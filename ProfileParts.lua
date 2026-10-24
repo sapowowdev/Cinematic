@@ -209,14 +209,14 @@ ns.PROFILE_PARTS = {
 			set("offInRaidGroup", true)
 		end },
 		-- As little as possible: buffs and the quest tracker don't pop up on
-		-- their own, group members' nameplates aren't kept up, no cast bar out
-		-- of fights, and fights bring up only your target and its target.
+		-- their own (bar quest progress), group members' nameplates aren't
+		-- kept up, no cast bar out of fights, and fights bring up only your
+		-- target and its target.
 		pure = { apply = function(set)
 			FramesBase(set)
 			set("buffPeek", false)
 			set("debuffPeek", false)
 			set("questRevealOnAccept", false)
-			set("questRevealOnProgress", false)
 			set("plateAlwaysGroupMembers", false)
 			set("plateAlwaysGroupMinions", false)
 			set("cineShow", { castbar = false })

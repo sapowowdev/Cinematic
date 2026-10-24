@@ -2941,12 +2941,19 @@ do
 		end
 	end)
 
-	-- Retail: QUEST_WATCH_UPDATE misses progress-bar objectives (a percentage
-	-- going up) and some counted ones, so each quest's progress (its counts
-	-- plus its bar's percent) is summed after a quest log update, and a quest
-	-- whose sum went up reveals. A quest seen for the first time doesn't.
+	-- QUEST_WATCH_UPDATE misses progress-bar objectives (a percentage going
+	-- up) and some counted ones, so each quest's progress (its counts plus its
+	-- bar's percent) is summed after a quest log update, and a quest whose sum
+	-- went up reveals. A quest seen for the first time doesn't. Any client with
+	-- retail's quest log API (retail and Forever).
 	local questLog = C_QuestLog
-	if ns.isRetail and questLog and questLog.GetNumQuestLogEntries and questLog.GetQuestObjectives then
+	local function IsTrackedID(questID)
+		if questLog.GetQuestWatchType then
+			return questLog.GetQuestWatchType(questID) ~= nil
+		end
+		return true
+	end
+	if questLog and questLog.GetNumQuestLogEntries and questLog.GetInfo and questLog.GetQuestObjectives then
 		local progress, seen = {}, {}
 		local pending = false
 		local function Progress(questID)
@@ -2955,14 +2962,14 @@ do
 			if objectives then
 				for i = 1, #objectives do
 					local count = objectives[i].numFulfilled
-					if type(count) == "number" then
+					if type(count) == "number" and not IsSecretValue(count) then
 						sum = sum + count
 					end
 				end
 			end
 			if GetQuestProgressBarPercent then
 				local percent = GetQuestProgressBarPercent(questID)
-				if type(percent) == "number" then
+				if type(percent) == "number" and not IsSecretValue(percent) then
 					sum = sum + percent
 				end
 			end
@@ -2982,7 +2989,7 @@ do
 					local before = progress[questID]
 					if before and sum > before then
 						advanced = true
-						if IsTracked(questID) then
+						if IsTrackedID(questID) then
 							ns.questActivityAt = GetTime()
 						end
 					end
@@ -3086,9 +3093,12 @@ do
 end
 
 -- A group member pinging the minimap brings it up the same way
--- (minimapRevealOnPing), even in a camera mode that hides it. Your own pings don't.
+-- (minimapRevealOnPing) for minimapPingTime seconds, even in a camera mode
+-- that hides it. Your own pings too, but not the ones NodeSweep.lua makes on
+-- ore and herbs (its own reveal shows those; theirs come back a moment later).
 local pingRevealUntil = 0
 do
+	local NODE_PING_ECHO = 3 -- seconds after a node ping that a ping of yours is taken as its echo
 	local pingWatcher = CreateFrame("Frame")
 	pcall(pingWatcher.RegisterEvent, pingWatcher, "MINIMAP_PING")
 	pingWatcher:SetScript("OnEvent", function(_, _, unit)
@@ -3096,11 +3106,10 @@ do
 			return
 		end
 		local ok, mine = pcall(UnitIsUnit, unit or "player", "player")
-		if ok and ns.Flag(mine) then
+		if ok and ns.Flag(mine) and GetTime() - (ns.nodePingAt or -math.huge) < NODE_PING_ECHO then
 			return
 		end
-		local hold = ns.HoldTime("mouseoverHold") - ns.FadeOutTime()
-		pingRevealUntil = GetTime() + ns.FadeInTime() + math.max(0, hold)
+		pingRevealUntil = GetTime() + ns.FadeInTime() + ns.db.minimapPingTime
 	end)
 end
 
