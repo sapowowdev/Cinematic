@@ -41,23 +41,27 @@ local function Ask(fn, ...)
 	return ok and Known(value) and value and true or false
 end
 
--- The game's quest cursors (Interface\Cursor), by file number as a texture
--- reads them back: made once, from their names.
+-- The game's quest cursors (Interface\Cursor, and retail's newer ones in its
+-- Crosshair folder), by file number as a texture reads them back: made once,
+-- from their names.
 local QUEST_CURSORS = { "Quest", "QuestRepeatable", "QuestTurnIn", "QuestInteract", "CampaignQuest",
 	"CampaignQuestTurnIn", "LegendaryQuest", "LegendaryQuestTurnIn", "Important", "ImportantTurnIn", "Recurring",
 	"RecurringTurnIn", "Wrapper", "WrapperTurnIn" }
+local CURSOR_FOLDERS = { "Interface\\Cursor\\", "Interface\\Cursor\\Crosshair\\" }
 local probe = CreateFrame("Frame"):CreateTexture()
 local questCursorFiles
 
 local function QuestCursorFiles()
 	if not questCursorFiles then
 		questCursorFiles = {}
-		for _, name in ipairs(QUEST_CURSORS) do
-			probe:SetTexture(nil)
-			pcall(probe.SetTexture, probe, "Interface\\Cursor\\" .. name)
-			local file = probe:GetTexture()
-			if type(file) == "number" and Known(file) then
-				questCursorFiles[file] = true
+		for _, folder in ipairs(CURSOR_FOLDERS) do
+			for _, name in ipairs(QUEST_CURSORS) do
+				probe:SetTexture(nil)
+				pcall(probe.SetTexture, probe, folder .. name)
+				local file = probe:GetTexture()
+				if type(file) == "number" and Known(file) then
+					questCursorFiles[file] = true
+				end
 			end
 		end
 	end
@@ -178,8 +182,35 @@ local function NamedInObjective(unit)
 		return false
 	end
 	name = name:lower()
+	-- Or its last word, the thing it is ("Lightbloom-Infected Bitterbloom" for
+	-- "Bitterblooms burned"), when that's long enough not to match by chance.
+	local last = name:match("([%a']+)$")
+	if last and #last < 5 then
+		last = nil
+	end
 	for _, text in ipairs(Objectives()) do
-		if text:find(name, 1, true) then
+		if text:find(name, 1, true) or (last and text:find(last, 1, true)) then
+			return true
+		end
+	end
+	return false
+end
+
+-- Whether the game's tooltip for it has a quest line (retail lists the
+-- objective it counts for under the object's name).
+local function QuestInTooltip(unit)
+	local info, lineTypes = C_TooltipInfo, Enum and Enum.TooltipDataLineType
+	if not (info and info.GetUnit and lineTypes) then
+		return false
+	end
+	local ok, data = pcall(info.GetUnit, unit)
+	if not (ok and type(data) == "table" and type(data.lines) == "table") then
+		return false
+	end
+	for _, line in ipairs(data.lines) do
+		local kind = line.type
+		if Known(kind) and kind ~= nil and (kind == lineTypes.QuestObjective or kind == lineTypes.QuestTitle
+			or kind == lineTypes.QuestPlayer) then
 			return true
 		end
 	end
@@ -198,6 +229,9 @@ local function QuestReason(unit)
 	end
 	if NamedInObjective(unit) then
 		return "objective"
+	end
+	if QuestInTooltip(unit) then
+		return "tooltip"
 	end
 	return nil
 end
@@ -247,6 +281,7 @@ do
 	mark:SetSize(24, 24)
 	mark:SetPoint("BOTTOM", glow, "TOP", 0, -30)
 	ns.SetQuestMark(mark)
+	glow.mark = mark
 	local pulse = light:CreateAnimationGroup()
 	pulse:SetLooping("BOUNCE")
 	local fade = pulse:CreateAnimation("Alpha")
@@ -278,6 +313,14 @@ local function GlowOn(plate, guid)
 		glow:SetFrameLevel((plate.GetFrameLevel and plate:GetFrameLevel() or 0) + 10)
 		glow:ClearAllPoints()
 		glow:SetPoint("CENTER", plate, "CENTER", 0, -40)
+		-- Retail gives objects' plates their name, where the mark would sit:
+		-- the mark goes just above it (the name itself hidden: see UpdateIcon).
+		local mark, name = glow.mark, plate.UnitFrame and plate.UnitFrame.name
+		mark:ClearAllPoints()
+		if not (ns.isRetail and type(name) == "table" and pcall(mark.SetPoint, mark, "BOTTOM", name, "TOP", 0, 2)) then
+			mark:ClearAllPoints()
+			mark:SetPoint("BOTTOM", glow, "TOP", 0, -30)
+		end
 	end
 	if not glow:IsShown() then
 		glow:Show()
@@ -421,6 +464,8 @@ end
 -- have shown it: soft targeting on for the way you're playing (keyboard and
 -- mouse, or gamepad) and the icon on for that kind of thing. Elsewhere it's
 -- hidden (quest objects have our mark). [icon frame] = true while hidden by us.
+-- Likewise the name retail gives an object's plate: hidden unless your own
+-- settings give objects plates (kept in hiddenIcons too).
 local hiddenIcons = {}
 
 local function OwnIconShows(object)
@@ -463,17 +508,22 @@ local function UpdateIcon()
 	if CVARS.active then
 		-- (Your own settings decide objects and creatures apart: each asked once.)
 		local shows = {}
+		local ownPlates = Own("SoftTargetNameplateInteract") == "1"
 		for _, plate in ipairs(C_NamePlate and C_NamePlate.GetNamePlates and C_NamePlate.GetNamePlates() or {}) do
 			local frame = IconOf(plate)
 			local unit = UnitOf(plate)
+			local object = unit and IsObject(unit)
 			if frame and unit then
-				local object = IsObject(unit)
 				if shows[object] == nil then
 					shows[object] = OwnIconShows(object)
 				end
 				if not shows[object] then
 					hideNow[frame] = true
 				end
+			end
+			local name = object and not ownPlates and plate.UnitFrame and plate.UnitFrame.name
+			if type(name) == "table" and name.SetAlpha and not (name.IsForbidden and name:IsForbidden()) then
+				hideNow[name] = true
 			end
 		end
 	end
@@ -754,6 +804,25 @@ function ns.PrintQuestGlowDebug()
 		Known(name) and tostring(name) or "(secret)", tostring(IsObject(SOFT)),
 		plate and ("yes, alpha " .. (okAlpha and alpha or "?")) or "no",
 		tostring(cursor), tostring(QuestReason(SOFT)), tostring(glow:IsShown())))
+	local known = 0
+	for _ in pairs(QuestCursorFiles()) do
+		known = known + 1
+	end
+	ns.Print(("  each check: cursor=%s (%d quest cursors known), related=%s, objective=%s, tooltip=%s"):format(
+		tostring(QuestCursor(cursor)), known, tostring(Ask(C_QuestLog.UnitIsRelatedToActiveQuest, SOFT)),
+		tostring(NamedInObjective(SOFT)), tostring(QuestInTooltip(SOFT))))
+	-- The mark: where it is against the plate and its name, and what it shows.
+	local mark = glow.mark
+	local nameText = plate and plate.UnitFrame and plate.UnitFrame.name
+	local function Rect(region)
+		local ok, left, bottom, width, height = pcall(region.GetRect, region)
+		return ok and Known(left) and left and ("%.0f,%.0f %.0fx%.0f"):format(left, bottom, width, height) or "?"
+	end
+	ns.Print(("mark: visible=%s alpha=%s atlas=%s texture=%s at %s | glow at %s level %s | plate at %s level %s"
+		.. " | name at %s"):format(Text(mark.IsVisible, mark), Text(mark.GetEffectiveAlpha, mark),
+		tostring(mark.GetAtlas and mark:GetAtlas()), tostring(mark:GetTexture()), Rect(mark), Rect(glow),
+		Text(glow.GetFrameLevel, glow), plate and Rect(plate) or "-",
+		plate and Text(plate.GetFrameLevel, plate) or "-", type(nameText) == "table" and nameText.GetRect and Rect(nameText) or "-"))
 	ns.Print(("game's icon: %s, your own settings would show it: %s"):format(
 		type(icon) ~= "table" and "none" or hiddenIcons[icon] and "hidden by us" or "left alone",
 		tostring(OwnIconShows(IsObject(SOFT)))))
