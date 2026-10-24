@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-24", page = "Vitals Vision", title = "Vitals Vision",
+		text = "As your health drops, dark edges creep in round the screen with art themed to your class " ..
+		"and talents (blood, frost, fire...), a heartbeat that quickens and a flash on big hits, so you can " ..
+		"tell how you're doing at a glance." },
 	{ date = "2026-10-23", page = "Chat", title = "Speech from behind you",
 		text = "Tick Show speech from behind you on the Chat page and says and yells from people behind you " ..
 		"or out of view show as bubbles low on the screen, rising up from below, instead of bringing up chat." },

@@ -12,6 +12,12 @@ local _, ns = ...
 -- can be missing for a moment after its plate appears).
 local answers = {} -- [guid] = { quest = bool, at = time }
 local RECHECK_NO = 2
+-- The game drops a unit's quest line a moment after the quest log changes
+-- (an NPC you've just questioned): answers read within SETTLE seconds of a
+-- change are read once more after it.
+local SETTLE = 2
+local settleAt = 0
+local passiveAnswers = {} -- [guid] = bool (see IsPassiveQuestMob)
 
 local function Known(value)
 	return not (issecretvalue and issecretvalue(value))
@@ -157,7 +163,7 @@ function ns.IsQuestMob(unit)
 	end
 	local now = GetTime()
 	local answer = answers[guid]
-	if answer and (answer.quest or now - answer.at < RECHECK_NO) then
+	if answer and (answer.at >= settleAt or now < settleAt) and (answer.quest or now - answer.at < RECHECK_NO) then
 		return answer.quest
 	end
 	answer = answer or {}
@@ -175,6 +181,8 @@ for _, event in ipairs({ "QUEST_LOG_UPDATE", "UNIT_QUEST_LOG_CHANGED", "QUEST_AC
 end
 watcher:SetScript("OnEvent", function()
 	wipe(answers)
+	wipe(passiveAnswers)
+	settleAt = GetTime() + SETTLE
 	barTexts = nil
 end)
 
@@ -194,17 +202,133 @@ local function StandardModels()
 	return ok and value == true
 end
 
+local function HasAtlas(name)
+	return type(name) == "string" and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(name) ~= nil
+end
+
+-- A quest mob you can't do anything with yourself (friendly, and the game
+-- gives it just the plain pointer: one you eavesdrop on or protect) gets the
+-- quest log's "in progress" mark (gold, three dots) instead: part of a quest
+-- you're on, nothing to click. The atlas as retail's quest log picks it, else
+-- by name; where there's none, the ! greyed.
+local PROGRESS_ATLASES = { "Quest-In-Progress-Icon-yellow", "QuestInProgress", "Quest-InProgress" }
+local progressAtlas -- false: none
+
+function ns.QuestProgressAtlas()
+	if progressAtlas ~= nil then
+		return progressAtlas or nil
+	end
+	progressAtlas = false
+	local util = _G.QuestUtil
+	if util and util.GetQuestIconActive then
+		local ok, atlas = pcall(util.GetQuestIconActive, false)
+		if ok and HasAtlas(atlas) then
+			progressAtlas = atlas
+			return atlas
+		end
+	end
+	for _, name in ipairs(PROGRESS_ATLASES) do
+		if HasAtlas(name) then
+			progressAtlas = name
+			break
+		end
+	end
+	return progressAtlas or nil
+end
+
 local function PaintMark(texture)
-	if StandardModels() or not (texture.SetAtlas and C_Texture and C_Texture.GetAtlasInfo
-		and C_Texture.GetAtlasInfo("QuestNormal") and pcall(texture.SetAtlas, texture, "QuestNormal")) then
+	local passive = marks[texture] == "passive"
+	texture:SetDesaturated(false)
+	texture:SetVertexColor(1, 1, 1)
+	local atlas = passive and not StandardModels() and ns.QuestProgressAtlas()
+	if atlas and pcall(texture.SetAtlas, texture, atlas) then
+		return
+	end
+	if StandardModels() or not (texture.SetAtlas and HasAtlas("QuestNormal")
+		and pcall(texture.SetAtlas, texture, "QuestNormal")) then
 		texture:SetTexture(ns.QUEST_MOB_TEXTURE)
 		texture:SetTexCoord(0, 1, 0, 1) -- undo the atlas's, if it had one
 	end
+	if passive then
+		texture:SetDesaturated(true)
+		texture:SetVertexColor(0.8, 0.8, 0.8)
+	end
+end
+
+-- The plain pointer, as a texture reads it back (file numbers, made once) or
+-- by name (retail's crosshair atlases: "Crosshair_Point_64").
+local cursorProbe = CreateFrame("Frame"):CreateTexture()
+local pointerFiles
+
+local function IsPointer(cursor)
+	if type(cursor) == "string" then
+		return cursor:lower():find("point", 1, true) ~= nil
+	end
+	if type(cursor) ~= "number" then
+		return false
+	end
+	if not pointerFiles then
+		pointerFiles = {}
+		for _, path in ipairs({ "Interface\\Cursor\\Point", "Interface\\Cursor\\Crosshair\\Point" }) do
+			cursorProbe:SetTexture(nil)
+			pcall(cursorProbe.SetTexture, cursorProbe, path)
+			local file = cursorProbe:GetTexture()
+			if type(file) == "number" and Known(file) then
+				pointerFiles[file] = true
+			end
+		end
+	end
+	return pointerFiles[cursor] or false
+end
+
+-- The cursor the game would show over the unit (file or atlas), or nil.
+function ns.UnitCursor(unit)
+	if not SetUnitCursorTexture then
+		return nil
+	end
+	cursorProbe:SetTexture(nil)
+	if not pcall(SetUnitCursorTexture, cursorProbe, unit, nil, true) then
+		return nil
+	end
+	local file = cursorProbe:GetTexture()
+	if file ~= nil and Known(file) then
+		return file
+	end
+	local atlas = cursorProbe.GetAtlas and cursorProbe:GetAtlas()
+	if atlas ~= nil and Known(atlas) then
+		return atlas
+	end
+	return nil
+end
+
+-- Whether a quest mob is one you can't do anything with (see above). By GUID
+-- until the quest log changes (passiveAnswers, at the top). Where the game
+-- won't say: no (the !).
+function ns.IsPassiveQuestMob(unit)
+	if not (unit and IsFriendly(unit)) then
+		return false
+	end
+	local ok, guid = pcall(UnitGUID, unit)
+	guid = ok and type(guid) == "string" and Known(guid) and guid or nil
+	if guid and passiveAnswers[guid] ~= nil then
+		return passiveAnswers[guid]
+	end
+	local passive = IsPointer(ns.UnitCursor(unit))
+	if guid then
+		passiveAnswers[guid] = passive
+	end
+	return passive
 end
 
 local watching
-function ns.SetQuestMark(texture)
-	marks[texture] = true
+-- passive: the "in progress" mark (see above), else the !. Painted again only
+-- when that changes.
+function ns.SetQuestMark(texture, passive)
+	local kind = passive and "passive" or "normal"
+	if marks[texture] == kind then
+		return
+	end
+	marks[texture] = kind
 	PaintMark(texture)
 	if not watching and Settings and Settings.SetOnValueChangedCallback then
 		watching = true
@@ -239,6 +363,7 @@ local function TargetIcon()
 	local texture = targetIcon:CreateTexture(nil, "OVERLAY")
 	texture:SetAllPoints()
 	ns.SetQuestMark(texture)
+	targetIcon.texture = texture
 	return targetIcon
 end
 
@@ -250,6 +375,7 @@ function ns.RefreshTargetQuestIcon()
 	if show then
 		local icon = TargetIcon()
 		if icon then
+			ns.SetQuestMark(icon.texture, ns.IsPassiveQuestMob("target"))
 			icon:Show()
 		end
 	elseif targetIcon then

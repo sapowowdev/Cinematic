@@ -34,6 +34,8 @@ local VISIONS = {
 		icon = "Interface\\Icons\\Ability_DualWield", trim = true },
 	{ label = "Roll Vision", page = "Roll Vision", active = "RollVisionActive", color = { 0.45, 0.7, 1 },
 		icon = "Interface\\Icons\\INV_Misc_Dice_01", trim = true },
+	{ label = "Vitals Vision", page = "Vitals Vision", active = "VitalsVisionActive", color = { 1, 0.25, 0.4 },
+		icon = "Interface\\Icons\\Spell_Shadow_LifeDrain02", trim = true },
 }
 local GLOW_EVERY = 0.5 -- seconds between looks at which are in use
 local inUse = {} -- the visions in use at the last look

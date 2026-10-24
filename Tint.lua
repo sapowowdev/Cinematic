@@ -65,6 +65,7 @@ local ZONE_MOODS = {
 	moonlit = { { 0.84, 0.88, 1 }, L["Moonlit"] },  -- cool, soft blue
 	gloomy = { { 0.76, 0.83, 0.82 }, L["Gloomy"] }, -- foggy grey-green, damp and eerie
 	twilight = { { 0.86, 0.8, 1 }, L["Twilight"] }, -- cool, soft purple-blue
+	deeptwilight = { { 0.72, 0.64, 1 }, L["Deep twilight"] }, -- twilight, much stronger
 	golden = { { 1, 0.9, 0.7 }, L["Golden"] },      -- warm harvest gold
 	autumn = { { 1, 0.88, 0.76 }, L["Autumn"] },    -- rust and amber, red rock and turning leaves
 	summer = { { 0.95, 0.97, 0.96 }, L["Summer"] }, -- clear and fresh, tames red ground, keeps blue skies
@@ -166,12 +167,12 @@ local ZONE_AREA_IDS = {
 	[15968] = "golden", [15969] = "hearth",                            -- Eversong Woods, Silvermoon City
 	[16215] = "airy",                                                  -- Isle of Quel'Danas (Midnight)
 	[15947] = "forest",                                                -- Zul'Aman
-	[15355] = "twilight",                                              -- Harandar
+	[15355] = "deeptwilight",                                          -- Harandar
 	[16648] = "void",                                                  -- Voidstorm
 }
 -- Mood order for the options page.
 local ZONE_MOOD_ORDER = { "snow", "desert", "savanna", "swamp", "blight", "volcanic", "forest", "dusky", "forge", "hearth", "dusty",
-	"sickly", "airy", "moonlit", "gloomy", "twilight", "golden", "autumn", "summer", "fel", "void" }
+	"sickly", "airy", "moonlit", "gloomy", "twilight", "deeptwilight", "golden", "autumn", "summer", "fel", "void" }
 -- At a border the old mood fades out, there's a pause with no mood (the land
 -- either side blends for a while, and snow under an ember tint looks red), then
 -- the new mood fades in. The pause is longer in the air, where you see
@@ -249,17 +250,20 @@ local function CreateVignette(frame)
 	return pieces
 end
 
--- size: the fraction of the screen each edge covers; alpha: its darkness.
-local function SetVignette(pieces, size, alpha)
+-- size: the fraction of the screen each edge covers; alpha: its darkness;
+-- r, g, b: its colour (black if left out).
+local function SetVignette(pieces, size, alpha, r, g, b)
 	local width, height = UIParent:GetWidth(), UIParent:GetHeight()
 	for name, piece in pairs(pieces) do
 		piece:SetShown(alpha > 0)
-		piece:SetVertexColor(0, 0, 0, alpha)
+		piece:SetVertexColor(r or 0, g or 0, b or 0, alpha)
 		if VIGNETTE_CORNERS[name] then
 			piece:SetSize(width * size, height * size)
 		end
 	end
 end
+-- (Also LowHealth.lua's.)
+ns.CreateVignette, ns.SetVignette = CreateVignette, SetVignette
 local tintLevel = 0
 -- The vignette's and weather's own levels: they share the tint's overlay but
 -- have their own rows in the Visual Effects page's grid.

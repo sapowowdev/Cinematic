@@ -936,7 +936,8 @@ local function DropWindow(frame)
 	local left, top = Num(frame:GetLeft()), Num(frame:GetTop())
 	if left and top and ns.SavePanelSpot then
 		local scale = TalentsScale()
-		ns.SavePanelSpot("PlayerSpellsFrame", { "TOPLEFT", "BOTTOMLEFT", left / scale, top / scale })
+		ns.SavePanelSpot("PlayerSpellsFrame", { "TOPLEFT", "BOTTOMLEFT", left / scale, top / scale },
+			frame:GetWidth() / scale, frame:GetHeight() / scale)
 	end
 end
 

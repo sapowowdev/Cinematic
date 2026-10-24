@@ -43,6 +43,7 @@ local PAGE_SLOTS = {
 	["Vision"] = "frames",
 	["Heal Vision"] = "frames",
 	["Quest Vision"] = "frames",
+	["Vitals Vision"] = "vfx",
 	["Mouseover groups"] = "bars",
 	["Cooldown Manager"] = "bars",
 	["Camera Modes"] = "camera",

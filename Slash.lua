@@ -86,6 +86,7 @@ local function PrintDebugHelp()
 	print("  /cine debug mode - which camera mode it thinks you're in")
 	print("  /cine debug cooldowns - what the Cooldown Manager's \"stay up while recharging\" check sees")
 	print("  /cine debug newplayer - back to no profile picked, as on a fresh install (the welcome window)")
+	print("  /cine debug welcomedemo - the demo of a simpler, three-step welcome window (picking a style there switches to it)")
 	print("  /cine debug whatsnew - the chat line shown at login after an update, with its What's new link")
 	print("  /cine debug modes - print each camera mode change to chat (again to stop)")
 	print("  /cine debug emote - the last emote the game passed, and whether cozy or vista took it")
@@ -105,12 +106,14 @@ local function PrintDebugHelp()
 	print("  /cine debug platewatch - log how faded nameplates are drawn each time it changes, to find one flashing up")
 	print("  /cine debug duels - duel nameplates: watching or why not, and which nearby players can attack each other")
 	print("  /cine debug questglow - quest object glow: what soft targeting picked and why it glows or not")
+	print("  /cine debug questmob - the unit under your mouse: the cursor the game gives it, its quest checks and quest items")
 	print("  /cine debug iconwatch - log nameplate interact icons every frame for 30 seconds")
 	print("  /cine debug sounds - print each sound the game plays, by number and name, e.g. the talents window's (again to stop)")
 	print("  /cine debug talentart - log every part of the open talents window (sizes, textures, atlases) and its trees")
 	print("  /cine debug talentcalc - the talent calculator: your trees as read, their grids, the row rule, its button")
 	print("  /cine debug talents - the character window's Talents button and the talents window's Character button: made, shown, where")
 	print("  /cine debug panels - the game's open windows: where they're anchored and whether they can be dragged")
+	print("  /cine debug tooltipparts - print the shown parts (bars, borders, textures) of the next tooltip")
 	print("  /cine debug raidparts - log every part of the party and raid frames and how each is faded, print shown icons that aren't")
 	print("  /cine debug auras - whether your group's debuffs can be seen, and how (run in and out of combat, in different places)")
 	print("  /cine debug combatlog - log the Combat Log tab's lines, readable or not; stays on across reloads (again to stop)")
@@ -792,6 +795,8 @@ local function HandleSlash(msg)
 		ns.PrintQuestGlowDebug()
 	elseif cmd == "debug" and arg == "chatcopy" then
 		ns.Print("Copy chat shows each line's codes as text: " .. OnOff(ns.ToggleChatCopyRaw()))
+	elseif cmd == "debug" and arg == "questmob" then
+		ns.PrintQuestMobDebug()
 	elseif cmd == "debug" and arg == "iconwatch" then
 		ns.StartIconWatch()
 	elseif cmd == "debug" and arg == "sounds" and ns.ToggleSoundWatch then
@@ -825,6 +830,8 @@ local function HandleSlash(msg)
 		ns.CVarsFind(arg:match("^cvars%s+(.+)"))
 	elseif cmd == "debug" and arg:find("^settings%s") then
 		ns.SettingsFind(arg:match("^settings%s+(.+)"))
+	elseif cmd == "debug" and arg == "tooltipparts" then
+		ns.TooltipPartsDebug()
 	elseif cmd == "debug" and arg == "raidparts" then
 		ns.LogRaidFrames()
 	elseif cmd == "debug" and arg:find("^healwatch") then
@@ -1092,6 +1099,8 @@ local function HandleSlash(msg)
 		ns.db.profileChosen = false
 		ns.Print("no profile picked: Cinematic is off until you pick one")
 		ns.ShowWelcome()
+	elseif cmd == "debug" and arg == "welcomedemo" then
+		ns.ShowWelcomeDemo()
 	elseif cmd == "debug" then
 		-- Hover over something and run this to see how the addon sees it.
 		local found = false

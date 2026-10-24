@@ -3386,11 +3386,12 @@ end
 
 -- Hide out of combat: db key -> test. One that's more than one kind (a quest
 -- mob is an enemy too) hides only if every kind it is is ticked.
+-- Each kind hides always (tooltipHide<kind>) or in fights (tooltipHideCombat<kind>).
 local HIDE_KINDS = {
-	{ key = "tooltipHideQuest", test = ShowsQuestObjective, why = "quest objective" },
-	{ key = "tooltipHideGather", test = ShowsGatheringNode, why = "gatherable" },
-	{ key = "tooltipHideEnemy", test = ShowsEnemy, why = "enemy" },
-	{ key = "tooltipHideFriendly", test = ShowsFriend, why = "friendly" },
+	{ kind = "Quest", test = ShowsQuestObjective, why = "quest objective" },
+	{ kind = "Gather", test = ShowsGatheringNode, why = "gatherable" },
+	{ kind = "Enemy", test = ShowsEnemy, why = "enemy" },
+	{ kind = "Friendly", test = ShowsFriend, why = "friendly" },
 }
 
 -- Optional trace for /cine debug tooltip: what the tooltip did and why.
@@ -3401,13 +3402,32 @@ local function Trace(what, ...)
 	end
 end
 
+-- When the cursor last moved (turning the camera with the mouse counts: the
+-- cursor stays put then).
+local stillX, stillY, stillSince = nil, nil, 0
+
+local function NoteCursor()
+	local x, y = GetCursorPosition()
+	if x ~= stillX or y ~= stillY or IsMouselooking() then
+		stillX, stillY, stillSince = x, y, GetTime()
+	end
+end
+
+-- With "Hide until the mouse is still" (tooltipStillMode "show"), whether
+-- the mouse hasn't yet been still tooltipShowStill seconds.
+local function StillWaiting()
+	local wait = ns.db.tooltipShowStill
+	return ns.db.tooltipStillMode == "show" and wait and wait > 0 and GetTime() - stillSince < wait
+end
+
 -- Whether the tooltip should be hidden now, and why. Only in CineMode, with
 -- the key not held, and never a minimap blip's. In a camera mode ticked
--- (tooltipHideIn*), every world and unit frame tooltip; in combat, enemies
--- (tooltipHideCombatEnemy), friendlies (tooltipHideCombatFriendly) or
--- everything else, the UI's too (tooltipHideCombatElse); otherwise the world
--- and unit frame kinds ticked.
-local function Hides(tooltip)
+-- (tooltipHideIn*), every world and unit frame tooltip; otherwise the kinds
+-- ticked (HIDE_KINDS, Always or, in fights, In combat), a world or unit frame
+-- one only with each of its kinds ticked, and everything else (the UI's
+-- too) with Everything else ticked. Then a world or unit frame one until
+-- the mouse has been still a while, with Hide until the mouse is still.
+local function HidesByKind(tooltip)
 	if not Handling() or not ns.lastCinematic or ShowKeyDown() then
 		return false
 	end
@@ -3420,28 +3440,41 @@ local function Hides(tooltip)
 	if unitOrWorld and mode and ns.db[TOOLTIP_HIDE_IN[mode]] then
 		return true, mode
 	end
-	if InCombat() then
-		local enemy = TooltipUnitIsEnemy(tooltip)
-		if enemy == true then
-			return ns.db.tooltipHideCombatEnemy and true or false, "combat enemy"
-		elseif enemy == false then
-			return ns.db.tooltipHideCombatFriendly and true or false, "combat friendly"
-		end
-		return ns.db.tooltipHideCombatElse and true or false, "combat else"
-	end
-	if not unitOrWorld then
-		return false
+	local combat = InCombat()
+	local function Ticked(kind)
+		return ns.db["tooltipHide" .. kind] or (combat and ns.db["tooltipHideCombat" .. kind]) or false
 	end
 	local why
-	for _, kind in ipairs(HIDE_KINDS) do
-		if kind.test(tooltip) then
-			if not ns.db[kind.key] then
-				return false
+	if unitOrWorld then
+		for _, kind in ipairs(HIDE_KINDS) do
+			if kind.test(tooltip) then
+				if not Ticked(kind.kind) then
+					return false
+				end
+				why = kind.why
 			end
-			why = kind.why
 		end
 	end
-	return why ~= nil, why
+	if why == nil then
+		return Ticked("Else"), "else"
+	end
+	return true, why
+end
+
+local function Hides(tooltip)
+	local hide, why = HidesByKind(tooltip)
+	if hide or not (Handling() and ns.lastCinematic) or ShowKeyDown() then
+		return hide, why
+	end
+	NoteCursor() -- (the tick's note can be a frame old)
+	if not StillWaiting() then
+		return false
+	end
+	local world = WorldOwned()
+	if (world and not OverMinimap()) or (not world and TooltipHasUnit(tooltip)) then
+		return true, "until still"
+	end
+	return false
 end
 
 -- The decision for the tooltip up now, kept until it hides, shows something
@@ -3566,6 +3599,7 @@ local function HideTooltip(tooltip, why)
 			name = TooltipName(), owner = tooltip:GetOwner(), world = world, unit = hasUnit,
 			x = x, y = y, px = px, py = py, facing = facing,
 			lines = not hasUnit and NoteLines(tooltip) or nil,
+			untilStill = why == "until still",
 		}
 	end
 	Trace("hiding %s (%s)", tostring(TooltipName()), tostring(why))
@@ -3610,6 +3644,17 @@ local function ShowAgain(note)
 	Trace("key down, showing %s ok=%s %s", tostring(note.name), tostring(ok), ok and "" or tostring(err))
 end
 
+-- At the mouse cursor (tooltipCursorMode "cursor", or "combat" in fights;
+-- Tooltips page, with its switch off too): tooltips the game puts in the
+-- bottom-right corner follow the cursor instead. (SetDefaultAnchor runs before the tooltip gets its lines.)
+function ns.OnTooltipDefaultAnchor(tooltip, parent)
+	local db = ns.db
+	local mode = db and db.enabled and db.tooltipCursorMode
+	if mode == "cursor" or (mode == "combat" and (InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")))) then
+		tooltip:SetOwner(parent or UIParent, "ANCHOR_CURSOR")
+	end
+end
+
 -- Catches each new tooltip the moment it appears (a hidden tooltip shows
 -- again for the next thing you mouse over, so this runs every time).
 function ns.OnTooltipShow(self)
@@ -3650,23 +3695,13 @@ function ns.OnTooltipHide()
 	checked = nil
 end
 
--- When the cursor last moved (turning the camera with the mouse counts: the
--- cursor stays put then).
-local stillX, stillY, stillSince = nil, nil, 0
-
-local function NoteCursor()
-	local x, y = GetCursorPosition()
-	if x ~= stillX or y ~= stillY or IsMouselooking() then
-		stillX, stillY, stillSince = x, y, GetTime()
-	end
-end
-
 -- A world or unit tooltip that's been up tooltipHideStill seconds with the
 -- mouse still (counted from whichever came later, it showing or the mouse
--- stopping). Not on the minimap, nor with the key held.
+-- stopping), with Hide when the mouse is still. Not on the minimap, nor with
+-- the key held.
 local function StillTooLong(tooltip)
 	local wait = ns.db.tooltipHideStill
-	if not (wait and wait > 0 and checked and ns.lastCinematic)
+	if ns.db.tooltipStillMode ~= "hide" or not (wait and wait > 0 and checked and ns.lastCinematic)
 		or GetTime() - math.max(stillSince, checked.at) < wait or ShowKeyDown() then
 		return false
 	end
@@ -3680,7 +3715,8 @@ end
 -- Runs on the tick: hides a tooltip that was already up as hiding starts (or
 -- as the key's let go, or the game reused it for something else, or the mouse
 -- has stayed still too long), and shows a hidden one again while the key's
--- down (one hidden for the mouse staying still, once it moves again).
+-- down (one hidden for the mouse staying still, once it moves again; one
+-- waiting for the mouse to be still, once it has been).
 function ns.UpdateTooltip()
 	if not Handling() then
 		hid, stillX = nil, nil
@@ -3696,17 +3732,25 @@ function ns.UpdateTooltip()
 			end
 		end
 		if StillTooLong(GameTooltip) then
-			HideTooltip(GameTooltip, "mouse still")
-			if hid then
-				hid.still = GetTime()
+			-- (Faded out first, with Fade in and out: TooltipParts.lua.)
+			local function Hide()
+				HideTooltip(GameTooltip, "mouse still")
+				if hid then
+					hid.still = GetTime()
+				end
 			end
+			if not ns.TooltipFadeOut(Hide) then
+				Hide()
+			end
+		else
+			ns.TooltipFadeCancel()
 		end
 		return
 	end
 	if hid then
 		if not ns.lastCinematic or not StillOver(hid) then
 			hid = nil
-		elseif ShowKeyDown() or (hid.still and stillSince > hid.still) then
+		elseif ShowKeyDown() or (hid.still and stillSince > hid.still) or (hid.untilStill and not StillWaiting()) then
 			ShowAgain(hid)
 		end
 	end

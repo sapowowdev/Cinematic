@@ -190,16 +190,24 @@ local DEFAULTS = {
 	nameKeepGuild = false,
 	nameKeepTarget = false,
 	handleTooltips = false,   -- the Tooltips page's master switch (off: every tooltip shows as the game has it)
-	-- In CineMode, out of combat, hide the tooltips of (world ones and unit frames')...
+	-- In CineMode, always (in and out of fights) hide the tooltips of (world ones and unit frames')...
 	tooltipHideEnemy = false,   -- ...units you can attack
 	tooltipHideFriendly = true, -- ...units you can't
 	tooltipHideGather = false,  -- ...something gatherable (herb, ore, skinnable)
 	tooltipHideQuest = false,   -- ...one showing a quest objective
+	tooltipHideElse = false,    -- ...everything else: objects, action bars, bags, menus
 	-- In CineMode, in combat, hide...
 	tooltipHideCombatEnemy = false,   -- ...units you can attack
 	tooltipHideCombatFriendly = true, -- ...units you can't
-	tooltipHideCombatElse = true,     -- ...everything else: objects, action bars, bags, menus
+	tooltipHideCombatGather = true,   -- ...something gatherable (Everything else, before it had a line)
+	tooltipHideCombatQuest = true,    -- ...one showing a quest objective (the same)
+	tooltipHideCombatElse = true,     -- ...everything else
+	tooltipStillMode = "hide", -- "hide": Hide when the mouse is still; "show": Hide until the mouse is still; "off"
 	tooltipHideStill = 10,    -- seconds a world or unit tooltip stays up with the mouse still (0: off)
+	tooltipShowStill = 2,     -- seconds the mouse is still before a world or unit tooltip shows (0: off)
+	tooltipCursorMode = "corner", -- tooltips the game puts in the bottom-right corner: "corner", "cursor" or "combat" (cursor in fights; switch or not)
+	tooltipFadeTime = 0,      -- seconds tooltips take to fade in, and out when the mouse is still too long (0: no fading; switch or not)
+	tooltipFullAfter = 2,     -- seconds hovering before the parts grid's After column takes over (0: never)
 	musicFadeTime = 3,        -- seconds for music to fade in or out
 	musicFatigue = 0,         -- minutes: don't start music again within this long of the last start
 	-- Which cameras can start music as they start (when music fatigue allows).
@@ -325,6 +333,7 @@ local DEFAULTS = {
 	questCamShoulder = 1,     -- ...yards the camera moves right, over your shoulder
 	questCamUncenter = false, -- ...turn the game's Keep Character Centered off meanwhile (it blocks the shoulder)
 	questCamAllGossip = false, -- ...for every NPC you talk to, not just quest givers
+	questCamNotMounted = false, -- ...but not while you're mounted
 	indoorLimits = true,      -- indoors, keep the camera modes from pushing into walls:
 	indoorZoomOut = 1,        -- ...zoom out at most this many yards past your own distance
 	indoorSwing = 10,         -- ...swing at most this far either side of behind
@@ -488,6 +497,15 @@ ns.CAMERA_OFF_NEVER = { flight = { Instances = true, BGs = true } }
 -- The Visual Effects page's grid: the same places, by where you are now.
 ns.EFFECT_OFF_WHERE = ns.CAMERA_OFF_WHERE
 ns.EFFECT_GRID = { "letterbox", "tint", "vignette", "weather" }
+-- The Tooltips page's parts grid (TooltipParts.lua): each part shows on
+-- first hover (tooltipShow<part>First) and after tooltipFullAfter seconds
+-- (...Later). To start with, none at first and all after.
+ns.TOOLTIP_PARTS = { "Border", "Health", "Guild", "Level", "Spec", "Type", "Faction", "Rep", "Threat", "Quest",
+	"ObjQuest" }
+for _, part in ipairs(ns.TOOLTIP_PARTS) do
+	DEFAULTS["tooltipShow" .. part .. "First"] = false
+	DEFAULTS["tooltipShow" .. part .. "Later"] = true
+end
 for _, effect in ipairs(ns.EFFECT_GRID) do
 	for _, where in ipairs(ns.EFFECT_OFF_WHERE) do
 		DEFAULTS[effect .. "OffIn" .. where] = false
@@ -2940,6 +2958,30 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				t.tooltipHideCombatFriendly = t.tooltipHideCombatElse
 			end
 		end
+		-- Gatherables and quest objectives in combat were part of Everything
+		-- else too, the same way.
+		local function CombatKindsFromElse(t)
+			for _, kind in ipairs({ "Gather", "Quest" }) do
+				if t["tooltipHideCombat" .. kind] == nil and t.tooltipHideCombatElse ~= nil then
+					t["tooltipHideCombat" .. kind] = t.tooltipHideCombatElse
+				end
+			end
+		end
+		-- At the mouse cursor was two ticks (always, in fights) before it was a choice.
+		local function CursorModeFromTicks(t)
+			if t.tooltipCursorMode == nil and (t.tooltipAtCursor or t.tooltipAtCursorCombat) then
+				t.tooltipCursorMode = t.tooltipAtCursor and "cursor" or "combat"
+			end
+			t.tooltipAtCursor, t.tooltipAtCursorCombat = nil, nil
+		end
+		CursorModeFromTicks(ns.db)
+		for _, saved in pairs(type(ns.db.profiles) == "table" and ns.db.profiles or {}) do
+			if type(saved) == "table" then CursorModeFromTicks(saved) end
+		end
+		CombatKindsFromElse(ns.db)
+		for _, saved in pairs(type(ns.db.profiles) == "table" and ns.db.profiles or {}) do
+			if type(saved) == "table" then CombatKindsFromElse(saved) end
+		end
 		CombatFriendlyFromElse(ns.db)
 		for _, saved in pairs(type(ns.db.profiles) == "table" and ns.db.profiles or {}) do
 			if type(saved) == "table" then CombatFriendlyFromElse(saved) end
@@ -3918,8 +3960,10 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			if not ns.playerMoving or UnitOnTaxi("player") or AnyMovementKey() then
 				return false
 			end
+			-- (Not while flying on retail: a skyriding glide carries you on with
+			-- no key held, so it would pass for auto-run.)
 			if not ns.autoRunning and GetTime() - (ns.movingSince or GetTime()) > AUTORUN_INFER_AFTER
-				and not AnyMovementKey() then
+				and not AnyMovementKey() and not (ns.isRetail and IsFlying and ns.Flag(IsFlying())) then
 				ns.autoRunning = true
 			end
 			return ns.autoRunning and not ns.IsRPWalking()
@@ -3952,6 +3996,8 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		GameTooltip:HookScript("OnShow", ns.Profiled("Tooltip shown", ns.OnTooltipShow))
 		GameTooltip:HookScript("OnHide", ns.OnTooltipHide)
 		hooksecurefunc(GameTooltip, "SetUnit", ns.OnTooltipSetUnit)
+		hooksecurefunc("GameTooltip_SetDefaultAnchor", ns.OnTooltipDefaultAnchor)
+		ns.HookTooltipParts()
 		-- The minimap button first, so the fade list picks it up straight away
 		-- (otherwise it stays visible until the next scan).
 		if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end

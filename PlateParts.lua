@@ -908,8 +908,9 @@ function RefreshQuestIcon(plate)
 	local level = math.max(levels.QuestIcon or 0, ns.QuestMarkLevel and ns.QuestMarkLevel() or 0)
 		* math.max(share, mark)
 	local icon = questIcons[plate]
+	local unit
 	if level > 0 and plate ~= PersonalPlate() then
-		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+		unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
 		if not (unit and ns.IsQuestMob(unit)) then
 			level = 0
 		end
@@ -922,6 +923,8 @@ function RefreshQuestIcon(plate)
 	end
 	icon = QuestIcon(plate)
 	if icon then
+		-- (One you can't do anything with: the "in progress" mark. See QuestMobs.)
+		ns.SetQuestMark(icon.texture, unit and ns.IsPassiveQuestMob(unit))
 		PlaceQuestIcon(icon, plate, body, kept, share, mark)
 		icon:SetAlpha(level)
 		icon:Show()

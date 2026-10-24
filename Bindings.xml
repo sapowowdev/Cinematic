@@ -33,6 +33,9 @@
 	<Binding name="CINEMATIC_VISION_ROLL" category="ADDONS">
 		Cinematic_ToggleVision("roll")
 	</Binding>
+	<Binding name="CINEMATIC_VISION_VITALS" category="ADDONS">
+		Cinematic_ToggleVision("vitals")
+	</Binding>
 	<Binding name="CINEMATIC_CAM_IDLE" category="ADDONS">
 		Cinematic_StartCam("idle")
 	</Binding>

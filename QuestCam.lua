@@ -780,6 +780,9 @@ local function OnEvent(_, event)
 		if not cam.since and not (ns.Flag(UnitExists("npc")) and not ns.Flag(UnitIsPlayer("npc"))) then
 			return -- shared by a player, or from an item: nobody to talk to
 		end
+		if not cam.since and ns.db and ns.db.questCamNotMounted and IsMounted and ns.Flag(IsMounted()) then
+			return -- on a mount, and you'd rather it didn't
+		end
 		-- The wait before starting (questCamDelay), from the first window. Each
 		-- window after adds WINDOW_EXTRA (and leaves at least that): clicking
 		-- through several quests' text, it doesn't start mid-way, but a few

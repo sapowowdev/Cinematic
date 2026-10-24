@@ -20,7 +20,8 @@
 -- closes: it's moved back to the drop each time). The Put windows back button
 -- forgets them (ns.ForgetPanelSpots). The game's own layout cache is kept out
 -- of it (SetUserPlaced(false)). Windows without a name are remembered only
--- while they stay open.
+-- while they stay open. Spots are saved as shares of the screen (ns.SpotShares),
+-- so they still fit after a change of resolution, aspect ratio or UI scale.
 --
 -- Protected windows can't be moved in a fight: those wait for it to end, and
 -- can't be dragged then.
@@ -65,28 +66,124 @@ local function Locked(frame)
 	return InCombatLockdown() and frame:IsProtected()
 end
 
+-- A saved spot: { left, top, width, height }, all shares of the screen. left
+-- and top are how far across the room the window has to move in (0 against
+-- the left or top edge, 1 against the right or bottom, 0.5 in the middle), so
+-- a window dropped against an edge stays there on a narrower screen; width
+-- and height, its size when dropped. Placed by its top left corner: a window
+-- that grows later grows right and down, as it always has.
+
+-- The frame's units to UIParent's (1 for nil).
+local function ToUI(frame)
+	local scale = type(frame) == "table" and frame.GetEffectiveScale and Number(frame:GetEffectiveScale())
+	local uiScale = Number(UIParent:GetEffectiveScale())
+	return scale and uiScale and scale > 0 and uiScale > 0 and scale / uiScale or 1
+end
+
+local function ScreenSize()
+	local width, height = Number(UIParent:GetWidth()), Number(UIParent:GetHeight())
+	if width and height and width > 0 and height > 0 then
+		return width, height
+	end
+end
+
+local function Share(distance, room)
+	if room <= 0 then
+		return 0
+	end
+	return math.max(0, math.min(1, distance / room))
+end
+
+-- A spot from a window's top left corner and size, in the frame's own units
+-- (nil frame: UIParent's). Nil if they can't be read.
+function ns.SpotShares(frame, left, top, width, height)
+	local screenWidth, screenHeight = ScreenSize()
+	left, top, width, height = Number(left), Number(top), Number(width), Number(height)
+	if not screenWidth or not left or not top or not width or not height then
+		return nil
+	end
+	local toUI = ToUI(frame)
+	left, top, width, height = left * toUI, top * toUI, width * toUI, height * toUI
+	return {
+		left = Share(left, screenWidth - width),
+		top = Share(screenHeight - top, screenHeight - height),
+		width = math.min(1, width / screenWidth),
+		height = math.min(1, height / screenHeight),
+	}
+end
+
+-- ...and back: the top left corner and size on this screen, in the frame's
+-- own units. Nil if it isn't one.
+function ns.SpotFromShares(frame, spot)
+	local screenWidth, screenHeight = ScreenSize()
+	if not screenWidth or type(spot) ~= "table" then
+		return nil
+	end
+	local left, top, width, height = spot.left, spot.top, spot.width, spot.height
+	if type(left) ~= "number" or type(top) ~= "number" or type(width) ~= "number" or type(height) ~= "number" then
+		return nil
+	end
+	width, height = width * screenWidth, height * screenHeight
+	local toUI = ToUI(frame)
+	left = left * math.max(0, screenWidth - width)
+	top = screenHeight - top * math.max(0, screenHeight - height)
+	return left / toUI, top / toUI, width / toUI, height / toUI
+end
+
 -- Dragging. Kept in our own tables: fields added to the game's frames taint them.
 local hooked = {}  -- frame -> true once it can be dragged
 local moving = {}  -- frame -> where the mouse and the window started, while it's being dragged
 local dropped = {} -- frame -> { point, relativePoint, x, y } for windows without a name, while they stay open
 
--- Where the window with this name was last dropped, or nil.
+-- Where the window with this name was last dropped, or nil: { point,
+-- relativePoint, x, y } in the window's own units, on this screen.
 local function NamedSpot(name)
 	local spots = ns.db and ns.db.panelSpots
 	if type(spots) ~= "table" then
 		return nil
 	end
 	local key = SPOT_NAME[name] or name
-	if spots[key] then
-		return spots[key]
-	end
-	-- (a spot saved before they were shared is still used, for both)
-	for other, shared in pairs(SPOT_NAME) do
-		if shared == key and spots[other] then
-			return spots[other]
+	if not spots[key] then
+		-- (a spot saved before they were shared is still used, for both)
+		for other, shared in pairs(SPOT_NAME) do
+			if shared == key and spots[other] then
+				key = other
+				break
+			end
 		end
 	end
-	return nil
+	local spot = spots[key]
+	if type(spot) ~= "table" then
+		return nil
+	end
+	local frame = _G[name]
+	if spot.left ~= nil then
+		local left, top = ns.SpotFromShares(frame, spot)
+		return left and { "TOPLEFT", "BOTTOMLEFT", left, top } or nil
+	end
+	-- (Saved before spots were shares: made one against this screen, once the
+	-- window is there to measure. Until then, used as it is.)
+	if spot[1] == "TOPLEFT" and spot[2] == "BOTTOMLEFT" and type(frame) == "table" and frame.GetWidth then
+		local width = Number(frame:GetWidth())
+		local shares = width and width > 0 and ns.SpotShares(frame, spot[3], spot[4], width, frame:GetHeight())
+		if shares then
+			spots[key] = shares
+		end
+	end
+	return spot
+end
+
+-- Saves where the window with this name was dropped (a spot of shares, or
+-- one that can't be: { point, relativePoint, x, y }).
+local function SaveSpot(name, spot)
+	if type(ns.db.panelSpots) ~= "table" then
+		ns.db.panelSpots = {}
+	end
+	local shared = SPOT_NAME[name]
+	if shared then
+		ns.db.panelSpots[name] = nil
+	end
+	ns.db.panelSpots[shared or name] = spot
 end
 
 -- Where the window was last dropped, or nil.
@@ -230,14 +327,9 @@ local function DragStop(frame)
 	local spot = { point, relativePoint, x, y }
 	local name = frame:GetName()
 	if name and ns.db then
-		if type(ns.db.panelSpots) ~= "table" then
-			ns.db.panelSpots = {}
-		end
-		local shared = SPOT_NAME[name]
-		if shared then
-			ns.db.panelSpots[name] = nil
-		end
-		ns.db.panelSpots[shared or name] = spot
+		local shares = point == "TOPLEFT" and relativePoint == "BOTTOMLEFT"
+			and ns.SpotShares(frame, x, y, frame:GetWidth(), frame:GetHeight())
+		SaveSpot(name, shares or spot)
 	else
 		dropped[frame] = spot
 	end
@@ -647,14 +739,20 @@ function ns.PanelSpot(name)
 end
 
 -- ...and dropped, it saves that spot; the game's window, if open, goes there.
-function ns.SavePanelSpot(name, spot)
+-- width and height: the window's size in the same units (else the game
+-- window's).
+function ns.SavePanelSpot(name, spot, width, height)
 	if not (ns.db and ns.Setting("dragPanels")) then
 		return
 	end
-	if type(ns.db.panelSpots) ~= "table" then
-		ns.db.panelSpots = {}
+	local frame = _G[name]
+	if type(frame) ~= "table" or not frame.GetWidth then
+		frame = nil
 	end
-	ns.db.panelSpots[SPOT_NAME[name] or name] = spot
+	width = width or frame and frame:GetWidth()
+	height = height or frame and frame:GetHeight()
+	local shares = spot[1] == "TOPLEFT" and spot[2] == "BOTTOMLEFT" and ns.SpotShares(frame, spot[3], spot[4], width, height)
+	SaveSpot(name, shares or spot)
 	Placed()
 end
 

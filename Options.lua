@@ -1084,6 +1084,7 @@ do
 			{ "Heal Vision", "Interface\\Icons\\Spell_Holy_FlashHeal" },
 			{ "Quest Vision", "Interface\\Icons\\INV_Misc_Head_Dragon_01" },
 			{ "Roll Vision", "Interface\\Icons\\INV_Misc_Dice_01" },
+			{ "Vitals Vision", "Interface\\Icons\\Spell_Shadow_LifeDrain02" },
 		} },
 		{ name = "Audio", pages = {
 			{ "Audio", "Interface\\Icons\\INV_Misc_Drum_01" },
@@ -2827,6 +2828,9 @@ local function CreateQuestPanel()
 		L["Also for NPCs with nothing to say about quests (innkeepers, guards...). Off: only when " ..
 		"they have a quest to offer or take in."]), "check")
 	GreyUnless(gossip, IfOn)
+	local mounted = stack:Add(Check(content, "questCamNotMounted", L["Not while mounted"],
+		L["Talking to a quest giver from your mount, the camera stays as it is."]), "check")
+	GreyUnless(mounted, IfOn)
 	local delay = stack:Add(Slider(content, "questCamDelay", L["Wait before starting"], 0, 10, 0.5, L["%.1f sec"]), "slider")
 	Tooltip(delay, L["The camera waits this long on a quest window before starting. Accept a quest and go " ..
 		"sooner, and it doesn't move at all; stay to read, and it starts. Clicking through several " ..
@@ -7360,8 +7364,8 @@ local function CreateVisionPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local note = PageIntro(content, title,
-		L["Ways of showing just what matters: the health of a duel near you. Heal Vision, Quest Vision and " ..
-		"Roll Vision have pages of their own."])
+		L["Ways of showing just what matters: the health of a duel near you. Heal Vision, Quest Vision, " ..
+		"Roll Vision and Vitals Vision have pages of their own."])
 
 	local switch = PageSwitch(content, "handleVision", L["Enable page"],
 		L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
@@ -7769,18 +7773,62 @@ local function CreateTooltipPanel()
 	local switch = PageSwitch(content, "handleTooltips", L["Enable page"],
 		L["On: CineMode hides tooltips as this page says. Off: every tooltip shows as normal."], note)
 
-	local still = Slider(content, "tooltipHideStill", L["Hide when the mouse is still"], 0, 30, 1, function(value)
+	-- Fade in/out (tooltipFadeTime): with the page switched off too.
+	local fade = Slider(content, "tooltipFadeTime", L["Fade in/out"], 0, 3, 0.1, function(value)
+		return value <= 0 and L["Off"] or L["%.1f sec"]:format(value)
+	end)
+	fade:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 6, -30)
+	Tooltip(fade, L["How long tooltips take to fade in as they show, and to fade out when the mouse has been " ..
+		"still too long (Mouse still, below). Off: no fading."] .. " " .. L["Works with this page switched off too."])
+	fade.pageSwitch = false -- (not greyed with the switch: see SwitchOf)
+
+	-- Mouse still: hide when or until the mouse is still, and the seconds
+	-- beside it (each choice keeps its own: tooltipHideStill or tooltipShowStill).
+	local stillHeader = Label(content, "GameFontNormal", L["Mouse still"])
+	stillHeader:SetPoint("TOPLEFT", fade, "BOTTOMLEFT", -4, -20)
+	local STILL_TIP = L["Hide when the mouse is still: a tooltip in the world or on a unit frame hides " ..
+		"once it's been up this long with the mouse still. Move the mouse and it comes back. Hide until the " ..
+		"mouse is still: it shows only once the mouse has rested on it this long. Off leaves tooltips be."]
+	local STILL_MODES = {
+		{ value = "hide", text = L["Hide when the mouse is still"] },
+		{ value = "show", text = L["Hide until the mouse is still"] },
+		{ value = "off", text = L["Off"] },
+	}
+	local mode = Dropdown(content, "tooltipStillMode", STILL_MODES, 220)
+	if mode then
+		mode:SetPoint("TOPLEFT", stillHeader, "BOTTOMLEFT", 4, -6)
+		Tooltip(mode, STILL_TIP)
+	else
+		local previousChoice = stillHeader
+		for _, choice in ipairs(STILL_MODES) do
+			local check = Choice(content, "tooltipStillMode", choice.value, choice.text, STILL_TIP)
+			check:SetPoint("TOPLEFT", previousChoice, "BOTTOMLEFT", previousChoice == stillHeader and 2 or 0, -2)
+			previousChoice = check
+			mode = check
+		end
+	end
+	local function StillKey()
+		return ns.GetDB().tooltipStillMode == "show" and "tooltipShowStill" or "tooltipHideStill"
+	end
+	RecordKey(content, "tooltipHideStill")
+	RecordKey(content, "tooltipShowStill")
+	local still = Slider(content, {
+		get = function() return ns.GetDB()[StillKey()] or 0 end,
+		set = function(value) ns.GetDB()[StillKey()] = value end,
+	}, "", 0, 30, 1, function(value)
 		return value <= 0 and L["Off"] or L["%d sec"]:format(value)
 	end)
-	still:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 6, -30)
-	Tooltip(still, L["A tooltip in the world or on a unit frame hides once it's been up this long with the " ..
-		"mouse still. Move the mouse and it comes back. Off leaves it up."])
+	still:SetPoint("LEFT", mode, "RIGHT", 24, 0)
+	Tooltip(still, STILL_TIP)
+	GreyUnless(still, function(db) return db.tooltipStillMode ~= "off" end)
 
-	-- A header, then its ticks under it, each on a line of its own.
-	local previous = still
+	-- A header, then its ticks under it, each on a line of its own (or a
+	-- grid or slider: lined up by sectionX, not as ticks are).
+	local previous = mode
 	local function Section(text)
+		local x = previous == mode and -4 or previous.sectionX or -10
 		local header = Label(content, "GameFontNormal", text)
-		header:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", previous == still and -4 or -10, previous == still and -22 or -14)
+		header:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", x, previous == mode and -16 or -14)
 		previous = header
 		return header
 	end
@@ -7791,25 +7839,167 @@ local function CreateTooltipPanel()
 		return check
 	end
 
-	Section(L["Hide out of combat"])
-	Row("tooltipHideEnemy", L["Enemies"],
-		L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems."], true)
-	Row("tooltipHideFriendly", L["Friendlies"],
-		L["Players and NPCs you can't attack, and their pets, minions and totems."])
-	Row("tooltipHideGather", L["Gatherables (herbs, ore, skinnable)"],
-		L["Herbs, ore and creatures you can skin."])
-	Row("tooltipHideQuest", L["Quest objectives"],
-		L["Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\"). Something " ..
-		"that's more than one kind (a quest mob is an enemy too) hides only with each of its kinds ticked."])
+	-- A grid of rows ({ label, tip, keys = column -> setting, tips = column
+	-- -> tip }) by columns ({ key, heading, enabled = function(db, row) for
+	-- a column that greys }), like the Visual Effects page's, under anchor.
+	-- Returns the last row and the column headings.
+	local GRID_NAME_WIDTH, GRID_COLUMN_WIDTH = 230, 90
+	local function Grid(anchor, rows, columns)
+		local top = CreateFrame("Frame", nil, content)
+		top:SetSize(GRID_NAME_WIDTH + GRID_COLUMN_WIDTH * #columns, 16)
+		top:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -8)
+		local headings = {}
+		for c, column in ipairs(columns) do
+			local heading = Label(top, "GameFontNormalSmall", column.heading)
+			heading:SetWidth(GRID_COLUMN_WIDTH)
+			heading:SetJustifyH("CENTER")
+			heading:SetPoint("BOTTOMLEFT", top, "BOTTOMLEFT", GRID_NAME_WIDTH + GRID_COLUMN_WIDTH * (c - 1), 0)
+			headings[column.key] = heading
+		end
+		local last = top
+		for _, info in ipairs(rows) do
+			local row = CreateFrame("Frame", nil, content)
+			row:SetSize(top:GetWidth(), 24)
+			row:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -2)
+			row.sectionX = 0
+			Label(row, "GameFontHighlight", info[1]):SetPoint("LEFT", row, "LEFT", 0, 0)
+			for c, column in ipairs(columns) do
+				local key = info.keys[column.key]
+				local check = Check(content, key, "", info[2] .. " " .. info.tips[column.key], function(value)
+					ns.GetDB()[key] = value
+					Refresh() -- grey out / enable the row's other boxes
+				end)
+				check:SetPoint("CENTER", row, "LEFT", GRID_NAME_WIDTH + GRID_COLUMN_WIDTH * (c - 0.5), 0)
+				if column.enabled then
+					GreyUnless(check, function(db) return column.enabled(db, info) end)
+				end
+			end
+			last = row
+		end
+		previous = last
+		return last, headings
+	end
 
-	Section(L["Hide in combat"])
-	Row("tooltipHideCombatEnemy", L["Enemies"],
-		L["Players and NPCs you can attack, and their pets, minions and totems."], true)
-	Row("tooltipHideCombatFriendly", L["Friendlies"],
-		L["Players and NPCs you can't attack, and their pets, minions and totems."])
-	Row("tooltipHideCombatElse", L["Everything else"],
-		L["Objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, " ..
-		"menus and the rest."])
+	-- Hide tooltips, by kind: Always (in and out of fights) or In combat
+	-- (greyed while Always is ticked).
+	local hideHeader = Section(L["Hide tooltips"])
+	local hideNote = PageIntro(content, hideHeader,
+		L["In CineMode. Ticked, those tooltips hide. Always: in and out of fights. In combat: just in fights. " ..
+		"Something that's more than one kind (a quest mob is an enemy too) hides only with each of its kinds ticked."])
+	local HIDE_TIPS = { Always = L["Hidden all the time."], Combat = L["Hidden in fights only."] }
+	local function HideRow(kind, label, tip)
+		return { label, tip, keys = { Always = "tooltipHide" .. kind, Combat = "tooltipHideCombat" .. kind },
+			tips = HIDE_TIPS }
+	end
+	Grid(hideNote, {
+		HideRow("Enemy", L["Enemies"],
+			L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems."]),
+		HideRow("Friendly", L["Friendlies"], L["Players and NPCs you can't attack, and their pets, minions and totems."]),
+		HideRow("Gather", L["Gatherables (herbs, ore, skinnable)"], L["Herbs, ore and creatures you can skin."]),
+		HideRow("Quest", L["Quest objectives"],
+			L["Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\")."]),
+		HideRow("Else", L["Everything else"],
+			L["Objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, " ..
+			"menus and the rest."]),
+	}, {
+		{ key = "Always", heading = L["Always"] },
+		{ key = "Combat", heading = L["In combat"], enabled = function(db, row) return not db[row.keys.Always] end },
+	})
+
+	-- Tooltip look: where tooltips show (tooltipCursorMode, with the page
+	-- switched off too), how long until the After column, then a grid of
+	-- the parts (rows) by when each shows: on first hover, and after
+	-- tooltipFullAfter seconds (columns).
+	local partsHeader = Section(L["Tooltip look"])
+	local partsNote = PageIntro(content, partsHeader,
+		L["Ticked, that part of the tooltip shows: On first hover, as soon as it appears; After, once you've " ..
+		"hovered as long as set above, until you mouse over something else. In and out of CineMode."])
+	local CURSOR_TIP = L["Where the game's tooltips (things in the world, unit frames, action bars, bags) show: " ..
+		"in their default position (the bottom-right corner, or wherever you've moved it), or by the mouse " ..
+		"cursor, following it (or just in fights)."] .. " " .. L["Works with this page switched off too."]
+	local CURSOR_MODES = {
+		{ value = "corner", text = L["Default position"] },
+		{ value = "cursor", text = L["At the mouse cursor"] },
+		{ value = "combat", text = L["At the mouse cursor in combat"] },
+	}
+	local cursorMode = Dropdown(content, "tooltipCursorMode", CURSOR_MODES, 220)
+	local lastCursor
+	if cursorMode then
+		cursorMode:SetPoint("TOPLEFT", partsNote, "BOTTOMLEFT", 4, -10)
+		Tooltip(cursorMode, CURSOR_TIP)
+		cursorMode.pageSwitch = false -- (not greyed with the switch: see SwitchOf)
+		lastCursor = cursorMode
+	else
+		lastCursor = partsNote
+		for _, choice in ipairs(CURSOR_MODES) do
+			local check = Choice(content, "tooltipCursorMode", choice.value, choice.text, CURSOR_TIP)
+			check:SetPoint("TOPLEFT", lastCursor, "BOTTOMLEFT", lastCursor == partsNote and 2 or 0, -2)
+			check.pageSwitch = false
+			lastCursor = check
+		end
+	end
+
+	-- How long until the After column (tooltipFullAfter): its heading says.
+	local laterHeading
+	local function LaterHeading(value)
+		if laterHeading then
+			laterHeading:SetText(value <= 0 and L["After (off)"] or L["After %d sec"]:format(value))
+		end
+	end
+	local laterOn
+	local fullAfter = Slider(content, "tooltipFullAfter", L["After hovering for"], 0, 10, 1, function(value)
+		return value <= 0 and L["Off"] or L["%d sec"]:format(value)
+	end, nil, function(value)
+		LaterHeading(value)
+		if (value > 0) ~= laterOn then
+			laterOn = value > 0
+			Refresh() -- grey out / enable the grid
+		end
+	end)
+	fullAfter:SetPoint("TOPLEFT", lastCursor, "BOTTOMLEFT", cursorMode and 0 or 2, -30)
+	Tooltip(fullAfter, L["How long you hover over something before the After column's parts take over, " ..
+		"until you mouse over something else. Off: tooltips show as normal, every part of them."])
+
+	local PARTS = {
+		Border = { L["Background and border"], L["The box around the tooltip. Unticked, just the text shows."] },
+		Health = { L["Health bar"], L["The health bar under the tooltips of players, NPCs and mobs."] },
+		Guild = { L["Guild and title (<...>)"], L["A player's <Guild> line, or an NPC's <Innkeeper>-style title."] },
+		Level = { L["Level"], L["The level line (for players, with their race and class)."] },
+		Spec = { L["Spec and class"], L["A player's spec and class line (\"Fury Warrior\")."] },
+		Type = { L["Creature type"], L["The kind of creature: Elemental, Beast, Humanoid and so on."] },
+		Faction = { L["Faction and PvP"], L["The Horde or Alliance line and the PvP line."] },
+		Rep = { L["Reputation faction"], L["The faction an NPC belongs to, whose reputation you earn (\"Hara'ti\")."] },
+		Threat = { L["Threat"], L["How much of the mob's threat you have (\"100% Threat\")."] },
+		Quest = { L["Quest lines"],
+			L["The names of your quests the unit is for, and their objectives (\"5/7 Thistle Boar slain\")."] },
+		ObjQuest = { L["Quest lines on objects"],
+			L["The same on things in the world you use or pick up for a quest (\"0/1 Palehill Runestone\")."] },
+	}
+	local PART_TIPS = { First = L["Shown as soon as the tooltip appears."],
+		Later = L["Shown once you've hovered as long as set above."] }
+	local partRows = {}
+	for _, part in ipairs(ns.TOOLTIP_PARTS) do
+		local info = PARTS[part]
+		info.keys = { First = "tooltipShow" .. part .. "First", Later = "tooltipShow" .. part .. "Later" }
+		info.tips = PART_TIPS
+		partRows[#partRows + 1] = info
+	end
+	-- (Off: the whole grid greys, and tooltips show as the game has them.)
+	local function LaterOn(db) return (db.tooltipFullAfter or 0) > 0 end
+	local headings
+	previous, headings = Grid(fullAfter, partRows, {
+		{ key = "First", heading = L["On first hover"], enabled = LaterOn },
+		{ key = "Later", heading = "", enabled = LaterOn },
+	})
+	laterHeading = headings.Later
+	-- (The heading follows the slider on a refresh too: a profile change, a reset.)
+	local refreshSlider = fullAfter.Refresh
+	fullAfter.Refresh = function(self)
+		refreshSlider(self)
+		local value = ns.GetDB().tooltipFullAfter or 0
+		laterOn = value > 0
+		LaterHeading(value)
+	end
 
 	-- The camera modes, in two columns of five, down the first then the second.
 	Section(L["Hide in camera modes"])
@@ -8255,6 +8445,8 @@ local KEYBINDS = {
 	{ action = "CINEMATIC_VISION_ROLL", label = L["Toggle Roll Vision"],
 		show = function() return ns.hasRollWindow end,
 		tip = L["Turns Roll Vision on or off."] },
+	{ action = "CINEMATIC_VISION_VITALS", label = L["Toggle Vitals Vision"],
+		tip = L["Turns Vitals Vision on or off (its Enable page switch)."] },
 	{ action = "CINEMATIC_CAM_IDLE", label = L["AFK camera"], section = L["Cameras"],
 		tip = L["Starts the AFK camera now, without waiting out its delay. " ..
 			"Press again, move or jump to stop it."] },
@@ -9614,6 +9806,13 @@ local function GuardGamepadClose()
 	end)
 end
 
+-- The page helpers LowHealth.lua's Vitals Vision page uses. (Out here: the
+-- function below is at Lua's cap of 60 outside locals it can use.)
+ns.lowHealthKit = { CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
+	RegisterSubpage = RegisterSubpage, Tooltip = Tooltip, PageIntro = PageIntro, Stack = Stack,
+	Check = Check, Slider = Slider, GreyUnless = GreyUnless, Refresh = Refresh, Dropdown = Dropdown,
+	PageSwitch = PageSwitch, AddControl = function(control) controls[#controls + 1] = control end }
+
 -- The pages are built once the language is known (Locales.lua): first the
 -- text this file made as it ran is translated again.
 ns.OnLanguage(function()
@@ -9677,6 +9876,9 @@ ns.OnLanguage(function()
 	CreateTooltipPanel()
 	-- (its hub listed after UI Manager's)
 	CreateVisionPanel()
+	if ns.CreateVitalsVisionPanel then -- (LowHealth.lua)
+		ns.CreateVitalsVisionPanel(ns.lowHealthKit)
+	end
 	CreateBuffsPanel()
 	CreatePlatesPanel()
 	CreateChatPanel()

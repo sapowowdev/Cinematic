@@ -721,6 +721,11 @@ if ns.hasRollWindow then
 			if ns.RefreshRollWindow then ns.RefreshRollWindow() end
 		end }
 end
+VISIONS[#VISIONS + 1] = { key = "vitals", setting = "lowHealth", label = "Vitals Vision",
+	icon = "Interface\\Icons\\Spell_Shadow_LifeDrain02", trim = true, color = { 1, 0.25, 0.4 },
+	Apply = function()
+		if ns.RefreshLowHealth then ns.RefreshLowHealth() end
+	end }
 local visionByKey = {}
 for _, vision in ipairs(VISIONS) do
 	visionByKey[vision.key] = vision
@@ -770,6 +775,7 @@ local function SetVisionBindingNames()
 	BINDING_NAME_CINEMATIC_VISION_QUEST = "Cinematic: " .. L["Toggle Quest Vision"]
 	BINDING_NAME_CINEMATIC_VISION_DUEL = "Cinematic: " .. L["Toggle Duel Vision"]
 	BINDING_NAME_CINEMATIC_VISION_ROLL = "Cinematic: " .. L["Toggle Roll Vision"]
+	BINDING_NAME_CINEMATIC_VISION_VITALS = "Cinematic: " .. L["Toggle Vitals Vision"]
 end
 SetVisionBindingNames()
 ns.OnLanguage(SetVisionBindingNames)

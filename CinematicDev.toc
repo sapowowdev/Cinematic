@@ -58,11 +58,15 @@ MarkerWheel.lua
 QuestMobs.lua
 QuestGlow.lua
 Effects.lua
+TooltipParts.lua
 PlateParts.lua
 PlateGuild.lua
 Camera.lua
 QuestCam.lua
 Tint.lua
+LowHealthArt.lua
+LowHealthThemes.lua
+LowHealth.lua
 Focus.lua
 Tracking.lua
 NodeSweep.lua
@@ -72,6 +76,7 @@ ProfileParts.lua
 Profiles.lua
 Share.lua
 Welcome.lua
+WelcomeDemo.lua
 Layouts.lua
 ProfileBuilder.lua
 Options.lua

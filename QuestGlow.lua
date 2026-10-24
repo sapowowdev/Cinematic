@@ -131,17 +131,48 @@ end
 -- Whether a quest you're on needs something picked up or used here: an
 -- objective you haven't finished that's an object to use or an item to
 -- collect, for a quest on the map you're in (any map where the game won't
--- say, or says no quest at all is here: quests without map data). Soft targeting is only held while one does: it picks every corpse
--- you walk past too, the game's ring flashing on each. Made as needed, again
--- when the quest log or zone changes. The quest (for the debug line) or nil.
+-- say, or says no quest at all is here: quests without map data), and not
+-- more than NEAR_YARDS from its area where the game says how far (a delve
+-- quest's "complete the delve" is an object objective too). Soft targeting is
+-- only held while one does: it picks every corpse and trainer you walk past
+-- too, the game outlining each. Made as needed, again when the quest log or
+-- zone changes and every RECHECK_EVERY seconds (as you move). The quest (for
+-- the debug line) or nil.
 local NEEDS_GLOW = { object = true, item = true }
+local NEAR_YARDS, RECHECK_EVERY = 300, 5
 local needed -- false: none
+local neededAt = 0
+
+local function Near(questID)
+	local log = C_QuestLog
+	if not log.GetDistanceSqToQuest then
+		return true
+	end
+	local ok, distanceSq = pcall(log.GetDistanceSqToQuest, questID)
+	return not (ok and type(distanceSq) == "number" and Known(distanceSq) and distanceSq > NEAR_YARDS * NEAR_YARDS)
+end
+
+-- Delve quests (retail's Delver's Call: "... delve completed" is an object
+-- objective): by the quest's tag, or (where the game won't tag it) the word
+-- in the objective's text.
+local function DelveQuest(questID, objective)
+	local log, tags = C_QuestLog, Enum and Enum.QuestTag
+	if log.GetQuestTagInfo and tags and tags.Delve then
+		local ok, info = pcall(log.GetQuestTagInfo, questID)
+		if ok and type(info) == "table" and Known(info.tagID) and info.tagID == tags.Delve then
+			return true
+		end
+	end
+	local text = objective.text
+	return type(text) == "string" and Known(text) and text:lower():find("delve", 1, true) ~= nil
+end
 
 local function NeededFor()
-	if needed ~= nil then
+	if needed ~= nil and GetTime() - neededAt < RECHECK_EVERY then
 		return needed or nil
 	end
 	needed = false
+	neededAt = GetTime()
 	local log = C_QuestLog
 	if not (log and log.GetNumQuestLogEntries and log.GetQuestIDForLogIndex and log.GetQuestObjectives) then
 		return nil
@@ -158,8 +189,10 @@ local function NeededFor()
 				end
 				anyHere = anyHere or here
 				for _, objective in ipairs(log.GetQuestObjectives(questID) or {}) do
-					if not objective.finished and NEEDS_GLOW[objective.type] then
-						if here then
+					if not objective.finished and NEEDS_GLOW[objective.type] and not DelveQuest(questID, objective) then
+						if here and not Near(questID) then
+							break
+						elseif here then
 							needed = questID
 						else
 							elsewhere = elsewhere or questID
@@ -593,6 +626,12 @@ end
 
 local function Update()
 	local on = Wanted()
+	-- Retail draws the icon over a creature-like interact pick (a hand over the
+	-- shears on a table) in the world, with no plate to hide it on: held as
+	-- your own settings would show it (followed as gamepad mode changes).
+	if ns.isRetail then
+		CVARS.values.SoftTargetIconInteract = OwnIconShows(false) and "1" or "0"
+	end
 	ns.ApplyCVarSet(CVARS, on)
 	HealSaved()
 	KeepHeld()
@@ -755,6 +794,61 @@ function ns.StartIconWatch()
 	ns.Print("icon watch: logging nameplate icons for 30 seconds (face a dead mob you can skin)")
 end
 
+-- /cine debug questmob: the unit under your mouse, to tell quest mobs you can
+-- interact with (talk to) from ones you can't (a quest item used on them):
+-- the cursor the game would give it, the quest checks, its tooltip's quest
+-- lines and the item each of those quests gives you to use.
+function ns.PrintQuestMobDebug()
+	local unit = "mouseover"
+	local okName, name = pcall(UnitName, unit)
+	if not (okName and name ~= nil) then
+		ns.Print("questmob: nothing under your mouse (hover a unit, then type the command)")
+		return
+	end
+	local cursor = CursorOf(unit)
+	local log = C_QuestLog
+	ns.Print(("questmob: %s, cursor=%s (quest cursor: %s), related=%s, object=%s, dead=%s, can attack=%s"):format(
+		Known(name) and tostring(name) or "(secret)", tostring(cursor), tostring(QuestCursor(cursor)),
+		tostring(Ask(log and log.UnitIsRelatedToActiveQuest, unit)), tostring(IsObject(unit)),
+		Text(UnitIsDead, unit), Text(UnitCanAttack, "player", unit)))
+	ns.Print(("  quest mob=%s, can't interact (in progress mark)=%s, in progress atlas=%s"):format(
+		tostring(ns.IsQuestMob(unit)), tostring(ns.IsPassiveQuestMob(unit)), tostring(ns.QuestProgressAtlas())))
+	local info, lineTypes = C_TooltipInfo, Enum and Enum.TooltipDataLineType
+	local ok, data = pcall(info and info.GetUnit or error, unit)
+	if not (ok and type(data) == "table" and type(data.lines) == "table" and lineTypes) then
+		ns.Print("  tooltip: unreadable")
+		return
+	end
+	-- Quest titles in the log, to find each tooltip quest's log index and item.
+	local byTitle = {}
+	for index = 1, log.GetNumQuestLogEntries and log.GetNumQuestLogEntries() or 0 do
+		local okInfo, quest = pcall(log.GetInfo, index)
+		if okInfo and type(quest) == "table" and not quest.isHeader and type(quest.title) == "string" then
+			byTitle[quest.title] = { index = index, questID = quest.questID }
+		end
+	end
+	for _, line in ipairs(data.lines) do
+		local kind, text = line.type, line.leftText
+		if Known(kind) and (kind == lineTypes.QuestTitle or kind == lineTypes.QuestObjective
+			or kind == lineTypes.QuestPlayer) then
+			local readable = Known(text) and type(text) == "string"
+			local extra = ""
+			local quest = readable and byTitle[text]
+			if quest then
+				local item, texture
+				local SpecialItem = _G.GetQuestLogSpecialItemInfo
+				if SpecialItem then
+					local okItem, link, icon = pcall(SpecialItem, quest.index)
+					item, texture = okItem and link, okItem and icon
+				end
+				extra = (" | quest %s, its item: %s%s"):format(tostring(quest.questID), tostring(item or "none"),
+					texture and (" (icon " .. tostring(texture) .. ")") or "")
+			end
+			ns.Print(("  tooltip line type %s: %s%s"):format(tostring(kind), readable and text or "(secret)", extra))
+		end
+	end
+end
+
 -- /cine debug questglow: what soft targeting has picked and why it glows or not.
 function ns.PrintQuestGlowDebug()
 	local cvars = {}
@@ -773,6 +867,9 @@ function ns.PrintQuestGlowDebug()
 		ns.Print(("  distance to its area: %s (on this continent: %s)"):format(
 			okDistance and type(distanceSq) == "number" and ("%.0f yards"):format(math.sqrt(distanceSq)) or "unknown",
 			tostring(okDistance and onContinent)))
+		local okTag, tag = pcall(C_QuestLog.GetQuestTagInfo or error, questID)
+		ns.Print(("  tag: %s"):format(okTag and type(tag) == "table" and ("%s (%s)"):format(tostring(tag.tagName),
+			tostring(tag.tagID)) or "none"))
 		for _, objective in ipairs(C_QuestLog.GetQuestObjectives(questID) or {}) do
 			ns.Print(("  objective: %s, type %s, finished %s"):format(tostring(objective.text), tostring(objective.type),
 				tostring(objective.finished)))

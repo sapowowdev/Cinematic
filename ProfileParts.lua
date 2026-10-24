@@ -318,10 +318,12 @@ ns.PROFILE_PARTS = {
 			end
 			set("depthOfField", false)
 		end },
-		-- Fights don't bring the letterbox down, and no time of day message.
+		-- Fights don't bring the letterbox down, no time of day message, and
+		-- Vitals Vision on (your health at the screen's edges, with no portrait to read it from).
 		pure = { apply = function(set)
 			set("letterboxOffInCombat", false)
 			set("timeOfDayMessage", false)
+			set("lowHealth", true)
 		end },
 	},
 	misc = {

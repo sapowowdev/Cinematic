@@ -925,11 +925,29 @@ end
 local ownDrag = false -- dragging our panels on their own (the game's frames have no place yet)
 
 -- With rollSeparate on, our panels have a place of their own, apart from the
--- game's roll frames: where last dropped (rollSpot, their top centre in
--- UIParent's units). Never dropped, they come up by the game's frames as usual.
+-- game's roll frames: where last dropped (rollSpot, shares of the screen:
+-- ns.SpotShares). Never dropped, they come up by the game's frames as usual.
+-- Their top centre, in their own units.
 local function OwnSpot()
 	local spot = ns.Setting("rollSeparate") and ns.db and ns.db.rollSpot
-	if type(spot) == "table" and type(spot[1]) == "number" and type(spot[2]) == "number" then
+	if type(spot) ~= "table" or not ns.SpotFromShares then
+		return nil
+	end
+	if spot.left ~= nil then
+		local left, top, width = ns.SpotFromShares(window, spot)
+		if left then
+			return left + width / 2, top
+		end
+		return nil
+	end
+	-- (Saved before spots were shares, as the top centre: made one against
+	-- this screen.)
+	if type(spot[1]) == "number" and type(spot[2]) == "number" then
+		local width, height = Number(window:GetWidth()), Number(window:GetHeight())
+		local shares = width and height and ns.SpotShares(window, spot[1] - width / 2, spot[2], width, height)
+		if shares then
+			ns.db.rollSpot = shares
+		end
 		return spot[1], spot[2]
 	end
 end
@@ -1076,8 +1094,8 @@ local function DragStop()
 	ownDrag = false
 	if ns.Setting("rollSeparate") then -- (apart: only ours moves, and keeps its spot)
 		local left, top = Number(window:GetLeft()), Number(window:GetTop())
-		if left and top and ns.db then
-			ns.db.rollSpot = { left + window:GetWidth() / 2, top }
+		if left and top and ns.db and ns.SpotShares then
+			ns.db.rollSpot = ns.SpotShares(window, left, top, window:GetWidth(), window:GetHeight())
 		end
 		window.placedX = nil
 		Place()
