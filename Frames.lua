@@ -2914,14 +2914,14 @@ do
 	for event in pairs(QUEST_REVEAL_EVENTS) do
 		pcall(questWatcher.RegisterEvent, questWatcher, event)
 	end
-	-- "Only the quest that moved on" (Quest tracker page): a progress reveal
-	-- that brings the tracker up from hidden shows just the quests whose
-	-- objectives moved on (more join while it's up); the rest of the tracker's
+	-- "Show just that quest" (Quest tracker page): a reveal (a quest accepted
+	-- or its objectives moving on) that brings the tracker up from hidden shows
+	-- just that quest (more join while it's up); the rest of the tracker's
 	-- quests, every header (the tracker's own and its sections') and its
 	-- background stay faded. They keep their place, so there can be a gap
-	-- above. Hovering the tracker, a
-	-- fight bringing it up, or a new quest shows the lot for the rest of that
-	-- reveal. (Retail-style tracker: sections with usedBlocks, keyed by quest ID.)
+	-- above. Hovering the tracker or a fight bringing it up shows the lot for
+	-- the rest of that reveal. (Retail-style tracker: sections with
+	-- usedBlocks, keyed by quest ID.)
 	local focus = { on = false, quests = {}, since = 0, othersAlpha = 1 }
 	local FOCUS_FIND_TIME = 0.5 -- none of its quests found in the tracker by then: show the lot
 	local function TrackerSections(tracker)
@@ -2931,7 +2931,8 @@ do
 		return { tracker:GetChildren() }
 	end
 	-- Fades every quest not in focus.quests, the headers and the background
-	-- to alpha; true if any focused quest has a block in the tracker.
+	-- to alpha; true if any focused quest has a block in the tracker. (Relative
+	-- to their own alpha: the background's is Edit Mode's opacity.)
 	local function ApplyFocus(tracker, alpha)
 		local found = false
 		for _, section in ipairs(TrackerSections(tracker)) do
@@ -2943,9 +2944,9 @@ do
 							if type(block) == "table" and block.SetAlpha and not IsForbidden(block) then
 								if focus.quests[id] then
 									sectionHas = true
-									block:SetAlpha(1)
+									ns.FadeRelative(block, 1)
 								else
-									block:SetAlpha(alpha)
+									ns.FadeRelative(block, alpha)
 								end
 							end
 						end
@@ -2954,19 +2955,19 @@ do
 				found = found or sectionHas
 				local header = section.Header
 				if type(header) == "table" and header.SetAlpha and not IsForbidden(header) then
-					header:SetAlpha(alpha)
+					ns.FadeRelative(header, alpha)
 				end
 			end
 		end
 		for _, part in ipairs({ tracker.Header, tracker.NineSlice }) do
 			if type(part) == "table" and part.SetAlpha and not IsForbidden(part) then
-				part:SetAlpha(alpha)
+				ns.FadeRelative(part, alpha)
 			end
 		end
 		return found
 	end
 	local function Focus(questID)
-		if not (ns.db and ns.db.questProgressOnlyThat and type(questID) == "number") then
+		if not (ns.db and ns.db.questRevealOnlyThat and type(questID) == "number") then
 			focus.on = false
 			return
 		end
@@ -3002,11 +3003,7 @@ do
 	end
 	local function Reveal(setting, questID)
 		if ns.db and ns.db[setting] then
-			if setting == "questRevealOnProgress" then
-				Focus(questID)
-			else
-				focus.on = false -- (a new quest: the whole tracker)
-			end
+			Focus(questID)
 			local hold = ns.HoldTime("mouseoverHold") - ns.FadeOutTime()
 			if ns.db[QUEST_REVEAL_CALM[setting]] then
 				hold = math.max(hold, ns.db.calmTime or 0)
@@ -3025,13 +3022,24 @@ do
 		end
 		return not IsQuestWatched or ns.Flag(IsQuestWatched(quest))
 	end
-	questWatcher:SetScript("OnEvent", function(_, event, quest)
-		-- (Older clients give a quest log index: with "Only the quest that moved
-		-- on", the quest log scan below reveals instead, knowing the quest.)
-		local scanReveals = event == "QUEST_WATCH_UPDATE" and not ns.isRetail and ns.db and ns.db.questProgressOnlyThat
+	-- QUEST_ACCEPTED's quest ID: its only argument on retail, the second
+	-- (after a quest log index) on the older clients.
+	local function AcceptedQuestID(first, second)
+		if type(second) == "number" and second > 0 then
+			return second
+		end
+		local inLog = C_QuestLog and C_QuestLog.GetLogIndexForQuestID
+		if type(first) == "number" and (ns.isRetail or (inLog and inLog(first))) then
+			return first
+		end
+	end
+	questWatcher:SetScript("OnEvent", function(_, event, quest, second)
+		-- (Older clients give a quest log index: with "Show just that quest",
+		-- the quest log scan below reveals instead, knowing the quest.)
+		local scanReveals = event == "QUEST_WATCH_UPDATE" and not ns.isRetail and ns.db and ns.db.questRevealOnlyThat
 			and C_QuestLog and C_QuestLog.GetQuestObjectives
 		if not scanReveals then
-			Reveal(QUEST_REVEAL_EVENTS[event], event == "QUEST_WATCH_UPDATE" and quest or nil)
+			Reveal(QUEST_REVEAL_EVENTS[event], event == "QUEST_WATCH_UPDATE" and quest or AcceptedQuestID(quest, second))
 		end
 		if event == "QUEST_ACCEPTED" or type(quest) ~= "number" or IsTracked(quest) then
 			ns.questActivityAt = GetTime()
@@ -5012,9 +5020,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 		if entry.frame == Minimap then
 			RedrawMinimapWhenShown()
 		end
-		-- (Only the quest that moved on, Quest tracker page.)
+		-- (Show just that quest, Quest tracker page.)
 		if entry.frame == _G.ObjectiveTrackerFrame and entry.group == "quests" then
-			ns.QuestFocusTick(entry, not cinematic or not ns.db.questProgressOnlyThat or hovered[row] or fightingShown
+			ns.QuestFocusTick(entry, not cinematic or not ns.db.questRevealOnlyThat or hovered[row] or fightingShown
 				or ns.previewRows, elapsed)
 		end
 		if typingShown and entry.alpha < 1 then
