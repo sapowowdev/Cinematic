@@ -2914,8 +2914,99 @@ do
 	for event in pairs(QUEST_REVEAL_EVENTS) do
 		pcall(questWatcher.RegisterEvent, questWatcher, event)
 	end
-	local function Reveal(setting)
+	-- "Only the quest that moved on" (Quest tracker page): a progress reveal
+	-- that brings the tracker up from hidden shows just the quests whose
+	-- objectives moved on (more join while it's up); the rest of the tracker's
+	-- quests, every header (the tracker's own and its sections') and its
+	-- background stay faded. They keep their place, so there can be a gap
+	-- above. Hovering the tracker, a
+	-- fight bringing it up, or a new quest shows the lot for the rest of that
+	-- reveal. (Retail-style tracker: sections with usedBlocks, keyed by quest ID.)
+	local focus = { on = false, quests = {}, since = 0, othersAlpha = 1 }
+	local FOCUS_FIND_TIME = 0.5 -- none of its quests found in the tracker by then: show the lot
+	local function TrackerSections(tracker)
+		if type(tracker.modules) == "table" then
+			return tracker.modules
+		end
+		return { tracker:GetChildren() }
+	end
+	-- Fades every quest not in focus.quests, the headers and the background
+	-- to alpha; true if any focused quest has a block in the tracker.
+	local function ApplyFocus(tracker, alpha)
+		local found = false
+		for _, section in ipairs(TrackerSections(tracker)) do
+			if type(section) == "table" and type(section.usedBlocks) == "table" and not IsForbidden(section) then
+				local sectionHas = false
+				for _, blocks in pairs(section.usedBlocks) do
+					if type(blocks) == "table" then
+						for id, block in pairs(blocks) do
+							if type(block) == "table" and block.SetAlpha and not IsForbidden(block) then
+								if focus.quests[id] then
+									sectionHas = true
+									block:SetAlpha(1)
+								else
+									block:SetAlpha(alpha)
+								end
+							end
+						end
+					end
+				end
+				found = found or sectionHas
+				local header = section.Header
+				if type(header) == "table" and header.SetAlpha and not IsForbidden(header) then
+					header:SetAlpha(alpha)
+				end
+			end
+		end
+		for _, part in ipairs({ tracker.Header, tracker.NineSlice }) do
+			if type(part) == "table" and part.SetAlpha and not IsForbidden(part) then
+				part:SetAlpha(alpha)
+			end
+		end
+		return found
+	end
+	local function Focus(questID)
+		if not (ns.db and ns.db.questProgressOnlyThat and type(questID) == "number") then
+			focus.on = false
+			return
+		end
+		local entry = focus.entry
+		if focus.on and (questRevealUntil > GetTime() or (entry and entry.alpha > 0)) then
+			focus.quests[questID] = true
+		elseif entry and entry.alpha == 0 then
+			focus.on, focus.since = true, GetTime()
+			wipe(focus.quests)
+			focus.quests[questID] = true
+		else
+			focus.on = false -- (up already for something else: all of it stays)
+		end
+	end
+	-- Each tick, with the tracker's entry: showAll when something besides the
+	-- reveal has it up (hovered, a fight, out of CineMode).
+	function ns.QuestFocusTick(entry, showAll, elapsed)
+		local now = GetTime()
+		focus.entry = entry
+		if focus.on and (showAll or (questRevealUntil <= now and entry.alpha == 0)) then
+			focus.on = false
+		end
+		local want = focus.on and 0 or 1
+		if want == 1 and focus.othersAlpha == 1 then
+			return
+		end
+		-- (Hidden with the tracker: no fade to see.)
+		focus.othersAlpha = entry.alpha == 0 and want
+			or ns.Approach(focus.othersAlpha, want, elapsed, want > 0 and ns.FadeInTime() or ns.FadeOutTime())
+		if not ApplyFocus(entry.frame, focus.othersAlpha) and focus.on and now - focus.since > FOCUS_FIND_TIME then
+			focus.on = false
+		end
+	end
+	local function Reveal(setting, questID)
 		if ns.db and ns.db[setting] then
+			if setting == "questRevealOnProgress" then
+				Focus(questID)
+			else
+				focus.on = false -- (a new quest: the whole tracker)
+			end
 			local hold = ns.HoldTime("mouseoverHold") - ns.FadeOutTime()
 			if ns.db[QUEST_REVEAL_CALM[setting]] then
 				hold = math.max(hold, ns.db.calmTime or 0)
@@ -2935,7 +3026,13 @@ do
 		return not IsQuestWatched or ns.Flag(IsQuestWatched(quest))
 	end
 	questWatcher:SetScript("OnEvent", function(_, event, quest)
-		Reveal(QUEST_REVEAL_EVENTS[event])
+		-- (Older clients give a quest log index: with "Only the quest that moved
+		-- on", the quest log scan below reveals instead, knowing the quest.)
+		local scanReveals = event == "QUEST_WATCH_UPDATE" and not ns.isRetail and ns.db and ns.db.questProgressOnlyThat
+			and C_QuestLog and C_QuestLog.GetQuestObjectives
+		if not scanReveals then
+			Reveal(QUEST_REVEAL_EVENTS[event], event == "QUEST_WATCH_UPDATE" and quest or nil)
+		end
 		if event == "QUEST_ACCEPTED" or type(quest) ~= "number" or IsTracked(quest) then
 			ns.questActivityAt = GetTime()
 		end
@@ -2954,7 +3051,7 @@ do
 		return true
 	end
 	if questLog and questLog.GetNumQuestLogEntries and questLog.GetInfo and questLog.GetQuestObjectives then
-		local progress, seen = {}, {}
+		local progress, seen, advancedQuests = {}, {}, {}
 		local pending = false
 		local function Progress(questID)
 			local sum = 0
@@ -2977,7 +3074,7 @@ do
 		end
 		local function Scan()
 			pending = false
-			local advanced = false
+			local advanced = wipe(advancedQuests)
 			for questID in pairs(seen) do
 				seen[questID] = nil
 			end
@@ -2988,7 +3085,7 @@ do
 					local sum = Progress(questID)
 					local before = progress[questID]
 					if before and sum > before then
-						advanced = true
+						advanced[#advanced + 1] = questID
 						if IsTrackedID(questID) then
 							ns.questActivityAt = GetTime()
 						end
@@ -3002,8 +3099,8 @@ do
 					progress[questID] = nil
 				end
 			end
-			if advanced then
-				Reveal("questRevealOnProgress")
+			for _, questID in ipairs(advanced) do
+				Reveal("questRevealOnProgress", questID)
 			end
 		end
 		local logWatcher = CreateFrame("Frame")
@@ -4914,6 +5011,11 @@ function ns.UpdateFrames(cinematic, elapsed)
 		end
 		if entry.frame == Minimap then
 			RedrawMinimapWhenShown()
+		end
+		-- (Only the quest that moved on, Quest tracker page.)
+		if entry.frame == _G.ObjectiveTrackerFrame and entry.group == "quests" then
+			ns.QuestFocusTick(entry, not cinematic or not ns.db.questProgressOnlyThat or hovered[row] or fightingShown
+				or ns.previewRows, elapsed)
 		end
 		if typingShown and entry.alpha < 1 then
 			-- Pressing Enter shows the chat input (and its window) at once.

@@ -7064,10 +7064,16 @@ local function CreateQuestTrackerPanel()
 	progressCalm:SetPoint("TOPLEFT", revealProgress, "BOTTOMLEFT", QUEST_INDENT, -2)
 	GreyUnless(progressCalm, function(db) return db.questRevealOnProgress end)
 
+	local progressOnly = Check(content, "questProgressOnlyThat", L["Only the quest that moved on"],
+		L["The quest tracker comes up with just the quest whose objective moved on (and any others that " ..
+		"move on while it's up); the rest of its quests stay faded. Hovering it shows them all."])
+	progressOnly:SetPoint("TOPLEFT", progressCalm, "BOTTOMLEFT", 0, -2)
+	GreyUnless(progressOnly, function(db) return db.questRevealOnProgress end)
+
 	local combatCalm = Check(content, "questCombatCalm", L["Stay up for the Calm Timer after a fight"],
 		L["With the quest tracker ticked In combat (Standard Frames page), it stays up after a fight " ..
 		"until the Calm Timer (CineMode page) has run out, then fades. Off: it fades as soon as the fight ends."])
-	combatCalm:SetPoint("TOPLEFT", progressCalm, "BOTTOMLEFT", -QUEST_INDENT, -2)
+	combatCalm:SetPoint("TOPLEFT", progressOnly, "BOTTOMLEFT", -QUEST_INDENT, -2)
 	GreyUnless(combatCalm, function(db) return db.stayInCombat end)
 
 	local lastQuest = combatCalm

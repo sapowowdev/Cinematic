@@ -109,6 +109,7 @@ local DEFAULTS = {
 	questAcceptCalm = false,    -- ...and stays up for the Calm Timer (if longer than the mouseover time)
 	questRevealOnProgress = true, -- quest objective progress shows the quest tracker the same way
 	questProgressCalm = false,  -- ...and stays up for the Calm Timer (if longer than the mouseover time)
+	questProgressOnlyThat = true, -- ...showing just the quests that moved on, the rest of the tracker faded
 	questCombatCalm = false,  -- ticked In combat (Standard Frames), it stays up until the Calm Timer runs out
 	minimapRevealOnPing = true, -- a group member pinging the minimap shows it as a mouseover would
 	minimapPingTime = 30,       -- ...for this many seconds (once faded in), then it fades
