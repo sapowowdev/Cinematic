@@ -2005,6 +2005,10 @@ L["Drag over the lines you want (or Select all), then press Ctrl+C to copy them.
 L["Copy chat: %s"] = "Copiar chat: %s"
 L["Copy chat"] = "Copiar chat"
 L["Opens this chat window's lines to copy."] = "Abre las líneas de esta ventana de chat para copiarlas."
+L["Colours"] = "Colores"
+L["Shows the lines in their chat colours. Copied text keeps the colour codes, so untick this to copy plain text."] =
+	"Muestra las líneas con sus colores del chat. El texto copiado conserva los códigos de color, así que desmárcalo para copiar texto sin formato."
+L["Show:"] = "Mostrar:"
 L["Copy chat button"] = "Botón de copiar chat"
 L["A small icon in the bottom right of a chat window, while your mouse is over it, opens " ..
 	"that window's lines as text you can select and copy with Ctrl+C."] =
