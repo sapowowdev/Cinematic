@@ -3099,18 +3099,54 @@ end
 local pingRevealUntil = 0
 do
 	local NODE_PING_ECHO = 3 -- seconds after a node ping that a ping of yours is taken as its echo
-	local pingWatcher = CreateFrame("Frame")
-	pcall(pingWatcher.RegisterEvent, pingWatcher, "MINIMAP_PING")
-	pingWatcher:SetScript("OnEvent", function(_, _, unit)
+	local function Reveal(how, mine)
 		if not (ns.db and ns.db.minimapRevealOnPing) then
+			if ns.pingDebug then ns.Print(how .. ": Pings is off") end
 			return
 		end
-		local ok, mine = pcall(UnitIsUnit, unit or "player", "player")
-		if ok and ns.Flag(mine) and GetTime() - (ns.nodePingAt or -math.huge) < NODE_PING_ECHO then
+		if mine and GetTime() - (ns.nodePingAt or -math.huge) < NODE_PING_ECHO then
+			if ns.pingDebug then ns.Print(how .. ": taken as an ore/herb ping, skipped") end
 			return
 		end
 		pingRevealUntil = GetTime() + ns.FadeInTime() + ns.db.minimapPingTime
+		if ns.pingDebug then
+			ns.Print(("%s: minimap up for %.1f sec"):format(how, pingRevealUntil - GetTime()))
+		end
+	end
+	local pingWatcher = CreateFrame("Frame")
+	pcall(pingWatcher.RegisterEvent, pingWatcher, "MINIMAP_PING")
+	pingWatcher:SetScript("OnEvent", function(_, _, unit)
+		local ok, mine = pcall(UnitIsUnit, unit or "player", "player")
+		Reveal("ping event (" .. tostring(unit) .. ")", ok and ns.Flag(mine))
 	end)
+	-- (Your own clicks, in case the event doesn't come for them: the click
+	-- pings through Minimap:PingLocation. NodeSweep.lua's pings go through it
+	-- too and are told apart the same way.)
+	if Minimap and Minimap.PingLocation then
+		hooksecurefunc(Minimap, "PingLocation", function()
+			Reveal("your ping", true)
+		end)
+	end
+	-- /cine debug ping: also what would bring the minimap up with it.
+	function ns.ReportPingReveal()
+		ns.pingDebug = not ns.pingDebug
+		ns.Print("print minimap pings: " .. (ns.pingDebug and "on" or "off") .. " (until you /reload)")
+		ns.Print(("Minimap page on: %s, Pings: %s, Show for: %s sec, Not on flight paths: %s"):format(
+			tostring(ns.PageOn("handleMinimap")), tostring(ns.db.minimapRevealOnPing),
+			tostring(ns.db.minimapPingTime), tostring(ns.db.minimapHideOnTaxi)))
+		local any = false
+		for _, group in ipairs(ns.GetHoverGroups()) do
+			if group.triggers and group.triggers.ping then
+				any = true
+				ns.Print(("group %s (Minimap ping ticked)%s%s: %s"):format(tostring(group.name),
+					group.off and ", turned off" or "", group.when and ", only " .. group.when or "",
+					table.concat(group.members or {}, ", ")))
+			end
+		end
+		if not any then
+			ns.Print("no Mouseover group has Minimap ping ticked: pings bring nothing up")
+		end
+	end
 end
 
 -- Someone joining or leaving your group (or you joining or leaving one)

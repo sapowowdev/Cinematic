@@ -6887,15 +6887,26 @@ local function CreateMinimapPanel()
 	local revealLabel = Label(content, "GameFontHighlight", L["Reveal"])
 	revealLabel:SetPoint("TOPLEFT", aboveTracking or switch, "BOTTOMLEFT", 4, -14)
 	local ping = Check(content, "minimapRevealOnPing", L["Pings"],
-		L["Someone in your party or raid pinging the minimap shows it as if you'd hovered it, so " ..
-		"you can see where, with the rest of the Mouseover groups that have Minimap ping ticked: it " ..
-		"goes after \"Stays after mouseover\" (Mouseover groups page). Your own pings don't count."])
+		L["You or someone in your party or raid pinging the minimap shows it as if you'd hovered it, so " ..
+		"you can see where, with the rest of the Mouseover groups that have Minimap ping ticked, for " ..
+		"as long as the slider under it says. Ore, herbs and treasure pinged by Ping where it is don't count."], function(value)
+			ns.GetDB().minimapRevealOnPing = value
+			Refresh() -- grey out / enable the time below
+		end)
 	ping:SetPoint("TOPLEFT", revealLabel, "BOTTOMLEFT", 12, -4)
+	local pingTime = Slider(content, "minimapPingTime", L["Show for"], 2, 60, 1, L["%d sec"])
+	pingTime:SetPoint("TOPLEFT", ping, "BOTTOMLEFT", 4, -26)
+	Tooltip(pingTime, L["How long the minimap stays up after someone pings it, before it fades."])
+	GreyUnless(pingTime, function(db) return db.minimapRevealOnPing end)
+	-- (What goes under the slider lines up with the checkboxes again.)
+	local pingSpacer = CreateFrame("Frame", nil, content)
+	pingSpacer:SetSize(1, 1)
+	pingSpacer:SetPoint("TOPLEFT", pingTime, "BOTTOMLEFT", -4, -14)
 	local SWEEP_NOTE = L["Cinematic looks every second or two by pointing at the minimap the way your " ..
 		"mouse would (not in combat), and the minimap fades again a few seconds after it's gone. While " ..
 		"any of these is ticked, the faded minimap stays in its place, invisible, instead of being " ..
 		"shrunk away."]
-	local previousReveal = ping
+	local previousReveal = pingSpacer
 	-- (Hidden where the minimap can't be swept: retail.)
 	for _, kind in ipairs(not ns.CanSweepMinimap() and {} or {
 		{ "minimapRevealNodes", L["Nearby ore, herbs and treasure"],

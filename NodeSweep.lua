@@ -512,6 +512,7 @@ local function PingNodes(found)
 					node.n, node.w = n + sx * sin + sy * cos, w - (sx * cos - sy * sin)
 				end
 				if db.minimapNodePing and Minimap.PingLocation and not SeenBefore(node, GetTime()) then
+					ns.nodePingAt = GetTime() -- (not a ping of yours for Pings, Minimap page)
 					pcall(Minimap.PingLocation, Minimap, node.x, node.y)
 					node.at = GetTime()
 					pinged[#pinged + 1] = node

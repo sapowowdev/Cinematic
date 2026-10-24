@@ -111,6 +111,7 @@ local DEFAULTS = {
 	questProgressCalm = false,  -- ...and stays up for the Calm Timer (if longer than the mouseover time)
 	questCombatCalm = false,  -- ticked In combat (Standard Frames), it stays up until the Calm Timer runs out
 	minimapRevealOnPing = true, -- a group member pinging the minimap shows it as a mouseover would
+	minimapPingTime = 30,       -- ...for this many seconds (once faded in), then it fades
 	cooldownWhileRecharging = false, -- the Cooldown Manager stays up while a cooldown recharges (Mouseover groups
 	                                 -- with Cooldown recharging ticked: the Cooldowns group by default)
 	cooldownAfterCombat = true,     -- ...only within the Calm Timer after a fight
