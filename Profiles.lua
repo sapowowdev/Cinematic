@@ -153,10 +153,10 @@ ns.BUILTIN_PROFILES = {
 	{
 		name = "Pure Cinema",
 		icon = "Interface\\Icons\\Ability_Stealth",
-		tip = L["As little UI as possible: chat, buffs and the quest tracker " ..
-			"don't pop up on their own (hovering still shows them), group members' " ..
-			"nameplates aren't kept up, and fights don't bring the letterbox down. Fights bring up only " ..
-			"your target and your cast bar (hidden otherwise), and every camera can start music."],
+		tip = L["As little UI as possible: buffs don't pop up on their own (hovering still shows them), " ..
+			"nameplates show only for enemies in fights, and fights don't bring the letterbox down. Fights bring " ..
+			"up only your resource bar and the Cooldown Manager, the cast bar shows all through CineMode, your " ..
+			"health shows at the screen's edges (Vitals Vision), and every camera can start music."],
 		parts = { layout = { forever = "preset" }, frames = "pure", bars = "pure", camera = "pure", vfx = "pure", misc = "pure" },
 	},
 }

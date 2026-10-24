@@ -78,14 +78,15 @@ local CDM_COMBAT = { "player", "prd", "prdpower", "target", "tot", "focus", "par
 local CDM_ENEMY = { "player", "prd", "prdpower", "target", "tot", "focus", "buffs", "cooldowns", "pet",
 	"stance", "totems" }
 
--- The Pure Cinema profile's columns: fights bring up only your target and its
--- target (and the cast bar): no portrait, bars, buffs, minimap or swing timer.
+-- The Pure Cinema profile's columns: fights bring up only your resource bar
+-- and the Cooldown Manager: no portrait, target, bars, buffs, minimap or
+-- swing timer; nothing for an enemy or friend targeted.
 -- (Rows not listed keep the defaults.)
-local PURE_COMBAT = { tot = true, castbar = true, prd = false, prdpower = false, party = false, raidplayers = false,
-	raidpets = false, minimap = false, buffs = false, swing = false, mainbar = false, art = false, bottomleft = false,
-	bottomright = false, pet = false, stance = false, totems = false, micro = false, bags = false, xp = false,
-	focus = false }
-local PURE_ENEMY = { target = true, tot = true, player = false, prd = false, prdpower = false, party = false,
+local PURE_COMBAT = { prdpower = true, cooldowns = true, player = false, petframe = false, target = false,
+	tot = false, castbar = false, prd = false, party = false, raidplayers = false, raidpets = false, minimap = false,
+	buffs = false, swing = false, mainbar = false, art = false, bottomleft = false, bottomright = false, pet = false,
+	stance = false, totems = false, micro = false, bags = false, xp = false, focus = false }
+local PURE_ENEMY = { target = false, tot = false, player = false, prd = false, prdpower = false, party = false,
 	raidplayers = false, raidpets = false, focus = false, buffs = false, mainbar = false, art = false,
 	bottomleft = false, bottomright = false, pet = false, stance = false, totems = false, micro = false,
 	bags = false, xp = false }
@@ -208,24 +209,58 @@ ns.PROFILE_PARTS = {
 			set("offInParty", true)
 			set("offInRaidGroup", true)
 		end },
-		-- As little as possible: buffs and the quest tracker don't pop up on
-		-- their own (bar quest progress), group members' nameplates aren't
-		-- kept up, no cast bar out of fights, and fights bring up only your
-		-- target and its target.
+		-- As little as possible: buffs don't pop up on their own (debuffs
+		-- do), the player frame and resource display don't stay up until
+		-- full, the cast bar shows all through CineMode, fights bring up only
+		-- your resource bar, and targeting brings up nothing.
+		-- (No FramesBase: In combat rows don't wait for the Calm Timer.)
 		pure = { apply = function(set)
-			FramesBase(set)
+			set("portraitWhenNotFull", false)
+			set("prdWhenNotFull", false)
 			set("buffPeek", false)
-			set("debuffPeek", false)
-			set("questRevealOnAccept", false)
 			set("plateAlwaysGroupMembers", false)
-			set("plateAlwaysGroupMinions", false)
-			set("cineShow", { castbar = false })
+			set("cineShow", { castbar = true })
 			set("combatShow", Rows(PURE_COMBAT, false))
 			set("enemyShow", Rows(PURE_ENEMY, false))
-			set("friendlyShow", { target = true, tot = true })
+			set("friendlyShow", { target = false, tot = false })
 			set("instanceShow", Rows(PureInstances(), false))
 			-- No quest timer box.
 			set("questTimerShow", false)
+			-- Nameplates: enemies' (and their minions') in fights, not kept up
+			-- otherwise; in PvP and battlegrounds, none; in instances, friendly
+			-- players' and NPCs' hidden; no group members' or friendly targets'.
+			for _, key in ipairs({ "plateAlwaysGroupMinions", "plateGroupFriends", "plateGroupFriendlyMinions",
+				"plateAlwaysMyFriendlyNPCTarget", "plateAlwaysMyFriendlyPlayerTarget", "plateCinematicEnemies",
+				"plateCombatPvPEnemies", "plateCombatPvPEnemyMinions", "plateCombatPvPFriends", "plateInBGsEnemies",
+				"plateInBGsFriends", "plateInPvPEnemies", "plateAlwaysPartClassEnemy", "plateAlwaysPartRoleHealer",
+				"plateAlwaysPartRoleTank" }) do
+				set(key, false)
+			end
+			set("plateCombatEnemies", true)
+			set("plateCombatEnemyMinions", true)
+			set("plateInstanceFriends", "hide")
+			set("plateInstanceFriendlyNPCs", "hide")
+			-- No focus's target of target frame.
+			set("unitPartsFocusToT", false)
+			-- Tooltips page on: hidden in RP walk and the quest camera, friendlies'
+			-- shown, and nothing hidden just for a fight; the border on first
+			-- hover, no health bar later; no Mouse still.
+			set("handleTooltips", true)
+			set("tooltipHideFriendly", false)
+			for _, kind in ipairs({ "Friendly", "Gather", "Quest", "Else" }) do
+				set("tooltipHideCombat" .. kind, false)
+			end
+			set("tooltipHideInWalk", true)
+			set("tooltipHideInQuest", true)
+			set("tooltipShowBorderFirst", true)
+			set("tooltipShowHealthLater", false)
+			set("tooltipStillMode", "off")
+			set("tooltipShowStill", 1)
+			-- Heal Vision in dungeons and raids too, and as a tank or damage dealer.
+			set("healVisionInDungeons", true)
+			set("healVisionInRaids", true)
+			set("tankHide", { healVision = false })
+			set("damageHide", { healVision = false })
 		end },
 	},
 	bars = {
@@ -254,8 +289,10 @@ ns.PROFILE_PARTS = {
 		end },
 		-- No action bars, micro menu, bags or XP bar in fights, with an enemy
 		-- targeted or in instances.
+		-- (The Cooldown Manager in fights, not just after them.)
 		pure = { apply = function(set, client)
 			BarsStandard(set, client)
+			set("cooldownAfterCombat", false)
 			set("combatShow", Rows(PURE_COMBAT, true))
 			set("enemyShow", Rows(PURE_ENEMY, true))
 			set("instanceShow", Rows(PureInstances(), true))
@@ -344,11 +381,12 @@ ns.PROFILE_PARTS = {
 		nomusic = { apply = function(set)
 			set("musicInCinematic", false)
 		end },
-		-- Chat doesn't pop up on its own, nor peek for General or LocalDefense.
+		-- Chat doesn't peek for General or LocalDefense, and speech from
+		-- behind you shows low on the screen.
 		pure = { apply = function(set)
-			set("chatPeek", false)
 			set("chatPeekChannelList", { General = false, LocalDefense = false })
 			NoNpcChat(set)
+			set("chatSpeechBehind", true)
 		end },
 	},
 }
