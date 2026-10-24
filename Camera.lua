@@ -934,8 +934,10 @@ end
 
 local function IsMouseOnCamera()
 	-- Fishing: a quick click (right-clicking the bobber) isn't moving the camera;
-	-- only holding the button down a moment is.
-	if mouseCameraHeld and ns.IsFishingEvent and ns.IsFishingEvent() then
+	-- only holding the button down a moment is. Same in the quest cam (clicking
+	-- the quest giver again for their next quest).
+	if mouseCameraHeld and ((ns.IsFishingEvent and ns.IsFishingEvent())
+		or (ns.QuestCamActive and ns.QuestCamActive())) then
 		return GetTime() - mouseCameraHeld >= 0.4
 	end
 	return mouseCameraHeld and true or (IsMouselooking and IsMouselooking()) or false
