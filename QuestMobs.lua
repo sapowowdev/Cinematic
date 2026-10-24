@@ -33,12 +33,65 @@ local function TextDone(text)
 	return nil
 end
 
+-- A friendly NPC whose only open objective is a progress bar ("Rout the
+-- Lightbloom Frenzy", 85%) gets no mark: the bar moves for the enemies you
+-- kill around it, and there's nothing to do with the NPC itself. Bar
+-- objectives are told by their text, as the quest log has them (rebuilt as
+-- it changes); a line that's just a percentage is one too.
+local barTexts -- [normalized text] = true, or nil until needed
+
+local function Normalize(text)
+	text = text:lower():gsub("%d+%s*/%s*%d+", ""):gsub("%d+%s*%%", ""):gsub("[%(%)%-:]", "")
+	return (text:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function BarTexts()
+	if barTexts then
+		return barTexts
+	end
+	barTexts = {}
+	local log = C_QuestLog
+	if not (log and log.GetNumQuestLogEntries and log.GetInfo and log.GetQuestObjectives) then
+		return barTexts
+	end
+	pcall(function()
+		for i = 1, log.GetNumQuestLogEntries() do
+			local info = log.GetInfo(i)
+			local questID = info and not info.isHeader and info.questID
+			for _, objective in ipairs(type(questID) == "number" and log.GetQuestObjectives(questID) or {}) do
+				local text = objective.text
+				if objective.type == "progressbar" and type(text) == "string" and Known(text) then
+					barTexts[Normalize(text)] = true
+				end
+			end
+		end
+	end)
+	return barTexts
+end
+
+local function IsBarLine(text)
+	if type(text) ~= "string" or not Known(text) then
+		return false
+	end
+	if text:find("%d+%s*/%s*%d+") then
+		return false -- (counted: not a bar)
+	end
+	local key = Normalize(text)
+	return key == "" or BarTexts()[key] == true
+end
+
+local function IsFriendly(unit)
+	local ok, can = pcall(UnitCanAttack, "player", unit)
+	return ok and Known(can) and not can
+end
+
 -- true / false from the tooltip lines, or nil when they can't say.
 local function FromTooltip(unit)
 	if not (C_TooltipInfo and C_TooltipInfo.GetUnit) then
 		return nil
 	end
 	local objective = Enum and Enum.TooltipDataLineType and Enum.TooltipDataLineType.QuestObjective
+	local friendly = IsFriendly(unit)
 	local ok, found = pcall(function()
 		local data = C_TooltipInfo.GetUnit(unit)
 		local lines = data and data.lines
@@ -52,7 +105,7 @@ local function FromTooltip(unit)
 				if done == nil then
 					done = TextDone(text)
 				end
-				if not done then
+				if not done and not (friendly and IsBarLine(text)) then
 					return true
 				end
 			elseif type(text) == "string" and Known(text) and text:find("^%s*%-%s*%d+%s*/%s*%d+") then
@@ -122,6 +175,7 @@ for _, event in ipairs({ "QUEST_LOG_UPDATE", "UNIT_QUEST_LOG_CHANGED", "QUEST_AC
 end
 watcher:SetScript("OnEvent", function()
 	wipe(answers)
+	barTexts = nil
 end)
 
 -- The golden exclamation mark shown for them (plates' Quest Icon row, the
