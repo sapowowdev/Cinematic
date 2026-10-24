@@ -306,7 +306,7 @@ read_globals = {
 	"FCF_StartAlertFlash",
 	"FCF_GetChatWindowInfo",
 	"CHAT_FRAMES",
-	"ChatTypeInfo", "GetChannelName", "CHANNEL",
+	"ChatTypeInfo", "GetChannelName", "CHANNEL", "SetPortraitToTexture",
 	"CHAT_FRAME_TEXTURES",
 	"FCF_StopAlertFlash",
 	"debugprofilestop",

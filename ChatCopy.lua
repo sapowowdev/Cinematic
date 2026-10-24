@@ -7,6 +7,7 @@ local L = ns.L
 
 local BUTTON_SIZE = 16
 local ICON = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\Quill" -- (Media/make_quill.py)
+local PORTRAIT = "Interface\\Icons\\INV_Misc_Note_01"
 local CHECK_INTERVAL = 0.1
 local buttons = {} -- [chat frame] = its copy button
 local window
@@ -184,9 +185,85 @@ local function Refresh()
 	end)
 end
 
+-- The game's window: metal frame with a portrait, title bar, close button
+-- and a sunken inset (ButtonFrameTemplate); a plain bordered box where a
+-- client hasn't got it.
+local function CreateFrameWindow()
+	local ok, frame = pcall(CreateFrame, "Frame", "CinematicChatCopyWindow", UIParent, "ButtonFrameTemplate")
+	if ok and frame and frame.Inset then
+		-- (the template's portrait is masked round already)
+		local portrait = frame.GetPortrait and frame:GetPortrait()
+			or frame.PortraitContainer and frame.PortraitContainer.portrait or frame.portrait
+		if frame.SetPortraitToAsset then
+			frame:SetPortraitToAsset(PORTRAIT)
+		elseif portrait and SetPortraitToTexture then
+			SetPortraitToTexture(portrait, PORTRAIT)
+		elseif portrait then
+			portrait:SetTexture(PORTRAIT)
+		end
+		if portrait then portrait:Show() end
+		local titleText = frame.TitleContainer and frame.TitleContainer.TitleText or frame.TitleText
+		frame.SetTitleText = function(_, text)
+			if frame.SetTitle then frame:SetTitle(text) elseif titleText then titleText:SetText(text) end
+		end
+		local close = frame.CloseButton
+		if close then
+			close:SetScript("OnClick", function() frame:Hide() end)
+		end
+		frame.Inset:ClearAllPoints()
+		frame.Inset:SetPoint("TOPLEFT", 4, -60)
+		frame.Inset:SetPoint("BOTTOMRIGHT", -6, 28)
+		return frame
+	end
+	frame = CreateFrame("Frame", "CinematicChatCopyWindow", UIParent, BackdropTemplateMixin and "BackdropTemplate")
+	frame:SetBackdrop({
+		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+		tile = true, tileSize = 16, edgeSize = 16,
+		insets = { left = 4, right = 4, top = 4, bottom = 4 },
+	})
+	local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	title:SetPoint("TOP", 0, -10)
+	frame.SetTitleText = function(_, text) title:SetText(text) end
+	local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+	close:SetPoint("TOPRIGHT", -2, -2)
+	local inset = CreateFrame("Frame", nil, frame, BackdropTemplateMixin and "BackdropTemplate")
+	inset:SetPoint("TOPLEFT", 10, -60)
+	inset:SetPoint("BOTTOMRIGHT", -10, 32)
+	inset:SetBackdrop({
+		bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+		tile = true, tileSize = 16, edgeSize = 12,
+		insets = { left = 3, right = 3, top = 3, bottom = 3 },
+	})
+	inset:SetBackdropColor(0, 0, 0, 0.6)
+	frame.Inset = inset
+	return frame
+end
+
+-- Retail's slim scroll bar (ScrollFrameTemplate), else the older one with arrows.
+local function CreateScroll(parent)
+	local ok, scroll = pcall(CreateFrame, "ScrollFrame", nil, parent, "ScrollFrameTemplate")
+	if ok and scroll and scroll.ScrollBar then
+		scroll:SetPoint("TOPLEFT", 8, -6)
+		scroll:SetPoint("BOTTOMRIGHT", -22, 6)
+		return scroll
+	end
+	if ok and scroll then scroll:Hide() end
+	scroll = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
+	scroll:SetPoint("TOPLEFT", 8, -6)
+	scroll:SetPoint("BOTTOMRIGHT", -28, 6)
+	return scroll
+end
+
+local function PlayWindowSound(name)
+	local sound = SOUNDKIT and SOUNDKIT[name]
+	if sound then PlaySound(sound) end
+end
+
 local function CreateWindow()
-	window = CreateFrame("Frame", "CinematicChatCopyWindow", UIParent, BackdropTemplateMixin and "BackdropTemplate")
-	window:SetSize(620, 400)
+	window = CreateFrameWindow()
+	window:SetSize(640, 440)
 	window:SetPoint("CENTER", 0, 40)
 	window:SetFrameStrata("DIALOG")
 	window:SetToplevel(true)
@@ -196,40 +273,12 @@ local function CreateWindow()
 	window:RegisterForDrag("LeftButton")
 	window:SetScript("OnDragStart", window.StartMoving)
 	window:SetScript("OnDragStop", window.StopMovingOrSizing)
-	window:SetBackdrop({
-		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
-		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-		tile = true, tileSize = 16, edgeSize = 16,
-		insets = { left = 4, right = 4, top = 4, bottom = 4 },
-	})
+	window:HookScript("OnShow", function() PlayWindowSound("IG_CHARACTER_INFO_OPEN") end)
+	window:HookScript("OnHide", function() PlayWindowSound("IG_CHARACTER_INFO_CLOSE") end)
 	tinsert(UISpecialFrames, "CinematicChatCopyWindow") -- Escape closes it
 
-	local title = window:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-	title:SetPoint("TOPLEFT", 16, -14)
-	window.title = title
-
-	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
-	close:SetPoint("TOPRIGHT", -2, -2)
-
-	local hint = window:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	hint:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-	hint:SetPoint("RIGHT", window, "RIGHT", -16, 0)
-	hint:SetJustifyH("LEFT")
-	hint:SetText(L["Drag over the lines you want (or Select all), then press Ctrl+C to copy them."])
-
-	local holder = CreateFrame("Frame", nil, window, BackdropTemplateMixin and "BackdropTemplate")
-	holder:SetPoint("TOPLEFT", 14, -56)
-	holder:SetPoint("BOTTOMRIGHT", -14, 44)
-	holder:SetBackdrop({
-		bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-		tile = true, tileSize = 16, edgeSize = 12,
-		insets = { left = 3, right = 3, top = 3, bottom = 3 },
-	})
-	holder:SetBackdropColor(0, 0, 0, 0.6)
-	local scroll = CreateFrame("ScrollFrame", nil, holder, "UIPanelScrollFrameTemplate")
-	scroll:SetPoint("TOPLEFT", 8, -6)
-	scroll:SetPoint("BOTTOMRIGHT", -28, 6)
+	local holder = window.Inset
+	local scroll = CreateScroll(holder)
 	local box = CreateFrame("EditBox", nil, scroll)
 	box:SetMultiLine(true)
 	box:SetMaxLetters(0)
@@ -250,18 +299,26 @@ local function CreateWindow()
 	window.box, window.scroll = box, scroll
 
 	local selectAll = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-	selectAll:SetSize(110, 22)
-	selectAll:SetPoint("BOTTOMRIGHT", -16, 14)
+	selectAll:SetSize(120, 22)
+	selectAll:SetPoint("BOTTOMRIGHT", -8, 4)
 	selectAll:SetText(L["Select all"])
 	selectAll:SetScript("OnClick", function()
 		box:SetFocus()
 		box:HighlightText()
 	end)
+	selectAll:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:SetText(L["Select all"])
+		GameTooltip:AddLine(L["Drag over the lines you want (or Select all), then press Ctrl+C to copy them."], 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	selectAll:SetScript("OnLeave", GameTooltip_Hide)
 
+	-- The filters sit in the bar under the title, right of the portrait.
 	-- Colours: copying keeps the colour codes, so untick it for plain text.
 	local colours = CreateFrame("CheckButton", nil, window, "UICheckButtonTemplate")
 	colours:SetSize(24, 24)
-	colours:SetPoint("RIGHT", selectAll, "LEFT", -76, 0)
+	colours:SetPoint("TOPRIGHT", -80, -31)
 	local coloursLabel = window:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	coloursLabel:SetPoint("LEFT", colours, "RIGHT", 2, 0)
 	coloursLabel:SetText(L["Colours"])
@@ -283,9 +340,9 @@ local function CreateWindow()
 	local ok, dropdown = pcall(CreateFrame, "DropdownButton", nil, window, "WowStyle1DropdownTemplate")
 	if ok and dropdown and dropdown.SetupMenu then
 		local label = window:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-		label:SetPoint("BOTTOMLEFT", 18, 19)
+		label:SetPoint("TOPLEFT", 70, -38)
 		label:SetText(L["Show:"])
-		dropdown:SetWidth(240)
+		dropdown:SetWidth(260)
 		dropdown:SetPoint("LEFT", label, "RIGHT", 8, 0)
 		dropdown:SetupMenu(function(_, rootDescription)
 			for _, choice in ipairs(TypeChoices(window.lines or {})) do
@@ -301,22 +358,21 @@ local function CreateWindow()
 	end
 end
 
--- Opens a chat window's lines, scrolled to the newest, all selected.
+-- Opens a chat window's lines, scrolled to the newest (nothing selected, so
+-- the colours show; drag over lines or Select all).
 local function ShowCopy(chatFrame)
 	if not window then CreateWindow() end
 	local name = chatFrame.name
 	if not Readable(name) and FCF_GetChatWindowInfo and chatFrame.GetID then
 		name = FCF_GetChatWindowInfo(chatFrame:GetID())
 	end
-	window.title:SetText(Readable(name) and name ~= "" and L["Copy chat: %s"]:format(name) or L["Copy chat"])
+	window:SetTitleText(Readable(name) and name ~= "" and L["Copy chat: %s"]:format(name) or L["Copy chat"])
 	window.lines = ChatLines(chatFrame)
 	window.chatType = nil -- each opening starts on All
 	if window.dropdown then window.dropdown:GenerateMenu() end
 	window.colours:SetChecked(ns.Setting("chatCopyColours") and true or false)
 	window:Show()
 	Refresh()
-	window.box:SetFocus()
-	window.box:HighlightText()
 end
 
 local function CreateButton(chatFrame)
