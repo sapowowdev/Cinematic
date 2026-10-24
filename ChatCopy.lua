@@ -69,6 +69,7 @@ local SAME_TYPE = {
 	PARTY_LEADER = "PARTY", RAID_LEADER = "RAID", INSTANCE_CHAT_LEADER = "INSTANCE_CHAT",
 }
 local OTHER = "OTHER" -- lines without a chat type (addons' prints)
+local CINEMATIC = "CINEMATIC" -- ...of those, ours
 
 -- A chat line's type ("SAY", "CHANNEL6"...): chat adds a line with its
 -- ChatTypeInfo id and event after the colour. A channel line read as just
@@ -79,6 +80,11 @@ local function LineType(idToType, id, event, plain)
 		chatType = event:match("^CHAT_MSG_(.+)")
 	end
 	chatType = chatType or OTHER
+	-- Our own prints (ns.Print), after a timestamp if there is one.
+	local own = chatType == OTHER and plain:find("Cinematic:", 1, true)
+	if own and own <= 16 then
+		chatType = CINEMATIC
+	end
 	if chatType == "CHANNEL" then
 		local number = plain:match("%[(%d+)%. ")
 		chatType = number and "CHANNEL" .. number or chatType
@@ -91,6 +97,8 @@ end
 local function TypeName(chatType)
 	if chatType == OTHER then
 		return L["Other"]
+	elseif chatType == CINEMATIC then
+		return "Cinematic"
 	end
 	local number = chatType:match("^CHANNEL(%d+)$")
 	if number then
