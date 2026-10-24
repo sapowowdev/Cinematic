@@ -4321,6 +4321,12 @@ local function CreateCombatPanel()
 		"until the Calm Timer (CineMode page) has run out, then fade. Off: they fade as soon as the fight ends."])
 	calm:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -2)
 	GreyUnless(calm, function(db) return db.stayInCombat end)
+	local hostileCast = Check(content, "fadeInOnHostileCast", L["Cast fade into combat"],
+		L["Out of combat, casting a spell at an enemy brings up the frames ticked In combat, as if the fight " ..
+		"had started: they fade in over the cast and are fully up as it lands. Instant spells bring them up " ..
+		"at the Combat fade in time."])
+	hostileCast:SetPoint("TOPLEFT", calm, "BOTTOMLEFT", 0, -2)
+	GreyUnless(hostileCast, function(db) return db.stayInCombat end)
 
 	-- Your player frame kept up while you recover, and the personal resource
 	-- display (its own tick, on clients that have one).
@@ -4328,7 +4334,7 @@ local function CreateCombatPanel()
 	local portrait = Check(content, "portraitWhenNotFull", L["Show your player frame until health and power are full"],
 		L["Keeps your player frame up after a fight, a fall or resurrecting, until your health and " ..
 		"power are full. Rage and runic power don't count."])
-	portrait:SetPoint("TOPLEFT", calm, "BOTTOMLEFT", 0, -2)
+	portrait:SetPoint("TOPLEFT", hostileCast, "BOTTOMLEFT", 0, -2)
 	-- The lowest option so far, and how far in from the column edge it sits.
 	local lastCheck, lastIndent = portrait, 0
 	if _G.CinematicPersonalPower then

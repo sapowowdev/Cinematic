@@ -136,6 +136,7 @@ local DEFAULTS = {
 	trackingOffInPvP = true,
 	stayInCombat = true,  -- stay cinematic in combat and when targeting enemies
 	combatShowCalm = false, -- Standard Frames' In combat rows stay up until the Calm Timer runs out after a fight
+	fadeInOnHostileCast = true, -- ...and fade in over a cast at an enemy, out of combat (the pull)
 	revealOnCast = false,   -- casting or channeling brings the UI back
 	revealAtNPCs = false,     -- vendor/bank/mail/trainer/trade/auction windows bring the UI back
 	revealOnDrag = false,     -- bring the UI back while something's held on the cursor (dragging)

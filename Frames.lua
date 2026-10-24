@@ -2420,6 +2420,127 @@ end
 local lastCombatAt = -math.huge
 ns.OnCalmEnd(function(cut) lastCombatAt = math.min(lastCombatAt, cut) end)
 
+-- Casting at an enemy out of combat (Standard Frames page, "Cast fade into
+-- combat"): the cast counts as the fight
+-- starting, so the In combat rows fade in over the cast and are up as it
+-- lands. ns.HostileCastLeft(now): seconds left of such a cast; 0 just after one
+-- (or an instant one, or a channel), while it flies to the enemy and the fight
+-- takes over; nil: none. (On ns: Frames.lua is at its 200 locals.)
+do
+	local CAST_HOLD = 1.5 -- seconds the rows stay after the cast, for it to reach the enemy
+	local CAST_UNITS = { "target", "focus", "mouseover" }
+	local endsAt, holdUntil = 0, 0
+	local castID, cancelled
+	local sentName, sentID -- (UNIT_SPELLCAST_SENT's: who the cast is aimed at)
+
+	local function Plain(value, kind)
+		return type(value) == kind and not (issecretvalue and issecretvalue(value))
+	end
+
+	-- Whether the spell is harmful; nil when the client can't say.
+	local function IsHarmful(spellID)
+		if not Plain(spellID, "number") then return nil end
+		if C_Spell and C_Spell.IsSpellHarmful then
+			local ok, harmful = pcall(C_Spell.IsSpellHarmful, spellID)
+			if ok and Plain(harmful, "boolean") then return harmful end
+		end
+		local IsHarmfulSpell = _G.IsHarmfulSpell
+		if IsHarmfulSpell and GetSpellInfo then
+			local name = GetSpellInfo(spellID)
+			local ok, harmful = pcall(IsHarmfulSpell, name)
+			if ok and not (issecretvalue and issecretvalue(harmful)) then return harmful and true or false end
+		end
+		return nil
+	end
+
+	-- Whether this cast is at a living enemy: the unit SENT named (target,
+	-- focus or mouseover), or with no name (aimed at the ground) the target.
+	local function AtEnemy(spellID, castGUID)
+		local harmful = IsHarmful(spellID)
+		if harmful == false then return false end
+		local name = castGUID == sentID and sentName or nil
+		for _, unit in ipairs(CAST_UNITS) do
+			if (name or unit == "target") and ns.IsEnemyUnit(unit) and not ns.Flag(UnitIsDeadOrGhost(unit)) then
+				if not name then return true end
+				local short, full = UnitName(unit), _G.GetUnitName and _G.GetUnitName(unit, true)
+				if (Plain(short, "string") and short == name) or (Plain(full, "string") and full == name) then
+					return true
+				end
+			end
+		end
+		return false
+	end
+
+	local function Report(text)
+		if ns.castDebug then ns.Print("hostile cast: " .. text) end
+	end
+
+	local watcher = CreateFrame("Frame")
+	watcher:RegisterUnitEvent("UNIT_SPELLCAST_SENT", "player")
+	watcher:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
+	watcher:RegisterUnitEvent("UNIT_SPELLCAST_DELAYED", "player")
+	watcher:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player")
+	watcher:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+	watcher:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player")
+	watcher:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player")
+	watcher:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player")
+	watcher:SetScript("OnEvent", function(_, event, _, a, b)
+		if not (ns.db and ns.db.fadeInOnHostileCast) then return end
+		if event == "UNIT_SPELLCAST_SENT" then
+			-- (unit, target name, castGUID, spellID)
+			sentName = Plain(a, "string") and a ~= "" and a or nil
+			sentID = b
+			return
+		end
+		-- (unit, castGUID, spellID)
+		local castGUID, spellID = a, b
+		local now = GetTime()
+		if event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_DELAYED" then
+			if event == "UNIT_SPELLCAST_START" then
+				castID, cancelled, endsAt = nil, false, 0
+				if not AtEnemy(spellID, castGUID) then return end
+				castID = castGUID
+			elseif castGUID ~= castID then
+				return
+			end
+			local ok, _, _, _, startMS, endMS = pcall(UnitCastingInfo, "player")
+			if ok and Plain(endMS, "number") and Plain(startMS, "number") then
+				endsAt = endMS / 1000
+				Report(("%s, %.1f sec, fading in over %.1f sec"):format(tostring(spellID),
+					(endMS - startMS) / 1000, math.max(0, endsAt - now)))
+			end
+		elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
+			if AtEnemy(spellID, castGUID) then
+				castID, endsAt, holdUntil = nil, 0, now + CAST_HOLD
+				Report(tostring(spellID) .. ", channelled")
+			end
+		elseif event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_FAILED" then
+			if castGUID == castID then
+				cancelled, endsAt, holdUntil = true, 0, 0
+				Report("stopped short")
+			end
+		elseif event == "UNIT_SPELLCAST_SUCCEEDED" or event == "UNIT_SPELLCAST_STOP" then
+			if castGUID == castID then
+				if not cancelled then
+					endsAt, holdUntil = 0, now + CAST_HOLD
+				end
+				if event == "UNIT_SPELLCAST_SUCCEEDED" then castID = nil end
+			elseif event == "UNIT_SPELLCAST_SUCCEEDED" and AtEnemy(spellID, castGUID) then
+				holdUntil = now + CAST_HOLD
+				Report(tostring(spellID) .. ", instant")
+			end
+		end
+	end)
+
+	function ns.HostileCastLeft(now)
+		if not ns.db.fadeInOnHostileCast then return nil end
+		if endsAt > now then return endsAt - now end
+		-- (A moment past its end before the events come in counts as just after.)
+		if holdUntil > now or (endsAt > 0 and now < endsAt + 0.5) then return 0 end
+		return nil
+	end
+end
+
 -- Frame names to show right now, from the Standard Frames page's column that
 -- applies: In combat (while staying cinematic, and with combatShowCalm on
 -- until the Calm Timer has run out after the fight), Tar Enemy (out of combat
@@ -2441,6 +2562,12 @@ do
 		end
 		return false
 	end
+	-- (Casting at an enemy: the In combat rows and the target's column's.
+	-- Not a closure for the same reason.)
+	local targetIsOn
+	local function CastIsOn(key)
+		return ns.IsCombatShowOn(key) or (targetIsOn and targetIsOn(key))
+	end
 	function GetCombatShownFrames()
 		local fighting = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 		local calm = not fighting and GetTime() - lastCombatAt < (ns.db.calmTime or 0)
@@ -2456,6 +2583,11 @@ do
 			else
 				isOn = ns.IsFriendlyShowOn
 			end
+		end
+		-- (Casting at an enemy: the In combat rows as well, see ns.HostileCastLeft.)
+		if not inCombat and ns.db.stayInCombat and ns.HostileCastLeft(GetTime()) then
+			targetIsOn = isOn
+			isOn = CastIsOn
 		end
 		-- (And the rows ticked for where you are.)
 		local placeLists = PlaceListsHere()
@@ -4781,6 +4913,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 		combatShown = GetCombatShownFrames()
 	end
 	local fighting = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+	-- (Casting at an enemy: the rows it brings up fade in over what's left of
+	-- the cast, at the Combat fade in time just after it.)
+	local castLeft = cinematic and not fighting and ns.db.stayInCombat and ns.HostileCastLeft(now)
 	if fighting then
 		lastCombatAt = now
 		buffPeekUntil = 0 -- (a peek from just before the fight doesn't outlast it)
@@ -5040,7 +5175,12 @@ function ns.UpdateFrames(cinematic, elapsed)
 		elseif entry.alpha ~= target or target == 0 or entry.shrunk then
 			local duration
 			if target > entry.alpha then
-				duration = GroupFadeTime(entry.group, true)
+				if castLeft and listShown and not hovered[row] then
+					-- (The time for a whole fade at the pace that ends with the cast.)
+					duration = castLeft > 0 and castLeft / (1 - entry.alpha) or ns.db.combatFadeInTime
+				else
+					duration = GroupFadeTime(entry.group, true)
+				end
 			else
 				duration = deathFade and DEATH_FADE_TIME or GroupFadeTime(entry.group, false)
 			end

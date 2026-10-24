@@ -77,6 +77,7 @@ local function PrintDebugHelp()
 	print("  /cine debug minimapicons - the minimap's methods for its player arrow and icons on this client")
 	print("  /cine debug nodes [raw] [grow [update]|park|stay] [seconds] - sweep a pretend mouse over the minimap and list the names its tooltip gives (herbs, veins), faded or not; grow gives the faded minimap its size back for each sweep only; park keeps it full size off the screen while it watches (60 seconds), stay full size in its place; update has the game place its dots first; raw shows each name's line as the game wrote it; with seconds, once a second, then all of it in the copy window (again to stop early)")
 	print("  /cine debug pad - print each gamepad button press and whether it shows the bars (again to stop)")
+	print("  /cine debug cast - print each cast at an enemy that fades in the In combat rows, and how long it takes (again to stop)")
 	print("  /cine debug frames - log the shown frames that aren't faded, and gamepad frames")
 	print("  /cine debug alpha -print frames setting their own alpha (again to stop)")
 	print("  /cine debug hover [group] - print what the mouse is on and whether the group (quests) counts as hovered (again to stop)")
@@ -355,6 +356,9 @@ local function HandleSlash(msg)
 			ns.ReportSwing()
 		end
 		ns.Print("print swing bars showing or fading: " .. OnOff(ns.swingDebug) .. " (until you /reload)")
+	elseif cmd == "debug" and arg == "cast" then
+		ns.castDebug = not ns.castDebug
+		ns.Print("print casts at enemies: " .. OnOff(ns.castDebug) .. " (until you /reload)")
 	elseif cmd == "debug" and arg == "pad" then
 		ns.padDebug = not ns.padDebug
 		local hasState = C_GamePad and C_GamePad.GetDeviceMappedState and true or false
