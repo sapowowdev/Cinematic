@@ -774,13 +774,75 @@ local function QuestMove(share)
 	return t * t * (3 - 2 * t)
 end
 
+-- The game's icons that can sit left of the health bar (a rare or elite's
+-- dragon, the raid marker): the quest mark goes left of any showing there.
+local SIDE_ICONS = { "ClassificationFrame", "classificationIndicator", "RaidTargetFrame" }
+
+-- The quest mark's middle from the bar's middle, left of the bar and of any
+-- side icon showing in its way (x, the start, is left of the bar alone).
+-- Where the game won't say where things are (retail's plates: sizes, but no
+-- spots): a side icon showing is taken to sit left of the bar where it's
+-- anchored (its RIGHT to the bar's LEFT, offset as its anchor says, if the
+-- game will say), the classification's dragon there even if it won't. Less
+-- SIDE_ICON_TRIM: the clear edges round the dragon and the thin ! (tested on
+-- retail: none left a wide gap, 16 overlapped).
+local SIDE_ICON_TRIM = 9
+
+local function PastSideIconsBySize(icon, unitFrame, x)
+	local barWidth = Measure(icon.bar, "GetWidth")
+	if not barWidth then
+		return x
+	end
+	for i, field in ipairs(SIDE_ICONS) do
+		local frame = unitFrame[field]
+		if Usable(frame) and Ask(frame.IsVisible, frame) and (Measure(frame, "GetAlpha") or 0) > 0 then
+			local width = Measure(frame, "GetWidth")
+			local ok, point, _, relative, offset = pcall(frame.GetPoint, frame, 1)
+			local known = ok and Known(point) and Known(relative) and Known(offset)
+			local left = known and type(point) == "string" and point:find("RIGHT")
+				and type(relative) == "string" and relative:find("LEFT")
+			if width and (left or (not known and i <= 2)) then
+				offset = (left and type(offset) == "number") and offset or 0
+				x = math.min(x, -(barWidth / 2 - offset + width + 2 + icon:GetWidth() / 2 - SIDE_ICON_TRIM))
+			end
+		end
+	end
+	return x
+end
+
+local function PastSideIcons(icon, unitFrame, x)
+	local bar = icon.bar
+	local barX = Measure(bar, "GetCenter")
+	local barScale, scale = Measure(bar, "GetEffectiveScale"), Measure(icon, "GetEffectiveScale")
+	if not (barX and barScale and scale) then
+		return PastSideIconsBySize(icon, unitFrame, x)
+	end
+	barX = barX * barScale
+	local reach = barX + (x - icon:GetWidth() / 2) * scale -- (the mark's left, on screen)
+	for _, field in ipairs(SIDE_ICONS) do
+		local frame = unitFrame[field]
+		if Usable(frame) and Ask(frame.IsVisible, frame) and (Measure(frame, "GetAlpha") or 0) > 0 then
+			local left, right = Measure(frame, "GetLeft"), Measure(frame, "GetRight")
+			local own = Measure(frame, "GetEffectiveScale")
+			if left and right and own then
+				left, right = left * own, right * own
+				-- (In the mark's way: from its left to the bar's middle.)
+				if right > reach and left < barX then
+					x = math.min(x, (left - barX) / scale - 2 - icon:GetWidth() / 2)
+				end
+			end
+		end
+	end
+	return x
+end
+
 local function QuestIconSpot(icon, plate, body, kept, shown, mark)
 	local half = icon:GetWidth() / 2
 	local width = Measure(icon.bar, "GetWidth")
 	if not width then
 		return nil
 	end
-	local x, y = -(width / 2 + 3 + half), 0
+	local x, y = PastSideIcons(icon, plate.UnitFrame, -(width / 2 + 3 + half)), 0
 	if kept and body < 1 then
 		local barX, barY = Measure(icon.bar, "GetCenter")
 		local unitFrame = plate.UnitFrame
@@ -1245,6 +1307,56 @@ function ns.DescribePlateParts(unitFrame)
 		found[#found + 1] = ns.DescribeQuestMob(unit) .. " icon="
 			.. (questIcon and (questIcon:IsShown() and "shown" or "hidden") or "none")
 	end
+	-- What the quest mark goes left of: each side icon (visible, alpha, left
+	-- and right on screen), then anything else drawn left of the bar's middle.
+	local function Spot(frame)
+		local okVisible, visible = pcall(frame.IsVisible, frame)
+		local alpha = Measure(frame, "GetAlpha")
+		local left, right = Measure(frame, "GetLeft"), Measure(frame, "GetRight")
+		local scale = Measure(frame, "GetEffectiveScale")
+		local width = Measure(frame, "GetWidth")
+		local okPoint, point, _, relative, offset = pcall(frame.GetPoint, frame, 1)
+		local anchor = "?"
+		if okPoint and Known(point) and Known(relative) and Known(offset) then
+			anchor = ("%s>%s %s"):format(tostring(point), tostring(relative), tostring(offset))
+		end
+		return ("%s a=%s %s-%s w=%s at %s"):format(okVisible and (Known(visible) and tostring(visible) or "secret") or "?",
+			alpha and ("%.2f"):format(alpha) or "?", left and scale and ("%.0f"):format(left * scale) or "?",
+			right and scale and ("%.0f"):format(right * scale) or "?", width and ("%.0f"):format(width) or "?", anchor)
+	end
+	local sides = {}
+	local barFrame = unitFrame.HealthBarsContainer or unitFrame.healthBar
+	local barX = Usable(barFrame) and Measure(barFrame, "GetCenter")
+	local barScale = Usable(barFrame) and Measure(barFrame, "GetEffectiveScale")
+	sides[#sides + 1] = "bar middle " .. (barX and barScale and ("%.0f"):format(barX * barScale) or "?")
+	local seen = {}
+	for _, field in ipairs(SIDE_ICONS) do
+		local frame = unitFrame[field]
+		seen[frame or field] = true
+		sides[#sides + 1] = field .. " " .. (Usable(frame) and Spot(frame) or "none")
+	end
+	if barX and barScale then
+		for _, owner in ipairs({ unitFrame, unitFrame.HealthBarsContainer }) do
+			if type(owner) == "table" and owner.GetObjectType then
+				for field, value in pairs(owner) do
+					if type(field) == "string" and not seen[value] and Usable(value) and value.GetLeft then
+						seen[value] = true
+						local left, scale = Measure(value, "GetLeft"), Measure(value, "GetEffectiveScale")
+						local okVisible, visible = pcall(value.IsVisible, value)
+						if left and scale and left * scale < barX * barScale - 20
+							and okVisible and Known(visible) and visible then
+							sides[#sides + 1] = field .. " " .. Spot(value)
+						end
+					end
+				end
+			end
+		end
+	end
+	local questIcon = questIcons[unitFrame:GetParent()]
+	if questIcon then
+		sides[#sides + 1] = "quest mark at " .. tostring(questIcon.x) .. " " .. Spot(questIcon)
+	end
+	found[#found + 1] = "left of bar: " .. table.concat(sides, "; ")
 	-- The health bar's container, the bar, and any frame on the bar (its border).
 	local healthFields = {}
 	local container, bar = unitFrame.HealthBarsContainer, unitFrame.healthBar
