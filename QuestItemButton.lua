@@ -4,7 +4,8 @@
 -- your extra ability button goes: at the extra abilities frame's place (Edit
 -- Mode's spot), or beside it while the game has an extra action or zone
 -- ability in it. Ours, not the game's: an addon can't put an item on that one.
--- Shows within NEAR_YARDS of the quest's area, until its objectives are done. A secure button: it can only
+-- Shows within NEAR_YARDS of the quest's area, until its objectives are done
+-- (once used: the objectives the item moved). A secure button: it can only
 -- show, hide, change item or move out of combat, so in a fight it stays as it
 -- was (its cooldown and count still follow). Key binding: CLICK
 -- CinematicQuestItemButton:LeftButton. Not one of the frames CineMode fades:
@@ -83,16 +84,102 @@ button:SetScript("OnLeave", function()
 	GameTooltip:Hide()
 end)
 
--- Whether every objective of the quest is done (10/10), the quest log maybe
--- not yet calling it complete. Then the item's no longer needed (whatever the
--- tracker does with it).
-local function Done(questID)
+local function Objectives(questID)
 	local ok, objectives = pcall(C_QuestLog.GetQuestObjectives, questID)
-	if not (ok and type(objectives) == "table" and #objectives > 0) then
+	return ok and type(objectives) == "table" and objectives or {}
+end
+
+local function Finished(objective)
+	return objective and Known(objective.finished) and objective.finished or false
+end
+
+-- The objectives the item is for: the ones that moved after you used it
+-- ("The Arcantina": the key's Teleport to the Arcantina, not Speak with
+-- Arator after it), kept per character until the quest leaves the log.
+-- ns.chardb.questItemObjectives[questID] = { [objective index] = true }.
+local USED_WAIT = 60 -- seconds after the cast for its objective to move
+local used -- { questID, at, before = { [index] = numFulfilled } }, or nil
+
+local function ItemObjectives()
+	local chardb = ns.chardb
+	if not chardb then
+		return {}
+	end
+	chardb.questItemObjectives = chardb.questItemObjectives or {}
+	return chardb.questItemObjectives
+end
+
+local function Counts(questID)
+	local counts = {}
+	for index, objective in ipairs(Objectives(questID)) do
+		local have = objective.numFulfilled
+		counts[index] = (type(have) == "number" and Known(have) and have or 0) + (Finished(objective) and 0.5 or 0)
+	end
+	return counts
+end
+
+-- You cast a spell: if it's a quest item's, note that quest's counts.
+local function ItemCast(spellID)
+	if not (type(spellID) == "number" and Known(spellID)) then
+		return
+	end
+	local GetItemSpell = C_Item and C_Item.GetItemSpell or _G.GetItemSpell
+	for _, quest in ipairs(ns.QuestLogItems()) do
+		local ok, _, itemSpell = pcall(GetItemSpell or error, quest.itemID)
+		if ok and itemSpell == spellID then
+			used = { questID = quest.questID, at = GetTime(), before = Counts(quest.questID) }
+			return
+		end
+	end
+end
+
+-- The quest log changed: which of that quest's objectives moved since.
+local function CheckUsed()
+	if not used then
+		return
+	end
+	if GetTime() - used.at > USED_WAIT then
+		used = nil
+		return
+	end
+	local moved
+	for index, have in pairs(Counts(used.questID)) do
+		if have > (used.before[index] or 0) then
+			moved = moved or {}
+			moved[index] = true
+		end
+	end
+	if moved then
+		ItemObjectives()[used.questID] = moved
+		used = nil
+	end
+end
+
+-- Forget quests no longer in the log.
+local function ForgetGone()
+	local saved = ItemObjectives()
+	if not next(saved) or not (C_QuestLog and C_QuestLog.GetLogIndexForQuestID) then
+		return
+	end
+	for questID in pairs(saved) do
+		local ok, index = pcall(C_QuestLog.GetLogIndexForQuestID, questID)
+		if ok and index == nil then
+			saved[questID] = nil
+		end
+	end
+end
+
+-- Whether the item's no longer needed (whatever the tracker does with it):
+-- the objectives it moved are done, else every objective of the quest is
+-- (10/10), the quest log maybe not yet calling it complete.
+local function Done(questID)
+	local objectives = Objectives(questID)
+	if #objectives == 0 then
 		return false
 	end
-	for _, objective in ipairs(objectives) do
-		if not (Known(objective.finished) and objective.finished) then
+	local mine = ItemObjectives()[questID]
+	for index, objective in ipairs(objectives) do
+		if (not mine or mine[index]) and not Finished(objective) then
 			return false
 		end
 	end
@@ -219,9 +306,19 @@ for _, event in ipairs({ "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "QUEST_LOG_UPD
 	"SPELLS_CHANGED", "QUEST_WATCH_LIST_CHANGED" }) do
 	pcall(watcher.RegisterEvent, watcher, event)
 end
-watcher:SetScript("OnEvent", function(_, event)
+pcall(watcher.RegisterUnitEvent, watcher, "UNIT_SPELLCAST_SENT", "player")
+watcher:SetScript("OnEvent", function(_, event, _, _, _, spellID)
+	if event == "UNIT_SPELLCAST_SENT" then
+		-- (unit, target name, castGUID, spellID): sent, before the count moves
+		ItemCast(spellID)
+		return
+	end
 	if event == "PLAYER_LOGIN" then
 		OnLogin()
+	elseif event == "QUEST_LOG_UPDATE" then
+		CheckUsed()
+	elseif event == "QUEST_REMOVED" or event == "QUEST_TURNED_IN" or event == "PLAYER_ENTERING_WORLD" then
+		ForgetGone()
 	end
 	ns.RefreshQuestItemButton()
 end)
