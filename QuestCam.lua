@@ -739,7 +739,7 @@ end
 local function Wanted()
 	local db = ns.db
 	return db and db.enabled and db.eventQuestCamera ~= "none" and not InCombatLockdown()
-		and not UnitOnTaxi("player") and not ns.IsCameraOffHere("quest")
+		and not cam.movie and not UnitOnTaxi("player") and not ns.IsCameraOffHere("quest")
 		and ns.CombatWaitOver("quest", GetTime())
 end
 
@@ -768,11 +768,67 @@ local OPENS = {
 	GOSSIP_SHOW = true,
 }
 
+-- A movie or cinematic (a quest giver's "play the movie" option): the moves
+-- went on counting while it played, and the game's camera didn't follow the
+-- count, so undoing them after left it looking straight down. So everything
+-- stops where it is, and no more for this conversation. Once it's over, if
+-- the quest cam had moved the camera, it's set back behind you, level, and
+-- back to your distance.
+local MOVIE_VIEW = 5 -- saved view slot used for Blizzard's default view (as /cine behind)
+local MOVIE_ZOOM_WAIT = 1.5 -- seconds for SetView's blend to settle before the zoom goes back
+local function OnMovie(started)
+	if not started then
+		cam.movie = false
+		local restore = cam.movieRestore
+		cam.movieRestore = nil
+		if restore and ResetView and SetView then
+			ns.CallCameraFunction("ResetView", MOVIE_VIEW)
+			ns.CallCameraFunction("SetView", MOVIE_VIEW)
+			C_Timer.After(MOVIE_ZOOM_WAIT, function()
+				local diff = restore.zoom and GetCameraZoom and restore.zoom - GetCameraZoom()
+				if diff and math.abs(diff) > 0.1 then
+					ns.CallCameraFunction(diff > 0 and "CameraZoomOut" or "CameraZoomIn", math.abs(diff))
+				end
+			end)
+		end
+		return
+	end
+	if cam.movie then
+		return
+	end
+	cam.movie = true
+	local moved = movers.yaw.amount ~= 0 or movers.pitch.amount ~= 0 or movers.yaw.moving or movers.pitch.moving
+		or zoomer.moving or zoomer.pending ~= nil or cam.zoomedTo ~= nil
+	if moved then
+		local zoom = zoomer.pending and zoomer.pending.to or (zoomer.leaving and zoomer.goal) or cam.zoom
+		cam.movieRestore = { zoom = zoom or (ns.PlayerZoom and ns.PlayerZoom()) }
+	end
+	for _, m in pairs(movers) do
+		StopMove(m)
+		m.amount = 0
+	end
+	StopZoom(true)
+	ns.RestoreZoomLimit()
+	zoomer.pending, zoomer.leaving = nil, false
+	cam.active, cam.steps, cam.zoom, cam.zoomedTo = false, {}, nil, nil
+	if cam.since then
+		cam.cancelled = true
+	end
+	ns.ApplyCVarSet(FOLLOW_CVARS, false)
+	ns.ApplyCVarSet(SHOULDER_CVARS, false)
+	ns.ApplyCVarSet(CENTERED_CVARS, false)
+	Note("movie: stopped")
+end
+
+local MOVIE_EVENTS = { PLAY_MOVIE = true, CINEMATIC_START = true, STOP_MOVIE = false, CINEMATIC_STOP = false }
+
 -- Talking to a quest giver: cam.since is when it started (nil: not talking),
 -- cam.closingAt when its window closed (it ends after CLOSE_GRACE, unless
 -- another opens meanwhile, going from gossip to the quest text).
 local function OnEvent(_, event)
-	if OPENS[event] then
+	if MOVIE_EVENTS[event] ~= nil then
+		OnMovie(MOVIE_EVENTS[event])
+	elseif OPENS[event] then
 		if event == "GOSSIP_SHOW" and not cam.since and not (ns.db and ns.db.questCamAllGossip)
 			and not GossipHasQuests() then
 			return -- an innkeeper or the like: not a quest giver
@@ -907,6 +963,9 @@ for event in pairs(OPENS) do
 end
 for _, event in ipairs({ "GOSSIP_CLOSED", "QUEST_FINISHED", "PLAYER_REGEN_DISABLED", "PLAYER_LOGOUT" }) do
 	frame:RegisterEvent(event)
+end
+for event in pairs(MOVIE_EVENTS) do
+	pcall(frame.RegisterEvent, frame, event) -- (not every client has every event)
 end
 frame:SetScript("OnEvent", OnEvent)
 
