@@ -444,12 +444,19 @@ L["Gaining or refreshing a buff briefly shows your buffs and debuffs. Not on fli
 L["On: this page's peeks bring your buffs and debuffs up in CineMode. Off: no peeks; they still fade as their Standard Frames row says."] = "Activado: los avisos de esta página muestran tus beneficios y perjuicios en CineMode. Desactivado: sin avisos; siguen desvaneciéndose según su fila de la página Marcos estándar."
 L["Only within the Calm Timer after a fight, so buffing up in town doesn't count."] = "Solo dentro del Temporizador de calma tras un combate, para que ponerte beneficios en la ciudad no cuente."
 L["Not ones you cast on yourself"] = "No los que te lanzas a ti mismo"
+L["Not ones lasting longer than"] = "No los que duran más de"
+L["Buffs and debuffs that last longer than this (their full time, not what's left: Power Word: " ..
+	"Fortitude, Deserter...) don't bring them up, nor keep them up until gone. Not in fights, when " ..
+	"what they are can't be seen."] =
+	"Los beneficios y perjuicios que duran más que esto (su duración total, no lo que les queda: " ..
+	"Palabra de poder: entereza, Desertor...) no los muestran, ni los mantienen hasta que se van. " ..
+	"No en combate, cuando no se puede ver cuáles son."
 L["Your own buffs on yourself (Power Word: Fortitude, Arcane Intellect, a self-cast shield...) and your pet's don't bring them up; ones from other players and the world still do."] = "Tus propios beneficios sobre ti (Palabra de poder: entereza, Intelecto Arcano, un escudo propio...) y los de tu mascota no los muestran; los de otros jugadores y del mundo sí."
 L["Show debuffs when you gain or refresh one"] = "Mostrar los perjuicios al obtener o renovar uno"
-L["Gaining or refreshing a debuff briefly shows your buffs and debuffs. Not on flights."] = "Obtener o renovar un perjuicio muestra brevemente tus beneficios y perjuicios. No en vuelos."
+L["Gaining or refreshing a debuff briefly shows your debuffs (not your buffs), in fights too. Not on flights."] = "Obtener o renovar un perjuicio muestra brevemente tus perjuicios (no tus beneficios), también en combate. No en vuelos."
 L["Only within the Calm Timer after a fight. Off: debuffs like Hunter's Mark show any time."] = "Solo dentro del Temporizador de calma tras un combate. Desactivado: perjuicios como Marca del cazador se muestran en cualquier momento."
 L["Keep them up until the debuff is gone"] = "Mantenerlos hasta que desaparezca el perjuicio"
-L["A debuff that brings them up keeps them up while you have any debuff (bar the ones listed below), however long that is. Combat still takes over."] = "Un perjuicio que los muestra los mantiene visibles mientras tengas cualquier perjuicio (salvo los de la lista de abajo), dure lo que dure. El combate sigue mandando."
+L["A debuff that brings them up keeps them up while you have any debuff (bar the ones listed below), however long that is, fights included."] = "Un perjuicio que los muestra los mantiene visibles mientras tengas cualquier perjuicio (salvo los de la lista de abajo), dure lo que dure, también en combate."
 L["Show buffs for"] = "Mostrar los beneficios durante"
 L["Show debuffs for"] = "Mostrar los perjuicios durante"
 L["Except for these buffs and debuffs:"] = "Excepto estos beneficios y perjuicios:"
@@ -983,6 +990,21 @@ L["sec (empty: %d)"] = "s (vacío: %d)"
 L["sec (empty: %d%%)"] = "s (vacío: %d%%)"
 L["Spell %d"] = "Hechizo %d"
 L[" |cff808080(not in it now)|r"] = " |cff808080(ahora no está en él)|r"
+L["Spell icons"] = "Iconos de hechizos"
+L["While recharging"] = "Mientras se recarga"
+L["Pick when each spell's icon shows. Always: as the game shows it. When Ready: out of fights, and while it recharges, it fades out; it comes back once it's ready, or the seconds in its box before (empty: %d%% of its cooldown). While recharging: in fights or not, it shows only while it recharges. When it procs: in fights or not, it shows only while the game makes it glow (a proc, like an instant Lightning Bolt). A faded icon keeps its place in the bar. In fights the game may not say how long is left, so then it goes by when you last cast it. The settings beside each group's name set every spell in it at once."] = "Elige cuándo se muestra el icono de cada hechizo. Siempre: como lo muestra el juego. Cuando esté listo: fuera de combate, y mientras se recarga, se desvanece; vuelve cuando está listo, o los segundos de su casilla antes (vacía: el %d%% de su reutilización). Mientras se recarga: en combate o no, solo se muestra mientras se recarga. Cuando se activa: en combate o no, solo se muestra mientras el juego lo hace brillar (una activación, como un Descarga de relámpagos instantáneo). Un icono desvanecido mantiene su sitio en la barra. En combate puede que el juego no diga cuánto falta, así que entonces se guía por la última vez que lo lanzaste. Los ajustes junto al nombre de cada grupo ajustan todos sus hechizos a la vez."
+L["Icon shows"] = "El icono se muestra"
+L["When Ready"] = "Cuando esté listo"
+L["When it procs"] = "Cuando se activa"
+L["Sets every spell in this group to this. Spells you haven't set on their own follow it, and a spell here made When Ready on its own starts with its Resources and Show Early."] = "Ajusta todos los hechizos de este grupo a esto. Los hechizos que no hayas ajustado por separado lo siguen, y un hechizo de aquí que pongas en Cuando esté listo por separado empieza con sus Recursos y Mostrar antes."
+L["When this spell's icon shows in the Cooldown Manager."] = "Cuándo se muestra el icono de este hechizo en el Gestor de reutilización."
+L["How many seconds before it's ready the icon comes back: 0 for once it's ready. Leave it empty for %d%% of its cooldown."] = "Cuántos segundos antes de estar listo vuelve el icono: 0 para cuando está listo. Déjalo vacío para el %d%% de su reutilización."
+L["sec"] = "s"
+L["Resources"] = "Recursos"
+L["Ready also needs the resources to cast it: Maelstrom, mana, rage and so on. Until you have them the icon stays faded."] = "Listo también exige los recursos para lanzarlo: Vorágine, maná, ira, etc. Hasta que los tengas, el icono sigue desvanecido."
+L["Essential Cooldowns"] = "Reutilizaciones esenciales"
+L["Utility Cooldowns"] = "Reutilizaciones de utilidad"
+L["Not in the Cooldown Manager now"] = "Ahora no está en el Gestor de reutilización"
 L["On: CineMode hides tooltips as this page says. Off: every tooltip shows as normal."] = "Activado: CineMode oculta los tooltips según esta página. Desactivado: todos los tooltips se muestran con normalidad."
 L["Only in CineMode. Hold your Show hidden tooltips key (set it on the Keybinds page) to see a hidden one anyway."] = "Solo en CineMode. Mantén pulsada tu tecla de mostrar tooltips ocultos (asígnala en la página de Atajos) para ver uno oculto igualmente."
 L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems."] = "Jugadores y PNJ a los que puedes atacar (también los neutrales), y sus mascotas, esbirros y tótems."
@@ -1367,7 +1389,7 @@ L["The UI fades and the look stays, with just a few cameras: flights (and fly-by
 L["Just the visual effects (tint, vignette, weather) over your normal UI: nothing fades, no letterbox, and the camera's left to you."] = "Solo los efectos visuales (tinte, viñeta, clima) sobre tu interfaz normal: nada se desvanece, sin franjas, y la cámara es cosa tuya."
 L["The normal UI until a camera starts (standing still, going AFK, a flight, an emote...), then CineMode until it ends. The letterbox, tint, vignette and weather show only while a camera mode runs; no soft edges. Standing still starts the AFK camera, and every camera can start music."] = "La interfaz normal hasta que empieza una cámara (al quedarte quieto, ponerte ausente, un vuelo, una emoción...), y luego CineMode hasta que termina. Las franjas, el tinte, la viñeta y el clima solo se muestran mientras funciona un modo de cámara; sin bordes difuminados. Quedarte quieto inicia la cámara AFK, y todas las cámaras pueden poner música."
 L["Everything on while you're out in the world on your own; the normal UI in a group, in dungeons, raids and PvP."] = "Todo activado mientras vas por el mundo en solitario; la interfaz normal en grupo, en mazmorras, en bandas y en JcJ."
-L["As little UI as possible: buffs don't pop up on their own (hovering still shows them), nameplates show only for enemies in fights, and fights don't bring the letterbox down. Fights bring up only your resource bar and the Cooldown Manager, the cast bar shows all through CineMode, your health shows at the screen's edges (Vitals Vision), and every camera can start music."] = "La menor interfaz posible: los beneficios no aparecen solos (pasar el ratón sigue mostrándolos), las placas de nombre solo se muestran para los enemigos en combate, y los combates no quitan las franjas. En los combates solo aparecen tu barra de recurso y el Gestor de reutilización, la barra de lanzamiento se muestra durante todo el CineMode, tu salud se ve en los bordes de la pantalla (Visión vital), y todas las cámaras pueden poner música."
+L["As little UI as possible: nameplates show only for enemies in fights, and fights don't bring the letterbox down. Fights bring up only your resource bar and the Cooldown Manager, the cast bar shows all through CineMode, your health shows at the screen's edges (Vitals Vision), and every camera can start music."] = "La menor interfaz posible: las placas de nombre solo se muestran para los enemigos en combate, y los combates no quitan las franjas. En los combates solo aparecen tu barra de recurso y el Gestor de reutilización, la barra de lanzamiento se muestra durante todo el CineMode, tu salud se ve en los bordes de la pantalla (Visión vital), y todas las cámaras pueden poner música."
 L["Started from %s."] = "Creado a partir de %s."
 
 -- Share.lua
@@ -1806,6 +1828,19 @@ L["Quest icon on your target frame"] = "Icono de misión en el marco de tu objet
 L["The same mark beside your target frame's health bar while your target is one of them. " ..
 	"In CineMode and out."] = "La misma marca junto a la barra de salud del marco de tu objetivo mientras tu " ..
 	"objetivo sea uno de ellos. En CineMode y fuera de él."
+L["Quest item button"] = "Botón del objeto de misión"
+L["Where your extra ability button goes (the extra abilities frame's place in Edit Mode), a big button " ..
+	"with the item the nearest quest gives you to use, the one in the quest tracker. Click it or press its " ..
+	"key (Keybinds page). Shows near the quest's area, beside the game's own button when that's up. " ..
+	"It can't show, hide or move in a fight: it stays as it was until the fight ends."] = "Donde va tu botón " ..
+	"de habilidad extra (el lugar del marco de habilidades extra en el Modo edición), un botón grande con el " ..
+	"objeto que te da la misión más cercana para usar, el del seguimiento de misiones. Haz clic en él o pulsa " ..
+	"su tecla (página Atajos). Aparece cerca de la zona de la misión, junto al botón propio del juego cuando " ..
+	"este está visible. No puede aparecer, ocultarse ni moverse en combate: se queda como estaba hasta que " ..
+	"termine el combate."
+L["Use the quest item"] = "Usar el objeto de misión"
+L["Uses the item on Quest Vision's quest item button, while it shows."] = "Usa el objeto del botón del " ..
+	"objeto de misión de la visión de misión, mientras se muestra."
 L["Glow on quest objects"] = "Brillo en objetos de misión"
 L["The thing on the ground you pick up or use for a quest objective glows gold, with the quest mark " ..
 	"over it, in CineMode and out. One at a time: the one in front of you that your interact key would " ..
@@ -2058,6 +2093,16 @@ L["A small icon in the bottom right of a chat window, while your mouse is over i
 	"Un pequeño icono abajo a la derecha de una ventana de chat, mientras el ratón está sobre ella, abre " ..
 	"sus líneas como texto que puedes seleccionar y copiar con Ctrl+C."
 
+-- Quality of life: reset zoom (Camera.lua)
+L["Reset the zoom on login and /reload"] = "Restablecer el zoom al entrar y con /reload"
+L["After you log in or /reload, the camera zooms to the distance below, rather than staying " ..
+	"wherever you left it."] =
+	"Al entrar en el juego o hacer /reload, la cámara se acerca o aleja a la distancia de abajo, en vez de " ..
+	"quedarse donde la dejaste."
+L["Zoom to"] = "Zoom a"
+L["The camera distance to start at. The game's furthest out may be less than this."] =
+	"La distancia de la cámara al empezar. Lo más lejos que permite el juego puede ser menos que esto."
+
 -- What's new: Copy chat
 L["Tick Copy chat button on the Quality of life page and a small icon in a chat window's corner opens its lines, ready to select and copy with Ctrl+C."] = "Marca Botón de copiar chat en la página Comodidades y un pequeño icono en la esquina de una ventana de chat abre sus líneas, listas para seleccionar y copiar con Ctrl+C."
 
@@ -2201,3 +2246,51 @@ L["Devastation"] = "Devastación"
 L["Preservation"] = "Preservación"
 L["Augmentation"] = "Aumento"
 L["As your health drops, dark edges creep in round the screen with art themed to your class and talents (blood, frost, fire...), a heartbeat that quickens and a flash on big hits, so you can tell how you're doing at a glance."] = "Cuando tu salud baja, unos bordes oscuros avanzan por la pantalla con un arte según tu clase y talentos (sangre, escarcha, fuego...), un latido que se acelera y un destello con los golpes fuertes, para que sepas cómo vas de un vistazo."
+
+-- WindGuide.lua: Wind Guide (a demo)
+L["Wind Guide"] = "Guía del viento"
+L["Wind Guide test done."] = "Prueba de la Guía del viento terminada."
+L["Wind Guide can't tell which way you face here."] = "La Guía del viento no puede saber hacia dónde miras aquí."
+L["A breeze that shows you the way: wind blows across the screen toward your waypoint (your map pin, or the quest you're tracking), in gusts. When it's off the screen, the wind sweeps off the side to turn to. It goes by the way you face, so it's off while you swing the camera round on its own (on retail it follows the game's waypoint marker exactly). A demo for now."] = "Una brisa que te enseña el camino: el viento cruza la pantalla hacia tu punto de ruta (tu marcador del mapa o la misión que sigues), a ráfagas. Si está fuera de la pantalla, el viento sale por el lado hacia el que girar. Se guía por hacia dónde miras, así que falla mientras giras solo la cámara (en retail sigue exactamente el marcador de ruta del juego). De momento es una demo."
+L["Blows toward your waypoint for 30 seconds (or, with none, a pretend one off to your right: turn toward it and the wind follows). It works with the page off too. Close the settings to see it."] = "Sopla hacia tu punto de ruta durante 30 segundos (o, si no tienes, hacia uno de prueba a tu derecha: gira hacia él y el viento te sigue). También funciona con la página desactivada. Cierra la configuración para verlo."
+L["Wind Guide test: blowing toward your waypoint."] = "Prueba de la Guía del viento: sopla hacia tu punto de ruta."
+L["Wind Guide test: no waypoint, so a pretend one off to your right."] = "Prueba de la Guía del viento: no hay punto de ruta, así que usa uno de prueba a tu derecha."
+L["Wind"] = "Viento"
+L["Motes of light"] = "Motas de luz"
+L["Style:"] = "Estilo:"
+L["When it blows"] = "Cuándo sopla"
+L["Not in fights"] = "Fuera de combate"
+L["Ticked, the wind drops while you're in a fight."] = "Marcado, el viento se calma mientras estás en combate."
+L["Stops within"] = "Se detiene a"
+L["How close to the waypoint the wind stops (you're there)."] = "A qué distancia del punto de ruta se detiene el viento (ya has llegado)."
+L["Amount"] = "Cantidad"
+L["%d a second"] = "%d por segundo"
+L["How many streaks (or leaves, or motes) start each second."] = "Cuántas ráfagas (u hojas, o motas) salen cada segundo."
+L["In gusts"] = "A ráfagas"
+L["Ticked, the wind comes and goes in gusts every few seconds. Unticked, it blows steadily."] = "Marcado, el viento va y viene a ráfagas cada pocos segundos. Sin marcar, sopla sin parar."
+L["What blows: Auto picks your class and spec's (the same as Vitals Vision's theme), or pick any, or plain wind or motes of light."] = "Qué sopla: Automático elige el de tu clase y especialización (el mismo que el tema de la Visión vital), o elige cualquiera, o viento o motas de luz sin más."
+L["Valhalla"] = "Valhalla"
+L["Light"] = "Luz"
+L["Venom wisps"] = "Volutas de veneno"
+L["Sea breeze"] = "Brisa marina"
+L["Lightning"] = "Relámpagos"
+L["Rain"] = "Lluvia"
+L["Arcane stars"] = "Estrellas arcanas"
+L["Embers"] = "Ascuas"
+L["Souls"] = "Almas"
+L["Fel wisps"] = "Volutas viles"
+L["Creeping shadow"] = "Sombra reptante"
+L["Shadowflame"] = "Llama de las Sombras"
+L["Starlight"] = "Luz estelar"
+L["Earth wisps"] = "Volutas de tierra"
+L["Green wisps"] = "Volutas verdes"
+L["Blood mist"] = "Niebla de sangre"
+L["Blizzard"] = "Ventisca"
+L["Plague wisps"] = "Volutas de peste"
+L["Bubbles"] = "Burbujas"
+L["Jade wisps"] = "Volutas de jade"
+L["Wisps"] = "Volutas"
+L["How fast they travel to the waypoint, next to the style's own speed."] = "Lo rápido que viajan hacia el punto de ruta, respecto a la velocidad propia del estilo."
+L["Speed"] = "Velocidad"
+L["Motes (class and spec)"] = "Motas (clase y especialización)"
+L["Wisps (class and spec)"] = "Volutas (clase y especialización)"

@@ -8,3 +8,7 @@ ignore:
   - CinematicDev.toc
   - Tools
   - .claude
+  # (Wind Guide: a demo, in the dev copy only, CinematicDev.toc)
+  - WindGuide.lua
+  - WindGuideStyles.lua
+  - Textures/WindGuide

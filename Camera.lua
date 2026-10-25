@@ -873,6 +873,11 @@ function ns.HookCameraInput()
 			emoteEvent = nil
 			ns.manualCam, ns.deathTestUntil, ns.deathTestLying = nil, nil, nil
 			ns.StopEventsOnMove()
+			-- (A jump on the spot isn't moving, but it ends the standing-still
+			-- cameras too: their wait starts over.)
+			if ns.stillSince then
+				ns.stillSince = GetTime()
+			end
 		end)
 	end
 	for _, name in ipairs({ "CameraZoomIn", "CameraZoomOut" }) do
@@ -899,14 +904,24 @@ function ns.HookCameraInput()
 		end
 	end
 	-- Turn keys (for spotting turns where the facing direction is hidden).
+	-- Turning with them ends the AFK camera, as moving does (the game doesn't
+	-- clear your AFK flag for a turn on the spot).
+	local function OnTurnKey(value)
+		if value then
+			if ns.manualCam == "afk" then
+				ns.manualCam = nil
+			end
+			ns.StopAFKEvent()
+		end
+	end
 	for name, value in pairs({ TurnLeftStart = true, TurnLeftStop = false }) do
 		if _G[name] then
-			hooksecurefunc(name, function() turnKeys.left = value end)
+			hooksecurefunc(name, function() turnKeys.left = value; OnTurnKey(value) end)
 		end
 	end
 	for name, value in pairs({ TurnRightStart = true, TurnRightStop = false }) do
 		if _G[name] then
-			hooksecurefunc(name, function() turnKeys.right = value end)
+			hooksecurefunc(name, function() turnKeys.right = value; OnTurnKey(value) end)
 		end
 	end
 end
@@ -1186,6 +1201,13 @@ do
 			if event.stopsOnMove and event.key ~= except and EventOn(event.key) then
 				stoppedByMove[event.key] = true
 			end
+		end
+	end
+	-- Turning with the keys: only Go AFK stops (a drawn weapon or a campfire
+	-- carries on as you turn to face something).
+	function ns.StopAFKEvent()
+		if ns.db and EventOn("AFK") then
+			stoppedByMove.AFK = true
 		end
 	end
 	-- Whether an event's state counts now (on, and not stopped by moving).
@@ -1931,7 +1953,8 @@ local CenterCamera -- defined with the flight-start code below
 function ns.CenterCamera(...) return CenterCamera(...) end
 
 -- Standing still: no movement and not dragging the camera. Turning on the spot
--- with the mouse counts as active, so the orbit never fights the player.
+-- with the mouse or the turn keys counts as active, so the orbit never fights
+-- the player.
 -- Movement comes from the PLAYER_STARTED/STOPPED_MOVING events: this client
 -- can return GetUnitSpeed as a "secret" value that addons may not compare.
 ns.playerMoving = false
@@ -1949,7 +1972,7 @@ end
 -- Feet moving or the camera being dragged right now. (The longer pause after
 -- camera input is handled separately in UpdateOrbit.)
 local function IsPlayerActive()
-	return ns.playerMoving or IsMouseOnCamera()
+	return ns.playerMoving or turnKeys.left or turnKeys.right or IsMouseOnCamera()
 end
 
 -- Idle zoom: after standing still for the standing-still delay, the camera
@@ -3081,6 +3104,13 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		local stopTime = (adjusting or landed or (active and not onTaxi) or orbitPrefix == "deathOrbit")
 			and ORBIT_QUICK_STOP_TIME or ORBIT_STOP_TIME
 		ns.orbit.level = ns.Approach(ns.orbit.level, 0, elapsed, stopTime)
+		-- The AFK camera ending (you moved, jumped, turned, came back): once its
+		-- turn has eased out, the camera turns back to where it started, behind
+		-- you as you stood. Not if you took the camera yourself.
+		ns.orbit.afkReturnDue = orbitPrefix == "idleOrbit" and not adjusting
+	end
+	if want then
+		ns.orbit.afkReturnDue = false -- (a camera running again)
 	end
 	-- The tele camera taking over from the cozy one (sat by a fire, then cast),
 	-- or picking up after you moved the camera: no swing round, but its spin
@@ -3093,7 +3123,15 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		PlanNextSweep()
 	end
 	if ns.orbit.level <= 0 then
-		-- A cancelled Hearthstone or teleport spin: turn back to where it started.
+		if ns.orbit.afkReturnDue then
+			-- (Its own turn, counted from where it began: the game's camera follow
+			-- set to "Always" didn't bring the camera round, walking or standing.
+			-- Tested on retail.)
+			ns.orbit.afkReturnDue = false
+			ns.orbit.returnPending = true
+		end
+		-- A cancelled Hearthstone or teleport spin, or the AFK camera ending: turn
+		-- back to where it started.
 		if ns.StepSpinReturn(elapsed, adjusting) then
 			return
 		end
@@ -4240,4 +4278,22 @@ function ns.UpdateTaxi()
 	end
 	ns.ApplyCVarSet(ns.FLIGHT_CVARS, (onTaxi and ns.db.enabled and ns.db.taxiOrbit and ns.FlightCameraOn()
 		and not recentering) or false)
+end
+
+-- Reset zoom (Quality of life): after a login or /reload (Core.lua calls it),
+-- glide to a set camera distance rather than wherever it was left.
+function ns.LoginZoom()
+	-- (a moment in: the camera's distance can still be settling as the world shows)
+	C_Timer.After(1, function()
+		if not (ns.Setting("loginZoom") and GetCameraZoom) then
+			return
+		end
+		local diff = ns.db.loginZoomDistance - GetCameraZoom()
+		ns.Log("zoom", ("login zoom: %.1f -> %.1f yards"):format(GetCameraZoom(), ns.db.loginZoomDistance))
+		if diff > 0.1 then
+			CameraZoomOut(diff)
+		elseif diff < -0.1 then
+			CameraZoomIn(-diff)
+		end
+	end)
 end

@@ -174,6 +174,9 @@ ns.PROFILE_PARTS = {
 		retail = LayoutPart("CINE_FOREVER_RETAIL_LAYOUT", "forever"),
 		-- Retail laid out like WoW Forever's default.
 		forever = LayoutPart("CINE_RETAIL_FOREVER_LAYOUT", "retail"),
+		-- Pure Cinema's: the personal resource display in the middle, the
+		-- Cooldown Manager above it.
+		pure = LayoutPart("CINE_PURE_CINEMA_LAYOUT", "retail"),
 		-- The game's own layout (Modern or Classic), which the fades and
 		-- mouseover groups are made for, not one the player's moved things in.
 		preset = LayoutPart(ns.LAYOUT_PRESET, "forever"),
@@ -209,15 +212,13 @@ ns.PROFILE_PARTS = {
 			set("offInParty", true)
 			set("offInRaidGroup", true)
 		end },
-		-- As little as possible: buffs don't pop up on their own (debuffs
-		-- do), the player frame and resource display don't stay up until
-		-- full, the cast bar shows all through CineMode, fights bring up only
-		-- your resource bar, and targeting brings up nothing.
+		-- As little as possible: the player frame and resource display don't
+		-- stay up until full, the cast bar shows all through CineMode, fights
+		-- bring up only your resource bar, and targeting brings up nothing.
 		-- (No FramesBase: In combat rows don't wait for the Calm Timer.)
 		pure = { apply = function(set)
 			set("portraitWhenNotFull", false)
 			set("prdWhenNotFull", false)
-			set("buffPeek", false)
 			set("plateAlwaysGroupMembers", false)
 			set("cineShow", { castbar = true })
 			set("combatShow", Rows(PURE_COMBAT, false))
@@ -289,9 +290,12 @@ ns.PROFILE_PARTS = {
 		end },
 		-- No action bars, micro menu, bags or XP bar in fights, with an enemy
 		-- targeted or in instances.
-		-- (The Cooldown Manager in fights, not just after them.)
+		-- (The Cooldown Manager in fights, not just after them, switched on as
+		-- the CDM part does, and up after a fight until its cooldowns are ready.)
 		pure = { apply = function(set, client)
 			BarsStandard(set, client)
+			set("cooldownManagerOn", true)
+			set("cooldownWhileRecharging", true)
 			set("cooldownAfterCombat", false)
 			set("combatShow", Rows(PURE_COMBAT, true))
 			set("enemyShow", Rows(PURE_ENEMY, true))

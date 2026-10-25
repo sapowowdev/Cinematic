@@ -1085,6 +1085,7 @@ do
 			{ "Quest Vision", "Interface\\Icons\\INV_Misc_Head_Dragon_01" },
 			{ "Roll Vision", "Interface\\Icons\\INV_Misc_Dice_01" },
 			{ "Vitals Vision", "Interface\\Icons\\Spell_Shadow_LifeDrain02" },
+			{ "Wind Guide", "Interface\\Icons\\Spell_Nature_Cyclone" },
 		} },
 		{ name = "Audio", pages = {
 			{ "Audio", "Interface\\Icons\\INV_Misc_Drum_01" },
@@ -1102,7 +1103,7 @@ do
 		} },
 	}
 	-- Pages still being worked on: "(WIP)" after the name on their icon's mouseover.
-	local WIP_PAGES = {}
+	local WIP_PAGES = { ["Wind Guide"] = true }
 	local TILE, TILE_GAP, EDGE = 36, 6, 12
 	local BAR = 30 -- (the search box and Reset page, above the icons)
 	local byName = {} -- tile by the name its page was registered under (English or shown)
@@ -1524,7 +1525,7 @@ local function CreateBuffsPanel()
 	GreyUnless(buffIgnoreSelf, IfBuffPeek)
 
 	local debuffPeek = Check(content, "debuffPeek", L["Show debuffs when you gain or refresh one"],
-		L["Gaining or refreshing a debuff briefly shows your buffs and debuffs. Not on flights."])
+		L["Gaining or refreshing a debuff briefly shows your debuffs (not your buffs), in fights too. Not on flights."])
 	debuffPeek:SetPoint("TOPLEFT", buffIgnoreSelf, "BOTTOMLEFT", -BUFF_INDENT, -2)
 	debuffPeek:HookScript("OnClick", Refresh)
 
@@ -1535,12 +1536,26 @@ local function CreateBuffsPanel()
 
 	local debuffUntilGone = Check(content, "debuffPeekUntilGone", L["Keep them up until the debuff is gone"],
 		L["A debuff that brings them up keeps them up while you have any debuff (bar the ones listed below), " ..
-		"however long that is. Combat still takes over."])
+		"however long that is, fights included."])
 	debuffUntilGone:SetPoint("TOPLEFT", debuffAfterCombat, "BOTTOMLEFT", 0, -2)
 	GreyUnless(debuffUntilGone, IfDebuffPeek)
 
+	-- (Buffs and debuffs alike: a long debuff doesn't keep them up either.)
+	local ignoreLong = Check(content, "buffPeekIgnoreLong", L["Not ones lasting longer than"],
+		L["Buffs and debuffs that last longer than this (their full time, not what's left: Power Word: " ..
+		"Fortitude, Deserter...) don't bring them up, nor keep them up until gone. Not in fights, when " ..
+		"what they are can't be seen."], function(value)
+			ns.GetDB().buffPeekIgnoreLong = value
+			Refresh()
+		end)
+	ignoreLong:SetPoint("TOPLEFT", debuffUntilGone, "BOTTOMLEFT", 0, -2)
+	GreyUnless(ignoreLong, IfAnyPeek)
+	local longMinutes = Slider(content, "buffPeekLongMinutes", "", 1, 60, 1, L["%d min"])
+	longMinutes:SetPoint("TOPLEFT", ignoreLong, "BOTTOMLEFT", 24, -10)
+	GreyUnless(longMinutes, function(db) return IfAnyPeek(db) and db.buffPeekIgnoreLong end)
+
 	local buffPeekTime = Slider(content, "buffPeekTime", L["Show buffs for"], 0.5, 30, 0.5, L["%.1f sec"])
-	buffPeekTime:SetPoint("TOPLEFT", debuffUntilGone, "BOTTOMLEFT", 4 - BUFF_INDENT, -30)
+	buffPeekTime:SetPoint("TOPLEFT", longMinutes, "BOTTOMLEFT", 4 - BUFF_INDENT - 24, -30)
 	GreyUnless(buffPeekTime, IfBuffPeek)
 
 	local debuffPeekTime = Slider(content, "debuffPeekTime", L["Show debuffs for"], 0.5, 30, 0.5, L["%.1f sec"])
@@ -5028,6 +5043,15 @@ local function CreateQualityPanel()
 	stack:Add(Check(content, "chatCopyButton", L["Copy chat button"],
 		L["A small icon in the bottom right of a chat window, while your mouse is over it, opens " ..
 		"that window's lines as text you can select and copy with Ctrl+C."]), "check")
+	-- (Camera.lua.)
+	local loginZoom = stack:Add(Check(content, "loginZoom", L["Reset the zoom on login and /reload"],
+		L["After you log in or /reload, the camera zooms to the distance below, rather than staying " ..
+		"wherever you left it."]), "check")
+	loginZoom:HookScript("OnClick", Refresh) -- grey out / enable the slider below
+	local loginDistance = stack:Add(Slider(content, "loginZoomDistance", L["Zoom to"], 2, 39, 0.5,
+		L["%.1f yards"]), "slider", 24)
+	Tooltip(loginDistance, L["The camera distance to start at. The game's furthest out may be less than this."])
+	GreyUnless(loginDistance, function(db) return db.loginZoom end)
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	-- (Quality of life's first page: "General" there.)
@@ -7200,146 +7224,362 @@ local function CreateCooldownPanel()
 	afterCombat:SetPoint("TOPLEFT", recharging, "BOTTOMLEFT", 16, -2)
 	GreyUnless(afterCombat, function(db) return db.handleCooldowns and db.cooldownWhileRecharging end)
 
-	-- Spells shown only when ready in combat: a box per spell in the
-	-- Cooldown Manager's spell bars now, then any ticked that aren't in it.
-	local readyHeader = Label(content, "GameFontNormal", L["Only when ready in combat"])
+	-- Each spell's icon: always shown (the game's own), only when ready in
+	-- fights, or only while recharging. A row per spell in the Cooldown
+	-- Manager's spell bars now, grouped by bar as in its settings, then any
+	-- set that aren't in it.
+	local readyHeader = Label(content, "GameFontNormal", L["Spell icons"])
 	readyHeader:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", -14, -18)
 	local readyNote = PageIntro(content, readyHeader,
-		L["Tick a spell to show its icon only in fights, and only once it's nearly ready: out of fights, " ..
-		"and while it recharges, it fades out, in CineMode or not. It comes back once it's ready, or " ..
-		"with Show Early ticked the seconds set beside it before (left empty: %d%% of its cooldown). " ..
-		"Its place in the bar stays, so it sits best at the end of one. In fights the game may not " ..
-		"say how long is left, so then it goes by when you last cast it."]:format(ns.READY_EARLY * 100))
+		L["Pick when each spell's icon shows. Always: as the game shows it. When Ready: out of " ..
+		"fights, and while it recharges, it fades out; it comes back once it's ready, or the seconds in " ..
+		"its box before (empty: %d%% of its cooldown). While recharging: in fights or not, it shows " ..
+		"only while it recharges. When it procs: in fights or not, it shows only while the game makes it " ..
+		"glow (a proc, like an instant Lightning Bolt). A faded icon keeps its place in the bar. In " ..
+		"fights the game may not say how long is left, so then it goes by when you last cast it. The " ..
+		"settings beside each group's name set every spell in it at once."]:format(ns.READY_EARLY * 100))
 	RecordKey(content, "cooldownReadyOnly") -- (for the page's Reset)
 	RecordKey(content, "cooldownReadyEarly")
 	RecordKey(content, "cooldownEarlyOn")
-	-- Two columns: the spell (ticked: only when ready in combat), and Show
-	-- Early (ticked: back the seconds in its box before it's ready).
-	local EARLY_X, ROW_HEIGHT = 296, 24
+	RecordKey(content, "cooldownRechargeOnly")
+	RecordKey(content, "cooldownNeedsPower")
+	RecordKey(content, "cooldownGroupDefaults")
+	RecordKey(content, "cooldownProcOnly")
+	RecordKey(content, "cooldownAlwaysShow")
+	-- Columns: the spell, when it shows, and (When ready only) how early it's back.
+	local MODE_X, POWER_X, EARLY_X, ROW_HEIGHT = 200, 360, 440, 26
+	local GROUP_HEIGHT, GROUP_GAP, GROUP_WIDTH = 36, 12, 560
 	local spellHeading = Label(content, "GameFontNormalSmall", L["Spell"])
 	spellHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -10)
+	local modeHeading = Label(content, "GameFontNormalSmall", L["Icon shows"])
+	modeHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", MODE_X, -10)
+	local powerHeading = Label(content, "GameFontNormalSmall", L["Resources"])
+	powerHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", POWER_X - 4, -10)
 	local earlyHeading = Label(content, "GameFontNormalSmall", L["Show Early"])
 	earlyHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", EARLY_X, -10)
 	local noSpells = Label(content, "GameFontDisable",
 		L["No spells in the Cooldown Manager's spell bars right now."])
 	noSpells:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, -8)
 
+	-- A heading over each bar's spells, as the Cooldown Manager's settings group them.
+	local GROUP_NAMES = {
+		essential = L["Essential Cooldowns"], utility = L["Utility Cooldowns"],
+		other = L["Not in the Cooldown Manager now"],
+	}
+	-- A spell's mode: "always", "ready", "recharge" or "proc" (set on its own:
+	-- db.cooldownAlwaysShow, ReadyOnly, RechargeOnly, ProcOnly; else its group's).
+	local MODES = {
+		{ value = "always", text = L["Always"] },
+		{ value = "ready", text = L["When Ready"] },
+		{ value = "recharge", text = L["While recharging"] },
+		{ value = "proc", text = L["When it procs"] },
+	}
+	local groupOf, groupSpells = {}, {} -- spell ID -> its group; group -> its spells (as last listed)
+
+	-- Each group's settings (db.cooldownGroupDefaults[group]: mode, power,
+	-- early = seconds or nil for the default share; a mode not set: the
+	-- built-in one, ns.COOLDOWN_GROUP_MODES). A spell not set on its own
+	-- follows its group; setting the group's mode puts every spell in it back
+	-- to following it. A spell made When Ready on its own starts with its
+	-- group's Resources and Show Early.
+	local function GroupDefaults(group)
+		local all = ns.GetDB().cooldownGroupDefaults
+		all[group] = all[group] or {}
+		return all[group]
+	end
+
+	local OWN_MODES = { ready = "cooldownReadyOnly", recharge = "cooldownRechargeOnly", proc = "cooldownProcOnly",
+		always = "cooldownAlwaysShow" }
+	local function ModeOf(spell)
+		return (ns.CooldownSpellMode(spell, groupOf[spell]))
+	end
+	-- (nil: back to following its group)
+	local function SetSpellMode(spell, mode)
+		local db = ns.GetDB()
+		if mode == "ready" and not db.cooldownReadyOnly[spell] then
+			-- (Newly When Ready: as it was following its group, or its group's
+			-- Resources and Show Early; the seconds box empty, the default
+			-- share, unless the group says.)
+			local _, power, early = ns.CooldownGroupSettings(groupOf[spell] or "other")
+			db.cooldownEarlyOn[spell], db.cooldownReadyEarly[spell] = true, early
+			db.cooldownNeedsPower[spell] = power or nil
+		end
+		for value, key in pairs(OWN_MODES) do
+			db[key][spell] = value == mode or nil
+		end
+	end
+	-- A spell following its group's When Ready gets its own (the same) before one part changes.
+	local function OwnReady(spell)
+		if not ns.GetDB().cooldownReadyOnly[spell] then SetSpellMode(spell, "ready") end
+	end
+
+	-- What a row reads and sets, for a spell (key: its ID) or a group's
+	-- settings (key: the group). Early returns the seconds box's text.
+	local function EarlyText(earlyOn, seconds)
+		if not earlyOn then return "0" end
+		return seconds and tostring(seconds) or ""
+	end
+	local SPELL = {
+		Mode = ModeOf,
+		SetMode = SetSpellMode,
+		Power = function(spell) return select(3, ns.CooldownSpellMode(spell, groupOf[spell])) end,
+		SetPower = function(spell, value)
+			OwnReady(spell)
+			ns.GetDB().cooldownNeedsPower[spell] = value or nil
+		end,
+		Early = function(spell)
+			local _, _, _, earlyOn, seconds = ns.CooldownSpellMode(spell, groupOf[spell])
+			return EarlyText(earlyOn, seconds)
+		end,
+		SetEarly = function(spell, seconds)
+			OwnReady(spell)
+			local db = ns.GetDB()
+			db.cooldownEarlyOn[spell], db.cooldownReadyEarly[spell] = true, seconds
+		end,
+		Length = function(spell) return ns.CooldownLength(spell) end,
+		tip = L["When this spell's icon shows in the Cooldown Manager."],
+	}
+	local GROUP = {
+		Mode = function(group) return (ns.CooldownGroupSettings(group)) end,
+		SetMode = function(group, mode)
+			GroupDefaults(group).mode = mode
+			for _, spell in ipairs(groupSpells[group] or {}) do
+				SetSpellMode(spell, nil)
+			end
+		end,
+		Power = function(group) return GroupDefaults(group).power end,
+		SetPower = function(group, value)
+			GroupDefaults(group).power = value or nil
+			for _, spell in ipairs(groupSpells[group] or {}) do
+				if ns.GetDB().cooldownReadyOnly[spell] then SPELL.SetPower(spell, value) end
+			end
+		end,
+		Early = function(group) return EarlyText(true, GroupDefaults(group).early) end,
+		SetEarly = function(group, seconds)
+			GroupDefaults(group).early = seconds
+			for _, spell in ipairs(groupSpells[group] or {}) do
+				if ns.GetDB().cooldownReadyOnly[spell] then SPELL.SetEarly(spell, seconds) end
+			end
+		end,
+		Length = function() return nil end,
+		tip = L["Sets every spell in this group to this. Spells you haven't set on their own follow it, " ..
+			"and a spell here made When Ready on its own starts with its Resources and Show Early."],
+	}
+
 	local GetName = (C_Spell and C_Spell.GetSpellName) or function(id) return (GetSpellInfo(id)) end
 	local GetIcon = (C_Spell and C_Spell.GetSpellTexture) or GetSpellTexture
-	local spellChecks = {}
+	local rows, groupRows = {}, {}
+
+	-- A row: a name, its mode (a dropdown, or on clients without the modern
+	-- one a button stepping through them), and for When Ready its Resources
+	-- tick and seconds box. access: SPELL or GROUP; row.key what it's for.
+	local function NewRow(access, font)
+		local row = { access = access, font = font }
+		row.name = Label(content, font, "")
+		row.name:SetWidth(MODE_X - 10)
+		row.name:SetJustifyH("LEFT")
+		row.name:SetWordWrap(false)
+
+		local function Pick(mode)
+			if row.key == nil then return end
+			access.SetMode(row.key, mode)
+			Refresh() -- (a group's change shows on its spells' rows too)
+		end
+		local ok, dropdown = pcall(CreateFrame, "DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+		if ok and dropdown and dropdown.SetupMenu then
+			dropdown:SetWidth(150)
+			dropdown.searchSkip = true
+			dropdown:SetupMenu(function(_, rootDescription)
+				for _, choice in ipairs(MODES) do
+					rootDescription:CreateRadio(choice.text,
+						function() return row.key ~= nil and access.Mode(row.key) == choice.value end,
+						function() Pick(choice.value) end)
+				end
+			end)
+			row.mode = dropdown
+		else
+			local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+			button:SetSize(150, 22)
+			button:SetScript("OnClick", function()
+				local now = row.key ~= nil and access.Mode(row.key)
+				for i, choice in ipairs(MODES) do
+					if choice.value == now then
+						Pick(MODES[i % #MODES + 1].value)
+						break
+					end
+				end
+			end)
+			row.mode = button
+		end
+		Tooltip(row.mode, access.tip)
+
+		-- Resources (When Ready only): ticked, ready also means you have the
+		-- power to cast it (Maelstrom, mana...).
+		local power = Check(content, nil, "", L["Ready also needs the resources to cast it: Maelstrom, " ..
+			"mana, rage and so on. Until you have them the icon stays faded."], function(value)
+			if row.key ~= nil then
+				access.SetPower(row.key, value)
+				Refresh()
+			end
+		end)
+		power.Refresh = function() end -- (set by its row's)
+		power:SetPoint("LEFT", row.mode, "LEFT", POWER_X - MODE_X, 0)
+		row.power = power
+
+		-- Seconds before it's ready that it comes back: empty for the default,
+		-- 0 for once it's ready. (Stored as before: Show Early on or off, and
+		-- its seconds.)
+		local early = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+		early:SetSize(36, 20)
+		early:SetAutoFocus(false)
+		early:SetNumeric(true)
+		early:SetMaxLetters(4)
+		early:SetPoint("LEFT", row.mode, "LEFT", EARLY_X - MODE_X + 6, 0)
+		Tooltip(early, L["How many seconds before it's ready the icon comes back: 0 for once it's ready. " ..
+			"Leave it empty for %d%% of its cooldown."]:format(ns.READY_EARLY * 100))
+		local function Save(self)
+			self:ClearFocus()
+			-- (Only when changed: a group's box left as it was doesn't reset its spells.)
+			if row.key ~= nil and self:GetText() ~= access.Early(row.key) then
+				access.SetEarly(row.key, tonumber(self:GetText()))
+				Refresh()
+			end
+		end
+		early:SetScript("OnEnterPressed", Save)
+		early:SetScript("OnEditFocusLost", function(self)
+			if self.saving then return end
+			self.saving = true
+			Save(self)
+			self.saving = nil
+		end)
+		early:SetScript("OnEscapePressed", function(self)
+			-- (Put back as it was: losing focus then saves nothing.)
+			self:SetText(row.key ~= nil and access.Early(row.key) or "")
+			self:ClearFocus()
+		end)
+		row.early = early
+		row.earlyText = Label(content, "GameFontHighlightSmall", "")
+		row.earlyText:SetPoint("LEFT", early, "RIGHT", 6, 0)
+
+		-- (The page's Refresh greys the mode with the page switch, after this.)
+		row.mode.Refresh = function(self)
+			local key = row.key
+			if self.GenerateMenu then
+				self:GenerateMenu()
+			end
+			if key == nil then return end
+			local mode = access.Mode(key)
+			if not self.SetupMenu then
+				for _, choice in ipairs(MODES) do
+					if choice.value == mode then self:SetText(choice.text) end
+				end
+			end
+			local handled = Handled()
+			SetLabelFont(row.name, handled and row.font or "GameFontDisable")
+			local ready = mode == "ready" and row.shown
+			row.early:SetShown(ready)
+			row.earlyText:SetShown(ready)
+			row.power:SetShown(ready)
+			if not ready then return end
+			row.power:SetChecked(access.Power(key) and true or false)
+			row.power:SetEnabled(handled)
+			local text = access.Early(key)
+			if not row.early:HasFocus() then
+				row.early:SetText(text)
+			end
+			local length = access.Length(key)
+			row.earlyText:SetText(text ~= "" and L["sec"] or (length
+				and (L["sec (empty: %d)"]):format(math.floor(length * ns.READY_EARLY + 0.5))
+				or (L["sec (empty: %d%%)"]):format(ns.READY_EARLY * 100)))
+			row.early:SetEnabled(handled)
+			row.early:SetAlpha(handled and 1 or 0.5)
+			row.earlyText:SetAlpha(handled and 1 or 0.5)
+		end
+		controls[#controls + 1] = row.mode
+		return row
+	end
+
+	-- Puts a row at y (below the column headings) and shows it.
+	local function PlaceRow(row, key, text, y)
+		row.key, row.shown = key, true
+		row.name:ClearAllPoints()
+		row.name:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, y - 5)
+		row.mode:ClearAllPoints()
+		row.mode:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", MODE_X, y)
+		row.name:SetText(text)
+		row.name:Show()
+		row.mode:Show()
+	end
+
+	local function HideRow(row)
+		row.key, row.shown = nil, false
+		row.name:Hide()
+		row.mode:Hide()
+		row.early:Hide()
+		row.earlyText:Hide()
+		row.power:Hide()
+		if row.line then row.line:Hide() end
+	end
+
+	-- A group's heading row: its name in gold, its defaults beside it, and a
+	-- rule under it across the columns.
+	local function GroupRow(group)
+		if not groupRows[group] then
+			local row = NewRow(GROUP, "GameFontNormal")
+			row.line = content:CreateTexture(nil, "ARTWORK")
+			row.line:SetColorTexture(1, 0.82, 0, 0.4)
+			row.line:SetSize(GROUP_WIDTH, 1)
+			groupRows[group] = row
+		end
+		return groupRows[group]
+	end
+
 	local function ListSpells()
-		local ids, inManager = ns.CooldownManagerSpells(), {}
-		for _, id in ipairs(ids) do inManager[id] = true end
+		local db = ns.GetDB()
+		local ids, barOf = ns.CooldownManagerSpells()
 		local others = {}
-		for id in pairs(ns.GetDB().cooldownReadyOnly) do
-			if not inManager[id] then others[#others + 1] = id end
+		for _, list in ipairs({ db.cooldownReadyOnly, db.cooldownRechargeOnly, db.cooldownProcOnly }) do
+			for id in pairs(list) do
+				if not barOf[id] then others[#others + 1] = id end
+			end
 		end
 		table.sort(others)
 		for _, id in ipairs(others) do ids[#ids + 1] = id end
+		wipe(groupOf)
+		wipe(groupSpells)
+		for _, row in pairs(groupRows) do HideRow(row) end
+		local y, lastGroup = -2, nil
 		for i, id in ipairs(ids) do
-			local check = spellChecks[i]
-			if not check then
-				local y = -2 - (i - 1) * ROW_HEIGHT
-				check = Check(content, nil, "", L["Out of fights, and while it recharges, this spell's " ..
-					"icon fades out of the Cooldown Manager."], function(value)
-					ns.GetDB().cooldownReadyOnly[spellChecks[i].spellID] = value or nil
-					spellChecks[i]:Refresh() -- (greys its Show Early)
-				end)
-				check:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", -2, y)
-				-- Show Early: ticked, back before it's ready; unticked, only once it is.
-				local earlyCheck = Check(content, nil, "", L["Bring the icon back a little before it's " ..
-					"ready, by the seconds beside it. Unticked, it comes back once it's ready."], function(value)
-					ns.GetDB().cooldownEarlyOn[check.spellID] = value or nil
-					check:Refresh()
-				end)
-				earlyCheck:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", EARLY_X - 2, y)
-				earlyCheck.Refresh = function() end -- (set by its row's)
-				-- Seconds before it's ready that it comes back: empty for the default.
-				local early = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
-				early:SetSize(36, 20)
-				early:SetAutoFocus(false)
-				early:SetNumeric(true)
-				early:SetMaxLetters(4)
-				early:SetPoint("LEFT", earlyCheck, "RIGHT", 6, 0)
-				Tooltip(early, L["How many seconds before it's ready the icon comes back. Leave it empty " ..
-					"for %d%% of its cooldown."]:format(ns.READY_EARLY * 100))
-				local function Save(self)
-					local spell = check.spellID
-					if spell then
-						ns.GetDB().cooldownReadyEarly[spell] = tonumber(self:GetText())
-					end
-					self:ClearFocus()
-					check:Refresh()
-				end
-				early:SetScript("OnEnterPressed", Save)
-				early:SetScript("OnEditFocusLost", function(self)
-					if self.saving then return end
-					self.saving = true
-					Save(self)
-					self.saving = nil
-				end)
-				early:SetScript("OnEscapePressed", function(self)
-					-- (Put back as it was: losing focus then saves that.)
-					local set = check.spellID and ns.GetDB().cooldownReadyEarly[check.spellID]
-					self:SetText(set and tostring(set) or "")
-					self:ClearFocus()
-				end)
-				check.earlyCheck, check.early = earlyCheck, early
-				check.earlyText = Label(content, "GameFontHighlightSmall", "")
-				check.earlyText:SetPoint("LEFT", early, "RIGHT", 6, 0)
-				check.Refresh = function(self)
-					local spell = self.spellID
-					local db = ns.GetDB()
-					self:SetChecked(spell and db.cooldownReadyOnly[spell] or false)
-					if not spell then return end
-					local set = db.cooldownReadyEarly[spell]
-					if not self.early:HasFocus() then
-						self.early:SetText(set and tostring(set) or "")
-					end
-					local length = ns.CooldownLength(spell)
-					self.earlyText:SetText(set and "sec" or (length
-						and (L["sec (empty: %d)"]):format(math.floor(length * ns.READY_EARLY + 0.5))
-						or (L["sec (empty: %d%%)"]):format(ns.READY_EARLY * 100)))
-					local handled = Handled()
-					self:SetEnabled(handled)
-					local label = self.Text or self.text
-					if label then SetLabelFont(label, handled and "GameFontHighlight" or "GameFontDisable") end
-					local ticked = db.cooldownReadyOnly[spell] and handled and true or false
-					local earlyOn = db.cooldownEarlyOn[spell] and true or false
-					self.earlyCheck:SetChecked(earlyOn)
-					self.earlyCheck:SetEnabled(ticked)
-					local seconds = ticked and earlyOn
-					self.early:SetEnabled(seconds)
-					self.early:SetAlpha(seconds and 1 or 0.5)
-					self.earlyText:SetAlpha(seconds and 1 or 0.5)
-				end
-				spellChecks[i] = check
+			local group = barOf[id] or "other"
+			groupOf[id] = group
+			groupSpells[group] = groupSpells[group] or {}
+			table.insert(groupSpells[group], id)
+			if group ~= lastGroup then
+				if lastGroup then y = y - GROUP_GAP end
+				lastGroup = group
+				local row = GroupRow(group)
+				PlaceRow(row, group, GROUP_NAMES[group], y - 4)
+				row.line:ClearAllPoints()
+				row.line:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, y - 30)
+				row.line:Show()
+				y = y - GROUP_HEIGHT
 			end
-			check.spellID = id
+			local row = rows[i] or NewRow(SPELL, "GameFontHighlight")
+			rows[i] = row
 			local okName, name = pcall(GetName, id)
 			local okIcon, icon = pcall(GetIcon, id)
-			local text = check.Text or check.text
-			text:SetText(("|T%s:16|t %s%s"):format(okIcon and icon or 134400,
-				okName and name or L["Spell %d"]:format(id),
-				inManager[id] and "" or L[" |cff808080(not in it now)|r"]))
-			text:SetWidth(EARLY_X - 36)
-			text:SetJustifyH("LEFT")
-			text:SetWordWrap(false)
-			check:Show()
-			check.earlyCheck:Show()
-			check.early:Show()
-			check.earlyText:Show()
+			PlaceRow(row, id, ("|T%s:16|t %s"):format(okIcon and icon or 134400,
+				okName and name or L["Spell %d"]:format(id)), y)
+			y = y - ROW_HEIGHT
 		end
-		for i = #ids + 1, #spellChecks do
-			spellChecks[i].spellID = nil
-			spellChecks[i]:Hide()
-			spellChecks[i].earlyCheck:Hide()
-			spellChecks[i].early:Hide()
-			spellChecks[i].earlyText:Hide()
+		for i = #ids + 1, #rows do
+			HideRow(rows[i])
 		end
 		noSpells:SetShown(#ids == 0)
 		spellHeading:SetShown(#ids > 0)
+		modeHeading:SetShown(#ids > 0)
 		earlyHeading:SetShown(#ids > 0)
+		powerHeading:SetShown(#ids > 0)
 	end
 
 	local shown = PageShown(Refresh, content)
@@ -7403,6 +7643,7 @@ local function CreateVisionPanel()
 	local function ApplyQuest()
 		if ns.RefreshTargetQuestIcon then ns.RefreshTargetQuestIcon() end
 		if ns.UpdateQuestGlow then ns.UpdateQuestGlow() end
+		if ns.RefreshQuestItemButton then ns.RefreshQuestItemButton() end
 	end
 	-- (Its switch: questVision, its Enable before it had a page.)
 	local questSwitch = PageSwitch(content, "questVision", L["Enable page"],
@@ -7448,6 +7689,15 @@ local function CreateVisionPanel()
 		if ns.RefreshTargetQuestIcon then ns.RefreshTargetQuestIcon() end
 	end)
 	questStack:Add(questTarget, "check")
+	local questItem = Check(content, "questItemButton", L["Quest item button"],
+		L["Where your extra ability button goes (the extra abilities frame's place in Edit Mode), a big button " ..
+		"with the item the nearest quest gives you to use, the one in the quest tracker. Click it or press its " ..
+		"key (Keybinds page). Shows near the quest's area, beside the game's own button when that's up. " ..
+		"It can't show, hide or move in a fight: it stays as it was until the fight ends."], function(value)
+		ns.GetDB().questItemButton = value
+		if ns.RefreshQuestItemButton then ns.RefreshQuestItemButton() end
+	end)
+	questStack:Add(questItem, "check")
 	local questGlow = Check(content, "questObjectGlow", L["Glow on quest objects"],
 		L["The thing on the ground you pick up or use for a quest objective glows gold, with the quest mark " ..
 		"over it, in CineMode and out. One at a time: the one in front of you that your interact key would " ..
@@ -8440,6 +8690,8 @@ local KEYBINDS = {
 			"raid frames all show again."] },
 	{ action = "CINEMATIC_VISION_QUEST", label = L["Toggle Quest Vision"],
 		tip = L["Turns Quest Vision on or off (its Enable page switch)."] },
+	{ action = "CLICK CinematicQuestItemButton:LeftButton", label = L["Use the quest item"],
+		tip = L["Uses the item on Quest Vision's quest item button, while it shows."] },
 	{ action = "CINEMATIC_VISION_DUEL", label = L["Toggle Duel Vision"],
 		tip = L["Turns Duel Vision on or off."] },
 	{ action = "CINEMATIC_VISION_ROLL", label = L["Toggle Roll Vision"],
@@ -9878,6 +10130,9 @@ ns.OnLanguage(function()
 	CreateVisionPanel()
 	if ns.CreateVitalsVisionPanel then -- (LowHealth.lua)
 		ns.CreateVitalsVisionPanel(ns.lowHealthKit)
+	end
+	if ns.CreateWindGuidePanel then -- (WindGuide.lua: the dev copy only, CinematicDev.toc)
+		ns.CreateWindGuidePanel(ns.lowHealthKit)
 	end
 	CreateBuffsPanel()
 	CreatePlatesPanel()

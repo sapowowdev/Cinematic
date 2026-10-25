@@ -17,10 +17,19 @@ local RECHECK_NO = 2
 -- change are read once more after it.
 local SETTLE = 2
 local settleAt = 0
-local passiveAnswers = {} -- [guid] = bool (see IsPassiveQuestMob)
+local passiveAnswers = {} -- [guid] = { passive = bool, at = time } (see IsPassiveQuestMob)
+local spent = {} -- [guid] = questID: NPCs you've used that quest's item on (see below)
+local spentNames = {} -- [name] = until (time): the same, by name, for SPENT_NAME_TIME seconds
+local SPENT_NAME_TIME = 60
+local lastSpent -- (for /cine debug questmob: the last one, { guid, name })
 
 local function Known(value)
 	return not (issecretvalue and issecretvalue(value))
+end
+
+local function NameOf(unit)
+	local ok, name = pcall(UnitName, unit)
+	return ok and type(name) == "string" and Known(name) and name or nil
 end
 
 -- Whether an objective line's text says it's done: "7/7" or "100%".
@@ -161,6 +170,24 @@ function ns.IsQuestMob(unit)
 	if not (ok and type(guid) == "string" and Known(guid)) then
 		return Read(unit)
 	end
+	if spent[guid] then
+		local okOn, on = pcall(C_QuestLog.IsOnQuest, spent[guid])
+		if okOn and on then
+			return false
+		end
+		spent[guid] = nil
+	end
+	-- (By name for a while too: the game can swap an NPC you've used the item
+	-- on for a fresh copy of it, with a new GUID.)
+	if next(spentNames) then
+		local name = NameOf(unit)
+		local untilTime = name and spentNames[name]
+		if untilTime and GetTime() < untilTime then
+			return false
+		elseif untilTime then
+			spentNames[name] = nil
+		end
+	end
 	local now = GetTime()
 	local answer = answers[guid]
 	if answer and (answer.at >= settleAt or now < settleAt) and (answer.quest or now - answer.at < RECHECK_NO) then
@@ -172,6 +199,175 @@ function ns.IsQuestMob(unit)
 	return answer.quest
 end
 
+-- NPCs you use a quest's item on ("Renewal for the Weary": 1/10 Sunwell
+-- Channeler renewed) keep the objective line on their tooltip after, so they'd
+-- keep the !. An NPC counts as done (spent, at the top) once a cast aimed at
+-- it is followed, within SPENT_WAIT seconds, by progress on a quest with an
+-- item to use: the quest whose item has that spell, else (an item can cast
+-- some other spell) any of them, if the NPC was a quest mob. Until the quest
+-- leaves the log. Its name too, for SPENT_NAME_TIME seconds. /cine debug questitem prints each step.
+local SPENT_WAIT = 15
+local CAST_UNITS = { "target", "softinteract", "softfriend", "mouseover", "focus" }
+local itemQuests -- { [spellID] = questID, all = { questID, ... } }, or nil until needed
+local aimed -- UNIT_SPELLCAST_SENT's: { id = castGUID, guid, mob = quest mob, have = { [questID] = count } }
+local pending = {} -- { guid, name, quest, have, at }
+
+local function Report(text)
+	if ns.questItemDebug then
+		ns.Print("quest item: " .. text)
+	end
+end
+
+-- The quests in your log with an item to use (the square beside them in the
+-- quest tracker): { questID, index (quest log), link, itemID, icon,
+-- showComplete, complete } each. Also for QuestItemButton. say: a function
+-- told what each quest gives back (/cine debug questitem).
+function ns.QuestLogItems(say)
+	local found = {}
+	local log = C_QuestLog
+	local SpecialItem = _G.GetQuestLogSpecialItemInfo or (log and log.GetQuestLogSpecialItemInfo)
+	if not (log and log.GetNumQuestLogEntries and log.GetInfo and SpecialItem) then
+		if say then
+			say(("can't read quest items: quest log %s, item reader %s"):format(tostring(log and log.GetInfo ~= nil),
+				tostring(SpecialItem ~= nil)))
+		end
+		return found
+	end
+	local okCount, entries = pcall(log.GetNumQuestLogEntries)
+	for index = 1, okCount and type(entries) == "number" and entries or 0 do
+		local ok, problem = pcall(function()
+			local info = log.GetInfo(index)
+			local questID = info and not info.isHeader and info.questID
+			if type(questID) ~= "number" then
+				return
+			end
+			local link, icon, _, showComplete = SpecialItem(index)
+			if link == nil then
+				return
+			end
+			local readable = type(link) == "string" and Known(link)
+			local itemID = readable and tonumber(link:match("item:(%d+)"))
+			local complete = log.IsComplete and log.IsComplete(questID) or false
+			if say then
+				say(("quest %s (%s): item %s%s"):format(questID, tostring(info.title),
+					readable and link or ("unreadable (" .. type(link) .. ")"), complete and ", complete" or ""))
+			end
+			if itemID then
+				found[#found + 1] = { questID = questID, index = index, link = link, itemID = itemID, icon = icon,
+					showComplete = showComplete, complete = complete }
+			end
+		end)
+		if not ok and say then
+			say(("quest log entry %d: error %s"):format(index, tostring(problem)))
+		end
+	end
+	return found
+end
+
+local function ItemQuests()
+	if itemQuests then
+		return itemQuests
+	end
+	itemQuests = { all = {} }
+	local GetItemSpell = C_Item and C_Item.GetItemSpell or _G.GetItemSpell
+	for _, quest in ipairs(ns.QuestLogItems()) do
+		local all = itemQuests.all
+		all[#all + 1] = quest.questID
+		local ok, _, spellID = pcall(GetItemSpell or error, quest.itemID)
+		if ok and type(spellID) == "number" and Known(spellID) then
+			itemQuests[spellID] = quest.questID
+		end
+	end
+	return itemQuests
+end
+
+-- How many of the quest's objectives' steps are done, all told.
+local function Fulfilled(questID)
+	local total = 0
+	pcall(function()
+		for _, objective in ipairs(C_QuestLog.GetQuestObjectives(questID) or {}) do
+			if type(objective.numFulfilled) == "number" and Known(objective.numFulfilled) then
+				total = total + objective.numFulfilled
+			end
+		end
+	end)
+	return total
+end
+
+-- The unit a cast is aimed at: of the ones SENT named (any, with no name: an
+-- item used on your soft target can come with none), a quest mob first.
+local function AimedAt(name)
+	local first
+	for _, unit in ipairs(CAST_UNITS) do
+		local okName, unitName = pcall(UnitName, unit)
+		local ok, guid = pcall(UnitGUID, unit)
+		if ok and type(guid) == "string" and Known(guid)
+			and (name == nil or (okName and Known(unitName) and unitName == name)) then
+			if ns.IsQuestMob(unit) then
+				return guid, true, unit
+			end
+			first = first or unit
+		end
+	end
+	return first and UnitGUID(first), false, first
+end
+
+local function CheckPending()
+	local now = GetTime()
+	for i = #pending, 1, -1 do
+		local cast = pending[i]
+		if now - cast.at > SPENT_WAIT then
+			Report(("no progress on quest %s in %d sec: the ! stays"):format(tostring(cast.quest), SPENT_WAIT))
+			table.remove(pending, i)
+		elseif Fulfilled(cast.quest) > cast.have then
+			spent[cast.guid] = cast.quest
+			if cast.name then
+				spentNames[cast.name] = now + SPENT_NAME_TIME
+			end
+			lastSpent = { guid = cast.guid, name = cast.name }
+			Report(("progress on quest %s: %s is done (%s)"):format(tostring(cast.quest), tostring(cast.name),
+				tostring(cast.guid)))
+			table.remove(pending, i)
+		end
+	end
+end
+
+local castWatcher = CreateFrame("Frame")
+castWatcher:RegisterUnitEvent("UNIT_SPELLCAST_SENT", "player")
+castWatcher:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+castWatcher:SetScript("OnEvent", function(_, event, _, a, b, c)
+	if event == "UNIT_SPELLCAST_SENT" then
+		-- (unit, target name, castGUID, spellID)
+		local name = type(a) == "string" and Known(a) and a ~= "" and a or nil
+		local guid, mob, unit = AimedAt(name)
+		-- (Each item quest's count now, before the cast: the game can move it
+		-- before SUCCEEDED reaches us.)
+		aimed = guid and { id = b, guid = guid, name = unit and NameOf(unit), mob = mob, have = {} }
+		for _, questID in ipairs(guid and ItemQuests().all or {}) do
+			aimed.have[questID] = Fulfilled(questID)
+		end
+		Report(("cast %s sent at %s: %s (%s)"):format(tostring(c), tostring(name or "no name"),
+			tostring(unit or "no unit found"), mob and "a quest mob" or "not a quest mob"))
+		return
+	end
+	-- (unit, castGUID, spellID)
+	if not (aimed and Known(a) and a == aimed.id) then
+		return
+	end
+	local quests = ItemQuests()
+	local quest = type(b) == "number" and Known(b) and quests[b]
+	local list = quest and { quest } or (aimed.mob and quests.all) or {}
+	Report(("cast %s done: %s"):format(tostring(b), quest and ("the item spell of quest " .. quest)
+		or (#list > 0 and ("not an item spell; watching %d quests with items"):format(#list))
+		or "not an item spell, not at a quest mob: ignored"))
+	for _, questID in ipairs(list) do
+		pending[#pending + 1] = { guid = aimed.guid, name = aimed.name, quest = questID, have = aimed.have[questID] or Fulfilled(questID),
+			at = GetTime() }
+	end
+	aimed = nil
+	CheckPending()
+end)
+
 -- The quest log changed (progress made, a quest taken or handed in): every
 -- answer is read again.
 local watcher = CreateFrame("Frame")
@@ -180,6 +376,10 @@ for _, event in ipairs({ "QUEST_LOG_UPDATE", "UNIT_QUEST_LOG_CHANGED", "QUEST_AC
 	pcall(watcher.RegisterEvent, watcher, event)
 end
 watcher:SetScript("OnEvent", function()
+	if #pending > 0 then
+		CheckPending()
+	end
+	itemQuests = nil
 	wipe(answers)
 	wipe(passiveAnswers)
 	settleAt = GetTime() + SETTLE
@@ -302,20 +502,24 @@ function ns.UnitCursor(unit)
 end
 
 -- Whether a quest mob is one you can't do anything with (see above). By GUID
--- until the quest log changes (passiveAnswers, at the top). Where the game
--- won't say: no (the !).
+-- until the quest log changes (passiveAnswers, at the top); a yes is read
+-- again after a while: an enemy that turns friendly when beaten (to be
+-- questioned) shows the plain pointer for a moment before you can talk to it.
+-- Where the game won't say: no (the !).
 function ns.IsPassiveQuestMob(unit)
 	if not (unit and IsFriendly(unit)) then
 		return false
 	end
 	local ok, guid = pcall(UnitGUID, unit)
 	guid = ok and type(guid) == "string" and Known(guid) and guid or nil
-	if guid and passiveAnswers[guid] ~= nil then
-		return passiveAnswers[guid]
+	local now = GetTime()
+	local answer = guid and passiveAnswers[guid]
+	if answer and not (answer.passive and now - answer.at >= RECHECK_NO) then
+		return answer.passive
 	end
 	local passive = IsPointer(ns.UnitCursor(unit))
 	if guid then
-		passiveAnswers[guid] = passive
+		passiveAnswers[guid] = { passive = passive, at = now }
 	end
 	return passive
 end
@@ -422,4 +626,15 @@ end)
 -- For /cine debug plates: what the target's quest lines say.
 function ns.DescribeQuestMob(unit)
 	return ("quest mob=%s (tooltip=%s)"):format(tostring(ns.IsQuestMob(unit)), tostring(FromTooltip(unit)))
+end
+
+-- For /cine debug questmob: the unit's GUID and whether it counts as done.
+function ns.DescribeQuestSpent(unit)
+	local ok, guid = pcall(UnitGUID, unit)
+	guid = ok and type(guid) == "string" and Known(guid) and guid or nil
+	local name = NameOf(unit)
+	local untilTime = name and spentNames[name]
+	return ("guid=%s, item used on it=%s, by name for %s, last done: %s (%s)"):format(tostring(guid),
+		tostring(guid and spent[guid] ~= nil), untilTime and ("%.0f more sec"):format(math.max(0, untilTime - GetTime()))
+		or "no", tostring(lastSpent and lastSpent.name), tostring(lastSpent and lastSpent.guid))
 end

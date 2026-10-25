@@ -66,6 +66,7 @@ MenuWheel.lua
 MarkerWheel.lua
 QuestMobs.lua
 QuestGlow.lua
+QuestItemButton.lua
 Effects.lua
 TooltipParts.lua
 PlateParts.lua

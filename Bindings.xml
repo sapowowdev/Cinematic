@@ -57,6 +57,8 @@
 	<Binding name="CINEMATIC_SHOWTOOLTIPS" category="ADDONS" runOnUp="true">
 		Cinematic_ShowTooltips(keystate)
 	</Binding>
+	<Binding name="CLICK CinematicQuestItemButton:LeftButton" category="ADDONS">
+	</Binding>
 	<Binding name="CINEMATIC_TOGGLETOOLTIPS" category="ADDONS">
 		Cinematic_ToggleTooltips()
 	</Binding>

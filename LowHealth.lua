@@ -567,6 +567,7 @@ local function Wanted(now)
 end
 
 local reachNow = 0 -- (the shadow's reach as last shown: effects start about there)
+local belowStart = false -- health known to be under Starts below (not when secret)
 
 -- The theme's effects that a hit, a heartbeat or time brings on.
 local function SpawnEffects(why, elapsed)
@@ -606,6 +607,7 @@ local function Update(_, elapsed)
 		StartDrip()
 	end
 	lastHealth = share
+	belowStart = on and share ~= nil and share < db.lowHealthStart
 	flash = Approach(flash, 0, elapsed, FLASH_TIME)
 	local secret = on and share == nil
 	local target = on and (share and LevelAt(share) or 1) or 0
@@ -716,9 +718,10 @@ events:SetScript("OnEvent", function(_, event)
 	Wake()
 end)
 
--- Is it showing now? (The minimap button's Vision Helper.)
+-- Is it showing now? (The minimap button's Vision Helper.) Only once your
+-- health is under Starts below: secret health can't tell, so it stays dark.
 function ns.VitalsVisionActive()
-	return db ~= nil and db.lowHealth and level > 0
+	return db ~= nil and db.lowHealth and belowStart and level > 0
 end
 
 -- The Vitals Vision page (in the Visions hub): its switch, the theme and a

@@ -2213,7 +2213,7 @@ function ns.IsPlaceShowOn(list, key) return IsListOn(list, key, PlaceDefaults(li
 -- than made anew: making them 33 times a second was a lot of garbage.
 local tickTables = {
 	hovered = {}, triggered = {}, pinged = {}, mouseRows = {}, mouseGroups = {}, events = {},
-	combatShown = {}, placeLists = {},
+	combatShown = {}, placeLists = {}, auraOnly = {},
 }
 
 -- "group:<group>", a group's key in the shown lists, made once for each
@@ -2723,6 +2723,12 @@ end
 -- aura details, which may be secret. Removals and the full refresh at login or
 -- zoning don't count. Clients that don't say what changed count every change.
 local buffPeekUntil = 0
+-- A debuff peek: just the debuffs, and a fight starting doesn't clear it
+-- (the hit that puts a debuff on you is often the one that starts the fight).
+-- (In ns, not locals: Frames.lua is at the 200-local cap.)
+ns.debuffPeekUntil = 0
+-- How many debuffs you had at the last aura change (nil: unknown), to spot a
+-- new one in a fight, when what changed is secret: ns.debuffCount.
 -- A debuff brought them up with debuffPeekUntilGone: held until you have no
 -- debuffs left (bar ignored ones).
 local debuffHeld = false
@@ -2790,6 +2796,20 @@ local function IsIgnoredAura(aura)
 	return ids[id] or (type(name) == "string" and names[name:lower()]) or false
 end
 
+-- One aura's data: lasting longer than buffPeekLongMinutes, with
+-- buffPeekIgnoreLong? (Its full time, not what's left. False when unsure, or
+-- for ones with no time at all.)
+function ns.IsLongAura(aura)
+	if type(aura) ~= "table" or not ns.db.buffPeekIgnoreLong then
+		return false
+	end
+	local duration = aura.duration
+	if type(duration) ~= "number" or (issecretvalue and issecretvalue(duration)) then
+		return false
+	end
+	return duration > (ns.db.buffPeekLongMinutes or 30) * 60
+end
+
 -- A buff you cast on yourself (buffPeekIgnoreSelf passes these over): its
 -- caster is you or your pet. (False when unsure: no data, or a secret caster.)
 local function IsSelfCast(aura)
@@ -2836,12 +2856,21 @@ local function EitherHold()
 	return buff or debuff
 end
 
+-- A debuff peek for this long (debuffPeekTime by default), and held until
+-- your debuffs are gone with debuffPeekUntilGone.
+function ns.StartDebuffPeek(hold)
+	ns.debuffPeekUntil = math.max(ns.debuffPeekUntil, GetTime() + (hold or ns.HoldTime("debuffPeekTime")))
+	if ns.db.debuffPeekUntilGone then
+		debuffHeld = true
+	end
+end
+
 -- One aura gained or refreshed: how long it brings the buffs up, or nil. Not
 -- at all if it's on the ignore list, or a buff you cast on yourself with
 -- buffPeekIgnoreSelf; otherwise as its kind allows. When unsure (no data,
 -- secret values), either kind will do.
 local function AuraHold(aura)
-	if IsIgnoredAura(aura) then
+	if IsIgnoredAura(aura) or ns.IsLongAura(aura) then
 		return nil
 	end
 	local harmful = type(aura) == "table" and aura.isHarmful
@@ -2852,8 +2881,10 @@ local function AuraHold(aura)
 		return nil
 	end
 	local hold = PeekHold(harmful and true or false)
-	if hold and harmful and ns.db.debuffPeekUntilGone then
-		debuffHeld = true
+	-- (A debuff's is a peek of its own, at just the debuffs.)
+	if hold and harmful then
+		ns.StartDebuffPeek(hold)
+		return nil
 	end
 	return hold
 end
@@ -2867,21 +2898,102 @@ local function HasDebuff()
 			-- (Errors rather than returning nil while auras are secret.)
 			local ok, data = pcall(C_UnitAuras.GetAuraDataByIndex, "player", i, "HARMFUL")
 			if not ok or (issecretvalue and issecretvalue(data)) then
-				return true
+				-- (Secret, as in a fight: whether the game's debuff frame shows any.)
+				local icons = ns.DebuffIconCount()
+				return icons == nil or icons > 0
 			end
 			aura = data
 		elseif UnitDebuff then
 			local values = { UnitDebuff("player", i) }
-			aura = values[1] and { name = values[1], spellId = values[10] }
+			aura = values[1] and { name = values[1], duration = values[5], spellId = values[10] }
 		end
 		if not aura then
 			return false
 		end
-		if (issecretvalue and issecretvalue(aura.name)) or not IsIgnoredAura(aura) then
+		if (issecretvalue and issecretvalue(aura.name)) or not (IsIgnoredAura(aura) or ns.IsLongAura(aura)) then
 			return true
 		end
 	end
 	return false
+end
+
+-- How many debuffs are on you, or nil when that can't be told. (The count
+-- isn't secret in fights, even where the debuffs are.)
+function ns.DebuffCount()
+	if C_UnitAuras and C_UnitAuras.GetAuraSlots then
+		local ok, count = pcall(function()
+			-- (The first value is the continuation token, not a slot.)
+			return select("#", C_UnitAuras.GetAuraSlots("player", "HARMFUL")) - 1
+		end)
+		return ok and count or nil
+	elseif UnitDebuff then
+		local count = 0
+		while UnitDebuff("player", count + 1) do
+			count = count + 1
+		end
+		return count
+	end
+end
+
+-- Where that count can't be had (retail in a fight), the game's own debuff
+-- frame is asked instead: the list of auras it draws (DebuffFrame.auraInfo),
+-- else its shown icons that hold an aura (buttonInfo), or DebuffButton1... on
+-- older clients. Nil when there's none of these.
+function ns.DebuffIconCount()
+	local count = 0
+	local function Shown(frame)
+		local ok, shown = pcall(function() return not IsForbidden(frame) and ns.Flag(frame:IsShown()) end)
+		return ok and shown
+	end
+	local function Look(depth, ...)
+		for i = 1, select("#", ...) do
+			local child = select(i, ...)
+			if Shown(child) then
+				if child.buttonInfo then
+					count = count + 1
+				elseif depth > 1 then
+					Look(depth - 1, child:GetChildren())
+				end
+			end
+		end
+	end
+	local frame = _G.DebuffFrame
+	local ok, listed = pcall(function() return type(frame.auraInfo) == "table" and #frame.auraInfo end)
+	if ok and type(listed) == "number" then
+		return listed
+	elseif frame and frame.GetChildren then
+		Look(3, frame:GetChildren())
+		return count
+	elseif _G.DebuffButton1 then
+		for i = 1, 40 do
+			local button = _G["DebuffButton" .. i]
+			if not button then break end
+			if Shown(button) then count = count + 1 end
+		end
+		return count
+	end
+end
+
+-- Counts the debuff icons a frame from now (once the game has drawn the
+-- change), noting the count; with peek, one more than before starts a
+-- fight's debuff peek.
+function ns.CheckDebuffIcons(peek)
+	C_Timer.After(0, function()
+		local icons = ns.DebuffIconCount()
+		if peek and icons and ns.debuffIcons and icons > ns.debuffIcons then
+			ns.StartDebuffPeek()
+		end
+		-- (The last one gone: the hold lets go. The game's frame has caught up
+		-- by now, which it may not have at the aura change itself.)
+		if icons == 0 then
+			debuffHeld = false
+		end
+		if ns.auraDebug then
+			ns.Print(("debuff icons %s -> %s%s"):format(tostring(ns.debuffIcons), tostring(icons),
+				peek and "" or " (not peeking)"))
+		end
+		ns.debuffIcons = icons
+	end)
 end
 
 -- The longest hold of any aura gained or refreshed, or nil. Updates (a stack
@@ -2932,12 +3044,34 @@ do
 		if not (ns.db and (PeekAllowed(false) or PeekAllowed(true))) then
 			return
 		end
-		-- In a fight the buffs follow the fight's own frames, and a peek started
-		-- then would hold them up past its end: leaving combat, they fade with the
-		-- rest of the UI at the usual fade out time. (Nor auras the fight's end
-		-- itself changes, in the moment after it.)
-		if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
-			or GetTime() - lastCombatAt < COMBAT_END_AURA_GRACE then
+		local count = PeekAllowed(true) and ns.DebuffCount() or nil
+		local gainedDebuff = count and ns.debuffCount and count > ns.debuffCount
+		if ns.auraDebug then
+			ns.Print(("aura change: in combat %s, debuffs %s -> %s, details %s"):format(
+				tostring(InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))), tostring(ns.debuffCount),
+				tostring(count), type(updateInfo) ~= "table" and "none"
+					or (issecretvalue and issecretvalue(updateInfo.addedAuras)) and "secret" or "readable"))
+		end
+		ns.debuffCount = count
+		-- In a fight buffs don't peek: they'd hold the buffs up past its end
+		-- (leaving combat, they fade with the rest of the UI at the usual fade
+		-- out time). Nor auras the fight's end itself changes, in the moment
+		-- after it. A new debuff in a fight still does (the fight's own frames
+		-- may not show the buffs, as in Pure Cinema): what it is is secret then,
+		-- so one more debuff than before counts, ignore list and all (not with
+		-- "Only after combat").
+		local inFight = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+			or GetTime() - lastCombatAt < COMBAT_END_AURA_GRACE
+		local fightPeeks = inFight and not ns.db.debuffPeekAfterCombat and not UnitOnTaxi("player")
+		-- (No count, as on retail in a fight: the game's debuff icons, kept
+		-- counted out of fights too, to compare with.)
+		if PeekAllowed(true) then
+			ns.CheckDebuffIcons(count == nil and fightPeeks)
+		end
+		if inFight then
+			if gainedDebuff and fightPeeks then
+				ns.StartDebuffPeek()
+			end
 			return
 		end
 		-- (wasOnTaxi: landed this instant, before the flight code has noticed.)
@@ -3771,6 +3905,9 @@ end
 -- says so, when the game lets it be read; in fights WoW Forever keeps it
 -- secret, so then it goes by when you last cast the spell and how long its
 -- cooldown is. Not knowing (say, cast before a reload), it shows.
+-- The page's "While recharging" spells (db.cooldownRechargeOnly) are the
+-- other way round, in fights or not: shown while recharging, faded once
+-- ready. Not knowing, those stay faded (most likely it's ready).
 -- (Sec: quicker than the CineMode fades, it's a cue. Coming back eases in;
 -- going, as it's cast, it's out of the way at once.)
 local READY_FADE_IN, READY_FADE_OUT = 0.5, 0.25
@@ -3792,6 +3929,41 @@ do
 	end)
 end
 
+-- The page's "When it procs" spells (db.cooldownProcOnly): shown only while
+-- the game glows the spell (a proc up, like an instant Lightning Bolt), in
+-- fights or not. The glow's events say which spell; failing that the game is
+-- asked, then the icon's own glow frame. Not knowing: faded.
+do
+	local glowing = {} -- spell ID -> true while its glow is up
+	local glowWatcher = CreateFrame("Frame")
+	glowWatcher:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
+	glowWatcher:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
+	glowWatcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+	glowWatcher:SetScript("OnEvent", function(_, event, spellID)
+		if event == "PLAYER_ENTERING_WORLD" then
+			wipe(glowing)
+		elseif not Secret(spellID) and type(spellID) == "number" then
+			glowing[spellID] = event == "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW" or nil
+		end
+	end)
+
+	local IsOverlayed = (C_SpellActivationOverlay and C_SpellActivationOverlay.IsSpellOverlayed)
+		or _G.IsSpellOverlayed
+	function ns.SpellGlowing(id, icon)
+		if glowing[id] then return true end
+		if IsOverlayed then
+			local ok, on = pcall(IsOverlayed, id)
+			if ok and not Secret(on) and on then return true end
+		end
+		local alert = icon and icon.SpellActivationAlert
+		if type(alert) == "table" and alert.IsShown then
+			local ok, shown = pcall(alert.IsShown, alert)
+			if ok and not Secret(shown) and shown then return true end
+		end
+		return false
+	end
+end
+
 function ns.CooldownLength(id)
 	if cooldownLength[id] then
 		return cooldownLength[id]
@@ -3806,12 +3978,42 @@ end
 
 local CooldownLength = ns.CooldownLength
 
+-- The page's groups (each bar of the Cooldown Manager) and what a spell in
+-- one does when it hasn't been set on its own: the group's settings
+-- (db.cooldownGroupDefaults[group]), else these.
+ns.COOLDOWN_GROUP_MODES = { utility = "recharge" }
+ns.COOLDOWN_BAR_GROUPS = { EssentialCooldownViewer = "essential", UtilityCooldownViewer = "utility" }
+
+-- A group's mode, and its Resources and Show Early seconds (nil: the default share).
+function ns.CooldownGroupSettings(group)
+	local set = ns.db.cooldownGroupDefaults[group] or {}
+	return set.mode or ns.COOLDOWN_GROUP_MODES[group] or "always", set.power, set.early
+end
+
+-- A spell's mode ("always", "ready", "recharge", "proc"), whether it's its
+-- own (else its group's), and for "ready" its Resources, Show Early on, and
+-- seconds (nil: the default share).
+function ns.CooldownSpellMode(id, group)
+	local db = ns.db
+	if db.cooldownReadyOnly[id] then
+		return "ready", true, db.cooldownNeedsPower[id], db.cooldownEarlyOn[id], db.cooldownReadyEarly[id]
+	elseif db.cooldownRechargeOnly[id] then
+		return "recharge", true
+	elseif db.cooldownProcOnly[id] then
+		return "proc", true
+	elseif db.cooldownAlwaysShow[id] then
+		return "always", true
+	end
+	local mode, power, early = ns.CooldownGroupSettings(group or "other")
+	return mode, false, power, true, early
+end
+
 -- How long before a spell's icon is ready it comes back (sec), or nil until its cooldown's known.
-local function ReadyEarly(id, length)
-	if not ns.db.cooldownEarlyOn[id] then
+local function ReadyEarly(earlyOn, seconds, length)
+	if not earlyOn then
 		return 0 -- (Show Early unticked: back once it's ready)
 	end
-	return ns.db.cooldownReadyEarly[id] or (length and length * ns.READY_EARLY)
+	return seconds or (length and length * ns.READY_EARLY)
 end
 
 -- How long until an icon's spell is ready (sec, 0 when it is), and its
@@ -3839,14 +4041,45 @@ local function IconTimeLeft(icon, id, now)
 	return nil
 end
 
--- Whether a ticked spell's icon shows: in fights, once it's nearly ready (or
--- when it can't tell).
-local function IconShows(icon, id, now)
-	local left, length = IconTimeLeft(icon, id, now)
-	return left == nil or left <= (ReadyEarly(id, length) or 0)
+-- Whether you have the resources to cast a spell (mana, Maelstrom...): the
+-- game's "usable" check first, else its costs against your power. True when
+-- the game won't say.
+function ns.SpellHasPower(id)
+	local IsUsable = (C_Spell and C_Spell.IsSpellUsable) or _G.IsUsableSpell
+	if IsUsable then
+		local ok, usable, noPower = pcall(IsUsable, id)
+		if ok and not Secret(usable, noPower) then
+			return not noPower
+		end
+	end
+	local GetCosts = (C_Spell and C_Spell.GetSpellPowerCost) or _G.GetSpellPowerCost
+	if not GetCosts then return true end
+	local ok, costs = pcall(GetCosts, id)
+	if not ok or type(costs) ~= "table" then return true end
+	for _, cost in ipairs(costs) do
+		-- (type() only on what may be secret: testing one errors.)
+		local need, kind = cost.minCost, cost.type
+		if type(need) == "nil" then need = cost.cost end
+		local have = type(kind) == "number" and not Secret(kind) and UnitPower("player", kind)
+		if type(need) == "number" and type(have) == "number" and not Secret(need, have) and have < need then
+			return false
+		end
+	end
+	return true
 end
 
--- Calls visit(icon, spell) for each icon in the Cooldown Manager's spell bars.
+-- Whether a When Ready spell's icon shows: in fights, once it's nearly ready
+-- (or when it can't tell), and with Resources ticked once you can pay for it.
+local function IconShows(icon, id, now, power, earlyOn, seconds)
+	local left, length = IconTimeLeft(icon, id, now)
+	if left ~= nil and left > (ReadyEarly(earlyOn, seconds, length) or 0) then
+		return false
+	end
+	return not power or ns.SpellHasPower(id)
+end
+
+-- Calls visit(icon, spell, bar) for each icon in the Cooldown Manager's spell
+-- bars (bar: the viewer's name).
 local function EachCooldownIcon(visit)
 	EachCooldownFrame(function(entry, frame)
 		if COOLDOWN_VIEWERS[entry.name] then
@@ -3858,7 +4091,7 @@ local function EachCooldownIcon(visit)
 					end
 					id = id or iconSpell[part]
 					if id then
-						visit(part, id)
+						visit(part, id, entry.name)
 					end
 				end
 			end)
@@ -3866,16 +4099,32 @@ local function EachCooldownIcon(visit)
 	end)
 end
 
--- The spells in the Cooldown Manager's spell bars now, in the order found (for its page).
-function ns.CooldownManagerSpells()
-	local ids, listed = {}, {}
-	EachCooldownIcon(function(_, id)
-		if not listed[id] then
-			listed[id] = true
-			ids[#ids + 1] = id
-		end
-	end)
-	return ids
+-- The spells in the Cooldown Manager's spell bars now, for its page: the
+-- Essential bar's first, then the Utility bar's, each in the order you set
+-- in its settings (the icon's place in its bar). Also returns spell ID ->
+-- "essential" or "utility".
+do
+	local BAR_ORDER = { EssentialCooldownViewer = 1, UtilityCooldownViewer = 2 }
+	local BAR_KIND = ns.COOLDOWN_BAR_GROUPS
+	function ns.CooldownManagerSpells()
+		local found, barOf = {}, {}
+		EachCooldownIcon(function(icon, id, bar)
+			if not barOf[id] then
+				barOf[id] = BAR_KIND[bar]
+				local place = icon.layoutIndex
+				if Secret(place) or type(place) ~= "number" then place = math.huge end
+				found[#found + 1] = { id = id, bar = BAR_ORDER[bar] or 3, place = place, seen = #found }
+			end
+		end)
+		table.sort(found, function(a, b)
+			if a.bar ~= b.bar then return a.bar < b.bar end
+			if a.place ~= b.place then return a.place < b.place end
+			return a.seen < b.seen
+		end)
+		local ids = {}
+		for i, spell in ipairs(found) do ids[i] = spell.id end
+		return ids, barOf
+	end
 end
 
 -- Every icon faded here back to full.
@@ -4113,12 +4362,22 @@ local function UpdateReadyOnly(elapsed, now)
 	if now - readyCheckedAt >= 0.1 then
 		readyCheckedAt = now
 		wipe(readyTargets)
-		local list = ns.db.cooldownReadyOnly
-		if next(list) then
+		local db = ns.db
+		local any = next(db.cooldownReadyOnly) or next(db.cooldownRechargeOnly) or next(db.cooldownProcOnly)
+		for _, group in pairs(ns.COOLDOWN_BAR_GROUPS) do
+			any = any or ns.CooldownGroupSettings(group) ~= "always"
+		end
+		if any then
 			local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
-			EachCooldownIcon(function(icon, id)
-				if list[id] then
-					readyTargets[icon] = (inCombat and IconShows(icon, id, now)) and 1 or 0
+			EachCooldownIcon(function(icon, id, bar)
+				local mode, _, power, earlyOn, seconds = ns.CooldownSpellMode(id, ns.COOLDOWN_BAR_GROUPS[bar])
+				if mode == "ready" then
+					readyTargets[icon] = (inCombat and IconShows(icon, id, now, power, earlyOn, seconds)) and 1 or 0
+				elseif mode == "recharge" then
+					local left = IconTimeLeft(icon, id, now) -- (not knowing: faded)
+					readyTargets[icon] = (left and left > 0) and 1 or 0
+				elseif mode == "proc" then
+					readyTargets[icon] = ns.SpellGlowing(id, icon) and 1 or 0
 				end
 			end)
 		end
@@ -4164,15 +4423,30 @@ function ns.ReportCooldowns()
 				print(("  icon spell=%s cooldown %s"):format(tostring(id), start
 					and ("%.1fs left of %.1fs"):format(math.max(0, start + duration - now), duration)
 					or "unreadable"))
-				if id and ns.db.cooldownReadyOnly[id] then
+				local mode, own, power, earlyOn, seconds
+				if id then
+					mode, own, power, earlyOn, seconds = ns.CooldownSpellMode(id, ns.COOLDOWN_BAR_GROUPS[entry.name])
+				end
+				local from = own and "" or " (its group's)"
+				if mode == "ready" then
 					local left, length = IconTimeLeft(part, id, now)
-					local early = ReadyEarly(id, length)
+					local early = ReadyEarly(earlyOn, seconds, length)
 					local cast = lastCastOf[id]
-					print(("    only when ready in combat: %s, back %s early (last cast %s, cooldown %s)"):format(
+					print(("    when ready%s: %s, back %s early (last cast %s, cooldown %s)"):format(from,
 						left == nil and "can't tell, shown" or (left > 0 and ("%.0fs left"):format(left) or "ready"),
 						early and ("%.0fs"):format(early) or "?",
 						cast and ("%.0fs ago"):format(now - cast) or "not seen",
 						length and ("%.0fs"):format(length) or "unknown"))
+					if power then
+						print(("    resources: %s"):format(ns.SpellHasPower(id) and "enough" or "not enough"))
+					end
+				elseif mode == "recharge" then
+					local left = IconTimeLeft(part, id, now)
+					print(("    while recharging%s: %s"):format(from, left == nil and "can't tell, faded"
+						or (left > 0 and ("%.0fs left, shown"):format(left) or "ready, faded")))
+				elseif mode == "proc" then
+					print(("    when it procs%s: %s"):format(from,
+						ns.SpellGlowing(id, part) and "glowing, shown" or "no glow, faded"))
 				end
 			else
 				local start, duration = SwipeTimes(part)
@@ -4918,8 +5192,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local castLeft = cinematic and not fighting and ns.db.stayInCombat and ns.HostileCastLeft(now)
 	if fighting then
 		lastCombatAt = now
-		buffPeekUntil = 0 -- (a peek from just before the fight doesn't outlast it)
-		debuffHeld = false
+		buffPeekUntil = 0 -- (a buff peek from just before the fight doesn't outlast it)
 	end
 	if ns.Flag(IsFalling()) then
 		lastFallingAt = now
@@ -5038,7 +5311,18 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- (The Minimap, Quest tracker, Buffs/debuffs and Cooldown Manager pages'
 	-- extras: none while their page's switch is off.)
 	local minimapPage = ns.PageOn("handleMinimap")
-	events.aura = cinematic and ns.PageOn("handleBuffs") and (buffPeekUntil > now or (debuffHeld and ns.db.debuffPeekUntilGone))
+	local debuffPeekOn = ns.debuffPeekUntil > now or (debuffHeld and ns.db.debuffPeekUntilGone)
+	events.aura = cinematic and ns.PageOn("handleBuffs") and (buffPeekUntil > now or debuffPeekOn)
+	-- (A debuff peek alone brings up just the debuffs, not the buffs beside
+	-- them: see auraOnly below.)
+	local debuffsOnly = events.aura and buffPeekUntil <= now
+	-- (/cine debug peeks: when a peek starts and stops, and why not.)
+	if ns.auraDebug and (events.aura or false) ~= (ns.auraDebugWas or false) then
+		ns.auraDebugWas = events.aura or false
+		ns.Print(("buffs peek %s (CineMode %s, page on %s, peek %.1fs, fight peek %.1fs)"):format(
+			events.aura and "on" or "off", tostring(cinematic), tostring(ns.PageOn("handleBuffs")),
+			math.max(0, buffPeekUntil - now), math.max(0, ns.debuffPeekUntil - now)))
+	end
 	-- (Not on flight paths, Minimap page: no pings, reveals or tracking bring it up then.)
 	local taxiHidesMinimap = minimapPage and ns.db.minimapHideOnTaxi and ns.Flag(UnitOnTaxi("player"))
 	events.ping = minimapPage and pingReveal and not taxiHidesMinimap
@@ -5049,10 +5333,14 @@ function ns.UpdateFrames(cinematic, elapsed)
 	events.cooldown = cinematic and ns.PageOn("handleCooldowns") and ns.db.cooldownWhileRecharging
 		and (not ns.db.cooldownAfterCombat or now - lastCombatAt < ns.db.calmTime)
 		and AnyCooldownRecharging(now)
+	-- (auraOnly: rows brought up by a buff or debuff peek and nothing else.)
+	local auraOnly = wipe(tickTables.auraOnly)
 	for _, group in ipairs(hoverGroups) do
 		for key, on in pairs(not group.off and group.when ~= offWhen and group.triggers or NO_DEFAULTS) do
 			if on and events[key] then
 				for _, member in ipairs(group.members) do
+					if not triggered[member] then auraOnly[member] = key == "aura" or nil end
+					if key ~= "aura" then auraOnly[member] = nil end
 					triggered[member] = true
 					if key == "ping" then pinged[member] = true end
 				end
@@ -5103,7 +5391,8 @@ function ns.UpdateFrames(cinematic, elapsed)
 			or (questTimerUp and entry.group == "questtimer")
 			or (durabilityUp and entry.group == "misc")
 			or (petUnhappyUp and entry.name == "PetFrame")
-			or triggered[row]
+			or (triggered[row] and not (debuffsOnly and auraOnly[row]
+				and (entry.name == "BuffFrame" or entry.name == "TemporaryEnchantFrame")))
 		local listShown = combatShown
 			and (entry.name and combatShown[entry.name] or combatShown[GROUP_KEY[ownRow or entry.group]])
 		local fightingShown = listShown

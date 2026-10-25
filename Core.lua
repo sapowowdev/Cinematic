@@ -150,7 +150,9 @@ local DEFAULTS = {
 	buffPeekIgnoreSelf = true,   -- ...and not for buffs you cast on yourself (or your pet does)
 	debuffPeek = true,        -- ...and when a debuff is
 	debuffPeekAfterCombat = false, -- (any time: Hunter's Mark and the like matter out of fights too)
-	debuffPeekUntilGone = false,   -- ...and keep them up until your debuffs are gone
+	debuffPeekUntilGone = true,    -- ...and keep them up until your debuffs are gone
+	buffPeekIgnoreLong = true,     -- ...not for buffs or debuffs lasting longer than
+	buffPeekLongMinutes = 30,      -- ...this many minutes (their full time, not what's left)
 	buffPeekTime = 3,           -- seconds they stay up for a buff
 	debuffPeekTime = 3,         -- ...and for a debuff
 	buffPeekIgnore = "2479, Plainsrunning, 8326, 20584", -- buffs or debuffs that never bring them up
@@ -292,6 +294,8 @@ local DEFAULTS = {
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
 	chatCopyButton = true,     -- an icon on each chat window opens its lines to copy (ChatCopy.lua)
 	chatCopyColours = true,    -- ...its lines in their chat colours (the Colours tick in that window)
+	loginZoom = false,         -- after a login or /reload, zoom to loginZoomDistance (Camera.lua)
+	loginZoomDistance = 15,    -- ...yards
 	rollWindow = true,         -- a window of the group's loot rolls, instead of reading them in chat (RollWindow.lua)
 	rollMinQuality = 3,        -- ...only items of this quality and up (2 uncommon, 3 rare, 4 epic)
 	rollRaidRows = 3,          -- ...in a raid, the top this many players' rolls per item (a party: all)
@@ -653,6 +657,8 @@ DEFAULTS.questVision = true -- the Quest Vision page's switch: off, none of the 
 -- shows, else alone) or "none" (as the Nameplates page's rows say).
 DEFAULTS.questMobsShow = "mark"
 DEFAULTS.targetQuestIcon = true -- a quest icon on the target frame while your target is one of them (see QuestMobs)
+-- The nearest quest's item to use on a big button at the extra ability button's spot (see QuestItemButton)
+DEFAULTS.questItemButton = true
 DEFAULTS.questObjectGlow = true -- the quest object soft targeting picks glows (see QuestGlow; changes interact settings)
 DEFAULTS.duelPlates = true -- in CineMode, the nameplates of two players dueling near you show (see Effects)
 DEFAULTS.minimapVisions = true -- the minimap button glows and lists the visions in use (see MinimapButton)
@@ -872,7 +878,7 @@ DEFAULTS.handleHealVision = true -- (read by ns.HealVisionHere; Quest Vision's s
 local PAGE_SWITCH = {}
 for page, keys in pairs({
 	handleQuality = { "campfireSitButton", "dragEquipCharacter", "talentLink", "talentCalc",
-		"centerPanels", "dragPanels", "chatCopyButton" },
+		"centerPanels", "dragPanels", "chatCopyButton", "loginZoom" },
 	handleHunter = { "hunterAmmoSort", "hunterQuiverFill" },
 	handleVision = { "duelPlates", "minimapVisions" }, -- Vision > General (Roll Vision has its own page: rollWindow)
 }) do
@@ -2146,6 +2152,11 @@ function ns.EnsureTables()
 	ns.db.cooldownReadyOnly = ns.db.cooldownReadyOnly or {} -- Cooldown Manager page: spell ID -> true
 	ns.db.cooldownReadyEarly = ns.db.cooldownReadyEarly or {} -- ...spell ID -> seconds early it comes back
 	ns.db.cooldownEarlyOn = ns.db.cooldownEarlyOn or {} -- ...spell ID -> true: Show Early ticked
+	ns.db.cooldownRechargeOnly = ns.db.cooldownRechargeOnly or {} -- ...spell ID -> true: only while recharging
+	ns.db.cooldownNeedsPower = ns.db.cooldownNeedsPower or {} -- ...spell ID -> true: ready needs its resources
+	ns.db.cooldownProcOnly = ns.db.cooldownProcOnly or {} -- ...spell ID -> true: only while it glows (a proc)
+	ns.db.cooldownAlwaysShow = ns.db.cooldownAlwaysShow or {} -- ...spell ID -> true: Always, whatever its group's
+	ns.db.cooldownGroupDefaults = ns.db.cooldownGroupDefaults or {} -- ...group -> { mode, power, early }
 	ns.db.cooldownEarlyOff = nil -- (a test build's, when Show Early started ticked)
 	ns.db.gamepadPressButtons = ns.db.gamepadPressButtons or {} -- Gamepad page: button -> reveals the bars
 	ns.db.cineFade = nil -- (a test build's CineMode column, before it became cineShow)
@@ -3401,6 +3412,21 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.weatherStrengthV1 = true
 		end
+		-- The Buffs/debuffs page's peeks as their defaults in every profile
+		-- (debuffs now held until gone, long auras skipped). Once. (Not the
+		-- ignore list: that's the player's own. Saved profiles drop theirs, to
+		-- follow their base.)
+		if not ns.db.buffPeekDefaultsV1 then
+			for _, key in ipairs({ "buffPeek", "buffPeekAfterCombat", "buffPeekIgnoreSelf", "debuffPeek",
+				"debuffPeekAfterCombat", "debuffPeekUntilGone", "buffPeekIgnoreLong", "buffPeekLongMinutes",
+				"buffPeekTime", "debuffPeekTime" }) do
+				ns.db[key] = DEFAULTS[key]
+				for _, saved in pairs(ns.db.profiles or {}) do
+					if type(saved) == "table" then saved[key] = nil end
+				end
+			end
+			ns.db.buffPeekDefaultsV1 = true
+		end
 		-- Heal Vision (Vision page) as its defaults in every profile: its grid
 		-- unticked, the options as the defaults say. Once. (Saved profiles drop
 		-- theirs, to follow their base.)
@@ -4038,6 +4064,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			quickStart = true -- straight in rather than after the fade delay
 			startSnapUntil = GetTime() + START_SNAP_WINDOW
 			snapRound = snapRound + 1
+			ns.LoginZoom()
 		end
 	elseif event == "PLAYER_LOGOUT" then
 		ns.SaveProfile()

@@ -27,7 +27,8 @@ local GLOBAL_KEYS = {
 local PROFILE_TABLES = {
 	"chatPeekTypes", "chatPeekChannelList", "combatShow", "cineShow", "targetShow", "enemyShow",
 	"friendlyShow", "bgShow", "worldShow", "groupShow", "instanceShow", "addonFrames", "gamepadPressButtons",
-	"hoverGroups", "cooldownReadyOnly", "cooldownReadyEarly", "cooldownEarlyOn",
+	"hoverGroups", "cooldownReadyOnly", "cooldownReadyEarly", "cooldownEarlyOn", "cooldownRechargeOnly", "cooldownNeedsPower",
+	"cooldownGroupDefaults", "cooldownProcOnly", "cooldownAlwaysShow",
 	"frameRules", -- (none in any built-in profile: each starts with no Custom Visibility Rules)
 	"tankHide", "healerHide", "damageHide",
 }
@@ -122,6 +123,16 @@ ns.BUILTIN_PROFILES = {
 	},
 	-- Both clients'.
 	{
+		name = "Pure Cinema",
+		icon = "Interface\\Icons\\Ability_Stealth",
+		tip = L["As little UI as possible: nameplates show only for enemies in fights, and fights don't bring " ..
+			"the letterbox down. Fights bring up only your resource bar and the Cooldown Manager, the cast bar " ..
+			"shows all through CineMode, your health shows at the screen's edges (Vitals Vision), and every " ..
+			"camera can start music."],
+		parts = { layout = { forever = "preset", retail = "pure" }, frames = "pure", bars = "pure", camera = "pure",
+			vfx = "pure", misc = "pure" },
+	},
+	{
 		name = "Lite",
 		icon = "Interface\\Icons\\Spell_Holy_HolyBolt",
 		tip = L["The UI fades and the look stays, with just a few cameras: flights (and fly-bys), AFK, " ..
@@ -149,15 +160,6 @@ ns.BUILTIN_PROFILES = {
 		tip = L["Everything on while you're out in the world on your own; the normal UI in a group, " ..
 			"in dungeons, raids and PvP."],
 		parts = { layout = { forever = "preset" }, frames = "solo" },
-	},
-	{
-		name = "Pure Cinema",
-		icon = "Interface\\Icons\\Ability_Stealth",
-		tip = L["As little UI as possible: buffs don't pop up on their own (hovering still shows them), " ..
-			"nameplates show only for enemies in fights, and fights don't bring the letterbox down. Fights bring " ..
-			"up only your resource bar and the Cooldown Manager, the cast bar shows all through CineMode, your " ..
-			"health shows at the screen's edges (Vitals Vision), and every camera can start music."],
-		parts = { layout = { forever = "preset" }, frames = "pure", bars = "pure", camera = "pure", vfx = "pure", misc = "pure" },
 	},
 }
 -- Each client's order, by name, where it isn't the list's (those not in it

@@ -158,6 +158,67 @@ local DESIGN = {
 	{ UNIT_FRAME, PARTY, nil, nil, nil, nil, nil, { [RAID_STYLE_PARTY] = 1 } }, -- party frames: raid-style
 }
 
+-- Pure Cinema's retail layout: the dev's PURE_CINEMA, as the game's Edit Mode
+-- save had it (WTF edit-mode-cache-account, 2026-10-24): one line per system
+-- (system, index, in its default spot, point, relative point, relative to,
+-- x, y, -1, settings), in the game's own export format, so it's put together
+-- into an export string (ExportFromSystems). The personal resource display
+-- moved to the middle, the Cooldown Manager above it.
+local PURE_CINEMA_SYSTEMS = {
+	"0 0 1 7 7 UIParent 0.0 45.0 -1 ##$$%/&('%)#+#,$",
+	"0 1 1 7 7 UIParent 0.0 45.0 -1 ##$$%/&('%(#,$",
+	"0 2 1 7 7 UIParent 0.0 45.0 -1 ##$$%/&('%(#,$",
+	"0 3 1 5 5 UIParent -5.0 -77.0 -1 #$$$%/&('%(#,$",
+	"0 4 1 5 5 UIParent -5.0 -77.0 -1 #$$$%/&('%(#,$",
+	"0 5 1 1 4 UIParent 0.0 0.0 -1 ##$$%/&('%(#,$",
+	"0 6 1 1 4 UIParent 0.0 -50.0 -1 ##$$%/&('%(#,$",
+	"0 7 1 1 4 UIParent 0.0 -100.0 -1 ##$$%/&('%(#,$",
+	"0 10 1 7 7 UIParent 0.0 45.0 -1 ##$$&('%",
+	"0 11 1 7 7 UIParent 0.0 45.0 -1 ##$$&('%,#",
+	"0 12 1 7 7 UIParent 0.0 45.0 -1 ##$$&('%",
+	"1 -1 1 4 4 UIParent 0.0 0.0 -1 ##$#%#",
+	"2 -1 1 2 2 UIParent 0.0 0.0 -1 ##$#%(&(",
+	"3 0 1 8 7 UIParent -300.0 250.0 -1 $#3#",
+	"3 1 1 6 7 UIParent 300.0 250.0 -1 %#3#",
+	"3 2 1 6 7 UIParent 520.0 265.0 -1 %#&#3#",
+	"3 3 1 0 2 CompactRaidFrameManager 0.0 -7.0 -1 '#(#)#-=.+/#1$3#5#6(7-7$8(9(",
+	"3 4 1 0 2 CompactRaidFrameManager 0.0 -5.0 -1 ,#-=.+/#0#1#2(3#5#6(7-7$8(9(",
+	"3 5 1 5 5 UIParent 0.0 0.0 -1 &#*$3#",
+	"3 6 1 5 5 UIParent 0.0 0.0 -1 -=.+/#4$5#6(7-7$8(9(",
+	"3 7 1 4 4 UIParent 0.0 0.0 -1 3#",
+	"4 -1 1 7 7 UIParent 0.0 45.0 -1 #",
+	"5 -1 0 4 4 UIParent 0.0 -141.2 -1 #",
+	"6 0 1 2 2 UIParent -255.0 -10.0 -1 ##$#%#&.(()(",
+	"6 1 1 2 2 UIParent -270.0 -155.0 -1 ##$#%#'+(()(-$",
+	"6 2 1 1 1 UIParent 0.0 -25.0 -1 ##$#%$&.(()(+#,-,$",
+	"7 -1 1 7 7 UIParent 0.0 45.0 -1 #",
+	"8 -1 1 6 6 UIParent 35.0 50.0 -1 #'$A%$&i",
+	"9 -1 1 7 7 UIParent 0.0 45.0 -1 #",
+	"10 -1 1 0 0 UIParent 16.0 -116.0 -1 #",
+	"11 -1 1 8 8 UIParent -9.0 85.0 -1 #",
+	"12 -1 1 2 2 UIParent -110.0 -275.0 -1 #K$#%#",
+	"13 -1 1 8 8 MicroButtonAndBagsBar 0.0 0.0 -1 ##$#%)&-",
+	"14 -1 1 2 2 MicroButtonAndBagsBar 0.0 10.0 -1 ##$#%(",
+	"15 0 1 7 7 StatusTrackingBarManager 0.0 0.0 -1 &-",
+	"15 1 1 7 7 StatusTrackingBarManager 0.0 17.0 -1 &-",
+	"16 -1 1 5 5 UIParent 0.0 0.0 -1 #(",
+	"17 -1 1 1 1 UIParent 0.0 -100.0 -1 ##",
+	"18 -1 1 5 5 UIParent 0.0 0.0 -1 #-",
+	"19 -1 1 7 7 UIParent 0.0 0.0 -1 ##",
+	"20 0 1 7 7 UIParent 0.0 310.0 -1 ##$/%$&('%(-($)#+$,$-$",
+	"20 1 1 7 7 UIParent 0.0 240.0 -1 ##$*%$&('%(-($)#+$,$-$",
+	"20 2 1 7 7 UIParent 0.0 370.0 -1 ##$$%$&('((-($)#+$,$-$",
+	"20 3 1 7 7 UIParent 420.0 430.0 -1 #$$$%#&('((-($)#*#+$,$-$.-.$",
+	"21 -1 0 4 4 UIParent 0.0 -217.2 -1 #$%#&#'((()#*-*$+#,&-#.#/(0#1#",
+	"22 0 1 8 7 UIParent -457.0 336.0 -1 #$$$%#&('((#)U*$+%,$-#.#/U0%",
+	"22 1 1 1 1 UIParent 0.0 -40.0 -1 &('()U*#+%",
+	"22 2 1 1 1 UIParent 0.0 -90.0 -1 &('()U*#+%",
+	"22 3 1 1 1 UIParent 0.0 -130.0 -1 &('()U*#+%",
+	"23 -1 1 0 0 UIParent 0.0 0.0 -1 ##$#%$&7&%'7(%)U+$,$-$.(/U",
+	"24 -1 1 1 1 UIParent 0.0 -182.0 -1 #",
+	"26 -1 1 4 4 UIParent 0.0 0.0 -1 #( ",
+}
+
 -- Cinematic's own layouts, by the name Edit Mode lists them under. export:
 -- an Edit Mode export string (Share > Copy to Clipboard); without one, design:
 -- changes to the Modern preset (as DESIGN). bars: the action bars it lays
@@ -171,7 +232,25 @@ ns.EDIT_MODE_LAYOUTS = {
 	-- Not designed yet: a copy of Modern until its export string's in.
 	CINE_RETAIL_FOREVER_LAYOUT = { export = nil, design = {},
 		label = "Cinematic's WoW Forever look", client = "retail" },
+	-- (the Pure Cinema profile's on retail)
+	CINE_PURE_CINEMA_LAYOUT = { systems = PURE_CINEMA_SYSTEMS,
+		label = "Cinematic's Pure Cinema look", client = "retail" },
 }
+
+-- A layout from systems lines (as PURE_CINEMA_SYSTEMS): the export string is
+-- a format version, the number of systems, then the lines. (The Edit Mode
+-- save is version 2; 1 tried too.) Nil if the game reads neither.
+local function ExportFromSystems(systems)
+	local body = #systems .. " " .. table.concat(systems, " ")
+	for _, version in ipairs({ 2, 1 }) do
+		local layout = C_EditMode.ConvertStringToLayoutInfo(version .. " " .. body)
+		if layout then
+			ns.Log("state", ("edit mode layout read from systems (version %d)"):format(version))
+			return layout
+		end
+	end
+	ns.Log("state", "edit mode layout: the game couldn't read the systems")
+end
 
 local function ApplyDesign(layout, design)
 	for _, system in ipairs(layout.systems or {}) do
@@ -197,6 +276,8 @@ local function BuildLayout(name)
 	local layout
 	if def.export then
 		layout = C_EditMode.ConvertStringToLayoutInfo(def.export)
+	elseif def.systems then
+		layout = ExportFromSystems(def.systems)
 	else
 		layout = Presets()[1] -- (Modern)
 		if layout then ApplyDesign(layout, def.design or {}) end

@@ -78,6 +78,7 @@ local function PrintDebugHelp()
 	print("  /cine debug minimapicons - the minimap's methods for its player arrow and icons on this client")
 	print("  /cine debug nodes [raw] [grow [update]|park|stay] [seconds] - sweep a pretend mouse over the minimap and list the names its tooltip gives (herbs, veins), faded or not; grow gives the faded minimap its size back for each sweep only; park keeps it full size off the screen while it watches (60 seconds), stay full size in its place; update has the game place its dots first; raw shows each name's line as the game wrote it; with seconds, once a second, then all of it in the copy window (again to stop early)")
 	print("  /cine debug pad - print each gamepad button press and whether it shows the bars (again to stop)")
+	print("  /cine debug peeks - print each change to your auras and when the buffs peek starts or stops (again to stop)")
 	print("  /cine debug cast - print each cast at an enemy that fades in the In combat rows, and how long it takes (again to stop)")
 	print("  /cine debug frames - log the shown frames that aren't faded, and gamepad frames")
 	print("  /cine debug alpha -print frames setting their own alpha (again to stop)")
@@ -107,6 +108,7 @@ local function PrintDebugHelp()
 	print("  /cine debug duels - duel nameplates: watching or why not, and which nearby players can attack each other")
 	print("  /cine debug questglow - quest object glow: what soft targeting picked and why it glows or not")
 	print("  /cine debug questmob - the unit under your mouse: the cursor the game gives it, its quest checks and quest items")
+	print("  /cine debug questitem - print each cast aimed at an NPC and whether it counts as a quest item used on it (again to stop)")
 	print("  /cine debug iconwatch - log nameplate interact icons every frame for 30 seconds")
 	print("  /cine debug sounds - print each sound the game plays, by number and name, e.g. the talents window's (again to stop)")
 	print("  /cine debug talentart - log every part of the open talents window (sizes, textures, atlases) and its trees")
@@ -123,6 +125,7 @@ local function PrintDebugHelp()
 	print("  /cine debug damage [seconds] - whether damage taken reaches addons: hit event, damage meter (15 seconds)")
 	print("  /cine debug slots [all] - profile slots and parts: anything with no slot or in the wrong one (in the log; all: also how each shared list is split)")
 	print("  /cine debug speech - show a sample line of speech from behind you, and print what happens to each say and yell (again to stop)")
+	print("  /cine debug layoutexport - save the Edit Mode layout you're on as an export string (in the saved settings: /reload after)")
 	print("  /cine debug cvars - graphics CVars: which exist here; run, move the Graphics sliders, run again to log what the menu changed")
 	print("  /cine debug cvars <words> - log every CVar whose name has any of the words in it, with its value and default")
 	print("  /cine debug settings <words> - list every option in the game's Settings panel named like the words, with the variable behind it and its value")
@@ -305,6 +308,19 @@ local function HandleSlash(msg)
 		ns.turnTestUntil = GetTime() + 10
 		ns.Print("turn hold test for 10 seconds: stand still and hold a turn key. The camera " ..
 			"should keep looking the same way while your character turns.")
+	elseif cmd == "debug" and arg == "layoutexport" then
+		-- (For a layout of Cinematic's own: db.debugLayoutExport, read from the saved settings.)
+		local info = C_EditMode and C_EditMode.GetLayouts()
+		local manager = _G.EditModePresetLayoutManager
+		local presets = manager and manager:GetCopyOfPresetLayouts() or {}
+		local active = info and info.activeLayout
+		local layout = active and (presets[active] or info.layouts[active - #presets])
+		if layout then
+			ns.db.debugLayoutExport = { name = layout.layoutName, export = C_EditMode.ConvertLayoutInfoToString(layout) }
+			ns.Print("saved " .. tostring(layout.layoutName) .. "'s export string: /reload to write it")
+		else
+			ns.Print("no Edit Mode layout to save here")
+		end
 	elseif cmd == "debug" and arg == "whatsnew" then
 		ns.ShowUpdateNotice(2)
 	elseif cmd == "debug" and arg == "modes" then
@@ -360,6 +376,37 @@ local function HandleSlash(msg)
 			ns.ReportSwing()
 		end
 		ns.Print("print swing bars showing or fading: " .. OnOff(ns.swingDebug) .. " (until you /reload)")
+	elseif cmd == "debug" and arg == "questitem" then
+		ns.questItemDebug = not ns.questItemDebug
+		ns.Print("print quest item casts: " .. OnOff(ns.questItemDebug) .. " (until you /reload)")
+		if ns.DescribeQuestItemButton then ns.Print(ns.DescribeQuestItemButton()) end
+	elseif cmd == "debug" and arg == "peeks" then
+		ns.auraDebug = not ns.auraDebug
+		ns.auraDebugWas = nil
+		ns.Print("print buff/debuff peeks: " .. OnOff(ns.auraDebug) .. " (until you /reload)")
+		-- (What the game's debuff frame holds, to count its icons by: its
+		-- fields that are tables or numbers, and its children.)
+		local frame = _G.DebuffFrame
+		if ns.auraDebug and type(frame) == "table" then
+			local fields = {}
+			for key, value in pairs(frame) do
+				if type(key) == "string" and (type(value) == "table" or type(value) == "number") then
+					local ok, size = pcall(function() return type(value) == "table" and #value end)
+					fields[#fields + 1] = key .. (ok and size and ("#" .. size) or "")
+				end
+			end
+			table.sort(fields)
+			ns.Print("DebuffFrame fields: " .. table.concat(fields, " "))
+			local children = {}
+			for _, child in ipairs({ frame:GetChildren() }) do
+				local okS, shown = pcall(child.IsShown, child)
+				children[#children + 1] = ("%s(%s%s%s)"):format(tostring(child:GetName() or child:GetObjectType()),
+					okS and tostring(shown) or "?", child.buttonInfo and " buttonInfo" or "",
+					child.Icon and " Icon" or "")
+			end
+			ns.Print("DebuffFrame children: " .. table.concat(children, " "))
+			ns.Print("debuffs counted: " .. tostring(ns.DebuffIconCount()))
+		end
 	elseif cmd == "debug" and arg == "cast" then
 		ns.castDebug = not ns.castDebug
 		ns.Print("print casts at enemies: " .. OnOff(ns.castDebug) .. " (until you /reload)")

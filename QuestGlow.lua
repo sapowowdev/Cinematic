@@ -813,6 +813,7 @@ function ns.PrintQuestMobDebug()
 		Text(UnitIsDead, unit), Text(UnitCanAttack, "player", unit)))
 	ns.Print(("  quest mob=%s, can't interact (in progress mark)=%s, in progress atlas=%s"):format(
 		tostring(ns.IsQuestMob(unit)), tostring(ns.IsPassiveQuestMob(unit)), tostring(ns.QuestProgressAtlas())))
+	ns.Print("  " .. ns.DescribeQuestSpent(unit))
 	local info, lineTypes = C_TooltipInfo, Enum and Enum.TooltipDataLineType
 	local ok, data = pcall(info and info.GetUnit or error, unit)
 	if not (ok and type(data) == "table" and type(data.lines) == "table" and lineTypes) then

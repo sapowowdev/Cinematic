@@ -137,7 +137,7 @@ end
 local function LinesToCut(tooltip, count, unit, object)
 	local cut = {}
 	local level = LEVEL or "Level"
-	local creatureType, className, isPlayer
+	local creatureType, className, isPlayer, guildName
 	if unit then
 		local okPlayer, player = pcall(function()
 			return ns.Flag(UnitIsPlayer(unit)) or tostring(UnitGUID(unit)):find("^Player%-") ~= nil
@@ -147,6 +147,9 @@ local function LinesToCut(tooltip, count, unit, object)
 		creatureType = ok and kind or nil
 		local okClass, class = pcall(UnitClass, unit)
 		className = okClass and type(class) == "string" and class or nil
+		local okGuild, guild = pcall(GetGuildInfo, unit)
+		guildName = okGuild and type(guild) == "string" and guild ~= ""
+			and not (issecretvalue and issecretvalue(guild)) and guild or nil
 	end
 	local questTitles, typed = QuestTitles(), TypedTexts(tooltip)
 	local inQuest = false
@@ -168,6 +171,8 @@ local function LinesToCut(tooltip, count, unit, object)
 			inQuest = false
 			if text:find("^<.*>$") then
 				return "Guild"
+			elseif guildName and text:find(guildName, 1, true) then
+				return "Guild" -- (a player's guild with no brackets, as on retail: "Top Opp")
 			elseif text:find(level, 1, true) then
 				return "Level"
 			elseif className and isPlayer and text:find(className, 1, true) then

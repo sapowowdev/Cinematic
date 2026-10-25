@@ -30,6 +30,9 @@ Cinematic's settings end with a **What's new** hub of two pages:
    refactor, a translation, a default changed, or anything internal. When
    unsure, lean toward skipping. If there's nothing, say so in one line and go
    on with the commit.
+   A dev-only feature (loaded only by CinematicDev.toc, ignored in `.pkgmeta`,
+   e.g. Wind Guide) is never listed, and stays out of the commit's subject line
+   too (players see subjects on All changes); the body may mention it.
 
 3. **Draft the entry** for each feature:
    - `date`: today (YYYY-MM-DD)
