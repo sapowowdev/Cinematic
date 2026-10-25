@@ -190,7 +190,6 @@ local DEFAULTS = {
 	nameKeepEnemies = false,
 	nameKeepEnemyMinions = false,
 	nameKeepGuild = false,
-	nameKeepTarget = false,
 	handleTooltips = false,   -- the Tooltips page's master switch (off: every tooltip shows as the game has it)
 	-- In CineMode, always (in and out of fights) hide the tooltips of (world ones and unit frames')...
 	tooltipHideEnemy = false,   -- ...units you can attack
@@ -812,6 +811,12 @@ end
 for _, row in ipairs(ns.PLATE_TARGET_ROWS) do
 	DEFAULTS["plateAlways" .. row] = true
 end
+-- The Target Names grid's rows, the same kinds (MyEnemyPlayerTarget ->
+-- TargetEnemyPlayer): the Names grid's Target row, split. See Effects.
+ns.NAME_TARGET_ROWS = {}
+for _, row in ipairs(ns.PLATE_TARGET_ROWS) do
+	ns.NAME_TARGET_ROWS[#ns.NAME_TARGET_ROWS + 1] = "Target" .. row:match("^My(.-)Target$")
+end
 DEFAULTS.plateAlwaysGroupMembers = true
 DEFAULTS.plateAlwaysGroupMinions = true
 -- The Plate Parts grid's rows (see PlateParts): each part of the plates that
@@ -927,8 +932,16 @@ for _, part in ipairs(ns.PLATE_ICONS_ALWAYS) do
 end
 -- Names likewise (the groups are in Effects): kept up in fights, and in each place.
 for _, key in ipairs({ "Self", "HostileNPCs", "NeutralNPCs", "FriendlyNPCs", "Critters", "Friends", "FriendlyMinions",
-	"Enemies", "EnemyMinions", "Guild", "Target" }) do
+	"Enemies", "EnemyMinions", "Guild" }) do
 	DEFAULTS["nameCombat" .. key], DEFAULTS["nameCombatPvP" .. key] = false, false
+	for _, suffix in ipairs(ns.PLATE_PLACES) do
+		DEFAULTS["nameIn" .. suffix .. key] = false
+	end
+end
+for _, key in ipairs(ns.NAME_TARGET_ROWS) do
+	for _, prefix in ipairs({ "nameAlways", "nameGroup", "nameCombat", "nameCombatPvP", "nameKeep" }) do
+		DEFAULTS[prefix .. key] = false
+	end
 	for _, suffix in ipairs(ns.PLATE_PLACES) do
 		DEFAULTS["nameIn" .. suffix .. key] = false
 	end
@@ -945,7 +958,7 @@ for _, kind in ipairs(ns.PLATE_KINDS) do
 	DEFAULTS["plateAlways" .. kind] = false
 end
 for _, key in ipairs({ "Self", "HostileNPCs", "NeutralNPCs", "FriendlyNPCs", "Critters", "Friends", "FriendlyMinions",
-	"Enemies", "EnemyMinions", "Guild", "Target" }) do
+	"Enemies", "EnemyMinions", "Guild" }) do
 	DEFAULTS["nameGroup" .. key] = false
 	DEFAULTS["nameAlways" .. key] = false
 end
@@ -3656,6 +3669,16 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 					end
 				end
 				t.nameNeutralNPCsV1 = true
+			end
+			-- Its Target row became the Target Names grid (the Target Nameplate
+			-- grid's kinds): each row starts out ticked wherever it was.
+			for _, prefix in ipairs(NAME_ROW_PREFIXES) do
+				if t[prefix .. "Target"] ~= nil then
+					for _, row in ipairs(ns.NAME_TARGET_ROWS) do
+						if t[prefix .. row] == nil then t[prefix .. row] = t[prefix .. "Target"] end
+					end
+					t[prefix .. "Target"] = nil
+				end
 			end
 		end
 		NeutralFromHostile(ns.db)

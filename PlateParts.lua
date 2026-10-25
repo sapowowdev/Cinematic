@@ -1128,10 +1128,19 @@ function ns.ToggleNamesDebug()
 		return false
 	end
 	namesTicker = C_Timer.NewTicker(0.1, function()
+		-- (A target with no plate at all says so.)
+		local targetLine = UnitExists("target") and not C_NamePlate.GetNamePlateForUnit("target")
+			and ("target: no plate (row %s)"):format(tostring(ns.TargetNameRow("target"))) or nil
+		if targetLine and namesLast.target ~= targetLine then
+			ns.Log("names", targetLine)
+		end
+		namesLast.target = targetLine
 		for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
 			local unit = UnitOf(plate)
 			local okGuid, guid = pcall(UnitGUID, unit)
-			if unit and okGuid and Known(guid) and type(guid) == "string" and guid:find("^Player%-") then
+			local okTarget, isTarget = pcall(UnitIsUnit, unit, "target")
+			if unit and ((okGuid and Known(guid) and type(guid) == "string" and guid:find("^Player%-"))
+				or (okTarget and Known(isTarget) and isTarget)) then
 				local okName, who = pcall(UnitName, unit)
 				local okAlpha, alpha = pcall(plate.GetAlpha, plate)
 				local text = texts[plate.UnitFrame]

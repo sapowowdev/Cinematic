@@ -59,14 +59,18 @@ ns.NAME_GROUPS = {
 		tip = L[" Players' guilds, under their names wherever their names show: over their heads, and in CineMode " ..
 			"on nameplates showing just the name."] },
 	-- Not in the game's menu: whatever you've targeted shows its name
-	-- even with its kind's names off, unless this is off too. (On a plate:
-	-- your target's, whatever its kind's row says.)
-	{ key = "Target", label = L["Target"], plate = true, cvars = { "UnitNameFocused" } },
+	-- even with its kind's names off, unless this is off too. Its boxes are
+	-- the Target Names grid's rows (ns.NAME_TARGET_ROWS: the Target Nameplate
+	-- grid's kinds): the game's one setting follows your target's row (any
+	-- row's, in fights and with no target). On a plate: your target's, as its
+	-- row says, whatever its kind's row says.
+	{ key = "Target", label = L["Target"], plate = true, cvars = { "UnitNameFocused" }, rows = ns.NAME_TARGET_ROWS },
 }
 ns.OnLanguage(function() ns.TranslateFields(ns.NAME_GROUPS, "label") end)
 
 local CVAR_SETS = {}
 for _, group in ipairs(ns.NAME_GROUPS) do
+	group.keys = group.rows or { group.key } -- (the grid rows its boxes are in)
 	local values = {}
 	for _, cvar in ipairs(group.cvars) do values[cvar] = "0" end
 	-- Secure: the game blocks changing name settings in combat. A fight's
@@ -125,9 +129,11 @@ end
 local NAME_ROW_PREFIXES = { "nameAlways", "nameGroup", "nameCombat", "nameCombatPvP", "nameKeep",
 	"nameInInstances", "nameInPvP", "nameInBGs" }
 local function NameRowTicked(group)
-	for _, prefix in ipairs(NAME_ROW_PREFIXES) do
-		if ns.db[prefix .. group.key] then
-			return true
+	for _, key in ipairs(group.keys) do
+		for _, prefix in ipairs(NAME_ROW_PREFIXES) do
+			if ns.db[prefix .. key] then
+				return true
+			end
 		end
 	end
 	return false
@@ -241,6 +247,19 @@ local function NameKeptHere(key, inCombat)
 	if key == "AllNPCs" then
 		return NameKeptHere("HostileNPCs", inCombat) and NameKeptHere("NeutralNPCs", inCombat)
 			and NameKeptHere("FriendlyNPCs", inCombat)
+	end
+	if key == "Target" then
+		-- (Your target's row; any row in fights, where the setting can't follow it.)
+		local row = not inCombat and ns.TargetNameRow and ns.TargetNameRow("target")
+		if row then
+			return NameKeptHere(row, inCombat)
+		end
+		for _, other in ipairs(ns.NAME_TARGET_ROWS) do
+			if NameKeptHere(other, inCombat) then
+				return true
+			end
+		end
+		return false
 	end
 	if ns.db["nameAlways" .. key] or (ns.db["nameGroup" .. key] and ns.InGroup()) then
 		return true
@@ -1977,6 +1996,13 @@ local function TargetRow(unit)
 	return (neutral and "MyNeutral" or "MyEnemy") .. who .. "Target"
 end
 
+-- The Target Names row (ns.NAME_TARGET_ROWS) a unit goes by as your target,
+-- or nil.
+function ns.TargetNameRow(unit)
+	local row = Ask(UnitExists, unit) and TargetRow(unit)
+	return row and "Target" .. row:match("^My(.-)Target$") or nil
+end
+
 -- Whether your target's plate shows now (its target row), whatever its
 -- kind's row says.
 local function AlwaysShownTarget(unit)
@@ -2272,8 +2298,9 @@ local function PlateAlphas(unit, plate)
 	elseif platesForced and unit and plate ~= PersonalPlate() then
 		local kind = PlateKind(unit)
 		name = kind and nameLevel[KIND_NAME_GROUP[kind]] or 0
-		if (nameLevel.Target or 0) > name and IsTarget(unit) then
-			name = nameLevel.Target
+		local targetRow = IsTarget(unit) and ns.TargetNameRow(unit)
+		if targetRow and (nameLevel[targetRow] or 0) > name then
+			name = nameLevel[targetRow]
 		end
 	end
 	-- Quest Vision's Name: a quest mob's name kept on its plate. Its ! only:
@@ -2300,9 +2327,14 @@ end
 -- (For /cine debug names: why a plate's name is kept or not.)
 function ns.DescribePlateNameKept(unit, plate)
 	local kind = unit and PlateKind(unit)
-	return ("kind=%s group=%s level=%s soft=%s forced=%s body=%.2f"):format(tostring(kind),
+	local targetRow = unit and IsTarget(unit) and ns.TargetNameRow(unit)
+	return ("kind=%s group=%s level=%s soft=%s forced=%s body=%.2f targetRow=%s targetLevel=%s kept=%s alphas=%s")
+		:format(tostring(kind),
 		tostring(kind and KIND_NAME_GROUP[kind]), tostring(kind and nameLevel[KIND_NAME_GROUP[kind]]),
-		tostring(unit and ns.SoftPlateHidden(unit)), tostring(platesForced), PlateAlpha(unit, plate))
+		tostring(unit and ns.SoftPlateHidden(unit)), tostring(platesForced), PlateAlpha(unit, plate),
+		tostring(unit and IsTarget(unit) and (targetRow or "none")), tostring(targetRow and nameLevel[targetRow]),
+		tostring(targetRow and NameKeptHere(targetRow, InCombatLockdown())),
+		table.concat({ PlateAlphas(unit, plate) }, "/"))
 end
 
 local function SetPlateAlphas(plate, alpha, body, name, mark)
@@ -2895,8 +2927,13 @@ end
 
 -- Whether any plate of a side may be showing.
 local function SideShown(side)
-	if ns.plates.level > 0 or TargetKeptUp() or next(leavingTargets) ~= nil or (nameLevel.Target or 0) > 0 then
+	if ns.plates.level > 0 or TargetKeptUp() or next(leavingTargets) ~= nil then
 		return true
+	end
+	for _, row in ipairs(ns.NAME_TARGET_ROWS) do
+		if (nameLevel[row] or 0) > 0 then
+			return true
+		end
 	end
 	for kind in pairs(side.kinds) do
 		if (keptLevel[kind] or 0) > 0 or (combatCap[kind] or 0) > 0 or (nameLevel[KIND_NAME_GROUP[kind]] or 0) > 0 then
@@ -3101,16 +3138,19 @@ function ns.UpdatePlates(cinematic, elapsed)
 		end
 	end
 	-- Names kept on plates fade up and down likewise.
+	-- (The Target row's by the Target Names grid's rows, for your target's kind.)
 	for _, group in ipairs(ns.NAME_GROUPS) do
 		if group.plate then
-			local nameTarget = platesForced and NameKeptHere(group.key, inCombat) and 1 or 0
-			local level = nameLevel[group.key]
-			if level == nil then
-				nameLevel[group.key] = nameTarget
-			elseif level ~= nameTarget then
-				nameLevel[group.key] = ns.Approach(level, nameTarget, elapsed,
-					nameTarget > level and ns.FadeInTime() or ns.FadeOutTime())
-				changed = true
+			for _, key in ipairs(group.keys) do
+				local nameTarget = platesForced and NameKeptHere(key, inCombat) and 1 or 0
+				local level = nameLevel[key]
+				if level == nil then
+					nameLevel[key] = nameTarget
+				elseif level ~= nameTarget then
+					nameLevel[key] = ns.Approach(level, nameTarget, elapsed,
+						nameTarget > level and ns.FadeInTime() or ns.FadeOutTime())
+					changed = true
+				end
 			end
 		end
 	end

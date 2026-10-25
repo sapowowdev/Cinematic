@@ -5724,20 +5724,20 @@ local function CreatePlatesPanel()
 	local nameTip = L[" Ticking any box turns these names on in the game's options. Ticking none turns them off."]
 	-- (Units with plates show a kept name on theirs in CineMode: see Effects.)
 	local plateNameTip = L[" In CineMode, away from dungeons and raids, the name shows on the unit's nameplate instead, with the rest of the plate hidden."]
-	for r, group in ipairs(ns.NAME_GROUPS) do
-		local tip = (group.tip or "") .. (group.plate and (plateNameTip .. nameTip) or nameTip)
-		local function Ticked(key)
+	-- A row of boxes (keys name<column><key>) for a names group: the Target
+	-- group's are the Target Names grid's rows, below.
+	local function AddNameRow(top, r, group, key, label, indent, tip)
+		local function Ticked(setting)
 			return function(value)
-				ns.GetDB()[key] = value
+				ns.GetDB()[setting] = value
 				ns.SyncNameRow(group)
 				ns.WarnPlatesInCombat()
 				Refresh()
 			end
 		end
-		local combatKey = "nameCombat" .. group.key
+		local combatKey = "nameCombat" .. key
 		local checks = {}
-		local pvpCheck
-		local alwaysKey = "nameAlways" .. group.key
+		local alwaysKey = "nameAlways" .. key
 		for _, place in ipairs(PLACE_COLUMNS) do
 			if place.always then
 				checks[#checks + 1] = Check(content, alwaysKey, "", ALWAYS_TIP .. tip, Ticked(alwaysKey))
@@ -5745,17 +5745,16 @@ local function CreatePlatesPanel()
 				checks[#checks + 1] = Check(content, combatKey, "", COMBAT_TIP .. tip, Ticked(combatKey))
 			elseif place.pvpCombat then
 				-- Names can't change mid-fight: they go by how the fight started.
-				pvpCheck = Check(content, "nameCombatPvP" .. group.key, "",
+				checks[#checks + 1] = Check(content, "nameCombatPvP" .. key, "",
 					PVP_COMBAT_TIP .. L[" The game only allows this to be set as the fight starts."] .. tip,
-					Ticked("nameCombatPvP" .. group.key))
-				checks[#checks + 1] = pvpCheck
+					Ticked("nameCombatPvP" .. key))
 			elseif place.group then
-				local groupKey = "nameGroup" .. group.key
+				local groupKey = "nameGroup" .. key
 				checks[#checks + 1] = Check(content, groupKey, "", GROUP_TIP .. tip, Ticked(groupKey))
 			else
 				-- The open world keeps the original Keep column's key.
-				local key = place[1] == "" and ("nameKeep" .. group.key) or ("nameIn" .. place[1] .. group.key)
-				checks[#checks + 1] = Check(content, key, "", place[3] .. tip, Ticked(key))
+				local placeKey = place[1] == "" and ("nameKeep" .. key) or ("nameIn" .. place[1] .. key)
+				checks[#checks + 1] = Check(content, placeKey, "", place[3] .. tip, Ticked(placeKey))
 			end
 		end
 		-- Greyed out where this client has no such setting.
@@ -5765,7 +5764,18 @@ local function CreatePlatesPanel()
 				return ns.HasNameSettings(group) and (c == 1 or not db[alwaysKey])
 			end)
 		end
-		lastLabel = PlaceRow(namesTop, r, group.label, group.indent, unpack(checks))
+		lastLabel = PlaceRow(top, r, label, indent, unpack(checks))
+	end
+	local targetGroup
+	r = 0
+	for _, group in ipairs(ns.NAME_GROUPS) do
+		if group.rows then
+			targetGroup = group
+		else
+			r = r + 1
+			local tip = (group.tip or "") .. (group.plate and (plateNameTip .. nameTip) or nameTip)
+			AddNameRow(namesTop, r, group, group.key, group.label, group.indent, tip)
+		end
 	end
 	-- Raid markers (skull, moon...) kept up over their units as the rest of
 	-- their plates fades or shows their names alone (see KeepRaidMarker).
@@ -5773,12 +5783,28 @@ local function CreatePlatesPanel()
 		"rest of their nameplates fades, or shows just their names, so your group can still see what's marked. " ..
 		"Unticked, they fade with the plates (the Plate Parts row decides them on the plates that are up)."]
 		.. markerRangeTip
-	AddPlateRow(namesTop, #ns.NAME_GROUPS + 1, { "PartMarker", L["Raid Marker"], rulePath = "Raid markers" })
+	AddPlateRow(namesTop, r + 1, { "PartMarker", L["Raid Marker"], rulePath = "Raid markers" })
 	EndSection(namesSection, lastLabel)
+
+	-- Your target's name, by what it is (the Target Nameplate grid's kinds),
+	-- laid out the same way: the Names grid's Target row, split.
+	local targetNamesSection = Section(L["Target Names"], "TargetNames")
+	BeginSection(targetNamesSection)
+	local targetNamesTop = TableTop(targetNamesSection.frame, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	local targetNameTip = L[" Your target's name while it's this kind, even with its kind's names off in the Names grid. " ..
+		"On a nameplate showing just the name in CineMode, your target's kind decides; beyond nameplate range, and " ..
+		"in dungeons and raids, the game has one setting for your target's name: it follows your target's kind out " ..
+		"of fights, and in fights shows while any row here does."] .. nameTip
+	for i, kind in ipairs(TARGET_KINDS) do
+		AddNameRow(targetNamesTop, i, targetGroup, "Target" .. kind[1]:match("^My(.-)Target$"), kind[2], nil,
+			targetNameTip)
+	end
+	EndSection(targetNamesSection, lastLabel)
 
 	-- Laid out top to bottom: the master switch, then the sections (friendly
 	-- nameplates, friendly plates in dungeons and raids, enemy nameplates,
-	-- your target's, their parts, then names and raid markers).
+	-- your target's, their parts, then names and raid markers, and your
+	-- target's name).
 	LayoutSections()
 
 	canvas:SetScript("OnShow", PageShown(function()
