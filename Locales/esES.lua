@@ -1830,11 +1830,11 @@ L["The same mark beside your target frame's health bar while your target is one 
 	"objetivo sea uno de ellos. En CineMode y fuera de él."
 L["Quest item button"] = "Botón del objeto de misión"
 L["Where your extra ability button goes (the extra abilities frame's place in Edit Mode), a big button " ..
-	"with the item the nearest quest gives you to use, the one in the quest tracker. Click it or press its " ..
+	"with the item the nearest tracked quest gives you to use, the one in the quest tracker. Click it or press its " ..
 	"key (Keybinds page). Shows near the quest's area, beside the game's own button when that's up. " ..
 	"It can't show, hide or move in a fight: it stays as it was until the fight ends."] = "Donde va tu botón " ..
 	"de habilidad extra (el lugar del marco de habilidades extra en el Modo edición), un botón grande con el " ..
-	"objeto que te da la misión más cercana para usar, el del seguimiento de misiones. Haz clic en él o pulsa " ..
+	"objeto que te da la misión seguida más cercana para usar, el del seguimiento de misiones. Haz clic en él o pulsa " ..
 	"su tecla (página Atajos). Aparece cerca de la zona de la misión, junto al botón propio del juego cuando " ..
 	"este está visible. No puede aparecer, ocultarse ni moverse en combate: se queda como estaba hasta que " ..
 	"termine el combate."

@@ -7691,7 +7691,7 @@ local function CreateVisionPanel()
 	questStack:Add(questTarget, "check")
 	local questItem = Check(content, "questItemButton", L["Quest item button"],
 		L["Where your extra ability button goes (the extra abilities frame's place in Edit Mode), a big button " ..
-		"with the item the nearest quest gives you to use, the one in the quest tracker. Click it or press its " ..
+		"with the item the nearest tracked quest gives you to use, the one in the quest tracker. Click it or press its " ..
 		"key (Keybinds page). Shows near the quest's area, beside the game's own button when that's up. " ..
 		"It can't show, hide or move in a fight: it stays as it was until the fight ends."], function(value)
 		ns.GetDB().questItemButton = value

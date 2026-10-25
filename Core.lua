@@ -657,7 +657,7 @@ DEFAULTS.questVision = true -- the Quest Vision page's switch: off, none of the 
 -- shows, else alone) or "none" (as the Nameplates page's rows say).
 DEFAULTS.questMobsShow = "mark"
 DEFAULTS.targetQuestIcon = true -- a quest icon on the target frame while your target is one of them (see QuestMobs)
--- The nearest quest's item to use on a big button at the extra ability button's spot (see QuestItemButton)
+-- The nearest tracked quest's item to use on a big button at the extra ability button's spot (see QuestItemButton)
 DEFAULTS.questItemButton = true
 DEFAULTS.questObjectGlow = true -- the quest object soft targeting picks glows (see QuestGlow; changes interact settings)
 DEFAULTS.duelPlates = true -- in CineMode, the nameplates of two players dueling near you show (see Effects)

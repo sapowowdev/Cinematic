@@ -1,5 +1,5 @@
 -- Cinematic: the quest item button (Vision page's Quest Vision,
--- questItemButton). The item the nearest quest in your log gives you to use
+-- questItemButton). The item the nearest tracked quest gives you to use
 -- (the small square beside it in the quest tracker), on a big button where
 -- your extra ability button goes: at the extra abilities frame's place (Edit
 -- Mode's spot), or beside it while the game has an extra action or zone
@@ -99,14 +99,33 @@ local function Done(questID)
 	return true
 end
 
--- The quest with an item to use nearest you, within NEAR_YARDS of its area
--- (where the game won't say how far: one anyway, if nothing nearer). nil if
--- none. say: a function told each quest's distance (/cine debug questitem).
+-- Whether the quest is tracked (in the quest tracker). Retail's watch type on
+-- clients that have it, else the older IsQuestWatched (by quest log index).
+local function Tracked(quest)
+	local log = C_QuestLog
+	if log and log.GetQuestWatchType then
+		local ok, watchType = pcall(log.GetQuestWatchType, quest.questID)
+		return ok and watchType ~= nil
+	end
+	if IsQuestWatched then
+		local ok, watched = pcall(IsQuestWatched, quest.index)
+		return ok and ns.Flag(watched) or false
+	end
+	return true
+end
+
+-- The tracked quest with an item to use nearest you, within NEAR_YARDS of its
+-- area (where the game won't say how far: one anyway, if nothing nearer). nil
+-- if none. say: a function told each quest's distance (/cine debug questitem).
 local function Nearest(say)
 	local log = C_QuestLog
 	local best, bestDistance
 	for _, quest in ipairs(ns.QuestLogItems(say)) do
-		if not (quest.complete or Done(quest.questID)) then
+		local tracked = Tracked(quest)
+		if say and not tracked then
+			say(("  quest %s: not tracked"):format(quest.questID))
+		end
+		if tracked and not (quest.complete or Done(quest.questID)) then
 			local distance = math.huge
 			local ok, distanceSq, onContinent = pcall(log.GetDistanceSqToQuest or error, quest.questID)
 			if ok and type(distanceSq) == "number" and Known(distanceSq) then
@@ -197,7 +216,7 @@ local watcher = CreateFrame("Frame")
 for _, event in ipairs({ "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "QUEST_LOG_UPDATE", "QUEST_ACCEPTED",
 	"QUEST_REMOVED", "QUEST_TURNED_IN", "BAG_UPDATE_DELAYED", "BAG_UPDATE_COOLDOWN", "ZONE_CHANGED",
 	"ZONE_CHANGED_NEW_AREA", "PLAYER_REGEN_ENABLED", "UPDATE_EXTRA_ACTIONBAR", "UPDATE_BINDINGS",
-	"SPELLS_CHANGED" }) do
+	"SPELLS_CHANGED", "QUEST_WATCH_LIST_CHANGED" }) do
 	pcall(watcher.RegisterEvent, watcher, event)
 end
 watcher:SetScript("OnEvent", function(_, event)
