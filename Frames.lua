@@ -1878,7 +1878,7 @@ ns.HOVER_TRIGGERS = {
 -- you make.)
 ns.HOVER_GROUPS_DEFAULT = {
 	{ preset = "bars", icon = "Interface\\Icons\\INV_Sword_04", name = L["Action bars"],
-		members = { "mainbar", "bottomleft", "bottomright", "pet", "stance", "totems", "micro", "bags", "xp", "extra" } },
+		members = { "mainbar", "bottomleft", "bottomright", "pet", "stance", "totems", "micro", "bags", "xp" } },
 	{ preset = "side", icon = "Interface\\Icons\\Ability_Warrior_DefensiveStance", name = L["Side bars"],
 		members = { "right1", "right2" } },
 	-- (Off: with it off, the mouse on bars 6-8 brings up nothing: groupOnly.)

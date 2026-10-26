@@ -115,7 +115,7 @@ local function SplitBarGroups(set)
 		if group.preset == "bars" then
 			local bars = Copy(group)
 			bars.name = L["Action bars 1-3"]
-			bars.members = { "mainbar", "bottomleft", "bottomright", "pet", "stance", "totems", "extra" }
+			bars.members = { "mainbar", "bottomleft", "bottomright", "pet", "stance", "totems" }
 			groups[#groups + 1] = bars
 			groups[#groups + 1] = { icon = "Interface\\Icons\\INV_Misc_Bag_07", name = L["Micro menu and bags"],
 				members = { "micro", "bags" } }

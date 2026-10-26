@@ -82,6 +82,7 @@ Welcome.lua
 WelcomeDemo.lua
 Layouts.lua
 ProfileBuilder.lua
+GridDemo.lua
 Options.lua
 Changelog.lua
 ChangelogCommits.lua

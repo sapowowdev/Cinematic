@@ -10189,6 +10189,10 @@ ns.OnLanguage(function()
 		ns.CreateProfileBuilder({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
 	end
+	if ns.isDev and ns.CreateGridDemo then
+		ns.CreateGridDemo({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
+			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
+	end
 	if ns.isDev and ns.CreateLayoutPanel and C_EditMode and C_EditMode.GetLayouts then
 		ns.CreateLayoutPanel({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage })

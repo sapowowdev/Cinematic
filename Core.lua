@@ -3827,6 +3827,25 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.raidManagerAloneV1 = true
 		end
+		-- The extra action and zone ability buttons were in the default Action
+		-- bars Mouseover group, so hovering them brought the bars up: alone now. Once.
+		if not ns.db.extraAloneV1 then
+			local function ExtraAlone(groups)
+				for _, group in ipairs(groups or {}) do
+					local preset = ns.HoverGroupPreset(group)
+					if preset and preset.preset == "bars" and group.members then
+						for i = #group.members, 1, -1 do
+							if group.members[i] == "extra" then table.remove(group.members, i) end
+						end
+					end
+				end
+			end
+			ExtraAlone(ns.db.hoverGroups)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then ExtraAlone(saved.hoverGroups) end
+			end
+			ns.db.extraAloneV1 = true
+		end
 		-- "Keep raid markers up as nameplates fade" (keepRaidMarkers) is now the
 		-- Raid Markers grid: unticked, neither side's markers are kept.
 		local function MarkersOff(t)
