@@ -553,3 +553,17 @@ watcher:RegisterEvent("PLAYER_REGEN_DISABLED")
 watcher:RegisterEvent("UI_SCALE_CHANGED")
 watcher:SetScript("OnEvent", Build)
 ns.BuildMenuWheel = Build -- (the master wheel's, before it opens this one)
+
+-- For the Wheels page's preview: the buttons on the bar now, each with its
+-- name and Paint(icon, under), which draws its art on those two textures as
+-- the wheel does.
+function ns.MenuWheelPreview()
+	local list = {}
+	for _, item in ipairs(BarButtons()) do
+		local entry, button = item.entry, item.button
+		list[#list + 1] = { label = ButtonLabel(button, entry), Paint = function(icon, under)
+			SetIcon({ icon = icon, under = under }, entry, button)
+		end }
+	end
+	return list
+end

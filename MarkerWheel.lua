@@ -24,11 +24,11 @@ local L = ns.L
 local ICON = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_"
 local CLEAR_ICON = "Interface\\Buttons\\UI-GroupLoot-Pass-Up"
 local CIRCLE = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask" -- (a round mask every client has)
-local RADIUS = 110     -- from the middle to each icon's centre (UI units)
+local RADIUS = 110     -- from the middle to each icon's centre (UI units); more for many icons
 local ICON_SIZE = 46
+local ICON_GAP = 18    -- at least this between icons round the ring
 local PICKED_SCALE = 1.3
 local DEAD_ZONE = 64   -- the cursor this near the middle picks nothing (the middle circle)
-local OUTER = RADIUS + ICON_SIZE * 0.9 -- the disc's edge: a click past it picks nothing
 local FADE_TIME = 0.12
 local TURN_TIME = 0.3  -- a slot going from on to off (or back): its ring fading, its icon greying
 local LINGER_FADE = 0.3 -- the last of a linger (below): the picked slot fading away
@@ -122,10 +122,12 @@ local OPEN_SNIPPET = [[
 -- slots whose secure actions can't call it), OnOpen() (as the key goes down, before the
 -- snippet: out of a fight our code may still change the buttons). Text is
 -- English, translated as it's shown (the language is only known later).
+-- wheel.SetSlots(list) puts other slots on it later, out of a fight.
 local function MakeWheel(spec)
 	local keyName, areaName = spec.name .. "Button", spec.name .. "Area"
 	local list = spec.slots
 	local slots = {}
+	local outer = RADIUS + ICON_SIZE * 0.9 -- the disc's edge: a click past it picks nothing
 	local picked -- the slot the cursor points at, or nil
 	local lingering -- seconds left showing a pick after the wheel's put away, or nil
 	local wheel, face, hub, centerText, stateText
@@ -228,7 +230,7 @@ local function MakeWheel(spec)
 			return nil
 		end
 		x, y = x / scale - cx, y / scale - cy
-		if x * x + y * y < DEAD_ZONE * DEAD_ZONE or (clicking and x * x + y * y > OUTER * OUTER) then
+		if #list == 0 or x * x + y * y < DEAD_ZONE * DEAD_ZONE or (clicking and x * x + y * y > outer * outer) then
 			return nil
 		end
 		local step = 360 / #list
@@ -245,9 +247,7 @@ local function MakeWheel(spec)
 	wheel:SetClampedToScreen(true) -- (it opens round the cursor, kept on screen)
 	wheel:SetSize((RADIUS + ICON_SIZE) * 2, (RADIUS + ICON_SIZE) * 2)
 	wheel:SetPoint("CENTER", UIParent)
-	wheel:SetAttribute("count", #list)
 	wheel:SetAttribute("deadzone", DEAD_ZONE)
-	wheel:SetAttribute("outer", OUTER)
 	wheel:Hide()
 
 	-- What's drawn: a plain frame of ours over the wheel, so it can stay up a
@@ -261,7 +261,6 @@ local function MakeWheel(spec)
 
 	local disc = face:CreateTexture(nil, "BACKGROUND")
 	disc:SetPoint("CENTER")
-	disc:SetSize(OUTER * 2, OUTER * 2)
 	disc:SetColorTexture(0, 0, 0, 0.55)
 	hub = face:CreateTexture(nil, "BORDER")
 	hub:SetPoint("CENTER")
@@ -309,25 +308,16 @@ local function MakeWheel(spec)
 	keyButton:SetAttribute("useOnKeyDown", false)
 
 	-- The icons: just art. Their actions are the key's button's and the
-	-- catcher's, as the "button" slotN.
-	for i, entry in ipairs(list) do
+	-- catcher's, as the "button" slotN. (Made as the wheel first needs each,
+	-- and kept: SetSlots hides the ones it has no use for.)
+	local function MakeSlot()
 		local slot = CreateFrame("Frame", nil, face)
 		slot:SetSize(ICON_SIZE, ICON_SIZE)
 		slot:SetFrameLevel(face:GetFrameLevel() + 5)
-		local angle = math.rad(90 - (i - 1) * 360 / #list)
-		slot:SetPoint("CENTER", face, "CENTER", RADIUS * math.cos(angle), RADIUS * math.sin(angle))
-		for key, value in pairs(entry.attributes or {}) do
-			keyButton:SetAttribute(key .. "-slot" .. i, value)
-			area:SetAttribute(key .. "-slot" .. i, value)
-		end
-		if entry.opens then
-			wheel:SetFrameRef("open" .. i, entry.opens)
-		end
 		local art = CreateFrame("Frame", nil, slot)
 		art:SetPoint("CENTER")
 		local glow = art:CreateTexture(nil, "BACKGROUND") -- the cursor's on it
 		glow:SetPoint("CENTER")
-		glow:SetColorTexture(entry.color[1], entry.color[2], entry.color[3], 0.45)
 		glow:Hide()
 		local ring = art:CreateTexture(nil, "BORDER") -- active (theirs now, or down)
 		ring:SetPoint("CENTER")
@@ -339,19 +329,94 @@ local function MakeWheel(spec)
 		ring:SetAlpha(0)
 		local icon = art:CreateTexture(nil, "ARTWORK")
 		icon:SetAllPoints()
-		icon:SetTexture(entry.icon)
-		if entry.trim then
-			icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-		end
 		Round(art, glow)
 		Round(art, ring)
-		if entry.trim then
-			Round(art, icon) -- (a spell's square icon, cut to a circle like its ring)
+		-- (A spell's square icon is cut to a circle like its ring: SetSlots
+		-- puts this on the ones that are.)
+		if art.CreateMaskTexture then
+			slot.iconMask = art:CreateMaskTexture()
+			slot.iconMask:SetAllPoints(icon)
+			slot.iconMask:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIONAL", "CLAMPTOBLACKADDITIONAL")
 		end
 		slot.art, slot.glow, slot.ring, slot.icon = art, glow, ring, icon
 		slot.ringLit, slot.ringTo, slot.colorLit, slot.colorTo = 0, 0, 1, 1
-		slots[i] = slot
+		slot.keys = {} -- the secure attributes it set, to take off again
 		SizeSlot(slot, ICON_SIZE)
+		return slot
+	end
+
+	-- Puts these slots on the wheel, in place of the ones it had, and sizes
+	-- the ring for them.
+	local function PutSlots(newList)
+		list = newList
+		local count = #list
+		-- (Wider for many icons, so they don't touch.)
+		local radius = math.max(RADIUS, count * (ICON_SIZE + ICON_GAP) / (2 * math.pi))
+		outer = radius + ICON_SIZE * 0.9
+		wheel:SetSize((radius + ICON_SIZE) * 2, (radius + ICON_SIZE) * 2)
+		disc:SetSize(outer * 2, outer * 2)
+		wheel:SetAttribute("count", count)
+		wheel:SetAttribute("outer", outer)
+		Pick(nil)
+		for i = 1, math.max(count, #slots) do
+			local entry, slot = list[i], slots[i]
+			if slot then
+				for _, key in ipairs(slot.keys) do
+					keyButton:SetAttribute(key .. "-slot" .. i, nil)
+					area:SetAttribute(key .. "-slot" .. i, nil)
+				end
+				wipe(slot.keys)
+			elseif entry then
+				slot = MakeSlot()
+				slots[i] = slot
+			end
+			wheel:SetAttribute("opens" .. i, entry and entry.opens and true or nil)
+			if entry then
+				local angle = math.rad(90 - (i - 1) * 360 / count)
+				slot:ClearAllPoints()
+				slot:SetPoint("CENTER", face, "CENTER", radius * math.cos(angle), radius * math.sin(angle))
+				for key, value in pairs(entry.attributes or {}) do
+					keyButton:SetAttribute(key .. "-slot" .. i, value)
+					area:SetAttribute(key .. "-slot" .. i, value)
+					slot.keys[#slot.keys + 1] = key
+				end
+				if entry.opens then
+					wheel:SetFrameRef("open" .. i, entry.opens)
+				end
+				slot.glow:SetColorTexture(entry.color[1], entry.color[2], entry.color[3], 0.45)
+				slot.icon:SetTexture(entry.icon)
+				if entry.trim then
+					slot.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+				else
+					slot.icon:SetTexCoord(0, 1, 0, 1)
+				end
+				if slot.iconMask and (entry.trim and true or false) ~= (slot.masked or false) then
+					if entry.trim then
+						slot.icon:AddMaskTexture(slot.iconMask)
+					else
+						slot.icon:RemoveMaskTexture(slot.iconMask)
+					end
+					slot.masked = entry.trim and true or false
+				end
+				slot:Show()
+			elseif slot then
+				slot:Hide()
+			end
+		end
+	end
+	PutSlots(list)
+
+	-- (Out of a fight only, when the secure buttons can change: false if not.)
+	function wheel.SetSlots(newList)
+		if InCombatLockdown() then
+			return false
+		end
+		wheel:Hide()
+		PutSlots(newList)
+		return true
+	end
+	function wheel.GetSlots()
+		return list
 	end
 
 	keyButton:SetScript("PreClick", function(_, _, down)
@@ -374,6 +439,9 @@ local function MakeWheel(spec)
 		if down then
 			if owner:IsShown() then
 				owner:Hide()
+				return false
+			end
+			if (owner:GetAttribute("count") or 0) == 0 then
 				return false
 			end
 			-- (One wheel at a time: the other secure ones are put away.)
@@ -414,7 +482,7 @@ local function MakeWheel(spec)
 		local angle = (90 - math.deg(math.atan2(dy, dx))) % 360
 		local index = math.floor((angle + step / 2) / step) % count + 1
 		owner:Hide()
-		local sub = owner:GetFrameRef("open" .. index)
+		local sub = owner:GetAttribute("opens" .. index) and owner:GetFrameRef("open" .. index)
 		if sub then
 			sub:SetAttribute("cineopen", true)
 			return false
@@ -442,7 +510,7 @@ local function MakeWheel(spec)
 		local step = 360 / count
 		local angle = (90 - math.deg(math.atan2(dy, dx))) % 360
 		local index = math.floor((angle + step / 2) / step) % count + 1
-		local sub = owner:GetFrameRef("open" .. index)
+		local sub = owner:GetAttribute("opens" .. index) and owner:GetFrameRef("open" .. index)
 		if sub then
 			sub:SetAttribute("cineopen", true)
 			return false
@@ -814,25 +882,66 @@ visionWheel = MakeWheel({
 -- it, out of a fight only (like its own key).
 local cameraOpener = CreateFrame("Button")
 cameraOpener:SetScript("OnClick", function() ns.OpenCameraWheel() end)
-local masterSlots = {
-	{ icon = "Interface\\Icons\\INV_Misc_Spyglass_03", trim = true, color = { 1, 0.82, 0.3 }, label = "Camera wheel",
-		attributes = { type = "click", clickbutton = cameraOpener },
+-- Each wheel it can have (key: as saved), in its usual order.
+local MASTER_CHOICES = {
+	{ key = "camera", icon = "Interface\\Icons\\INV_Misc_Spyglass_03", trim = true, color = { 1, 0.82, 0.3 },
+		label = "Camera wheel", attributes = { type = "click", clickbutton = cameraOpener },
 		Cant = function() return ns.CameraWheelCant() end },
-	{ icon = "Interface\\Icons\\INV_Misc_Gear_01", trim = true, color = { 1, 0.82, 0.3 }, label = "Menu wheel",
-		opens = CinematicMenuWheel },
-	{ icon = ICON .. 8, color = COLORS[8], label = "Marker wheel", opens = markerWheel },
-	{ icon = "Interface\\Icons\\Ability_EyeOfTheOwl", trim = true, color = { 0.35, 1, 0.45 }, label = "Vision wheel",
-		opens = visionWheel },
+	{ key = "menu", icon = "Interface\\Icons\\INV_Misc_Gear_01", trim = true, color = { 1, 0.82, 0.3 },
+		label = "Menu wheel", opens = CinematicMenuWheel },
+	{ key = "marker", icon = ICON .. 8, color = COLORS[8], label = "Marker wheel", opens = markerWheel },
+	{ key = "vision", icon = "Interface\\Icons\\Ability_EyeOfTheOwl", trim = true, color = { 0.35, 1, 0.45 },
+		label = "Vision wheel", opens = visionWheel },
 }
 if CinematicWorldMarkerWheel then
-	masterSlots[#masterSlots + 1] = { icon = ICON .. 6, color = COLORS[6], label = "Ground marker wheel",
-		opens = CinematicWorldMarkerWheel }
+	MASTER_CHOICES[#MASTER_CHOICES + 1] = { key = "world", icon = ICON .. 6, color = COLORS[6],
+		label = "Ground marker wheel", opens = CinematicWorldMarkerWheel }
 end
-MakeWheel({
+local masterByKey = {}
+for _, choice in ipairs(MASTER_CHOICES) do
+	masterByKey[choice.key] = choice
+end
+ns.MASTER_WHEEL_CHOICES = MASTER_CHOICES
+
+-- The master wheel's wheels as the player has them (for the account, not a
+-- profile: db.masterWheelOrder, the keys in their order, and
+-- db.masterWheelOff, the ones taken off it): each choice in order, with
+-- whether it's on. A wheel the saved order doesn't name (one new since) goes
+-- at the end, on.
+function ns.MasterWheelOrder()
+	local db = ns.db or {}
+	local off = type(db.masterWheelOff) == "table" and db.masterWheelOff or {}
+	local list, seen = {}, {}
+	for _, key in ipairs(type(db.masterWheelOrder) == "table" and db.masterWheelOrder or {}) do
+		local choice = masterByKey[key]
+		if choice and not seen[key] then
+			seen[key] = true
+			list[#list + 1] = { choice = choice, on = not off[key] }
+		end
+	end
+	for _, choice in ipairs(MASTER_CHOICES) do
+		if not seen[choice.key] then
+			list[#list + 1] = { choice = choice, on = not off[choice.key] }
+		end
+	end
+	return list
+end
+
+local function MasterSlots()
+	local slots = {}
+	for _, item in ipairs(ns.MasterWheelOrder()) do
+		if item.on then
+			slots[#slots + 1] = item.choice
+		end
+	end
+	return slots
+end
+
+local masterWheel = MakeWheel({
 	name = "CinematicMasterWheel",
 	title = "Master wheel",
 	binding = "Master wheel (hold)",
-	slots = masterSlots,
+	slots = MasterSlots(), -- (the usual ones: settings aren't loaded yet)
 	-- (Out of a fight: the menu wheel laid out fresh, and who the marker
 	-- wheel marks settled from where the cursor is now.)
 	OnOpen = function()
@@ -840,6 +949,45 @@ MakeWheel({
 		SetUnit(MarkUnit())
 	end,
 })
+
+-- The master wheel laid out again from the settings: now, or (in a fight,
+-- when the secure buttons can't change) as it ends.
+local masterPending = CreateFrame("Frame")
+masterPending:SetScript("OnEvent", function(self)
+	self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+	masterWheel.SetSlots(MasterSlots())
+end)
+function ns.RebuildMasterWheel()
+	if not masterWheel.SetSlots(MasterSlots()) then
+		masterPending:RegisterEvent("PLAYER_REGEN_ENABLED")
+	end
+end
+
+-- Saves the master wheel's wheels (list: as ns.MasterWheelOrder gives it,
+-- or nil for the usual ones) and lays it out again.
+function ns.SetMasterWheelOrder(list)
+	local db = ns.db
+	if not db then
+		return
+	end
+	if list then
+		local order, off = {}, {}
+		for _, item in ipairs(list) do
+			order[#order + 1] = item.choice.key
+			if not item.on then
+				off[item.choice.key] = true
+			end
+		end
+		db.masterWheelOrder, db.masterWheelOff = order, next(off) and off or nil
+	else
+		db.masterWheelOrder, db.masterWheelOff = nil, nil
+	end
+	ns.RebuildMasterWheel()
+end
+
+-- For the Wheels pages' previews: each built-in secure wheel's slots now.
+ns.markerWheels = { master = masterWheel, marker = markerWheel, vision = visionWheel,
+	world = CinematicWorldMarkerWheel }
 -- (The menu wheel opens from the master wheel's snippet too.)
 CinematicMenuWheel:SetAttribute("_onattributechanged", OPEN_SNIPPET)
 
@@ -868,7 +1016,11 @@ local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
 watcher:RegisterEvent("PLAYER_REGEN_DISABLED")
 watcher:RegisterEvent("UI_SCALE_CHANGED")
-watcher:SetScript("OnEvent", function()
+watcher:SetScript("OnEvent", function(_, event)
+	-- (The master wheel's wheels, as saved: the settings are loaded now.)
+	if event == "PLAYER_ENTERING_WORLD" then
+		ns.RebuildMasterWheel()
+	end
 	if InCombatLockdown() then
 		return
 	end

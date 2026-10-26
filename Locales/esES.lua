@@ -2303,3 +2303,18 @@ L["How fast they travel to the waypoint, next to the style's own speed."] = "Lo 
 L["Speed"] = "Velocidad"
 L["Motes (class and spec)"] = "Motas (clase y especialización)"
 L["Wisps (class and spec)"] = "Volutas (clase y especialización)"
+
+-- WheelsPage.lua
+L["No wheels on it"] = "No tiene ruedas"
+L["Key"] = "Tecla"
+L["On the master wheel"] = "En la rueda de ruedas"
+L["Its icon is on the master wheel, which opens it. Untick to leave it off: its own key still brings it up. The master wheel is the same for all your characters."] = "Su icono está en la rueda de ruedas, que la abre. Desmárcalo para quitarla: su propia tecla la sigue mostrando. La rueda de ruedas es la misma para todos tus personajes."
+L["Wheels on it"] = "Ruedas que tiene"
+L["Earlier round the wheel (the first is at the top)."] = "Antes en la rueda (la primera está arriba)."
+L["Later round the wheel."] = "Después en la rueda."
+L["Usual order"] = "Orden habitual"
+L["Every wheel back on the master wheel, in their usual order."] = "Todas las ruedas vuelven a la rueda de ruedas, en su orden habitual."
+
+-- What's new: Wheels page
+L["Wheels page"] = "Página de ruedas"
+L["A new Wheels page shows every wheel and its icons, with its keybind right there, and lets you pick which wheels sit on the master wheel and in what order."] = "Una nueva página Ruedas muestra cada rueda y sus iconos, con su tecla a mano, y te deja elegir qué ruedas van en la rueda de ruedas y en qué orden."

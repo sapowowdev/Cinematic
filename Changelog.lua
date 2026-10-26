@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-26", page = "Master wheel", title = "Wheels page",
+		text = "A new Wheels page shows every wheel and its icons, with its keybind right there, and lets you " ..
+		"pick which wheels sit on the master wheel and in what order." },
 	{ date = "2026-10-24", page = "Vitals Vision", title = "Vitals Vision",
 		text = "As your health drops, dark edges creep in round the screen with art themed to your class " ..
 		"and talents (blood, frost, fire...), a heartbeat that quickens and a flash on big hits, so you can " ..

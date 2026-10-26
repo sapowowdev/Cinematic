@@ -13,7 +13,7 @@
 --
 -- Not part of a profile: the minimap button and its position, the on/off
 -- switch, debug options, frames you added or stopped fading, zone and time
--- tint colours you picked, and things the addon keeps for itself (flight
+-- tint colours you picked, the master wheel's wheels, and things the addon keeps for itself (flight
 -- times, the log, game settings it's holding).
 
 local _, ns = ...
@@ -21,6 +21,7 @@ local L = ns.L
 
 local GLOBAL_KEYS = {
 	enabled = true, minimapButton = true, minimapAngle = true, logDetail = true, language = true,
+	masterWheelOrder = true, masterWheelOff = true, -- (the master wheel's wheels: Wheels page)
 }
 -- Lists kept as tables that belong to a profile (their defaults are in code;
 -- see EnsureTables in Core.lua). Missing from a profile: emptied, which means defaults.

@@ -55,6 +55,7 @@ RollWindow.lua
 CameraWheel.lua
 MenuWheel.lua
 MarkerWheel.lua
+WheelsPage.lua
 QuestMobs.lua
 QuestGlow.lua
 QuestItemButton.lua

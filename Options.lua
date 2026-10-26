@@ -1087,6 +1087,15 @@ do
 			{ "Vitals Vision", "Interface\\Icons\\Spell_Shadow_LifeDrain02" },
 			{ "Wind Guide", "Interface\\Icons\\Spell_Nature_Cyclone" },
 		} },
+		-- (WheelsPage.lua's pages)
+		{ name = "Wheels", pages = {
+			{ "Master wheel", "Interface\\Icons\\Spell_Nature_WispSplode" },
+			{ "Camera wheel", "Interface\\Icons\\INV_Misc_Spyglass_03" },
+			{ "Menu wheel", "Interface\\Icons\\INV_Misc_Gear_01" },
+			{ "Marker wheel", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8" },
+			{ "Ground marker wheel", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_6" },
+			{ "Vision wheel", "Interface\\Icons\\Ability_EyeOfTheOwl" },
+		} },
 		{ name = "Audio", pages = {
 			{ "Audio", "Interface\\Icons\\INV_Misc_Drum_01" },
 		} },
@@ -10089,7 +10098,9 @@ end
 ns.lowHealthKit = { CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 	RegisterSubpage = RegisterSubpage, Tooltip = Tooltip, PageIntro = PageIntro, Stack = Stack,
 	Check = Check, Slider = Slider, GreyUnless = GreyUnless, Refresh = Refresh, Dropdown = Dropdown,
-	PageSwitch = PageSwitch, AddControl = function(control) controls[#controls + 1] = control end }
+	PageSwitch = PageSwitch, AddControl = function(control) controls[#controls + 1] = control end,
+	Header = Header, CreateKeybindButton = CreateKeybindButton, RefreshKeybinds = RefreshKeybinds,
+	StopListening = StopListening }
 
 -- The pages are built once the language is known (Locales.lua): first the
 -- text this file made as it ran is translated again.
@@ -10159,6 +10170,9 @@ ns.OnLanguage(function()
 	end
 	if ns.CreateWindGuidePanel then -- (WindGuide.lua: the dev copy only, CinematicDev.toc)
 		ns.CreateWindGuidePanel(ns.lowHealthKit)
+	end
+	if ns.CreateWheelsPanels then -- (WheelsPage.lua; its hub listed after Visions)
+		ns.CreateWheelsPanels(ns.lowHealthKit)
 	end
 	CreateBuffsPanel()
 	CreatePlatesPanel()
