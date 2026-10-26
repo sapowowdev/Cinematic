@@ -3,7 +3,7 @@
 -- (tooltipShow<part>First), and once the tooltip's been up tooltipFullAfter
 -- seconds or not (...Later): the background and border, the health bar
 -- under unit tooltips, and lines of unit tooltips (players, NPCs and mobs):
--- guild and titles, level, spec and class, creature type, faction and PvP,
+-- guild and titles, level, spec and class, creature type, corpse, faction and PvP,
 -- reputation faction, threat, quest lines; and the quest lines of objects
 -- in the world.
 -- A line is taken out by moving the lines under it up one (text and colour,
@@ -169,7 +169,9 @@ local function LinesToCut(tooltip, count, unit, object)
 				return "Quest" -- (an objective under its quest)
 			end
 			inQuest = false
-			if text:find("^<.*>$") then
+			if text == (CORPSE or "Corpse") then
+				return "Corpse"
+			elseif text:find("^<.*>$") then
 				return "Guild"
 			elseif guildName and text:find(guildName, 1, true) then
 				return "Guild" -- (a player's guild with no brackets, as on retail: "Top Opp")
@@ -300,7 +302,7 @@ local function CutLines(tooltip, object)
 	end
 end
 
-local LINE_PARTS = { "Guild", "Level", "Spec", "Type", "Faction", "Rep", "Threat", "Quest" }
+local LINE_PARTS = { "Guild", "Level", "Spec", "Type", "Corpse", "Faction", "Rep", "Threat", "Quest" }
 local function AnyLineCut()
 	for _, part in ipairs(LINE_PARTS) do
 		if Cut(part) then

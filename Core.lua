@@ -505,8 +505,8 @@ ns.EFFECT_GRID = { "letterbox", "tint", "vignette", "weather" }
 -- The Tooltips page's parts grid (TooltipParts.lua): each part shows on
 -- first hover (tooltipShow<part>First) and after tooltipFullAfter seconds
 -- (...Later). To start with, none at first and all after.
-ns.TOOLTIP_PARTS = { "Border", "Health", "Guild", "Level", "Spec", "Type", "Faction", "Rep", "Threat", "Quest",
-	"ObjQuest" }
+ns.TOOLTIP_PARTS = { "Border", "Health", "Guild", "Level", "Spec", "Type", "Corpse", "Faction", "Rep", "Threat",
+	"Quest", "ObjQuest" }
 for _, part in ipairs(ns.TOOLTIP_PARTS) do
 	DEFAULTS["tooltipShow" .. part .. "First"] = false
 	DEFAULTS["tooltipShow" .. part .. "Later"] = true

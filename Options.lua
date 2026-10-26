@@ -8268,6 +8268,7 @@ local function CreateTooltipPanel()
 		Level = { L["Level"], L["The level line (for players, with their race and class)."] },
 		Spec = { L["Spec and class"], L["A player's spec and class line (\"Fury Warrior\")."] },
 		Type = { L["Creature type"], L["The kind of creature: Elemental, Beast, Humanoid and so on."] },
+		Corpse = { L["Corpse"], L["The Corpse line on a dead player, NPC or mob."] },
 		Faction = { L["Faction and PvP"], L["The Horde or Alliance line and the PvP line."] },
 		Rep = { L["Reputation faction"], L["The faction an NPC belongs to, whose reputation you earn (\"Hara'ti\")."] },
 		Threat = { L["Threat"], L["How much of the mob's threat you have (\"100% Threat\")."] },

@@ -24,6 +24,7 @@ globals = {
 
 -- The WoW API the addon uses (add new ones here as they come up)
 read_globals = {
+	"CORPSE",
 	"FACTION_ALLIANCE",
 	"FACTION_HORDE",
 	"PVP",
