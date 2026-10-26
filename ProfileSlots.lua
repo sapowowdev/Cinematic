@@ -62,7 +62,7 @@ local PAGE_SLOTS = {
 
 -- The Standard Frames columns' rows that are the Action bars slot's.
 local BAR_ROWS = {
-	cooldowns = true, mainbar = true, art = true, bottomleft = true, bottomright = true, right1 = true,
+	cooldowns = true, cooldownsutility = true, mainbar = true, art = true, bottomleft = true, bottomright = true, right1 = true,
 	right2 = true, bar6 = true, bar7 = true, bar8 = true, pet = true, stance = true, totems = true,
 	micro = true, bags = true, xp = true, extra = true, gamepadbars = true, gamepadxp = true,
 	-- (other addons' bars: Bartender4's, and EllesmereUI's action bars,

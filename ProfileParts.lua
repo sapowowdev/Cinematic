@@ -225,8 +225,6 @@ ns.PROFILE_PARTS = {
 			set("enemyShow", Rows(PURE_ENEMY, false))
 			set("friendlyShow", { target = false, tot = false })
 			set("instanceShow", Rows(PureInstances(), false))
-			-- No quest timer box.
-			set("questTimerShow", false)
 			-- Nameplates: enemies' (and their minions') in fights, not kept up
 			-- otherwise; in PvP and battlegrounds, none; in instances, friendly
 			-- players' and NPCs' hidden; no group members' or friendly targets'.
@@ -360,11 +358,13 @@ ns.PROFILE_PARTS = {
 			set("depthOfField", false)
 		end },
 		-- Fights don't bring the letterbox down, no time of day message, and
-		-- Vitals Vision on (your health at the screen's edges, with no portrait to read it from).
+		-- Vitals Vision on (your health at the screen's edges, with no portrait to
+		-- read it from, and the personal resource display fading in as it drops).
 		pure = { apply = function(set)
 			set("letterboxOffInCombat", false)
 			set("timeOfDayMessage", false)
 			set("lowHealth", true)
+			set("lowHealthPrd", true)
 		end },
 	},
 	misc = {

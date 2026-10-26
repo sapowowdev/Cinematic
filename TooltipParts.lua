@@ -403,6 +403,13 @@ fader:SetScript("OnUpdate", function()
 	end
 end)
 
+-- The fade in is the tooltip coming up at all, not each new thing in it: the
+-- game hides and shows it again for every new thing hovered, so a show within
+-- KEEP_UP seconds of a hide carries on from the alpha it had then (sweeping
+-- the mouse across buttons doesn't flicker it).
+local KEEP_UP = 0.3
+local hiddenAt, hiddenAlpha = 0, 0
+
 local function StartFade(kind, from, to, length, done)
 	fade = { kind = kind, from = from, to = to, start = GetTime(), length = length, set = from, done = done }
 	GameTooltip:SetAlpha(from)
@@ -601,7 +608,8 @@ function ns.HookTooltipParts()
 		UpdateBorder(tooltip)
 		StartCountdown(tooltip)
 		if FadeTime() and tooltip == GameTooltip then
-			StartFade("in", 0, 1, FadeTime())
+			local from = GetTime() - hiddenAt <= KEEP_UP and hiddenAlpha or 0
+			StartFade("in", from, 1, FadeTime() * (1 - from))
 		elseif fade then
 			StopFade(true)
 		end
@@ -620,6 +628,7 @@ function ns.HookTooltipParts()
 		end
 		revealed, linesCut, shownName = false, false, nil
 		hiddenBars = {}
+		hiddenAt, hiddenAlpha = GetTime(), Alpha(GameTooltip) or (fade and fade.set) or 1
 		StopFade(true)
 	end)
 	-- The health bar hides each time it shows.

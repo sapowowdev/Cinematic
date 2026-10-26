@@ -7,7 +7,8 @@ local _, ns = ...
 -- Each part's frame on a plate's unit frame: the first of these it has, or
 -- (all) every one of them, for parts drawn by several textures. The
 -- containers (health and cast bars with their borders) go first. WoW
--- Forever's level is the PlayerLevelDiffFrame box (its LevelFrame stays hidden).
+-- Forever's level is the PlayerLevelDiffFrame box (its LevelFrame stays hidden);
+-- Classic Era has both too but shows LevelFrame, so each is faded.
 -- A dotted field is one on a frame on the unit frame.
 local PART_FRAMES = {
 	Health = { "HealthBarsContainer", "healthBar" },
@@ -22,7 +23,7 @@ local PART_FRAMES = {
 	-- row keeps one of Effects' own.)
 	RaidMarker = { "RaidTargetFrame" },
 	Classification = { "ClassificationFrame", "classificationIndicator", all = true },
-	Level = { "PlayerLevelDiffFrame", "LevelFrame", "levelText" },
+	Level = { "PlayerLevelDiffFrame", "LevelFrame", "levelText", all = true },
 	Threat = { "aggroHighlight", "aggroHighlightBase", "aggroHighlightAdditive", "aggroFlash", all = true },
 	-- (Forever's is the health bar's gold border, on your target.)
 	Highlight = { "selectionHighlight", "healthBar.selectedBorder", all = true },
@@ -103,13 +104,23 @@ local function PersonalPlate()
 	return C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit("player")
 end
 
+-- The game's own alpha for a part, from before it was first held: some aren't
+-- at full (Classic Era's target highlight, a faint white over the bar, went
+-- solid white when let go at 1). [part frame] = alpha.
+local own = {}
+
 local function Fade(frame, alpha)
 	if alpha < 1 then
-		held[frame] = alpha
-		frame:SetAlpha(alpha)
+		if not held[frame] then
+			local base = frame:GetAlpha()
+			own[frame] = type(base) == "number" and not (issecretvalue and issecretvalue(base)) and base or 1
+		end
+		held[frame] = alpha * own[frame]
+		frame:SetAlpha(held[frame])
 	elseif held[frame] then
-		held[frame] = nil -- (let go: back to full, then the game's again)
-		frame:SetAlpha(1)
+		held[frame] = nil -- (let go: back to the game's own, then the game's again)
+		frame:SetAlpha(own[frame] or 1)
+		own[frame] = nil
 	end
 end
 

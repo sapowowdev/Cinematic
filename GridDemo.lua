@@ -14,7 +14,7 @@ local _, ns = ...
 -- the words their items write.
 local GROUPS = {
 	{ heading = "Combat", color = { 1, 0.45, 0.4 }, options = { { "combat", "In combat" },
-		{ "nocombat", "Out of combat" }, { "pvpcombat", "PvP combat" } } },
+		{ "calm", "Calm Timer" }, { "nocombat", "Out of combat" }, { "pvpcombat", "PvP combat" } } },
 	{ heading = "Target", color = { 1, 0.65, 0.25 }, options = { { "enemy", "Enemy" }, { "friendly", "Friendly" },
 		{ "target", "Any target" } } },
 	{ heading = "Location", color = { 0.45, 0.75, 1 }, options = { { "world", "Open World" }, { "city", "City" },
@@ -26,6 +26,13 @@ for _, group in ipairs(GROUPS) do
 end
 local ROLES = { "Tank", "Healer", "Damage" }
 local ROLE_COLOR = { 0.4, 0.85, 0.5 }
+-- Each role's icon as text (the nameplates' role texture, pixels of its 64x64).
+local ROLE_PIXELS = { Tank = { 0, 19, 22, 41 }, Healer = { 20, 39, 1, 20 }, Damage = { 20, 39, 22, 41 } }
+local function RoleIcon(role, size)
+	local p = ROLE_PIXELS[role]
+	return ("|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:%d:%d:0:0:64:64:%d:%d:%d:%d|t")
+		:format(size, size, p[1], p[2], p[3], p[4])
+end
 
 -- Text in a colour (r, g, b from 0 to 1).
 local function Colored(color, text)
@@ -57,11 +64,21 @@ local function CamNow()
 	if ns.IsTele and ns.IsTele() then return "tele" end
 	return ns.CameraMode and ns.CameraMode()
 end
+-- When the last fight ended, for calm (the Calm Timer after it). Cut short
+-- like everyone's when calmEndsAtFull ends the timer early.
+local lastCombatAt = -math.huge
+ns.OnCalmEnd(function(cut) lastCombatAt = math.min(lastCombatAt, cut) end)
+local combatWatch = CreateFrame("Frame")
+combatWatch:RegisterEvent("PLAYER_REGEN_ENABLED")
+combatWatch:SetScript("OnEvent", function() lastCombatAt = GetTime() end)
+
 -- The demo's own words (the rules don't know them yet), each true or false
 -- where you are now, given the rules' facts. Low health and Not full aren't
 -- here: the demo can't tell.
 local DEMO_FACTS = {
 	nocombat = function(f) return not f.combat end,
+	-- (Just the time after a fight: tick In combat as well for the fight too.)
+	calm = function(f) return not f.combat and GetTime() - lastCombatAt < (ns.db.calmTime or 0) end,
 	-- (The rules' bg is battlegrounds and arenas both: split here.)
 	bg = function(f) return f.bg and select(2, IsInInstance()) ~= "arena" end,
 	arena = function(f) return f.bg and select(2, IsInInstance()) == "arena" end,
@@ -449,7 +466,7 @@ function ns.CreateGridDemo(kit)
 		roles:SetPoint("LEFT", rolesX, 0)
 		local roleEntries = {}
 		for _, role in ipairs(ROLES) do
-			roleEntries[#roleEntries + 1] = { role, function() return state.roles[role] == true end,
+			roleEntries[#roleEntries + 1] = { RoleIcon(role, 14) .. " " .. role, function() return state.roles[role] == true end,
 				function() state.roles[role] = not state.roles[role] or nil end }
 		end
 		roles:SetScript("OnClick", function(self)
@@ -645,7 +662,7 @@ function ns.CreateGridDemo(kit)
 			Line("Role", ROLE_COLOR)
 			for _, role in ipairs(ROLES) do
 				local word = role:lower()
-				local button = Piece(role, function() Insert(word) end, ROLE_COLOR, true)
+				local button = Piece(RoleIcon(role, 12) .. " " .. role, function() Insert(word) end, ROLE_COLOR, true)
 				wordButtons[word] = button
 				Tooltip(button, ("Adds \"%s\", for after an AND. A green dot: you're that role now."):format(word))
 			end
@@ -817,9 +834,9 @@ function ns.CreateGridDemo(kit)
 			ruleText:SetShown(text ~= nil)
 			local on = {}
 			for _, role in ipairs(ROLES) do
-				if state.roles[role] then on[#on + 1] = role:sub(1, 1) end
+				if state.roles[role] then on[#on + 1] = RoleIcon(role, 13) end
 			end
-			roles:SetText(#on == 0 and "|cff808080-|r" or Colored(ROLE_COLOR, #on == #ROLES and "All" or table.concat(on, " ")))
+			roles:SetText(#on == 0 and "|cff808080-|r" or #on == #ROLES and Colored(ROLE_COLOR, "All") or table.concat(on))
 			local canGoBack = not text or ReadGrid(text) ~= nil
 			ruleText:SetText(text and ((canGoBack and "|cffffd100" or "|cffff6060") .. text .. "|r") or "")
 			rule:SetText(text and "Grid" or "Edit")
@@ -834,7 +851,7 @@ function ns.CreateGridDemo(kit)
 	-- that can't be a grid): name, ticks, roles, Always, rule.
 	local ROWS = {
 		{ "Minimap", { combat = true, city = true, inn = true, raid = true } },
-		{ "Player frame", { combat = true, enemy = true, friendly = true } },
+		{ "Player frame", { combat = true, calm = true, enemy = true, friendly = true } },
 		{ "Target frame", { target = true } },
 		{ "Action bars", { combat = true, dungeon = true, raid = true }, { Tank = true, Healer = true } },
 		{ "Chat", {}, nil, true },

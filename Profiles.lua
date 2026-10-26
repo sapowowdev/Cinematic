@@ -127,7 +127,8 @@ ns.BUILTIN_PROFILES = {
 		icon = "Interface\\Icons\\Ability_Stealth",
 		tip = L["As little UI as possible: nameplates show only for enemies in fights, and fights don't bring " ..
 			"the letterbox down. Fights bring up only your resource bar and the Cooldown Manager, the cast bar " ..
-			"shows all through CineMode, your health shows at the screen's edges (Vitals Vision), and every " ..
+			"shows all through CineMode, your health shows at the screen's edges and " ..
+			"your personal resource display fades in as it drops (Vitals Vision), and every " ..
 			"camera can start music."],
 		parts = { layout = { forever = "preset", retail = "pure" }, frames = "pure", bars = "pure", camera = "pure",
 			vfx = "pure", misc = "pure" },

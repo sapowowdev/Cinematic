@@ -163,7 +163,8 @@ local DESIGN = {
 -- (system, index, in its default spot, point, relative point, relative to,
 -- x, y, -1, settings), in the game's own export format, so it's put together
 -- into an export string (ExportFromSystems). The personal resource display
--- moved to the middle, the Cooldown Manager above it.
+-- moved to the middle (its health bar shown: its first setting, HideHealth,
+-- 0), the Cooldown Manager above it.
 local PURE_CINEMA_SYSTEMS = {
 	"0 0 1 7 7 UIParent 0.0 45.0 -1 ##$$%/&('%)#+#,$",
 	"0 1 1 7 7 UIParent 0.0 45.0 -1 ##$$%/&('%(#,$",
@@ -209,7 +210,7 @@ local PURE_CINEMA_SYSTEMS = {
 	"20 1 1 7 7 UIParent 0.0 240.0 -1 ##$*%$&('%(-($)#+$,$-$",
 	"20 2 1 7 7 UIParent 0.0 370.0 -1 ##$$%$&('((-($)#+$,$-$",
 	"20 3 1 7 7 UIParent 420.0 430.0 -1 #$$$%#&('((-($)#*#+$,$-$.-.$",
-	"21 -1 0 4 4 UIParent 0.0 -217.2 -1 #$%#&#'((()#*-*$+#,&-#.#/(0#1#",
+	"21 -1 0 4 4 UIParent 0.0 -217.2 -1 ##%#&#'((()#*-*$+#,&-#.#/(0#1#",
 	"22 0 1 8 7 UIParent -457.0 336.0 -1 #$$$%#&('((#)U*$+%,$-#.#/U0%",
 	"22 1 1 1 1 UIParent 0.0 -40.0 -1 &('()U*#+%",
 	"22 2 1 1 1 UIParent 0.0 -90.0 -1 &('()U*#+%",

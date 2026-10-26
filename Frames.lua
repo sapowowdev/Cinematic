@@ -1671,8 +1671,14 @@ ns.COMBAT_SHOW = {
 	{ key = "castbar", label = L["Cast bar"], default = false, frames = FRAME_GROUPS.castbar },
 	-- The game's own damage meter (made when first opened).
 	{ key = "meters", label = L["Damage meter (the game's)"], default = false, frames = FRAME_GROUPS.meters },
-	{ key = "cooldowns", label = L["Cooldown Manager"], default = false, addon = "Blizzard_CooldownViewer",
-		frames = FRAME_GROUPS.cooldowns, morePage = "Cooldown Manager" },
+	-- The Cooldown Manager's two spell bars, a row each (the tracked buffs go
+	-- with the Essential bar). Utility follows Essential's ticks until set
+	-- (see ROW_FALLBACK), as it was one row before.
+	{ key = "cooldowns", label = L["Essential Cooldowns"], default = false, addon = "Blizzard_CooldownViewer",
+		frames = { "EssentialCooldownViewer", "BuffIconCooldownViewer", "BuffBarCooldownViewer" },
+		morePage = "Cooldown Manager" },
+	{ key = "cooldownsutility", label = L["Utility Cooldowns"], default = false, addon = "Blizzard_CooldownViewer",
+		frames = { "UtilityCooldownViewer" }, morePage = "Cooldown Manager" },
 	-- Numbered as retail's Edit Mode numbers them; Classic doesn't number its
 	-- bars, so there each also says where it sits.
 	{ key = "mainbar", label = L["Action bar 1"], default = true,
@@ -1741,6 +1747,7 @@ ns.COMBAT_SHOW = {
 local ROW_SECTIONS = {
 	player = "units", petframe = "units", prd = "units", prdpower = "units", target = "units", tot = "units", focus = "units", focustot = "units",
 	buffs = "combat", swing = "combat", castbar = "combat", meters = "combat", cooldowns = "combat",
+	cooldownsutility = "combat",
 	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars",
 	pet = "bars", stance = "bars", totems = "bars", extra = "bars",
 	right1 = "extrabars", right2 = "extrabars", bar6 = "extrabars", bar7 = "extrabars", bar8 = "extrabars",
@@ -1915,7 +1922,7 @@ ns.HOVER_GROUPS_DEFAULT = {
 	{ preset = "chat", icon = "Interface\\Icons\\INV_Scroll_03", name = L["Chat"],
 		members = { "chat" }, triggers = { whisper = true, typing = true } },
 	{ preset = "cooldowns", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", name = L["Cooldowns"],
-		members = { "cooldowns", "addon:fecm" }, triggers = { cooldown = true } },
+		members = { "cooldowns", "cooldownsutility", "addon:fecm" }, triggers = { cooldown = true } },
 }
 
 -- The icons a group you make can have (the Mouseover groups page's picker).
@@ -2116,6 +2123,7 @@ end
 local ROW_FALLBACK = {
 	art = "mainbar", petframe = "player", prdpower = "prd", focustot = "focus", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
 	minimapzone = "minimap", minimapclock = "minimap", minimapdial = "minimap", bags = "micro",
+	cooldownsutility = "cooldowns",
 }
 -- (And the raid-style party frames' rows the raid frames'.)
 for raidKey, key in pairs(ns.RAID_STYLE_PARTY) do
@@ -5407,6 +5415,18 @@ function ns.UpdateFrames(cinematic, elapsed)
 		if deathFade and not hovered[row] and not typingShown then
 			target = 0
 		end
+		-- (Vitals Vision's health bars: up as far as your health says, LowHealth.lua.)
+		entry.vitalsSecret = nil
+		if target == 0 and cinematic and not deathFade and PORTRAIT_FRAMES[entry.name]
+			and entry.name ~= "CinematicPersonalPower" then
+			local vitals = ns.VitalsFrameAlpha(PORTRAIT_FRAMES[entry.name] == "prdWhenNotFull" and "prd" or "portrait",
+				entry.frame == personalPower.healthStandIn)
+			if vitals == "secret" then
+				entry.vitalsSecret = true
+			elseif vitals then
+				target = vitals
+			end
+		end
 		-- (Swing timer page: in CineMode and out, hovering included.)
 		if entry.group == "swing" and ns.IsSwingBarUnused(entry.name) then
 			target = 0
@@ -5474,6 +5494,10 @@ function ns.UpdateFrames(cinematic, elapsed)
 				duration = deathFade and DEATH_FADE_TIME or GroupFadeTime(entry.group, false)
 			end
 			ns.SetEntryAlpha(entry, ns.Approach(entry.alpha, target, elapsed, duration))
+		end
+		-- (Secret health: the game sets a faded-out health bar's alpha from it.)
+		if entry.vitalsSecret and target == 0 and entry.alpha == 0 and not ns.layoutFadeUntil and not ns.previewRows then
+			ns.SetVitalsSecretAlpha(entry.frame)
 		end
 		if NEVER_NESTED[entry.name] and entry.group == "chat" then
 			chatButtonsAlpha = math.max(chatButtonsAlpha or 0, entry.alpha)

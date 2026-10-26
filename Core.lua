@@ -92,7 +92,7 @@ local DEFAULTS = {
 	weatherTint = true,    -- rain, snow and sandstorms grey or colour the scene (clients with C_Weather)
 	weatherTintStrength = 1,
 	tintClock = "game",    -- time-of-day tint follows "game" (realm) time or "local" (computer) time
-	timeTintStrength = 0.5,-- how strongly the time-of-day colour applies (both time presets)
+	timeTintStrength = 1,  -- how strongly the time-of-day colour applies (both time presets)
 	tintPreviewHour = -2,  -- options-page preview of the time-of-day tint at this hour (-1 = now, -2 = not picked)
 	alwaysShowMinimap = false, -- keep the whole minimap group visible in cinematic mode
 	alwaysShowWaypoint = true, -- keep retail's quest waypoint visible in cinematic mode
@@ -207,7 +207,7 @@ local DEFAULTS = {
 	tooltipHideStill = 10,    -- seconds a world or unit tooltip stays up with the mouse still (0: off)
 	tooltipShowStill = 2,     -- seconds the mouse is still before a world or unit tooltip shows (0: off)
 	tooltipCursorMode = "corner", -- tooltips the game puts in the bottom-right corner: "corner", "cursor" or "combat" (cursor in fights; switch or not)
-	tooltipFadeTime = 0,      -- seconds tooltips take to fade in, and out when the mouse is still too long (0: no fading; switch or not)
+	tooltipFadeTime = 0.2,    -- seconds tooltips take to fade in, and out when the mouse is still too long (0: no fading; switch or not)
 	tooltipFullAfter = 2,     -- seconds hovering before the parts grid's After column takes over (0: never)
 	musicFadeTime = 3,        -- seconds for music to fade in or out
 	musicFatigue = 0,         -- minutes: don't start music again within this long of the last start
@@ -336,7 +336,7 @@ local DEFAULTS = {
 	questCamShoulder = 1,     -- ...yards the camera moves right, over your shoulder
 	questCamUncenter = false, -- ...turn the game's Keep Character Centered off meanwhile (it blocks the shoulder)
 	questCamAllGossip = false, -- ...for every NPC you talk to, not just quest givers
-	questCamNotMounted = false, -- ...but not while you're mounted
+	questCamNotMounted = true, -- ...but not while you're mounted
 	indoorLimits = true,      -- indoors, keep the camera modes from pushing into walls:
 	indoorZoomOut = 1,        -- ...zoom out at most this many yards past your own distance
 	indoorSwing = 10,         -- ...swing at most this far either side of behind
@@ -3769,6 +3769,48 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.chatSkillOffV1 = true
 		end
+		-- The quest timer box shows while one is running in every profile (Pure
+		-- Cinema had it off). Once, in every profile.
+		if not ns.db.questTimerOnV1 then
+			ns.db.questTimerShow = nil -- (on by default)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then saved.questTimerShow = nil end
+			end
+			ns.db.questTimerOnV1 = true
+		end
+		-- Tooltips fade in and out over 0.2 seconds by default, not 0. Once, in
+		-- every profile still at the old default.
+		if not ns.db.tooltipFadeV1 then
+			local function FadeOn(t)
+				if t.tooltipFadeTime == 0 then t.tooltipFadeTime = nil end -- (0.2 by default)
+			end
+			FadeOn(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then FadeOn(saved) end
+			end
+			ns.db.tooltipFadeV1 = true
+		end
+		-- The time-of-day tint now shows at full strength by default, not half.
+		-- Once, in every profile still at the old default.
+		if not ns.db.timeTintFullV1 then
+			local function TimeTintFull(t)
+				if t.timeTintStrength == 0.5 then t.timeTintStrength = nil end -- (1 by default)
+			end
+			TimeTintFull(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then TimeTintFull(saved) end
+			end
+			ns.db.timeTintFullV1 = true
+		end
+		-- The quest cam now leaves you be while you're mounted by default. Once,
+		-- in every profile.
+		if not ns.db.questCamNotMountedV1 then
+			ns.db.questCamNotMounted = nil -- (on by default)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then saved.questCamNotMounted = nil end
+			end
+			ns.db.questCamNotMountedV1 = true
+		end
 		-- The cozy camera by a tent: 8 yards, not 7. Once, in every profile still
 		-- at the old default (there's no slider for it).
 		if not ns.db.cozyTentCloseV1 then
@@ -3859,6 +3901,25 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then ExtraAlone(saved.hoverGroups) end
 			end
 			ns.db.extraAloneV1 = true
+		end
+		-- The Cooldown Manager's row is now its Essential bar's, with a row of its
+		-- own for the Utility bar: put that in every saved group the old row was in. Once.
+		if not ns.db.cooldownsUtilityV1 then
+			local function UtilityToo(groups)
+				for _, group in ipairs(groups or {}) do
+					for i, member in ipairs(group.members or {}) do
+						if member == "cooldowns" then
+							table.insert(group.members, i + 1, "cooldownsutility")
+							break
+						end
+					end
+				end
+			end
+			UtilityToo(ns.db.hoverGroups)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then UtilityToo(saved.hoverGroups) end
+			end
+			ns.db.cooldownsUtilityV1 = true
 		end
 		-- "Keep raid markers up as nameplates fade" (keepRaidMarkers) is now the
 		-- Raid Markers grid: unticked, neither side's markers are kept.
