@@ -7134,11 +7134,26 @@ local function CreateQuestTrackerPanel()
 	progressCalm:SetPoint("TOPLEFT", revealProgress, "BOTTOMLEFT", QUEST_INDENT, -2)
 	GreyUnless(progressCalm, function(db) return db.questRevealOnProgress end)
 
+	-- Scenarios: raid bosses' and dungeons' stages, which aren't quests.
+	local lastReveal = progressCalm
+	if C_ScenarioInfo and C_ScenarioInfo.GetScenarioStepInfo then
+		local revealScenario = Check(content, "questRevealOnScenario", L["Reveal on scenario progress"],
+			L["Progress in a scenario (the stages and objectives the tracker shows for some raid bosses, " ..
+			"dungeons and events) shows the whole quest tracker the same way."])
+		revealScenario:SetPoint("TOPLEFT", progressCalm, "BOTTOMLEFT", -QUEST_INDENT, -2)
+		revealScenario:HookScript("OnClick", Refresh) -- grey out / enable the option below
+
+		local scenarioCalm = Check(content, "questScenarioCalm", L["Keep up for the Calm Timer"], calmTip)
+		scenarioCalm:SetPoint("TOPLEFT", revealScenario, "BOTTOMLEFT", QUEST_INDENT, -2)
+		GreyUnless(scenarioCalm, function(db) return db.questRevealOnScenario end)
+		lastReveal = scenarioCalm
+	end
+
 	local onlyThat = Check(content, "questRevealOnlyThat", L["Show just that quest"],
 		L["When accepting a quest or progress on one brings the quest tracker up, just that quest shows " ..
 		"(and any others accepted or moved on while it's up); the rest of the tracker, headers and all, " ..
 		"stays faded. Hovering it shows it all."])
-	onlyThat:SetPoint("TOPLEFT", progressCalm, "BOTTOMLEFT", -QUEST_INDENT, -2)
+	onlyThat:SetPoint("TOPLEFT", lastReveal, "BOTTOMLEFT", -QUEST_INDENT, -2)
 	GreyUnless(onlyThat, function(db) return db.questRevealOnAccept or db.questRevealOnProgress end)
 
 	local combatCalm = Check(content, "questCombatCalm", L["Stay up for the Calm Timer after a fight"],

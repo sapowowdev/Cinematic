@@ -3183,7 +3183,8 @@ local hoverHeldUntil = {} -- [row key] = when the mouse's hold on it ends (Mouse
 local questRevealUntil = 0
 do
 	local QUEST_REVEAL_EVENTS = { QUEST_ACCEPTED = "questRevealOnAccept", QUEST_WATCH_UPDATE = "questRevealOnProgress" }
-	local QUEST_REVEAL_CALM = { questRevealOnAccept = "questAcceptCalm", questRevealOnProgress = "questProgressCalm" }
+	local QUEST_REVEAL_CALM = { questRevealOnAccept = "questAcceptCalm", questRevealOnProgress = "questProgressCalm",
+		questRevealOnScenario = "questScenarioCalm" }
 	local questWatcher = CreateFrame("Frame")
 	for event in pairs(QUEST_REVEAL_EVENTS) do
 		pcall(questWatcher.RegisterEvent, questWatcher, event)
@@ -3391,6 +3392,56 @@ do
 			if not pending then
 				pending = true
 				C_Timer.After(0.2, Scan)
+			end
+		end)
+	end
+
+	-- Scenarios (a raid boss's or dungeon's stages and objectives, as in the
+	-- tracker's scenario block) aren't quests: their progress is the stage
+	-- number plus each criterion's count plus the step's weighted percent,
+	-- summed after a scenario update, and a sum gone up reveals the whole
+	-- tracker (no quest to focus). Entering a scenario doesn't.
+	local scenario = C_ScenarioInfo
+	if scenario and scenario.GetScenarioInfo and scenario.GetScenarioStepInfo and scenario.GetCriteriaInfo then
+		local lastSum, lastName
+		local scenarioPending = false
+		local function Number(value)
+			return type(value) == "number" and not IsSecretValue(value) and value or 0
+		end
+		local function ScanScenario()
+			scenarioPending = false
+			local info = scenario.GetScenarioInfo()
+			local name = info and info.name
+			if type(name) ~= "string" or IsSecretValue(name) or name == "" then
+				lastSum, lastName = nil, nil
+				return
+			end
+			local sum = Number(info.currentStage) * 1e6
+			local step = scenario.GetScenarioStepInfo()
+			if step then
+				sum = sum + Number(step.weightedProgress)
+				for i = 1, Number(step.numCriteria) do
+					local criteria = scenario.GetCriteriaInfo(i)
+					if criteria then
+						sum = sum + Number(criteria.quantity)
+					end
+				end
+			end
+			if name == lastName and lastSum and sum > lastSum then
+				Reveal("questRevealOnScenario")
+				ns.questActivityAt = GetTime()
+			end
+			lastSum, lastName = sum, name
+		end
+		local scenarioWatcher = CreateFrame("Frame")
+		for _, event in ipairs({ "SCENARIO_UPDATE", "SCENARIO_CRITERIA_UPDATE", "CRITERIA_COMPLETE",
+			"PLAYER_ENTERING_WORLD" }) do
+			pcall(scenarioWatcher.RegisterEvent, scenarioWatcher, event)
+		end
+		scenarioWatcher:SetScript("OnEvent", function()
+			if not scenarioPending then
+				scenarioPending = true
+				C_Timer.After(0.2, ScanScenario)
 			end
 		end)
 	end

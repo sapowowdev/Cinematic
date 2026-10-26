@@ -71,6 +71,7 @@ read_globals = {
 	"C_NamePlateManager",
 	"C_PlayerInfo",
 	"C_QuestLog",
+	"C_ScenarioInfo",
 	"C_Spell",
 	"C_Timer",
 	"C_UnitAuras",
