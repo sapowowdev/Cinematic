@@ -3196,8 +3196,13 @@ do
 	-- background stay faded. They keep their place, so there can be a gap
 	-- above. Hovering the tracker or a fight bringing it up shows the lot for
 	-- the rest of that reveal. (Retail-style tracker: sections with
-	-- usedBlocks, keyed by quest ID.)
+	-- usedBlocks, keyed by quest ID.) Scenario progress focuses the scenario
+	-- section the same way, key SCENARIO: its header, stage and objectives.
 	local focus = { on = false, quests = {}, since = 0, othersAlpha = 1 }
+	local SCENARIO = "scenario"
+	local function IsScenarioSection(section)
+		return section == _G.ScenarioObjectiveTracker or type(section.StageBlock) == "table"
+	end
 	local FOCUS_FIND_TIME = 0.5 -- none of its quests found in the tracker by then: show the lot
 	local function TrackerSections(tracker)
 		if type(tracker.modules) == "table" then
@@ -3213,11 +3218,25 @@ do
 		for _, section in ipairs(TrackerSections(tracker)) do
 			if type(section) == "table" and type(section.usedBlocks) == "table" and not IsForbidden(section) then
 				local sectionHas = false
+				local scenarioSection = IsScenarioSection(section)
+				local sectionAlpha = alpha
+				if scenarioSection then
+					-- (Its stage and other blocks aren't all in usedBlocks.)
+					sectionHas = focus.quests[SCENARIO] and true or false
+					sectionAlpha = sectionHas and 1 or alpha
+					for _, child in ipairs({ section:GetChildren() }) do
+						if child.SetAlpha and not IsForbidden(child) then
+							ns.FadeRelative(child, sectionAlpha)
+						end
+					end
+				end
 				for _, blocks in pairs(section.usedBlocks) do
 					if type(blocks) == "table" then
 						for id, block in pairs(blocks) do
 							if type(block) == "table" and block.SetAlpha and not IsForbidden(block) then
-								if focus.quests[id] then
+								if scenarioSection then
+									ns.FadeRelative(block, sectionAlpha)
+								elseif focus.quests[id] then
 									sectionHas = true
 									ns.FadeRelative(block, 1)
 								else
@@ -3230,7 +3249,7 @@ do
 				found = found or sectionHas
 				local header = section.Header
 				if type(header) == "table" and header.SetAlpha and not IsForbidden(header) then
-					ns.FadeRelative(header, alpha)
+					ns.FadeRelative(header, sectionAlpha)
 				end
 			end
 		end
@@ -3242,7 +3261,7 @@ do
 		return found
 	end
 	local function Focus(questID)
-		if not (ns.db and ns.db.questRevealOnlyThat and type(questID) == "number") then
+		if not (ns.db and ns.db.questRevealOnlyThat and (type(questID) == "number" or questID == SCENARIO)) then
 			focus.on = false
 			return
 		end
@@ -3399,8 +3418,9 @@ do
 	-- Scenarios (a raid boss's or dungeon's stages and objectives, as in the
 	-- tracker's scenario block) aren't quests: their progress is the stage
 	-- number plus each criterion's count plus the step's weighted percent,
-	-- summed after a scenario update, and a sum gone up reveals the whole
-	-- tracker (no quest to focus). Entering a scenario doesn't.
+	-- summed after a scenario update, and a sum gone up reveals the tracker
+	-- (with "Show just that quest", just the scenario section). Entering a
+	-- scenario doesn't.
 	local scenario = C_ScenarioInfo
 	if scenario and scenario.GetScenarioInfo and scenario.GetScenarioStepInfo and scenario.GetCriteriaInfo then
 		local lastSum, lastName
@@ -3428,7 +3448,7 @@ do
 				end
 			end
 			if name == lastName and lastSum and sum > lastSum then
-				Reveal("questRevealOnScenario")
+				Reveal("questRevealOnScenario", SCENARIO)
 				ns.questActivityAt = GetTime()
 			end
 			lastSum, lastName = sum, name
