@@ -1090,6 +1090,7 @@ do
 		-- (WheelsPage.lua's pages)
 		{ name = "Wheels", pages = {
 			{ "Master wheel", "Interface\\Icons\\Spell_Nature_WispSplode" },
+			{ "Your wheels", "Interface\\Icons\\INV_Misc_Note_01" },
 			{ "Camera wheel", "Interface\\Icons\\INV_Misc_Spyglass_03" },
 			{ "Menu wheel", "Interface\\Icons\\INV_Misc_Gear_01" },
 			{ "Marker wheel", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8" },
@@ -10100,7 +10101,7 @@ ns.lowHealthKit = { CreateScrollPage = CreateScrollPage, Label = Label, PageShow
 	Check = Check, Slider = Slider, GreyUnless = GreyUnless, Refresh = Refresh, Dropdown = Dropdown,
 	PageSwitch = PageSwitch, AddControl = function(control) controls[#controls + 1] = control end,
 	Header = Header, CreateKeybindButton = CreateKeybindButton, RefreshKeybinds = RefreshKeybinds,
-	StopListening = StopListening }
+	StopListening = StopListening, IconPicker = IconPicker, FitContentHeight = FitContentHeight }
 
 -- The pages are built once the language is known (Locales.lua): first the
 -- text this file made as it ran is translated again.

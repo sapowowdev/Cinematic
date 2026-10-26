@@ -427,10 +427,14 @@ local function MakeWheel(spec)
 			ns.CloseCameraWheel()
 		end
 	end)
-	_G["BINDING_NAME_CLICK " .. keyName .. ":LeftButton"] = "Cinematic: " .. L[spec.binding]
-	ns.OnLanguage(function()
-		_G["BINDING_NAME_CLICK " .. keyName .. ":LeftButton"] = "Cinematic: " .. L[spec.binding]
-	end)
+	-- (Its name in the game's key bindings: spec.BindingName() if it has one,
+	-- for a wheel of the player's own. wheel.RefreshBindingName() sets it again.)
+	function wheel.RefreshBindingName()
+		_G["BINDING_NAME_CLICK " .. keyName .. ":LeftButton"] = "Cinematic: "
+			.. (spec.BindingName and spec.BindingName() or L[spec.binding])
+	end
+	wheel.RefreshBindingName()
+	ns.OnLanguage(wheel.RefreshBindingName)
 
 	-- Down: up round the cursor (or, already up, away). Up: does the slot the
 	-- cursor points at; let go in the middle, it stays up to click one.
@@ -897,34 +901,68 @@ if CinematicWorldMarkerWheel then
 	MASTER_CHOICES[#MASTER_CHOICES + 1] = { key = "world", icon = ICON .. 6, color = COLORS[6],
 		label = "Ground marker wheel", opens = CinematicWorldMarkerWheel }
 end
-local masterByKey = {}
-for _, choice in ipairs(MASTER_CHOICES) do
-	masterByKey[choice.key] = choice
-end
 ns.MASTER_WHEEL_CHOICES = MASTER_CHOICES
+
+-- Every wheel the master wheel can have: the built-in ones, then the
+-- player's own (CustomWheels.lua; off it until ticked: offByDefault).
+local function AllChoices()
+	local list = {}
+	for _, choice in ipairs(MASTER_CHOICES) do
+		list[#list + 1] = choice
+	end
+	for _, choice in ipairs(ns.CustomWheelChoices and ns.CustomWheelChoices() or {}) do
+		list[#list + 1] = choice
+	end
+	return list
+end
 
 -- The master wheel's wheels as the player has them (for the account, not a
 -- profile: db.masterWheelOrder, the keys in their order, and
 -- db.masterWheelOff, the ones taken off it): each choice in order, with
 -- whether it's on. A wheel the saved order doesn't name (one new since) goes
--- at the end, on.
+-- at the end, on (a wheel of the player's own: off).
 function ns.MasterWheelOrder()
 	local db = ns.db or {}
 	local off = type(db.masterWheelOff) == "table" and db.masterWheelOff or {}
+	local choices, byKey = AllChoices(), {}
+	for _, choice in ipairs(choices) do
+		byKey[choice.key] = choice
+	end
 	local list, seen = {}, {}
 	for _, key in ipairs(type(db.masterWheelOrder) == "table" and db.masterWheelOrder or {}) do
-		local choice = masterByKey[key]
+		local choice = byKey[key]
 		if choice and not seen[key] then
 			seen[key] = true
 			list[#list + 1] = { choice = choice, on = not off[key] }
 		end
 	end
-	for _, choice in ipairs(MASTER_CHOICES) do
+	for _, choice in ipairs(choices) do
 		if not seen[choice.key] then
-			list[#list + 1] = { choice = choice, on = not off[choice.key] }
+			list[#list + 1] = { choice = choice, on = not off[choice.key] and not choice.offByDefault }
 		end
 	end
 	return list
+end
+
+-- Takes a wheel that's gone (one of the player's own) out of the saved order.
+function ns.ForgetMasterWheel(key)
+	local db = ns.db
+	if not db then
+		return
+	end
+	if type(db.masterWheelOrder) == "table" then
+		for i = #db.masterWheelOrder, 1, -1 do
+			if db.masterWheelOrder[i] == key then
+				table.remove(db.masterWheelOrder, i)
+			end
+		end
+	end
+	if type(db.masterWheelOff) == "table" then
+		db.masterWheelOff[key] = nil
+		if not next(db.masterWheelOff) then
+			db.masterWheelOff = nil
+		end
+	end
 end
 
 local function MasterSlots()
@@ -980,6 +1018,7 @@ function ns.SetMasterWheelOrder(list)
 		end
 		db.masterWheelOrder, db.masterWheelOff = order, next(off) and off or nil
 	else
+		-- (The player's own wheels stay off it.)
 		db.masterWheelOrder, db.masterWheelOff = nil, nil
 	end
 	ns.RebuildMasterWheel()
@@ -992,21 +1031,26 @@ ns.markerWheels = { master = masterWheel, marker = markerWheel, vision = visionW
 CinematicMenuWheel:SetAttribute("_onattributechanged", OPEN_SNIPPET)
 
 -- (Each secure wheel can put the others away, in a fight too: the menu
--- wheel's snippet reads the same refs.)
-local secure = { CinematicMenuWheel }
-for _, wheel in ipairs(wheels) do
-	secure[#secure + 1] = wheel
-end
-for _, wheel in ipairs(secure) do
-	local others = 0
-	for _, other in ipairs(secure) do
-		if other ~= wheel then
-			others = others + 1
-			wheel:SetFrameRef("other" .. others, other)
-		end
+-- wheel's snippet reads the same refs. Run again once more wheels are made:
+-- CustomWheels.lua's.)
+function ns.LinkSecureWheels()
+	local secure = { CinematicMenuWheel }
+	for _, wheel in ipairs(wheels) do
+		secure[#secure + 1] = wheel
 	end
-	wheel:SetAttribute("others", others)
+	for _, wheel in ipairs(secure) do
+		local others = 0
+		for _, other in ipairs(secure) do
+			if other ~= wheel then
+				others = others + 1
+				wheel:SetFrameRef("other" .. others, other)
+			end
+		end
+		wheel:SetAttribute("others", others)
+	end
 end
+ns.LinkSecureWheels()
+ns.MakeWheel = MakeWheel -- (CustomWheels.lua: the player's own)
 
 -- Scaled like the UI (they aren't in UIParent) out of a fight; and the
 -- marker wheel back to the target as a fight starts (just before the

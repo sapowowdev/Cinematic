@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-26", page = "Your wheels", title = "Your own wheels",
+		text = "Make up to 8 wheels of your own on the Wheels page: each icon runs a command you type, like " ..
+		"/rw or /readycheck, in a fight too. Give each one a key or put it on the master wheel." },
 	{ date = "2026-10-26", page = "Master wheel", title = "Wheels page",
 		text = "A new Wheels page shows every wheel and its icons, with its keybind right there, and lets you " ..
 		"pick which wheels sit on the master wheel and in what order." },
