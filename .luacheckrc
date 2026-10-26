@@ -54,6 +54,7 @@ read_globals = {
 	"C_SpellActivationOverlay",
 	"C_CVar",
 	"C_ChatBubbles",
+	"C_TalkingHead",
 	"C_GamePad",
 	"C_EditMode",
 	"GetActionBarToggles",

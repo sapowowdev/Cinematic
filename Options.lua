@@ -2041,6 +2041,14 @@ local function LayoutCameraSections()
 		-- (on its own: it can't close, and the hub's Reset page resets it)
 		section.icon:SetShown(not focus)
 		section.reset:SetShown(not focus)
+		if section.test then
+			section.test:ClearAllPoints()
+			if focus then
+				section.test:SetPoint("RIGHT", section.reset:GetParent(), "RIGHT", -6, 0)
+			else
+				section.test:SetPoint("RIGHT", section.reset, "LEFT", -6, 0)
+			end
+		end
 	end
 	if cameraSettingsContent then
 		FitContentHeight(cameraSettingsContent)
@@ -2116,6 +2124,40 @@ local function CameraSection(name, key)
 	reset:SetScript("OnClick", function()
 		StaticPopup_Show("CINEMATIC_RESET_SECTION", nil, nil, body)
 	end)
+
+	-- Test: runs the camera for a while (CameraTests.lua), Stop with the
+	-- seconds left meanwhile. (Placed by LayoutCameraSections: left of Reset, or
+	-- at the row's end in the Camera hub, where Reset is the hub's own.)
+	local testKey
+	for k in pairs(ns.CAMERA_TESTS or {}) do
+		if k == key or L[k] == key then testKey = k end
+	end
+	if testKey then
+		local test = ns.PanelButton(header)
+		test:SetSize(90, 20)
+		test:SetPoint("RIGHT", reset, "LEFT", -6, 0)
+		test:SetText(L["Test"])
+		test.searchSkip = true
+		Tooltip(test, ns.CAMERA_TESTS[testKey].tip and L[ns.CAMERA_TESTS[testKey].tip]
+			or L["Runs this camera for 30 seconds where you stand, to see your settings at work. " ..
+			"Moving, or clicking Stop, ends it."])
+		test:SetScript("OnClick", function()
+			if ns.CameraTestLeft(testKey) then
+				ns.CameraTestStop()
+			else
+				ns.CameraTestStart(testKey)
+			end
+		end)
+		local wait = 0
+		test:SetScript("OnUpdate", function(self, elapsed)
+			wait = wait - elapsed
+			if wait > 0 then return end
+			wait = 0.2
+			local left = ns.CameraTestLeft(testKey)
+			self:SetText(left and L["Stop (%d)"]:format(math.ceil(left)) or L["Test"])
+		end)
+		section.test = test
+	end
 
 	-- (Search: a setting found in here opens the section first, or in the
 	-- Camera hub picks its icon.)
@@ -2283,6 +2325,10 @@ local DEATH_CAMERAS = {
 }
 local QUEST_CAMERAS = {
 	{ value = "quest", text = L["Quest camera"] },
+	{ value = "none", text = L["No camera"] },
+}
+local CHAT_CAMERAS = {
+	{ value = "chat", text = L["Chat camera"] },
 	{ value = "none", text = L["No camera"] },
 }
 local TELE_CAMERAS = {
@@ -2463,7 +2509,7 @@ local function CreateEventsPanel()
 	-- Auto-walking, auto-running and dying: their cameras, or none (off: the
 	-- "No camera" value), and Music. (Dying's is the death song, which needs
 	-- only game music.)
-	for _, cam in ipairs({
+	local rows = {
 		{ label = L["Auto-walk (RP walk)"], cameraKey = "walkCamera", choices = WALK_CAMERAS, off = "none",
 			key = "musicCamWalk", cineKey = "walkCine", delayKey = "walkCameraDelay",
 			delayLabel = L["After auto-walking for"],
@@ -2481,7 +2527,15 @@ local function CreateEventsPanel()
 			musicTip = L["A song of its own plays while the death camera runs, in place of the zone music " ..
 				"(pick the songs under Death Cam on the Camera Settings page). With CineMode music off, " ..
 				"only if your game music is on."] },
-	}) do
+	}
+	if ns.ChatCamCommand then -- (ChatCam.lua: the dev copy only; no music or CineMode switch yet)
+		table.insert(rows, 1, { label = L["NPCs talking"], cameraKey = "chatCamera", choices = CHAT_CAMERAS,
+			off = "none", tip = L["NPCs talking near you (their chat bubbles). The camera zooms in and " ..
+				"swings toward whoever's talking, drifting while they go on, and turns back once no one's " ..
+				"talked for a while. Moving hands the camera straight back to you. Its settings are " ..
+				"under Chat Cam on the Camera Settings page."] })
+	end
+	for _, cam in ipairs(rows) do
 		local label = Label(content, "GameFontHighlight", cam.label)
 		label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", dx, -20)
 		label:SetWidth(CAMERA_X - 10)
@@ -2492,11 +2546,13 @@ local function CreateEventsPanel()
 		Tooltip(hover, cam.tip)
 		local camera = CameraChoice(cam.cameraKey, cam.choices)
 		camera:SetPoint("LEFT", label, "LEFT", CAMERA_X, 0)
-		local music = Check(content, cam.key, "", cam.musicTip or MUSIC_TIP)
-		music:SetPoint("LEFT", label, "LEFT", MUSIC_X + 8, 0)
-		GreyUnless(music, function(db)
-			return (cam.deathSong or db.musicInCinematic) and db[cam.cameraKey] ~= cam.off
-		end)
+		if cam.key then
+			local music = Check(content, cam.key, "", cam.musicTip or MUSIC_TIP)
+			music:SetPoint("LEFT", label, "LEFT", MUSIC_X + 8, 0)
+			GreyUnless(music, function(db)
+				return (cam.deathSong or db.musicInCinematic) and db[cam.cameraKey] ~= cam.off
+			end)
+		end
 		if cam.cineKey then
 			CineCheck(cam.cineKey, label, function(db) return db[cam.cameraKey] ~= cam.off end)
 		end
@@ -2822,6 +2878,72 @@ local function CreateDeathPanel()
 	rightStack:Note(content, L["Music file IDs, separated by commas. One is picked at random."])
 end
 
+-- Chat Cam (ChatCam.lua: the dev copy only), started by NPCs talking; laid
+-- out as the Quest Cam's below.
+local function CreateChatCamPanel()
+	local content, top, title = CameraSection(L["Chat Cam"], "Chat Cam")
+	local subtitle = PageIntro(content, title, L["As NPCs talk near you, the camera zooms in and " ..
+		"swings toward whoever's talking (by their chat bubble), drifting slowly while they go on. It " ..
+		"swings again only when someone else speaks, and turns back and zooms out once no one's " ..
+		"talked for a while. Moving, or moving the camera yourself, hands it straight back to you."], top)
+	local function IfOn(db) return db.chatCamera ~= "none" end
+
+	local stack = Stack(subtitle, "label")
+	stack:Header(content, L["Starting"])
+	local on = stack:Add(Check(content, "chatCamera", L["Use the chat camera"],
+		L["Same as setting the \"NPCs talking\" event to the chat camera (on) or no camera (off) " ..
+		"on the Camera Triggers page."],
+		function(value)
+			ns.GetDB().chatCamera = value and "chat" or "none"
+			Refresh()
+		end), "check")
+	on.Refresh = function(self) self:SetChecked(ns.GetDB().chatCamera ~= "none") end
+	local hideWorld = stack:Add(Check(content, "chatCamHideWorld", L["Hide names, nameplates and the target circle"],
+		L["While a conversation has the camera, names over heads, nameplates and the circle under your " ..
+		"target fade away, in or out of CineMode, and come back once it's over. (Nameplates only with " ..
+		"the Nameplates page on.)"]), "check")
+	GreyUnless(hideWorld, IfOn)
+
+	local rotationHeader = stack:Header(content, L["Rotation"])
+	local speed = stack:Add(Slider(content, "chatCamSwingSpeed", L["Swing speed"], 5, 40, 1, L["%d°/sec"]), "slider")
+	Tooltip(speed, L["The fastest the camera swings toward a new speaker. Each swing speeds up and " ..
+		"slows down gently, as the flight camera's fly-bys do, so a short one never gets this fast " ..
+		"and takes a few seconds."])
+	GreyUnless(speed, IfOn)
+	local frame = stack:Add(Slider(content, "chatCamFrame", L["Leave the speaker off center"], 0, 20, 1, "%d°"), "slider")
+	Tooltip(frame, L["The swing stops with the speaker this far from the middle of the screen, on " ..
+		"their side, so you stay in the shot beside them. 0 aims right at them (you may block the view)."])
+	GreyUnless(frame, IfOn)
+	local drift = stack:Add(Slider(content, "chatCamDrift", L["Drift"], 0, 10, 1, "%d°"), "slider")
+	Tooltip(drift, L["Once the camera has settled on a speaker, it drifts slowly to and fro, side " ..
+		"to side, across this many degrees, so the shot isn't stock-still. 0 holds still."])
+	GreyUnless(drift, IfOn)
+	stack:Header(content, L["Ending"])
+	local quiet = stack:Add(Slider(content, "chatCamQuiet", L["Over after no one talks for"], 3, 30, 1, L["%d sec"]), "slider")
+	Tooltip(quiet, L["With no one talking for this long, the camera turns back and zooms back out. " ..
+		"Moving ends it at once, leaving the camera where it is."])
+	GreyUnless(quiet, IfOn)
+
+	-- Right column: zoom
+	local zoomHeader = Label(content, "GameFontNormal", L["Zoom"])
+	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
+	local right = Stack(zoomHeader)
+	local distance = right:Add(Slider(content, "chatCamDistance", L["Zoom in to about"], 1.5, 10, 0.5, L["%.1f yards"]), "slider")
+	Tooltip(distance, L["If you're further out than this. Closer already, it stays where it is."])
+	GreyUnless(distance, IfOn)
+	local zoomSpeed = right:Add(Slider(content, "chatCamZoomSpeed", L["Zoom in speed"], 0.25, 10, 0.25, L["%.2f yards/sec"]), "slider")
+	Tooltip(zoomSpeed, L["The first swing waits for the zoom in to finish."])
+	GreyUnless(zoomSpeed, IfOn)
+	local zoomOutSpeed = right:Add(Slider(content, "chatCamZoomOutSpeed", L["Zoom back out speed"], 0, 10, 0.25, L["%.2f yards/sec"]), "slider")
+	Tooltip(zoomOutSpeed, L["Once the conversation's over, the camera zooms back out to your own " ..
+		"distance at this speed (not if you zoomed yourself meanwhile). At 0 it stays in."])
+	GreyUnless(zoomOutSpeed, IfOn)
+	local zoomMax = right:Add(Slider(content, "chatCamZoomMaxTime", L["Zoom takes at most"], 2, 30, 1, L["%d sec"]), "slider")
+	Tooltip(zoomMax, L["From far out, the zoom in or back out speeds up so it's done in this long. " ..
+		"A short zoom still goes at the speeds above."])
+	GreyUnless(zoomMax, IfOn)
+end
+
 -- Not a CreateCameraModePanel page either (QuestCam.lua, started by the quest
 -- giver event), but laid out the same way.
 local QUEST_SIDES = {
@@ -2940,6 +3062,10 @@ local function CreateQuestPanel()
 		"10 yards from where you started talking (talk to another quest giver and it counts from there), " ..
 		"then zooms back out to your own distance at this speed, in a few seconds at most. At 0 it stays in."])
 	GreyUnless(zoomOutSpeed, IfOn)
+	local zoomMax = right:Add(Slider(content, "questCamZoomMaxTime", L["Zoom takes at most"], 2, 30, 1, L["%d sec"]), "slider")
+	Tooltip(zoomMax, L["From far out, the zoom in or back out speeds up so it's done in this long. " ..
+		"A short zoom still goes at the speeds above."])
+	GreyUnless(zoomMax, IfOn)
 end
 
 local function CreateTelePanel()
@@ -3043,6 +3169,9 @@ local function CreateCameraSettingsPanel()
 	CreateAutoRunPanel()
 	CreateDeathPanel()
 	CreateQuestPanel()
+	if ns.ChatCamCommand then -- (ChatCam.lua: the dev copy only)
+		CreateChatCamPanel()
+	end
 
 	canvas:SetScript("OnShow", function()
 		Refresh()
@@ -3065,6 +3194,7 @@ local function CreateCameraSettingsPanel()
 		["Auto-run Cam"] = "Interface\\Icons\\Ability_Rogue_Sprint",
 		["Death Cam"] = "Interface\\Icons\\INV_Misc_Bone_HumanSkull_01",
 		["Quest Cam"] = "Interface\\Icons\\INV_Misc_Book_08",
+		["Chat Cam"] = "Interface\\Icons\\Ability_Warrior_BattleShout",
 	}
 	canvas.hubTabs = {}
 	for _, section in ipairs(cameraSections) do
@@ -8773,6 +8903,12 @@ local KEYBINDS = {
 	{ action = "CINEMATIC_TOGGLETOOLTIPS", label = L["Toggle tooltip hiding"],
 		tip = L["Turns the Tooltips page on or off (its Enable page switch)."] },
 }
+if ns.ChatCamCommand then -- (ChatCam.lua: the dev copy only, so here rather than in Bindings.xml)
+	KEYBINDS[#KEYBINDS + 1] = { action = "CLICK CinematicChatTargetButton:LeftButton",
+		label = L["Target the last speaker"], section = L["Chat Cam"],
+		tip = L["Targets the last NPC who spoke near you (your character turns their head to them). " ..
+			"Addons can't target on their own: the game only lets a key press do it. Out of fights."] }
+end
 
 local IGNORED_KEYS = {
 	LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true,

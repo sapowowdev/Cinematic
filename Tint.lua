@@ -442,7 +442,7 @@ local function SameColor(a, b)
 end
 
 local function InTheAir()
-	return UnitOnTaxi("player") or (IsFlying and IsFlying()) or false
+	return ns.OnTaxi() or (IsFlying and IsFlying()) or false
 end
 
 -- Moves the shown zone colour and strength toward the zone's: a new mood

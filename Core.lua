@@ -329,6 +329,7 @@ local DEFAULTS = {
 	questCamTime = 3,         -- ...seconds the swing behind you takes
 	questCamZoomSpeed = 0.5,  -- ...yards a second the zoom in goes
 	questCamZoomOutSpeed = 0.5, -- ...yards a second the zoom back out goes, leaving (walking off: quicker; 0: stays in)
+	questCamZoomMaxTime = 8,  -- ...seconds the zoom in or back out takes at most (from far out: quicker than its speed)
 	questCamAngle = 30,       -- ...degrees the camera comes round to one side of behind you (0: straight behind)
 	questCamSide = "click",   -- ...the side of the screen you clicked them on (else at random), or "random", "left" or "right"
 	questCamTurnTime = 4,     -- ...seconds that turn takes (once the zoom's done)
@@ -1076,6 +1077,12 @@ local MENU_WINDOWS = {
 	"VideoOptionsFrame", "BarberShopFrame",
 }
 for _, name in ipairs(REVEAL_WHILE_SHOWN) do MENU_WINDOWS[#MENU_WINDOWS + 1] = name end
+-- On a flight path, or a flight camera test pretending to be (CameraTests.lua:
+-- the game's UnitOnTaxi everywhere else).
+function ns.OnTaxi()
+	return ns.testTravel == "flight" or UnitOnTaxi("player")
+end
+
 function ns.MenuWindowOpen()
 	return AnyShown(MENU_WINDOWS)
 end
@@ -1154,7 +1161,7 @@ targetWatcher:RegisterEvent("PLAYER_TARGET_CHANGED")
 targetWatcher:SetScript("OnEvent", function() targetDropped = false end)
 
 local function UpdateDroppedTarget()
-	local onTaxi = UnitOnTaxi("player")
+	local onTaxi = ns.OnTaxi()
 	if onTaxi ~= wasOnTaxiForTarget then
 		wasOnTaxiForTarget = onTaxi
 		targetDropped = onTaxi and ns.db.dropTargetOnFlights
@@ -1197,7 +1204,7 @@ end
 -- an auto-run or RP walk (say, pressing forward) without stopping.
 local movingOffSince
 local function MovingFor()
-	if not ns.db.offWhileMoving or not ns.playerMoving or UnitOnTaxi("player")
+	if not ns.db.offWhileMoving or not ns.playerMoving or ns.OnTaxi()
 		or (ns.IsAutoRunning and ns.IsAutoRunning()) or (ns.IsRPWalking and ns.IsRPWalking()) then
 		movingOffSince = nil
 		return nil
@@ -1287,7 +1294,7 @@ end
 -- are checked first because Dalaran is an instance. A flight leaving a city or
 -- inn doesn't count as being there.
 function ns.GetPlaceType()
-	local onTaxi = UnitOnTaxi("player")
+	local onTaxi = ns.OnTaxi()
 	if ns.IsInCity() then
 		return not onTaxi and "city" or nil
 	end
@@ -1322,7 +1329,7 @@ function ns.GetOptionPlace()
 	if place == "pvp" or place == "dungeon" or place == "raid" then
 		return place
 	end
-	if IsPvPFlagged() and not UnitOnTaxi("player") then
+	if IsPvPFlagged() and not ns.OnTaxi() then
 		return "pvp"
 	end
 	return place ~= "inn" and place or nil
@@ -1404,7 +1411,7 @@ function ns.IsCameraOffHere(cam)
 		end
 	end
 	local place
-	if cam == "flight" and UnitOnTaxi("player") then
+	if cam == "flight" and ns.OnTaxi() then
 		place = db.takeoffInCity and "Cities" or "World"
 	else
 		place = CAMERA_OFF_PLACE[ns.GetPlaceType()] or "World"
@@ -1431,7 +1438,7 @@ local function IsInDisabledZone()
 	local place = ns.GetOptionPlace()
 	if place == nil then
 		-- The open world (inns too). Flights still go cinematic, as they do leaving a city.
-		return ns.db.offInWorld and not UnitOnTaxi("player") and not IsInInstance() or false
+		return ns.db.offInWorld and not ns.OnTaxi() and not IsInInstance() or false
 	end
 	return ns.db[OFF_IN[place]] or false
 end
@@ -2113,7 +2120,7 @@ function Cinematic_StartCam(camera, quiet)
 		Print(L["Cinematic is off: turn it on first"])
 		return
 	end
-	if ns.playerMoving or UnitOnTaxi("player") then
+	if ns.playerMoving or ns.OnTaxi() then
 		Print(L["stand still to start the %s"]:format(L[CAM_NAMES[camera]]))
 		return
 	end
@@ -2251,7 +2258,7 @@ local FLIGHT_HOLD = { mouseoverHold = 0 }
 
 -- Flying, RP walking, or standing still past the standing-still delay.
 local function InCameraMode()
-	if UnitOnTaxi("player") then
+	if ns.OnTaxi() then
 		return true
 	end
 	if (ns.IsRPWalking and ns.IsRPWalking()) or (ns.IsAutoRunning and ns.IsAutoRunning()) then
@@ -2266,7 +2273,7 @@ ns.InCameraMode = function() return InCameraMode() end
 -- Which camera mode you're in: "flight", "walk", "run", "vista", "fish", "cozy", "idle", or nil.
 -- (Not one turned off where you are; see ns.IsCameraOffHere.)
 function ns.CameraMode()
-	if UnitOnTaxi("player") then
+	if ns.OnTaxi() then
 		return "flight"
 	elseif ns.IsRPWalking and ns.IsRPWalking() then
 		return not ns.IsCameraOffHere("walk") and "walk" or nil
@@ -4049,7 +4056,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		ns.musicBackOn = nil
 		ns.RestoreMusicVolume()
 		ns.PruneBuiltInExtras()
-		ns.wasOnTaxi = UnitOnTaxi("player") -- don't re-center after a /reload mid-flight
+		ns.wasOnTaxi = ns.OnTaxi() -- don't re-center after a /reload mid-flight
 		ns.RegisterChatPeek()
 		ns.HookCameraInput()
 		-- Walk mode: there's no "am I walking" API, so the walk/run toggle is
@@ -4059,6 +4066,9 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		-- RP walking: auto-walking (auto-run in walk mode). Walking by hand
 		-- cancels the camera modes like any other movement (ns.MovingManually).
 		ns.IsRPWalking = function()
+			if ns.testTravel then
+				return ns.testTravel == "walk" -- (a camera test pretending: CameraTests.lua)
+			end
 			if not ns.playerMoving then
 				return false
 			end
@@ -4102,7 +4112,10 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			return ns.playerMoving and AnyMovementKey()
 		end
 		ns.IsAutoRunning = function()
-			if not ns.playerMoving or UnitOnTaxi("player") or AnyMovementKey() then
+			if ns.testTravel then
+				return ns.testTravel == "run"
+			end
+			if not ns.playerMoving or ns.OnTaxi() or AnyMovementKey() then
 				return false
 			end
 			-- (Not while flying on retail: a skyriding glide carries you on with
@@ -4166,7 +4179,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		-- /reload already on the move, check your speed instead.
 		local function CheckMoving()
 			local speed = ns.GetPlayerSpeed()
-			if speed and speed > 0 and not UnitOnTaxi("player") and not ns.playerMoving then
+			if speed and speed > 0 and not ns.OnTaxi() and not ns.playerMoving then
 				ns.playerMoving = true
 				ns.movingSince = GetTime() - 5 -- (long enough to count as auto-run if no key's held)
 			end

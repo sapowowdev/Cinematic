@@ -3078,7 +3078,7 @@ do
 		-- "Only after combat").
 		local inFight = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 			or GetTime() - lastCombatAt < COMBAT_END_AURA_GRACE
-		local fightPeeks = inFight and not ns.db.debuffPeekAfterCombat and not UnitOnTaxi("player")
+		local fightPeeks = inFight and not ns.db.debuffPeekAfterCombat and not ns.OnTaxi()
 		-- (No count, as on retail in a fight: the game's debuff icons, kept
 		-- counted out of fights too, to compare with.)
 		if PeekAllowed(true) then
@@ -3091,7 +3091,7 @@ do
 			return
 		end
 		-- (wasOnTaxi: landed this instant, before the flight code has noticed.)
-		if UnitOnTaxi("player") or ns.wasOnTaxi or GetTime() < landedQuietUntil then
+		if ns.OnTaxi() or ns.wasOnTaxi or GetTime() < landedQuietUntil then
 			return
 		end
 		local hold
@@ -5411,7 +5411,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 			math.max(0, buffPeekUntil - now), math.max(0, ns.debuffPeekUntil - now)))
 	end
 	-- (Not on flight paths, Minimap page: no pings, reveals or tracking bring it up then.)
-	local taxiHidesMinimap = minimapPage and ns.db.minimapHideOnTaxi and ns.Flag(UnitOnTaxi("player"))
+	local taxiHidesMinimap = minimapPage and ns.db.minimapHideOnTaxi and ns.Flag(ns.OnTaxi())
 	events.ping = minimapPage and pingReveal and not taxiHidesMinimap
 	-- (Keep open and Reveal, Minimap page: "Except in" is for gathering tracking only.)
 	events.tracking = minimapPage and not taxiHidesMinimap and ((keepForGathering and not trackingPaused) or keepForCreatures

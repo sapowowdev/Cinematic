@@ -54,6 +54,7 @@ Chat.lua
 ChatCopy.lua
 Bubbles.lua
 Speech.lua
+SpeakerWatch.lua
 Campfire.lua
 HunterAmmo.lua
 DragEquip.lua
@@ -76,6 +77,7 @@ PlateParts.lua
 PlateGuild.lua
 Camera.lua
 QuestCam.lua
+CameraTests.lua
 Tint.lua
 LowHealthArt.lua
 LowHealthThemes.lua

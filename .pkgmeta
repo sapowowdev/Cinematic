@@ -14,3 +14,5 @@ ignore:
   - Textures/WindGuide
   # (Grid Demo: the grids done with dropdowns and rules, in the dev copy only)
   - GridDemo.lua
+  # (Chat Cam: a prototype, in the dev copy only)
+  - ChatCam.lua

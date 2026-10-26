@@ -125,6 +125,7 @@ local function PrintDebugHelp()
 	print("  /cine debug damage [seconds] - whether damage taken reaches addons: hit event, damage meter (15 seconds)")
 	print("  /cine debug slots [all] - profile slots and parts: anything with no slot or in the wrong one (in the log; all: also how each shared list is split)")
 	print("  /cine debug speech - show a sample line of speech from behind you, and print what happens to each say and yell (again to stop)")
+	print("  /cine debug speakers - log where each speaking NPC's bubble and plate are on screen, and the angle off the middle (again to stop, /reload to save)")
 	print("  /cine debug layoutexport - save the Edit Mode layout you're on as an export string (in the saved settings: /reload after)")
 	print("  /cine debug cvars - graphics CVars: which exist here; run, move the Graphics sliders, run again to log what the menu changed")
 	print("  /cine debug cvars <words> - log every CVar whose name has any of the words in it, with its value and default")
@@ -338,6 +339,11 @@ local function HandleSlash(msg)
 		if ns.speechWatch and ns.ShowSpeechBehind then
 			ns.ShowSpeechBehind("CHAT_MSG_SAY", "Cinematic", "This is how speech from behind you looks.")
 		end
+	elseif cmd == "chatcam" and ns.ChatCamCommand then -- (ChatCam.lua: the dev copy only)
+		ns.ChatCamCommand(arg)
+	elseif cmd == "debug" and arg == "speakers" then
+		ns.Print("log where speaking NPCs' bubbles and plates are on screen: " .. OnOff(ns.ToggleSpeakerWatch())
+			.. " (/reload afterwards to save the log)")
 	elseif cmd == "debug" and arg == "alpha" then
 		ns.alphaWatch = not ns.alphaWatch
 		ns.Print("print frames setting their own alpha: " .. OnOff(ns.alphaWatch) .. " (until you /reload)")

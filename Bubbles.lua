@@ -152,6 +152,7 @@ local function SaysText(frame, text)
 	end
 	return false
 end
+ns.BubbleSays = SaysText -- (/cine debug speakers)
 
 function ns.IsBubbleOnScreen(text)
 	if not (C_ChatBubbles and C_ChatBubbles.GetAllChatBubbles) then

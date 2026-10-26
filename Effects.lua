@@ -274,6 +274,13 @@ end
 
 local lastCinematic = false
 
+-- Chat Cam (ChatCam.lua, the dev copy) hiding names, plates and the target
+-- circle while a conversation has the camera (chatCamHideWorld), in or out
+-- of CineMode.
+local function ChatCamHides()
+	return (ns.ChatCamHidesWorld and ns.ChatCamHidesWorld()) or false
+end
+
 -- fightStarting: called as a fight starts, just before combat lockdown.
 function ns.UpdateCVars(cinematic, fightStarting)
 	lastCinematic = cinematic
@@ -281,12 +288,12 @@ function ns.UpdateCVars(cinematic, fightStarting)
 	for _, set in ipairs(CVAR_SETS) do
 		-- (Nameplates page's master switch off: names are left to the game.)
 		local want = cinematic and ns.db.handlePlates and not NameKeptHere(set.key, inCombat)
-		ns.ApplyCVarSet(set, want or false)
+		ns.ApplyCVarSet(set, want or ChatCamHides() or false)
 	end
 	-- (Kept through the Calm Timer after a fight, like the plates.)
 	local fighting = inCombat or (ns.FightLingering and ns.FightLingering())
 	ns.ApplyCVarSet(COMBAT_TEXT_CVARS, (cinematic and ns.db.hideCombatText and not fighting) or false)
-	ns.ApplyCVarSet(TARGET_CIRCLE_CVARS, (cinematic and ns.db.hideTargetCircle and not fighting) or false)
+	ns.ApplyCVarSet(TARGET_CIRCLE_CVARS, (cinematic and ns.db.hideTargetCircle and not fighting) or ChatCamHides())
 	-- The red error text ("Target not in line of sight"): its own In combat
 	-- and Out of combat boxes, CineMode or not (the addon off: always shown).
 	if UIErrorsFrame then
@@ -1608,7 +1615,7 @@ do
 			return "in combat"
 		elseif GetTime() < duels.selfUntil then
 			return "dueling yourself"
-		elseif Ask(UnitOnTaxi, "player") then
+		elseif Ask(ns.OnTaxi) then
 			return "on a flight"
 		elseif NO_DUEL_PLACES[ns.GetPlaceType() or ""] then
 			return "no duels here (" .. ns.GetPlaceType() .. ")"
@@ -2321,7 +2328,8 @@ local function PlateAlphas(unit, plate)
 	if alpha <= 0 then
 		return 0, 1, 0, 0
 	end
-	return alpha, body / alpha, name / alpha, mark / alpha
+	-- (Chat Cam holding every plate down: see UpdatePlates.)
+	return alpha * (1 - (ns.plates.hold or 0)), body / alpha, name / alpha, mark / alpha
 end
 
 -- (For /cine debug names: why a plate's name is kept or not.)
@@ -3085,6 +3093,14 @@ function ns.UpdatePlates(cinematic, elapsed)
 	local target = hide and 0 or 1
 	local changed = UpdateTargetFade(elapsed)
 	changed = duels.Update(elapsed) or changed
+	-- Chat Cam hiding every plate meanwhile (see PlateAlphas): ns.plates.hold
+	-- fades from 0 (as usual) to 1 (all hidden).
+	local holdTarget = ChatCamHides() and 1 or 0
+	if (ns.plates.hold or 0) ~= holdTarget then
+		ns.plates.hold = ns.Approach(ns.plates.hold or 0, holdTarget, elapsed,
+			holdTarget > 0 and ns.FadeOutTime() or ns.FadeInTime())
+		changed = true
+	end
 	changed = ns.plates.level ~= target or changed
 	if changed then
 		local duration = target > ns.plates.level and ns.FadeInTime() or ns.FadeOutTime()
@@ -3598,7 +3614,7 @@ end
 
 local function ViewMoved(note)
 	local ok, speed = pcall(GetUnitSpeed, "player")
-	if (ok and Readable(speed) and speed > 0) or UnitOnTaxi("player") or IsMouselooking()
+	if (ok and Readable(speed) and speed > 0) or ns.OnTaxi() or IsMouselooking()
 		or (ns.yawAxis and ns.yawAxis.moving) or (ns.pitchAxis and ns.pitchAxis.moving) then
 		return true
 	end

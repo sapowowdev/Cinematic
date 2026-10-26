@@ -60,7 +60,7 @@ local function CanStart(camera)
 	if camera.key == "death" then
 		return db.deathOrbit and not ns.playerMoving
 	end
-	if not db.enabled or ns.playerMoving or ns.Flag(UnitOnTaxi("player")) then
+	if not db.enabled or ns.playerMoving or ns.Flag(ns.OnTaxi()) then
 		return false
 	end
 	return camera.key ~= "idle" or db.idleOrbit

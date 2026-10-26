@@ -440,7 +440,7 @@ local function Wanted(now)
 	if db.windGuideNotInFights and (InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))) then
 		return false
 	end
-	return not (ns.Flag(UnitOnTaxi("player")) or ns.Flag(UnitIsDeadOrGhost("player")))
+	return not (ns.Flag(ns.OnTaxi()) or ns.Flag(UnitIsDeadOrGhost("player")))
 end
 
 local function Update(_, elapsed)
