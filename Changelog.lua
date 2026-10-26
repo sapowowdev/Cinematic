@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-26", page = "Your wheels", title = "Share wheels",
+		text = "Share a wheel of yours as a line of text and import one from a friend, reading every command " ..
+		"first. Icons now come from every icon the game has, like the macro window's, and you can add icons " ..
+		"of your own to the marker and vision wheels." },
 	{ date = "2026-10-26", page = "Your wheels", title = "Your own wheels",
 		text = "Make up to 8 wheels of your own on the Wheels page: each icon runs a command you type, like " ..
 		"/rw or /readycheck, in a fight too. Give each one a key or put it on the master wheel." },

@@ -2341,7 +2341,29 @@ L["What picking it does: a slash command, such as /rw Pull in 10, or several, a 
 L["Runs its command now, as picking it on the wheel would."] = "Ejecuta su orden ahora, como al elegirlo en la rueda."
 L["Takes this icon off the wheel."] = "Quita este icono de la rueda."
 L["Add an icon"] = "Añadir un icono"
-L["Adds an icon to the wheel, for a command of its own (up to 12)."] = "Añade un icono a la rueda, con su propia orden (hasta 12)."
+L["Adds an icon to the wheel, for a command of its own."] = "Añade un icono a la rueda, con su propia orden."
+L["Or find one:"] = "O busca uno:"
+L["Picked now"] = "Elegido ahora"
+L["Type a spell or item you know (its name or ID), or an icon's file name such as INV_Misc_Bag_07, and press Enter."] = "Escribe un hechizo o un objeto que conozcas (su nombre o ID), o el nombre de archivo de un icono como INV_Misc_Bag_07, y pulsa Intro."
+L["None found"] = "No se encontró ninguno"
+L["Add wheel"] = "Añadir rueda"
+L["This wheel is from a newer Cinematic: update it to add this one."] = "Esta rueda es de un Cinematic más reciente: actualízalo para añadirla."
+L["That's a profile, not a wheel: import it on the Profiles page."] = "Eso es un perfil, no una rueda: impórtalo en la página Perfiles."
+L["That isn't a whole wheel: copy it again, all of it."] = "Eso no es una rueda completa: vuelve a copiarla, entera."
+L["Read every command before you add it: each runs as if you'd typed it, and /run ones can do anything an addon can."] = "Lee cada orden antes de añadirla: cada una se ejecuta como si la hubieras escrito tú, y las de /run pueden hacer todo lo que puede un accesorio."
+L["from %s"] = "de %s"
+L["(no name)"] = "(sin nombre)"
+L["(no command)"] = "(sin orden)"
+L["Share %s"] = "Compartir %s"
+L["Press Ctrl+C to copy this, then paste it wherever your friends will see it. They add it with Import a wheel on their Your wheels page."] = "Pulsa Ctrl+C para copiar esto y pégalo donde lo vean tus amigos. Lo añaden con Importar una rueda en su página Tus ruedas."
+L["Import a wheel"] = "Importar una rueda"
+L["Paste in a wheel someone shared (Ctrl+V), read what's on it below, and Add wheel. It's added as a new wheel of yours."] = "Pega una rueda que alguien compartió (Ctrl+V), lee lo que lleva abajo y pulsa Añadir rueda. Se añade como una rueda nueva tuya."
+L["Add a wheel someone shared with you: paste in its text, and read what's on it before you add it."] = "Añade una rueda que alguien compartió contigo: pega su texto y lee lo que lleva antes de añadirla."
+L["Share wheel"] = "Compartir"
+L["A line of text to copy and paste to friends, who add it with Import a wheel."] = "Una línea de texto para copiar y pegar a tus amigos, que la añaden con Importar una rueda."
+L["Shared wheel"] = "Rueda compartida"
+L["Your icons on it"] = "Tus iconos en ella"
+L["Icons of your own, after the wheel's own: each runs a command, as on your own wheels. Room for %d. The same for all your characters."] = "Iconos tuyos, tras los de la rueda: cada uno ejecuta una orden, como en tus propias ruedas. Caben %d. Los mismos para todos tus personajes."
 
 -- What's new: Wheels page
 L["Wheels page"] = "Página de ruedas"
@@ -2350,3 +2372,7 @@ L["A new Wheels page shows every wheel and its icons, with its keybind right the
 -- What's new: Your own wheels
 L["Your own wheels"] = "Tus propias ruedas"
 L["Make up to 8 wheels of your own on the Wheels page: each icon runs a command you type, like /rw or /readycheck, in a fight too. Give each one a key or put it on the master wheel."] = "Crea hasta 8 ruedas propias en la página Ruedas: cada icono ejecuta una orden que escribes, como /rw o /readycheck, también en combate. Dale a cada una una tecla o ponla en la rueda de ruedas."
+
+-- What's new: Share wheels
+L["Share wheels"] = "Compartir ruedas"
+L["Share a wheel of yours as a line of text and import one from a friend, reading every command first. Icons now come from every icon the game has, like the macro window's, and you can add icons of your own to the marker and vision wheels."] = "Comparte una rueda tuya como una línea de texto e importa la de un amigo, leyendo antes cada orden. Los iconos salen ahora de todos los del juego, como en la ventana de macros, y puedes añadir iconos tuyos a las ruedas de marcas y de visiones."

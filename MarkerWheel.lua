@@ -157,7 +157,9 @@ local function MakeWheel(spec)
 
 	local function UpdateText()
 		local entry = picked and list[picked]
-		local cant = spec.Cant and spec.Cant()
+		-- (An icon of the player's own on it, extra, isn't the wheel's: the
+		-- wheel's Cant and Active don't apply to it.)
+		local cant = not (entry and entry.extra) and spec.Cant and spec.Cant()
 		cant = cant or (entry and entry.Cant and entry.Cant())
 		if entry then
 			centerText:SetText(L[entry.label])
@@ -173,9 +175,9 @@ local function MakeWheel(spec)
 		stateText:SetTextColor(1, 1, 1)
 		if cant then
 			stateText:SetText(cant)
-		elseif entry and spec.activeText and spec.Active and spec.Active(entry) then
+		elseif entry and not entry.extra and spec.activeText and spec.Active and spec.Active(entry) then
 			stateText:SetText(L[spec.activeText])
-		elseif entry and spec.inactiveText and spec.Active and spec.Active(entry) == false then
+		elseif entry and not entry.extra and spec.inactiveText and spec.Active and spec.Active(entry) == false then
 			stateText:SetText(L[spec.inactiveText])
 			stateText:SetTextColor(1, 0.4, 0.35)
 		else
@@ -187,8 +189,8 @@ local function MakeWheel(spec)
 		local usable = not (spec.Cant and spec.Cant())
 		for i, entry in ipairs(list) do
 			local slot = slots[i]
-			local can = usable and not (entry.Cant and entry.Cant())
-			local active = spec.Active and spec.Active(entry)
+			local can = (usable or entry.extra) and not (entry.Cant and entry.Cant())
+			local active = not entry.extra and spec.Active and spec.Active(entry)
 			slot.ringTo = (can and active == true) and 1 or 0
 			-- (Greyed: can't be used now, or with dimInactive, isn't active.)
 			slot.colorTo = (not can or (spec.dimInactive and active == false)) and 0 or 1
@@ -1023,6 +1025,81 @@ function ns.SetMasterWheelOrder(list)
 	end
 	ns.RebuildMasterWheel()
 end
+
+-- Icons of the player's own on the marker, ground marker and vision wheels,
+-- after the wheel's own (for the account: db.wheelExtras[key], each a label,
+-- icon and command, as on a wheel of their own: CustomWheels.lua). Each runs
+-- its command, as a macro. The wheels hold 12 icons in all.
+local EXTRA_WHEELS = { marker = markerWheel, vision = visionWheel, world = CinematicWorldMarkerWheel }
+local baseSlots = {}
+for key, wheel in pairs(EXTRA_WHEELS) do
+	baseSlots[key] = wheel.GetSlots()
+end
+local EXTRA_COLOR = { 1, 0.82, 0.3 }
+
+-- The player's icons on one (the saved list, made if make is set).
+function ns.WheelExtras(key, make)
+	local db = ns.db
+	if not db then
+		return {}
+	end
+	if make then
+		db.wheelExtras = type(db.wheelExtras) == "table" and db.wheelExtras or {}
+		db.wheelExtras[key] = type(db.wheelExtras[key]) == "table" and db.wheelExtras[key] or {}
+		return db.wheelExtras[key]
+	end
+	return type(db.wheelExtras) == "table" and type(db.wheelExtras[key]) == "table" and db.wheelExtras[key] or {}
+end
+
+-- How many of their own icons fit on one (12 in all).
+function ns.WheelExtrasRoom(key)
+	return baseSlots[key] and math.max(0, (ns.CUSTOM_WHEEL_SLOTS or 12) - #baseSlots[key]) or 0
+end
+
+local extrasPending = {}
+local extrasFrame = CreateFrame("Frame")
+-- Lays one out again: its own icons, then the player's (now, or in a fight
+-- as it ends).
+function ns.ApplyWheelExtras(key)
+	local wheel = EXTRA_WHEELS[key]
+	if not wheel then
+		return
+	end
+	local list = {}
+	for _, entry in ipairs(baseSlots[key]) do
+		list[#list + 1] = entry
+	end
+	for i, slot in ipairs(ns.WheelExtras(key)) do
+		if i > ns.WheelExtrasRoom(key) then
+			break
+		end
+		list[#list + 1] = { icon = slot.icon or "Interface\\Icons\\INV_Misc_QuestionMark", trim = true,
+			color = EXTRA_COLOR, label = ns.CustomSlotLabel and ns.CustomSlotLabel(slot) or slot.label or "",
+			extra = true, attributes = { type = "macro", macrotext = slot.command or "" } }
+	end
+	if wheel.SetSlots(list) then
+		extrasPending[key] = nil
+	else
+		extrasPending[key] = true
+		extrasFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+	end
+end
+extrasFrame:SetScript("OnEvent", function(self, event)
+	if event == "PLAYER_REGEN_ENABLED" then
+		self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+		for key in pairs(extrasPending) do
+			ns.ApplyWheelExtras(key)
+		end
+		return
+	end
+	-- (PLAYER_LOGIN: the settings are loaded.)
+	for key in pairs(EXTRA_WHEELS) do
+		if next(ns.WheelExtras(key)) then
+			ns.ApplyWheelExtras(key)
+		end
+	end
+end)
+extrasFrame:RegisterEvent("PLAYER_LOGIN")
 
 -- For the Wheels pages' previews: each built-in secure wheel's slots now.
 ns.markerWheels = { master = masterWheel, marker = markerWheel, vision = visionWheel,

@@ -21,7 +21,7 @@ local L = ns.L
 
 local GLOBAL_KEYS = {
 	enabled = true, minimapButton = true, minimapAngle = true, logDetail = true, language = true,
-	masterWheelOrder = true, masterWheelOff = true, customWheels = true, -- (Wheels pages)
+	masterWheelOrder = true, masterWheelOff = true, customWheels = true, wheelExtras = true, -- (Wheels pages)
 }
 -- Lists kept as tables that belong to a profile (their defaults are in code;
 -- see EnsureTables in Core.lua). Missing from a profile: emptied, which means defaults.
@@ -471,7 +471,7 @@ function ns.SetProfileNote(name, text)
 end
 
 -- A profile's icon: a built-in's own, or the one picked for yours
--- (db.profileIcons, one of HOVER_GROUP_ICONS).
+-- (db.profileIcons: any of the game's icons, picked on the Profiles page).
 function ns.ProfileIcon(name)
 	local builtin = builtinByName[name]
 	return builtin and builtin.icon or ns.db.profileIcons[name] or ns.HOVER_GROUP_ICONS[1]

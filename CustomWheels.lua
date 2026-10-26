@@ -159,8 +159,9 @@ local function FreeName(name)
 	return try
 end
 
--- A new wheel from a template (one of CUSTOM_WHEEL_TEMPLATES): it, or nil
--- with all MAX made.
+-- A new wheel from a template (one of CUSTOM_WHEEL_TEMPLATES, or any table
+-- whose Make() gives a name, slots and optionally an icon): it, or nil with
+-- all MAX made.
 function ns.NewCustomWheel(template)
 	local db = ns.db
 	if not db then
@@ -172,9 +173,9 @@ function ns.NewCustomWheel(template)
 	end
 	for n = 1, MAX do
 		if not used[n] then
-			local name, slots = template.Make()
-			local data = { pool = n, name = FreeName(name), icon = slots[1] and slots[1].icon or DEFAULT_ICON,
-				slots = slots }
+			local name, slots, icon = template.Make()
+			local data = { pool = n, name = FreeName(name),
+				icon = icon or slots[1] and slots[1].icon or DEFAULT_ICON, slots = slots }
 			db.customWheels = type(db.customWheels) == "table" and db.customWheels or {}
 			db.customWheels[#db.customWheels + 1] = data
 			ns.ForgetMasterWheel("custom" .. n) -- (nothing left of a wheel that had its place)
@@ -204,4 +205,53 @@ function ns.DeleteCustomWheel(data)
 		end
 	end
 	ns.ApplyCustomWheel(data)
+end
+
+-- A wheel someone shared (Share.lua's ns.ReadSharedWheel): added as a new
+-- one of yours, or nil with all MAX made.
+function ns.AddSharedWheel(info)
+	local slots = {}
+	for _, slot in ipairs(info.slots) do
+		slots[#slots + 1] = { label = slot.label, icon = slot.icon or DEFAULT_ICON, command = slot.command }
+	end
+	return ns.NewCustomWheel({ Make = function() return info.name, slots, info.icon end })
+end
+
+-- An icon from what's typed: a spell or item (its name, ID or link), an
+-- icon's file name (INV_Misc_Bag_07) or path, or a file ID. nil if none.
+local probe = UIParent:CreateTexture()
+probe:Hide()
+local function Exists(file)
+	return file and probe:SetTexture(file) ~= false and file or nil
+end
+local function SpellIcon(spell)
+	local GetTexture = C_Spell and C_Spell.GetSpellTexture or GetSpellTexture
+	local ok, icon = pcall(GetTexture, spell)
+	return ok and icon or nil
+end
+local function ItemIcon(item)
+	local ok, icon = pcall(GetItemIcon, item)
+	if ok and icon then
+		return icon
+	end
+	local found, _, _, _, _, _, _, _, _, _, texture = pcall(GetItemInfo, item)
+	return found and texture or nil
+end
+function ns.FindIcon(text)
+	text = (text or ""):match("^%s*(.-)%s*$")
+	if text == "" then
+		return nil
+	end
+	local itemID, spellID = text:match("|Hitem:(%d+)"), text:match("|Hspell:(%d+)")
+	if itemID then
+		return ItemIcon(tonumber(itemID))
+	elseif spellID then
+		return SpellIcon(tonumber(spellID))
+	end
+	local number = tonumber(text)
+	if number then
+		return SpellIcon(number) or ItemIcon(number) or Exists(number)
+	end
+	return SpellIcon(text) or ItemIcon(text)
+		or Exists(text:find("[\\/]") and text or "Interface\\Icons\\" .. text)
 end

@@ -45,6 +45,8 @@ read_globals = {
 	"C_AddOnProfiler",
 	"CALENDAR_FULLDATE_MONTH_NAMES",
 	"C_AddOns",
+	"IconDataProviderMixin", "IconDataProviderExtraType", "CreateAndInitFromMixin", -- (IconBrowser.lua)
+	"GetLooseMacroIcons", "GetMacroIcons", "GetLooseMacroItemIcons", "GetMacroItemIcons",
 	"SetPortraitTexture",
 	"CLASS_ICON_TCOORDS",
 	"C_CooldownViewer",

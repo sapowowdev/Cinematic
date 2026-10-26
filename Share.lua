@@ -202,11 +202,8 @@ function ns.ReadSharedProfile(text)
 	if #payload < 9 or Checksum(body) ~= sum then return nil, "broken" end
 	local data = Read(body)
 	if type(data) ~= "table" or type(data.settings) ~= "table" then return nil, "broken" end
-	-- (Its icon only if it's one this version can pick.)
-	local icon
-	for _, file in ipairs(ns.HOVER_GROUP_ICONS) do
-		if data.icon == file then icon = file end
-	end
+	-- (Its icon: any of the game's, as a file path or ID: ns.CleanSharedIcon, below.)
+	local icon = ns.CleanSharedIcon(data.icon)
 	local settings, count, skipped = {}, 0, 0
 	for key, value in pairs(data.settings) do
 		if ns.KnownProfileSetting(key, value) then
@@ -459,4 +456,71 @@ function ns.ShowImport()
 	window.box:SetText("")
 	window.box:SetFocus()
 	UpdateImport()
+end
+
+-- Sharing a wheel of your own (Wheels > Your wheels): the same kind of
+-- text as a profile's, but "CINEW1:" (W for wheel) and holding the wheel's
+-- name, icon and icons, each a label, icon and command. Read back as data,
+-- like a profile; the Your wheels page shows every command before it's added.
+local WHEEL_FORMAT = 1
+local WHEEL_PREFIX = "CINEW" .. WHEEL_FORMAT .. ":"
+local MAX_WHEEL_NAME = 40
+local MAX_COMMAND = 1023 -- (a macro's text can't be longer)
+
+function ns.ExportWheel(wheel)
+	local slots = {}
+	for _, slot in ipairs(wheel.slots or {}) do
+		slots[#slots + 1] = { label = slot.label, icon = slot.icon, command = slot.command }
+	end
+	local data = { format = WHEEL_FORMAT, version = Version(), from = UnitName("player"), name = wheel.name,
+		icon = wheel.icon, slots = slots }
+	local out = {}
+	Write(data, out)
+	local body = table.concat(out)
+	return WHEEL_PREFIX .. Encode(body .. Checksum(body))
+end
+
+-- An icon from a shared string (a profile's or a wheel's): a file path or
+-- ID (no | in it, which would turn into an escape), else nil.
+local function CleanIcon(icon)
+	if type(icon) == "number" and icon > 0 and icon == floor(icon) then return icon end
+	if type(icon) == "string" and #icon <= 200 and icon:match("^[%w_%-%.\\/ ]+$") then return icon end
+end
+
+ns.CleanSharedIcon = CleanIcon
+
+-- What a pasted wheel holds: { name, icon, from, version, slots }, or nil
+-- and why not ("empty", "newer", "profile" or "broken").
+function ns.ReadSharedWheel(text)
+	text = (text or ""):gsub("%s", "")
+	if text == "" then return nil, "empty" end
+	if text:match("^CINE%d+:") then return nil, "profile" end
+	local format, encoded = text:match("^CINEW(%d+):(.*)")
+	format = tonumber(format)
+	if not format then return nil, "broken" end
+	if format > WHEEL_FORMAT then return nil, "newer" end
+	local payload = Decode(encoded)
+	local body, sum = payload:sub(1, -9), payload:sub(-8)
+	if #payload < 9 or Checksum(body) ~= sum then return nil, "broken" end
+	local data = Read(body)
+	if type(data) ~= "table" or type(data.slots) ~= "table" then return nil, "broken" end
+	local slots = {}
+	for i = 1, ns.CUSTOM_WHEEL_SLOTS or 12 do
+		local slot = data.slots[i]
+		if type(slot) == "table" then
+			-- (Commands keep their lines; other control characters go.)
+			local command = type(slot.command) == "string" and slot.command:gsub("[%c]", function(c)
+				return c == "\n" and c or ""
+			end):sub(1, MAX_COMMAND) or ""
+			slots[#slots + 1] = { label = Clean(slot.label, MAX_WHEEL_NAME) or "", icon = CleanIcon(slot.icon),
+				command = command }
+		end
+	end
+	return {
+		name = Clean(data.name, MAX_WHEEL_NAME) or L["Shared wheel"],
+		icon = CleanIcon(data.icon),
+		from = Clean(data.from, 48),
+		version = Clean(data.version, 32),
+		slots = slots,
+	}
 end

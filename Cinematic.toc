@@ -65,6 +65,7 @@ CameraWheel.lua
 MenuWheel.lua
 MarkerWheel.lua
 CustomWheels.lua
+IconBrowser.lua
 WheelsPage.lua
 QuestMobs.lua
 QuestGlow.lua

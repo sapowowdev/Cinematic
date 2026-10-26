@@ -68,6 +68,7 @@ end
 -- Each wheel's page, in the hub's order: key (as the master wheel saves
 -- it), its page's name (English), its key binding, and Entries(), its slots
 -- now (each: label, and icon with trim and color, or Paint(icon, under)).
+-- extras: the player can put icons of their own on it (MarkerWheel.lua).
 local WHEELS = {
 	{ key = "master", label = "Master wheel", action = "CLICK CinematicMasterWheelButton:LeftButton",
 		Entries = function() return SlotsOf("master") end },
@@ -82,11 +83,11 @@ local WHEELS = {
 		end },
 	{ key = "menu", label = "Menu wheel", action = "CLICK CinematicMenuWheelButton:LeftButton",
 		Entries = function() return ns.MenuWheelPreview and ns.MenuWheelPreview() or {} end },
-	{ key = "marker", label = "Marker wheel", action = "CLICK CinematicMarkerWheelButton:LeftButton",
+	{ key = "marker", label = "Marker wheel", action = "CLICK CinematicMarkerWheelButton:LeftButton", extras = true,
 		Entries = function() return SlotsOf("marker") end },
 	{ key = "world", label = "Ground marker wheel", action = "CLICK CinematicWorldMarkerWheelButton:LeftButton",
-		Entries = function() return SlotsOf("world") end },
-	{ key = "vision", label = "Vision wheel", action = "CLICK CinematicVisionWheelButton:LeftButton",
+		extras = true, Entries = function() return SlotsOf("world") end },
+	{ key = "vision", label = "Vision wheel", action = "CLICK CinematicVisionWheelButton:LeftButton", extras = true,
 		Entries = function() return SlotsOf("vision") end },
 }
 
@@ -273,27 +274,6 @@ end
 
 local refreshMaster -- the master wheel's page, laid out again (once made)
 
--- A built-in wheel's page.
-local function WheelPage(kit, info)
-	local canvas, content = kit.CreateScrollPage(true)
-	local text = Top(kit, content, info)
-	local keyLabel = KeyRow(kit, content, text, info.action)
-	local onMaster = kit.Check(content, nil, L["On the master wheel"],
-		L["Its icon is on the master wheel, which opens it. Untick to leave it off: its own key still " ..
-		"brings it up. The master wheel is the same for all your characters."],
-		function(value)
-			SetOnMaster(info.key, value)
-			if refreshMaster then refreshMaster() end
-		end)
-	onMaster:SetPoint("TOPLEFT", keyLabel, "BOTTOMLEFT", -2, -12)
-	onMaster.Refresh = function(self) self:SetChecked(IsOnMaster(info.key)) end
-	local preview = Preview(content, L[info.label])
-	preview:SetPoint("TOPLEFT", onMaster, "BOTTOMLEFT", 2, -16)
-	Finish(kit, canvas, content, info, function()
-		preview:SetEntries(info.Entries())
-	end)
-end
-
 -- Up and down arrows (the chat frame's).
 local function Arrow(parent, dir)
 	local button = CreateFrame("Button", nil, parent)
@@ -477,17 +457,474 @@ local function IconTile(parent, size)
 	return tile
 end
 
--- Your wheels: buttons to make a new one (blank or from a template), a row
--- of the ones you've made, and the one picked from it: its name, icon, key
--- and master wheel tick, then a row for each icon on it (its icon, name and
--- command, a Test button, arrows to move it and a delete), and its preview.
--- Changes are saved as you type, and put on the wheel as you leave a box.
+-- The Test buttons' secure side: one button of the game's secure kind (a
+-- macro's, like the wheels'), laid over the Test button the cursor's on, out
+-- of a fight. It isn't in the settings window, as a secure button in it
+-- would make the window's frames protected, and they couldn't move or hide
+-- in a fight. It goes as the cursor leaves it (a secure snippet, so in a
+-- fight too). Made with the first page that has Test buttons.
+local tester
+local function CoverWith(button, command)
+	if not tester then
+		tester = CreateFrame("Button", "CinematicWheelTestButton", UIParent,
+			"SecureActionButtonTemplate, SecureHandlerEnterLeaveTemplate")
+		tester:SetFrameStrata("FULLSCREEN_DIALOG")
+		tester:RegisterForClicks("AnyUp")
+		tester:SetAttribute("useOnKeyDown", false)
+		tester:SetAttribute("type", "macro")
+		tester:SetAttribute("_onleave", "self:Hide()")
+		tester:Hide()
+		tester:HookScript("OnEnter", function(self)
+			if self.owner then
+				self.owner:LockHighlight()
+				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+				GameTooltip:SetText(L["Runs its command now, as picking it on the wheel would."], 1, 1, 1, 1, true)
+				GameTooltip:Show()
+			end
+		end)
+		tester:HookScript("OnHide", function(self)
+			if self.owner then self.owner:UnlockHighlight() end
+			GameTooltip:Hide()
+		end)
+	end
+	if InCombatLockdown() then return end
+	local scale = button:GetEffectiveScale() / UIParent:GetEffectiveScale()
+	local left, bottom = button:GetLeft(), button:GetBottom()
+	if not left then return end
+	tester.owner = button
+	tester:SetAttribute("macrotext", command or "")
+	tester:ClearAllPoints()
+	tester:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left * scale, bottom * scale)
+	tester:SetSize(button:GetWidth() * scale, button:GetHeight() * scale)
+	tester:Show()
+end
+local function HideTester()
+	if tester and not InCombatLockdown() then tester:Hide() end
+end
+
+-- The icon picker: every icon the game has, and a box to find one by name
+-- (IconBrowser.lua). onPick(key, file).
+local function SearchPicker(_, canvas, onPick)
+	return ns.IconBrowser(canvas, onPick)
+end
+
+-- The rows of a wheel's icons, each its icon, name and command, a Test
+-- button, arrows to move it and a delete, then Add an icon. Under anchor
+-- (column names first). hooks: Slots() (the list, live: made if need be),
+-- Max() (how many it can have), Edited() (typed in: saved, not on the wheel
+-- yet), Commit() (put on the wheel, and the page laid out again). The page's
+-- picker calls editor:SetIcon(i, file) for slot i.
+local function SlotEditor(kit, parent, anchor, picker, hooks)
+	local editor = { rows = {} }
+	local COLUMNS = { { L["Icon"], 0 }, { L["Name"], 48 }, { L["Command"], 172 } }
+	for _, column in ipairs(COLUMNS) do
+		local label = kit.Label(parent, "GameFontNormalSmall", column[1])
+		label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", column[2], -8)
+	end
+
+	local function Slot(i)
+		return hooks.Slots()[i]
+	end
+	local function Move(i, by)
+		local slots = hooks.Slots()
+		if slots[i] and slots[i + by] then
+			slots[i], slots[i + by] = slots[i + by], slots[i]
+			hooks.Commit()
+		end
+	end
+
+	local function Row(i)
+		local row = CreateFrame("Frame", nil, parent)
+		row:SetSize(580, SLOT_ROW)
+		row:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -26 - (i - 1) * SLOT_ROW)
+		local icon = IconTile(row, 32)
+		icon:SetPoint("TOPLEFT", 0, 0)
+		kit.Tooltip(icon, L["Click to pick its icon."])
+		icon:SetScript("OnClick", function(self)
+			local slot = Slot(i)
+			if slot then picker:Open(self, i, slot.icon) end
+		end)
+		local label = InputBox(row)
+		label:SetSize(120, 22)
+		label:SetAutoFocus(false)
+		label:SetMaxLetters(40)
+		label:SetPoint("TOPLEFT", 48, -5)
+		kit.Tooltip(label, L["Its name in the wheel's middle as you point at it. Empty: its command's first line."])
+		label:SetScript("OnTextChanged", function(self, userInput)
+			local slot = Slot(i)
+			if userInput and slot then
+				slot.label = self:GetText()
+				hooks.Edited()
+			end
+		end)
+		label:SetScript("OnEnterPressed", label.ClearFocus)
+		label:SetScript("OnEscapePressed", label.ClearFocus)
+		label:SetScript("OnEditFocusLost", hooks.Commit)
+		local command = CommandBox(row, 250)
+		command:SetPoint("TOPLEFT", 172, 0)
+		kit.Tooltip(command, L["What picking it does: a slash command, such as /rw Pull in 10, or several, a " ..
+			"line each (anything a macro can do). The game cuts a line at 255 letters."])
+		command.box:SetScript("OnTextChanged", function(self, userInput)
+			local slot = Slot(i)
+			if userInput and slot then
+				slot.command = self:GetText()
+				hooks.Edited()
+			end
+		end)
+		command.box:SetScript("OnEditFocusLost", hooks.Commit)
+		-- Test: runs its command now, as a pick would (through the tester above).
+		local test = PanelButton(row)
+		test:SetSize(52, 22)
+		test:SetPoint("TOPLEFT", 430, -5)
+		test:SetText(L["Test"])
+		test:HookScript("OnEnter", function(self)
+			local slot = Slot(i)
+			if slot then CoverWith(self, slot.command) end
+		end)
+		row.up, row.down = Arrow(row, "Up"), Arrow(row, "Down")
+		row.up:SetPoint("TOPLEFT", 488, -5)
+		row.down:SetPoint("LEFT", row.up, "RIGHT", 2, 0)
+		row.up:SetScript("OnClick", function() Move(i, -1) end)
+		row.down:SetScript("OnClick", function() Move(i, 1) end)
+		kit.Tooltip(row.up, L["Earlier round the wheel (the first is at the top)."])
+		kit.Tooltip(row.down, L["Later round the wheel."])
+		local remove = CreateFrame("Button", nil, row)
+		remove:SetSize(20, 20)
+		remove:SetPoint("LEFT", row.down, "RIGHT", 6, 0)
+		remove:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
+		remove:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+		kit.Tooltip(remove, L["Takes this icon off the wheel."])
+		remove:SetScript("OnClick", function()
+			local slots = hooks.Slots()
+			if slots[i] then
+				table.remove(slots, i)
+				hooks.Commit()
+			end
+		end)
+		row.icon, row.label, row.command, row.test = icon, label, command, test
+		return row
+	end
+
+	local add = PanelButton(parent)
+	add:SetSize(120, 22)
+	add:SetText(L["Add an icon"])
+	kit.Tooltip(add, L["Adds an icon to the wheel, for a command of its own."])
+	add:SetScript("OnClick", function()
+		local slots = hooks.Slots()
+		if #slots < hooks.Max() then
+			slots[#slots + 1] = { label = "", icon = ns.CUSTOM_WHEEL_DEFAULT_ICON, command = "" }
+			hooks.Commit()
+		end
+	end)
+	editor.add = add
+
+	function editor:SetIcon(i, file)
+		local slot = Slot(i)
+		if slot then
+			slot.icon = file
+			hooks.Commit()
+		end
+	end
+
+	-- Lays the rows out for the list as it is now.
+	function editor:Refresh()
+		local slots = hooks.Slots()
+		local rows = self.rows
+		for i = 1, math.max(#slots, #rows) do
+			local slot, row = slots[i], rows[i]
+			if slot and not row then
+				row = Row(i)
+				rows[i] = row
+			end
+			if slot then
+				row.icon.icon:SetTexture(slot.icon or ns.CUSTOM_WHEEL_DEFAULT_ICON)
+				if not row.label:HasFocus() then
+					row.label:SetText(slot.label or "")
+				end
+				if not row.command.box:HasFocus() then
+					row.command.box:SetText(slot.command or "")
+				end
+				row.test:SetEnabled(not InCombatLockdown())
+				row.up:SetEnabled(i > 1)
+				row.down:SetEnabled(i < #slots)
+				row:Show()
+			elseif row then
+				row:Hide()
+			end
+		end
+		add:ClearAllPoints()
+		add:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -26 - #slots * SLOT_ROW - 4)
+		add:SetEnabled(#slots < hooks.Max())
+		return #slots
+	end
+	return editor
+end
+
+-- The window for sharing a wheel: Export shows its text to copy; Import
+-- takes one pasted, shows its name and every command on it to read, and
+-- Add wheel makes it one of yours (onAdded(wheel) after).
+local share
+local function ShareWindow()
+	if share then return share end
+	share = CreateFrame("Frame", "CinematicWheelShareWindow", UIParent, BACKDROP)
+	share:SetSize(500, 440)
+	share:SetPoint("CENTER")
+	share:SetFrameStrata("FULLSCREEN_DIALOG")
+	share:SetToplevel(true)
+	share:EnableMouse(true)
+	share:SetMovable(true)
+	share:RegisterForDrag("LeftButton")
+	share:SetScript("OnDragStart", share.StartMoving)
+	share:SetScript("OnDragStop", share.StopMovingOrSizing)
+	if share.SetBackdrop then
+		share:SetBackdrop({
+			bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+			edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+			tile = true, tileSize = 32, edgeSize = 16,
+			insets = { left = 4, right = 4, top = 4, bottom = 4 },
+		})
+	end
+	if ns.SkinWindow then ns.SkinWindow(share) end
+	tinsert(UISpecialFrames, "CinematicWheelShareWindow") -- (Escape closes it)
+	share:Hide()
+
+	share.title = share:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	share.title:SetPoint("TOPLEFT", 16, -14)
+	local close = CreateFrame("Button", nil, share, "UIPanelCloseButton")
+	if ns.SkinClose then ns.SkinClose(close) end
+	close:SetPoint("TOPRIGHT", -2, -2)
+	share.hint = share:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	share.hint:SetPoint("TOPLEFT", share.title, "BOTTOMLEFT", 0, -8)
+	share.hint:SetWidth(468)
+	share.hint:SetJustifyH("LEFT")
+
+	-- A dark well with a scroll bar, for the text or the review.
+	local function Well(height)
+		local holder = CreateFrame("Frame", nil, share, BACKDROP)
+		holder:SetPoint("LEFT", 14, 0)
+		holder:SetPoint("RIGHT", -14, 0)
+		holder:SetHeight(height)
+		if holder.SetBackdrop then
+			holder:SetBackdrop({
+				bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+				edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+				tile = true, tileSize = 16, edgeSize = 12,
+				insets = { left = 3, right = 3, top = 3, bottom = 3 },
+			})
+			holder:SetBackdropColor(0, 0, 0, 0.6)
+		end
+		if ns.SkinWindow then ns.SkinWindow(holder, true) end
+		local scroll = CreateFrame("ScrollFrame", nil, holder, "UIPanelScrollFrameTemplate")
+		if ns.SkinScroll then ns.SkinScroll(scroll) end
+		scroll:SetPoint("TOPLEFT", 8, -6)
+		scroll:SetPoint("BOTTOMRIGHT", -28, 6)
+		holder.scroll = scroll
+		return holder
+	end
+
+	local textWell = Well(90)
+	textWell:SetPoint("TOP", share, "TOP", 0, -76)
+	local box = CreateFrame("EditBox", nil, textWell.scroll)
+	box:SetMultiLine(true)
+	box:SetMaxLetters(0)
+	box:SetAutoFocus(false)
+	box:SetFontObject(ChatFontNormal)
+	box:SetWidth(430)
+	textWell.scroll:SetScrollChild(box)
+	box:SetScript("OnEscapePressed", function() share:Hide() end)
+	share.box = box
+
+	local reviewWell = Well(200)
+	reviewWell:SetPoint("TOP", textWell, "BOTTOM", 0, -10)
+	local reviewHolder = CreateFrame("Frame", nil, reviewWell.scroll)
+	reviewHolder:SetSize(430, 10)
+	reviewWell.scroll:SetScrollChild(reviewHolder)
+	local review = reviewHolder:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	review:SetPoint("TOPLEFT")
+	review:SetWidth(430)
+	review:SetJustifyH("LEFT")
+	review:SetSpacing(3)
+	share.reviewWell = reviewWell
+
+	local accept = PanelButton(share)
+	accept:SetSize(120, 22)
+	accept:SetPoint("BOTTOMRIGHT", -16, 14)
+	accept:SetText(L["Add wheel"])
+	local selectAll = PanelButton(share)
+	selectAll:SetSize(120, 22)
+	selectAll:SetPoint("BOTTOMRIGHT", -16, 14)
+	selectAll:SetText(L["Select all"])
+	selectAll:SetScript("OnClick", function()
+		box:SetFocus()
+		box:HighlightText()
+	end)
+	share.accept, share.selectAll = accept, selectAll
+
+	-- What's pasted, read: shown for review, or why it can't be added.
+	local WHY = {
+		empty = "",
+		newer = "This wheel is from a newer Cinematic: update it to add this one.",
+		profile = "That's a profile, not a wheel: import it on the Profiles page.",
+		broken = "That isn't a whole wheel: copy it again, all of it.",
+	}
+	local function Safe(text)
+		return (tostring(text or ""):gsub("|", "||"))
+	end
+	local function UpdateImport()
+		local info, why = ns.ReadSharedWheel(box:GetText())
+		share.info = info
+		accept:SetEnabled(info ~= nil)
+		if not info then
+			review:SetText(why and WHY[why] and L[WHY[why]] or "")
+		else
+			local lines = {
+				"|cffff6659" .. L["Read every command before you add it: each runs as if you'd typed it, " ..
+					"and /run ones can do anything an addon can."] .. "|r",
+				"",
+				"|cffffd100" .. Safe(info.name) .. "|r" .. (info.from and (" (" .. L["from %s"]:format(Safe(info.from)) .. ")") or ""),
+			}
+			if #info.slots == 0 then
+				lines[#lines + 1] = L["Nothing on it yet"]
+			end
+			for i, slot in ipairs(info.slots) do
+				local name = slot.label ~= "" and slot.label or L["(no name)"]
+				lines[#lines + 1] = ("|cffffd100%d. %s|r"):format(i, Safe(name))
+				for line in ((slot.command ~= "" and slot.command or L["(no command)"]) .. "\n"):gmatch("(.-)\n") do
+					lines[#lines + 1] = "    " .. Safe(line)
+				end
+			end
+			review:SetText(table.concat(lines, "\n"))
+		end
+		reviewHolder:SetHeight(review:GetStringHeight() + 4)
+	end
+	box:SetScript("OnTextChanged", function(self, userInput)
+		if share.mode == "export" then
+			-- (Read-only: any typing puts the text back.)
+			if userInput then
+				self:SetText(share.text)
+				self:HighlightText()
+			end
+		else
+			UpdateImport()
+		end
+	end)
+	accept:SetScript("OnClick", function()
+		if not share.info then return end
+		local data = ns.AddSharedWheel(share.info)
+		if not data then
+			ns.Print(L["You have %d wheels already: delete one to make another."]:format(ns.CUSTOM_WHEEL_MAX))
+			return
+		end
+		share:Hide()
+		if share.onAdded then share.onAdded(data) end
+	end)
+	return share
+end
+
+local function ShowExport(data)
+	local window = ShareWindow()
+	window.mode = "export"
+	window.text = ns.ExportWheel(data)
+	window.title:SetText(L["Share %s"]:format(data.name))
+	window.hint:SetText(L["Press Ctrl+C to copy this, then paste it wherever your friends will see it. They add " ..
+		"it with Import a wheel on their Your wheels page."])
+	window.reviewWell:Hide()
+	window.accept:Hide()
+	window.selectAll:Show()
+	window:Show()
+	window.box:SetText(window.text)
+	window.box:SetFocus()
+	window.box:HighlightText()
+end
+
+local function ShowImport(onAdded)
+	local window = ShareWindow()
+	window.mode = "import"
+	window.onAdded = onAdded
+	window.title:SetText(L["Import a wheel"])
+	window.hint:SetText(L["Paste in a wheel someone shared (Ctrl+V), read what's on it below, and Add wheel. " ..
+		"It's added as a new wheel of yours."])
+	window.reviewWell:Show()
+	window.accept:Show()
+	window.selectAll:Hide()
+	window:Show()
+	window.box:SetText("")
+	window.box:SetFocus()
+end
+
+-- A built-in wheel's page; on the marker, ground marker and vision wheels'
+-- (info.extras), a section for icons of the player's own on it too.
+local function WheelPage(kit, info)
+	local canvas, content = kit.CreateScrollPage(true)
+	local text = Top(kit, content, info)
+	local keyLabel = KeyRow(kit, content, text, info.action)
+	local onMaster = kit.Check(content, nil, L["On the master wheel"],
+		L["Its icon is on the master wheel, which opens it. Untick to leave it off: its own key still " ..
+		"brings it up. The master wheel is the same for all your characters."],
+		function(value)
+			SetOnMaster(info.key, value)
+			if refreshMaster then refreshMaster() end
+		end)
+	onMaster:SetPoint("TOPLEFT", keyLabel, "BOTTOMLEFT", -2, -12)
+	onMaster.Refresh = function(self) self:SetChecked(IsOnMaster(info.key)) end
+	local preview = Preview(content, L[info.label])
+	local RefreshPage, editor, picker
+	local dirty
+
+	if info.extras then
+		local header = kit.Header(content, L["Your icons on it"], onMaster, -18)
+		header:SetPoint("TOPLEFT", onMaster, "BOTTOMLEFT", 2, -18)
+		local note = kit.Label(content, "GameFontHighlightSmall", "")
+		note:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -6)
+		note:SetWidth(560)
+		local function Commit()
+			dirty = false
+			ns.ApplyWheelExtras(info.key)
+			RefreshPage()
+		end
+		picker = SearchPicker(kit, canvas, function(key, file)
+			editor:SetIcon(key, file)
+		end)
+		editor = SlotEditor(kit, content, note, picker, {
+			Slots = function() return ns.WheelExtras(info.key, true) end,
+			Max = function() return ns.WheelExtrasRoom(info.key) end,
+			Edited = function() dirty = true end,
+			Commit = Commit,
+		})
+		RefreshPage = function()
+			note:SetText(L["Icons of your own, after the wheel's own: each runs a command, as on your own " ..
+				"wheels. Room for %d. The same for all your characters."]:format(ns.WheelExtrasRoom(info.key)))
+			editor:Refresh()
+			preview:ClearAllPoints()
+			preview:SetPoint("TOPLEFT", editor.add, "BOTTOMLEFT", 0, -20)
+			preview:SetEntries(info.Entries())
+			if kit.FitContentHeight then kit.FitContentHeight(content) end
+		end
+	else
+		preview:SetPoint("TOPLEFT", onMaster, "BOTTOMLEFT", 2, -16)
+		RefreshPage = function()
+			preview:SetEntries(info.Entries())
+		end
+	end
+	Finish(kit, canvas, content, info, RefreshPage, function()
+		if picker then picker:Hide() end
+		HideTester()
+		if dirty then
+			dirty = false
+			ns.ApplyWheelExtras(info.key)
+		end
+	end)
+end
+
+-- Your wheels: New wheel and Import a wheel, a row of the ones you've made,
+-- and the one picked from it: its name, icon, key, master wheel tick, Share
+-- and Delete, then a row for each icon on it, and its preview. Changes are
+-- saved as you type, and put on the wheel as you leave a box.
 local function YourWheelsPage(kit, info)
 	local canvas, content = kit.CreateScrollPage(true)
 	local text = Top(kit, content, info)
 	local MAX, MAX_SLOTS = ns.CUSTOM_WHEEL_MAX, ns.CUSTOM_WHEEL_SLOTS
 	local DEFAULT_ICON = ns.CUSTOM_WHEEL_DEFAULT_ICON
-	local CoverWith -- (the Test buttons': below)
 	local selected -- the wheel being edited
 	local dirty    -- changed since it was last put on the wheel
 	local RefreshPage
@@ -505,19 +942,25 @@ local function YourWheelsPage(kit, info)
 		RefreshPage()
 	end
 
-	-- A button for each template.
+	-- A button for each template, then Import a wheel.
 	local newButtons, previous = {}, nil
-	for _, template in ipairs(ns.CUSTOM_WHEEL_TEMPLATES or {}) do
+	local function TopButton(label, tip, width, onClick)
 		local button = PanelButton(content)
-		button:SetSize(template.key == "blank" and 120 or 180, 22)
-		button:SetText(L[template.button])
-		kit.Tooltip(button, L[template.tip])
+		button:SetSize(width, 22)
+		button:SetText(label)
+		kit.Tooltip(button, tip)
 		if previous then
 			button:SetPoint("LEFT", previous, "RIGHT", 8, 0)
 		else
 			button:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -14)
 		end
-		button:SetScript("OnClick", function()
+		button:SetScript("OnClick", onClick)
+		newButtons[#newButtons + 1] = button
+		previous = button
+		return button
+	end
+	for _, template in ipairs(ns.CUSTOM_WHEEL_TEMPLATES or {}) do
+		TopButton(L[template.button], L[template.tip], 120, function()
 			Apply()
 			local data = ns.NewCustomWheel(template)
 			if data then
@@ -526,9 +969,12 @@ local function YourWheelsPage(kit, info)
 				ns.Print(L["You have %d wheels already: delete one to make another."]:format(MAX))
 			end
 		end)
-		newButtons[#newButtons + 1] = button
-		previous = button
 	end
+	TopButton(L["Import a wheel"], L["Add a wheel someone shared with you: paste in its text, and read " ..
+		"what's on it before you add it."], 140, function()
+		Apply()
+		ShowImport(Select)
+	end)
 	local firstNew = newButtons[1]
 
 	-- The row of your wheels.
@@ -549,32 +995,33 @@ local function YourWheelsPage(kit, info)
 	end
 
 	-- The wheel picked.
-	local editor = CreateFrame("Frame", nil, content)
-	editor:SetPoint("TOPLEFT", firstNew, "BOTTOMLEFT", 0, -12 - TILE - 18)
-	editor:SetSize(580, 10)
+	local editorFrame = CreateFrame("Frame", nil, content)
+	editorFrame:SetPoint("TOPLEFT", firstNew, "BOTTOMLEFT", 0, -12 - TILE - 18)
+	editorFrame:SetSize(580, 10)
 
-	local picker = kit.IconPicker(canvas, function(key, file)
+	local slotEditor
+	local picker = SearchPicker(kit, canvas, function(key, file)
 		if not selected then return end
 		if key == 0 then
 			selected.icon = file
-		elseif selected.slots[key] then
-			selected.slots[key].icon = file
+			dirty = true
+			Apply()
+			RefreshPage()
+		else
+			slotEditor:SetIcon(key, file)
 		end
-		dirty = true
-		Apply()
-		RefreshPage()
 	end)
 
-	local wheelIcon = IconTile(editor, TILE)
+	local wheelIcon = IconTile(editorFrame, TILE)
 	wheelIcon:SetPoint("TOPLEFT", 0, 0)
 	kit.Tooltip(wheelIcon, L["The wheel's icon, as it shows on the master wheel. Click to pick another."])
 	wheelIcon:SetScript("OnClick", function(self)
 		picker:Open(self, 0, selected and selected.icon)
 	end)
-	local nameLabel = kit.Label(editor, "GameFontHighlight", L["Name"])
+	local nameLabel = kit.Label(editorFrame, "GameFontHighlight", L["Name"])
 	nameLabel:SetPoint("LEFT", wheelIcon, "RIGHT", 12, 0)
-	local nameBox = InputBox(editor)
-	nameBox:SetSize(200, 22)
+	local nameBox = InputBox(editorFrame)
+	nameBox:SetSize(180, 22)
 	nameBox:SetAutoFocus(false)
 	nameBox:SetMaxLetters(40)
 	nameBox:SetPoint("LEFT", nameLabel, "RIGHT", 12, 0)
@@ -607,20 +1054,29 @@ local function YourWheelsPage(kit, info)
 		end,
 		timeout = 0, whileDead = true, hideOnEscape = true,
 	}
-	local delete = PanelButton(editor)
-	delete:SetSize(120, 22)
+	local delete = PanelButton(editorFrame)
+	delete:SetSize(100, 22)
 	delete:SetText(L["Delete wheel"])
-	delete:SetPoint("TOPRIGHT", editor, "TOPRIGHT", -20, -7)
+	delete:SetPoint("TOPRIGHT", editorFrame, "TOPRIGHT", -20, -7)
 	kit.Tooltip(delete, L["Deletes this wheel, and takes its keys off."])
 	delete:SetScript("OnClick", function()
 		if selected then
 			StaticPopup_Show("CINEMATIC_WHEEL_DELETE", selected.name, nil, selected)
 		end
 	end)
+	local shareButton = PanelButton(editorFrame)
+	shareButton:SetSize(100, 22)
+	shareButton:SetText(L["Share wheel"])
+	shareButton:SetPoint("RIGHT", delete, "LEFT", -8, 0)
+	kit.Tooltip(shareButton, L["A line of text to copy and paste to friends, who add it with Import a wheel."])
+	shareButton:SetScript("OnClick", function()
+		Apply()
+		if selected then ShowExport(selected) end
+	end)
 
-	local keyLabel, firstKey, secondKey = KeyRow(kit, editor, wheelIcon, "CLICK CinematicCustomWheel1Button:LeftButton",
-		-14)
-	local onMaster = kit.Check(editor, nil, L["On the master wheel"],
+	local keyLabel, firstKey, secondKey = KeyRow(kit, editorFrame, wheelIcon,
+		"CLICK CinematicCustomWheel1Button:LeftButton", -14)
+	local onMaster = kit.Check(editorFrame, nil, L["On the master wheel"],
 		L["Its icon is on the master wheel, which opens it. Untick to leave it off: its own key still " ..
 		"brings it up. The master wheel is the same for all your characters."],
 		function(value)
@@ -633,158 +1089,18 @@ local function YourWheelsPage(kit, info)
 		self:SetChecked(selected and IsOnMaster("custom" .. selected.pool) or false)
 	end
 
-	local header = kit.Header(editor, L["Icons on it"], onMaster, -18)
+	local header = kit.Header(editorFrame, L["Icons on it"], onMaster, -18)
 	header:SetPoint("TOPLEFT", onMaster, "BOTTOMLEFT", 2, -18)
-	-- (Column names over the rows.)
-	local COLUMNS = { { L["Icon"], 0 }, { L["Name"], 42 }, { L["Command"], 172 } }
-	for _, column in ipairs(COLUMNS) do
-		local label = kit.Label(editor, "GameFontNormalSmall", column[1])
-		label:SetPoint("TOPLEFT", header, "BOTTOMLEFT", column[2], -8)
-	end
-
-	-- The Test buttons' secure side: one button of the game's secure kind (a
-	-- macro's, like the wheel's), laid over the Test button the cursor's on,
-	-- out of a fight. It isn't in the settings window, as a secure button in
-	-- it would make the window's frames protected, and they couldn't move or
-	-- hide in a fight. It goes as the cursor leaves it (a secure snippet,
-	-- so in a fight too).
-	local tester = CreateFrame("Button", "CinematicWheelTestButton", UIParent,
-		"SecureActionButtonTemplate, SecureHandlerEnterLeaveTemplate")
-	tester:SetFrameStrata("FULLSCREEN_DIALOG")
-	tester:RegisterForClicks("AnyUp")
-	tester:SetAttribute("useOnKeyDown", false)
-	tester:SetAttribute("type", "macro")
-	tester:SetAttribute("_onleave", "self:Hide()")
-	tester:Hide()
-	tester:HookScript("OnEnter", function(self)
-		if self.owner then
-			self.owner:LockHighlight()
-			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-			GameTooltip:SetText(L["Runs its command now, as picking it on the wheel would."], 1, 1, 1, 1, true)
-			GameTooltip:Show()
-		end
-	end)
-	tester:HookScript("OnHide", function(self)
-		if self.owner then self.owner:UnlockHighlight() end
-		GameTooltip:Hide()
-	end)
-	function CoverWith(button, slot)
-		if InCombatLockdown() then return end
-		local scale = button:GetEffectiveScale() / UIParent:GetEffectiveScale()
-		local left, bottom = button:GetLeft(), button:GetBottom()
-		if not left then return end
-		tester.owner = button
-		tester:SetAttribute("macrotext", slot.command or "")
-		tester:ClearAllPoints()
-		tester:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left * scale, bottom * scale)
-		tester:SetSize(button:GetWidth() * scale, button:GetHeight() * scale)
-		tester:Show()
-	end
-
-	-- Each icon's row (made as needed; i: its place on the wheel).
-	local slotRows = {}
-	local function MoveSlot(i, by)
-		local slots = selected.slots
-		if slots[i] and slots[i + by] then
-			slots[i], slots[i + by] = slots[i + by], slots[i]
+	slotEditor = SlotEditor(kit, editorFrame, header, picker, {
+		Slots = function() return selected and selected.slots or {} end,
+		Max = function() return MAX_SLOTS end,
+		Edited = function() dirty = true end,
+		Commit = function()
 			dirty = true
 			Apply()
 			RefreshPage()
-		end
-	end
-	local function SlotRow(i)
-		local row = CreateFrame("Frame", nil, editor)
-		row:SetSize(580, SLOT_ROW)
-		row:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -26 - (i - 1) * SLOT_ROW)
-		local icon = IconTile(row, 32)
-		icon:SetPoint("TOPLEFT", 0, 0)
-		kit.Tooltip(icon, L["Click to pick its icon."])
-		icon:SetScript("OnClick", function(self)
-			local slot = selected and selected.slots[i]
-			if slot then picker:Open(self, i, slot.icon) end
-		end)
-		local label = InputBox(row)
-		label:SetSize(120, 22)
-		label:SetAutoFocus(false)
-		label:SetMaxLetters(40)
-		label:SetPoint("TOPLEFT", 48, -5)
-		kit.Tooltip(label, L["Its name in the wheel's middle as you point at it. Empty: its command's first line."])
-		label:SetScript("OnTextChanged", function(self, userInput)
-			local slot = selected and selected.slots[i]
-			if userInput and slot then
-				slot.label = self:GetText()
-				dirty = true
-			end
-		end)
-		label:SetScript("OnEnterPressed", label.ClearFocus)
-		label:SetScript("OnEscapePressed", label.ClearFocus)
-		label:SetScript("OnEditFocusLost", function()
-			Apply()
-			RefreshPage()
-		end)
-		local command = CommandBox(row, 250)
-		command:SetPoint("TOPLEFT", 172, 0)
-		kit.Tooltip(command, L["What picking it does: a slash command, such as /rw Pull in 10, or several, a " ..
-			"line each (anything a macro can do). The game cuts a line at 255 letters."])
-		command.box:SetScript("OnTextChanged", function(self, userInput)
-			local slot = selected and selected.slots[i]
-			if userInput and slot then
-				slot.command = self:GetText()
-				dirty = true
-			end
-		end)
-		command.box:SetScript("OnEditFocusLost", function()
-			Apply()
-			RefreshPage()
-		end)
-		-- Test: runs its command now, as a pick would (through the secure
-		-- tester laid over it, below).
-		local test = PanelButton(row)
-		test:SetSize(52, 22)
-		test:SetPoint("TOPLEFT", 430, -5)
-		test:SetText(L["Test"])
-		test:SetScript("OnEnter", function(self)
-			local slot = selected and selected.slots[i]
-			if slot then CoverWith(self, slot) end
-		end)
-		row.up, row.down = Arrow(row, "Up"), Arrow(row, "Down")
-		row.up:SetPoint("TOPLEFT", 488, -5)
-		row.down:SetPoint("LEFT", row.up, "RIGHT", 2, 0)
-		row.up:SetScript("OnClick", function() MoveSlot(i, -1) end)
-		row.down:SetScript("OnClick", function() MoveSlot(i, 1) end)
-		kit.Tooltip(row.up, L["Earlier round the wheel (the first is at the top)."])
-		kit.Tooltip(row.down, L["Later round the wheel."])
-		local remove = CreateFrame("Button", nil, row)
-		remove:SetSize(20, 20)
-		remove:SetPoint("LEFT", row.down, "RIGHT", 6, 0)
-		remove:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
-		remove:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
-		kit.Tooltip(remove, L["Takes this icon off the wheel."])
-		remove:SetScript("OnClick", function()
-			if selected and selected.slots[i] then
-				table.remove(selected.slots, i)
-				dirty = true
-				Apply()
-				RefreshPage()
-			end
-		end)
-		row.icon, row.label, row.command, row.test = icon, label, command, test
-		row.test:SetEnabled(not InCombatLockdown())
-		return row
-	end
-
-	local add = PanelButton(editor)
-	add:SetSize(120, 22)
-	add:SetText(L["Add an icon"])
-	kit.Tooltip(add, L["Adds an icon to the wheel, for a command of its own (up to 12)."])
-	add:SetScript("OnClick", function()
-		if selected and #selected.slots < MAX_SLOTS then
-			selected.slots[#selected.slots + 1] = { label = "", icon = DEFAULT_ICON, command = "" }
-			dirty = true
-			Apply()
-			RefreshPage()
-		end
-	end)
+		end,
+	})
 
 	local preview = Preview(content, "")
 
@@ -816,7 +1132,7 @@ local function YourWheelsPage(kit, info)
 			button:SetEnabled(#list < MAX)
 		end
 		empty:SetShown(#list == 0)
-		editor:SetShown(selected ~= nil)
+		editorFrame:SetShown(selected ~= nil)
 		preview:SetShown(selected ~= nil)
 		if selected then
 			wheelIcon.icon:SetTexture(selected.icon or DEFAULT_ICON)
@@ -827,36 +1143,11 @@ local function YourWheelsPage(kit, info)
 			firstKey.action, secondKey.action = action, action
 			kit.RefreshKeybinds()
 			onMaster:Refresh()
-			local slots = selected.slots
-			for i = 1, math.max(#slots, #slotRows) do
-				local slot, row = slots[i], slotRows[i]
-				if slot and not row then
-					row = SlotRow(i)
-					slotRows[i] = row
-				end
-				if slot then
-					row.icon.icon:SetTexture(slot.icon or DEFAULT_ICON)
-					if not row.label:HasFocus() then
-						row.label:SetText(slot.label or "")
-					end
-					if not row.command.box:HasFocus() then
-						row.command.box:SetText(slot.command or "")
-					end
-					row.test:SetEnabled(not InCombatLockdown())
-					row.up:SetEnabled(i > 1)
-					row.down:SetEnabled(i < #slots)
-					row:Show()
-				elseif row then
-					row:Hide()
-				end
-			end
-			add:ClearAllPoints()
-			add:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -26 - #slots * SLOT_ROW - 4)
-			add:SetEnabled(#slots < MAX_SLOTS)
-			-- (The editor's height: down to the Add button, for the page's scroll.)
-			editor:SetHeight(TILE + 120 + #slots * SLOT_ROW + 30)
+			local count = slotEditor:Refresh()
+			-- (The editor's height: down to Add an icon, for the page's scroll.)
+			editorFrame:SetHeight(TILE + 120 + count * SLOT_ROW + 30)
 			preview:ClearAllPoints()
-			preview:SetPoint("TOPLEFT", add, "BOTTOMLEFT", 0, -20)
+			preview:SetPoint("TOPLEFT", slotEditor.add, "BOTTOMLEFT", 0, -20)
 			preview:SetTitle(selected.name)
 			preview:SetEntries(ns.CustomWheelEntries(selected))
 		end
@@ -864,7 +1155,7 @@ local function YourWheelsPage(kit, info)
 	end
 	Finish(kit, canvas, content, info, RefreshPage, function()
 		picker:Hide()
-		if not InCombatLockdown() then tester:Hide() end
+		HideTester()
 		Apply()
 	end)
 end
