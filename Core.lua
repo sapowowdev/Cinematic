@@ -3755,6 +3755,20 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.chatRollsOffV1 = true
 		end
+		-- Skill ups no longer bring up chat (off by default now). Once, in every
+		-- profile.
+		if not ns.db.chatSkillOffV1 then
+			local function SkillOff(t)
+				if type(t.chatPeekTypes) == "table" then
+					t.chatPeekTypes.skill = nil -- (off by default)
+				end
+			end
+			SkillOff(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then SkillOff(saved) end
+			end
+			ns.db.chatSkillOffV1 = true
+		end
 		-- The cozy camera by a tent: 8 yards, not 7. Once, in every profile still
 		-- at the old default (there's no slider for it).
 		if not ns.db.cozyTentCloseV1 then
