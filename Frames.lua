@@ -66,6 +66,10 @@ local FRAME_GROUPS = {
 		"GamepadPlayerCastingBarFrame",
 	},
 	meters = { "DamageMeter" },
+	-- The encounter bar: the extra power bar some bosses, quests and vehicles
+	-- bring up. Retail's PlayerPowerBarAlt sits inside EncounterBar, which
+	-- Edit Mode places (one of them, so it isn't faded twice).
+	encounter = { _G.EncounterBar and "EncounterBar" or "PlayerPowerBarAlt" },
 	-- Voice chat's notices of who's talking (above the chat): the game makes
 	-- them inside this frame.
 	voice = { "VoiceActivityManager" },
@@ -1679,6 +1683,9 @@ ns.COMBAT_SHOW = {
 		morePage = "Cooldown Manager" },
 	{ key = "cooldownsutility", label = L["Utility Cooldowns"], default = false, addon = "Blizzard_CooldownViewer",
 		frames = { "UtilityCooldownViewer" }, morePage = "Cooldown Manager" },
+	-- Always ticked to start with (CINE_SHOW_DEFAULT): a boss's or quest's bar to watch.
+	{ key = "encounter", label = L["Encounter bar"], default = false, frames = FRAME_GROUPS.encounter,
+		tip = L["The extra bar some bosses, quests and vehicles bring up, such as a boss's own power."] },
 	-- Numbered as retail's Edit Mode numbers them; Classic doesn't number its
 	-- bars, so there each also says where it sits.
 	{ key = "mainbar", label = L["Action bar 1"], default = true,
@@ -1747,7 +1754,7 @@ ns.COMBAT_SHOW = {
 local ROW_SECTIONS = {
 	player = "units", petframe = "units", prd = "units", prdpower = "units", target = "units", tot = "units", focus = "units", focustot = "units",
 	buffs = "combat", swing = "combat", castbar = "combat", meters = "combat", cooldowns = "combat",
-	cooldownsutility = "combat",
+	cooldownsutility = "combat", encounter = "combat",
 	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars",
 	pet = "bars", stance = "bars", totems = "bars", extra = "bars",
 	right1 = "extrabars", right2 = "extrabars", bar6 = "extrabars", bar7 = "extrabars", bar8 = "extrabars",
@@ -1850,7 +1857,7 @@ local HOVER_ROW_BY_GROUP = {
 	minimap = "minimap", buffs = "buffs", quests = "quests", questtimer = "questtimer", misc = "durability",
 	swing = "swing", castbar = "castbar", meters = "meters", cooldowns = "cooldowns", waypoint = "waypoint",
 	gamepadbars = "gamepadbars", gamepadlegend = "gamepadlegend", gamepadreticle = "gamepadreticle",
-	chat = "chat", barart = "mainbar", voice = "voice",
+	chat = "chat", barart = "mainbar", voice = "voice", encounter = "encounter",
 }
 function ns.HoverRowFor(entry)
 	return (entry.name and HOVER_ROW_BY_NAME[entry.name]) or HOVER_ROW_BY_GROUP[entry.group] or entry.group
@@ -2168,6 +2175,7 @@ local CINE_SHOW_DEFAULT = {
 	flags = true, castbar = true, partyroles = true, partynames = true, partystatus = true,
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true,
 	raiddebuffs = true, raidthreat = true, raidtarget = true, raidready = true, extra = true, voice = true,
+	encounter = true,
 }
 function ns.IsCineShowOn(key)
 	local setting = ns.CINE_SHOW_SETTING[key]
