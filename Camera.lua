@@ -2802,7 +2802,11 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	-- at a campfire is still cozy.) So is a Chat Cam conversation (NPCs talking to you).
 	local casting = (ns.Flag(UnitCastingInfo("player")) or ns.Flag(UnitChannelInfo("player")))
 		and not ns.IsFishingEvent() and not ns.IsDepartEvent()
-	if onTaxi or active or atNPC or inMenu or (casting and not ns.IsCozy()) or (ns.ChatCamActive and ns.ChatCamActive()) then
+	-- A movie or in-game cutscene playing: you're watching, not standing about,
+	-- so the timer starts once it's over.
+	local movie = (MovieFrame and ns.Flag(MovieFrame:IsShown())) or (CinematicFrame and ns.Flag(CinematicFrame:IsShown()))
+	if onTaxi or active or atNPC or inMenu or movie or (casting and not ns.IsCozy())
+		or (ns.ChatCamActive and ns.ChatCamActive()) then
 		ns.stillSince = nil
 	elseif not ns.stillSince then
 		-- Stopping from the RP walk or auto-run camera goes straight into the
