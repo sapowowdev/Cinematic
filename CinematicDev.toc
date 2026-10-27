@@ -85,12 +85,13 @@ Tracking.lua
 NodeSweep.lua
 Slash.lua
 ProfileModules.lua
+ProfileChoices.lua
 Profiles.lua
 Share.lua
 Welcome.lua
 WelcomeDemo.lua
 Layouts.lua
-ProfileBuilder.lua
+ModuleEditor.lua
 ProfilesDemo.lua
 GridDemo.lua
 Options.lua

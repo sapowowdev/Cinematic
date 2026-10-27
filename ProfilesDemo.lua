@@ -1,7 +1,7 @@
 -- The dev build's Profiles demo page: the Profiles page done the modular way,
 -- to see how it looks before the real one changes. A profile is where you
 -- start from; under it, each part (a profile slot, ProfileSlots.lua) has its
--- choices (ns.SLOT_CHOICES, WelcomeDemo.lua), the live one lit, and picking
+-- choices (ns.SLOT_CHOICES, ProfileChoices.lua), the live one lit, and picking
 -- another changes just that part (ns.ApplyPart: on a built-in, first a
 -- profile of your own). Wired in: it really switches. Drawn flat, as the
 -- welcome demo is. Options.lua calls ns.CreateProfilesDemo (dev build only).

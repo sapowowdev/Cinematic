@@ -1,9 +1,14 @@
--- Profile modules: the pieces the built-in profiles (Profiles.lua) are made
--- of. A module is a set of settings for the pages, or the sections of pages,
--- it names (its scope), and changes nothing outside them: the CDM module is
--- just the Standard Frames page's action bar sections and the Cooldown
--- Manager page, so a profile with the Cooldown Manager is another profile
--- plus that module, not a whole Standard Frames setup of its own.
+-- Profile modules: the settings under the choices and profiles in
+-- ProfileChoices.lua. A module is a set of settings for the pages, or the
+-- sections of pages, it names (its scope), and changes nothing outside
+-- them: the CDM module is just the Cooldown Manager page and the Standard
+-- Frames page's Combat and action bar sections, so the CDM choice is those
+-- settings and nothing else.
+--
+-- A module is written one of two ways: apply = function(set) (set(key,
+-- value) a setting, set(list, { row = value }) some rows of a list), or as
+-- data, settings = { key = value, list = { row = value } }, which is what
+-- the dev build's Module Editor (ModuleEditor.lua) makes and exports.
 --
 -- Where a setting is: its address, "Page/Section" by the English names the
 -- options show (Options.lua records each setting's page and the header or
@@ -12,11 +17,9 @@
 -- (the Standard Frames columns) has an address per row: the CDM module can
 -- have the In combat column's action bar rows without its unit frame rows.
 --
--- A built-in profile's modules go on top of the defaults in its order, each
--- writing only its own settings: two modules of one profile never write the
--- same setting or row, except that a module of the same group replaces the
--- one before (the Edit Mode layout: a profile's own replacing the one it
--- started from). /cine debug modules checks all of this, and so does
+-- Two modules of one profile never change the same setting or row, except
+-- that a module of the same group replaces the one before (the Edit Mode
+-- layouts). /cine debug modules checks all of this, and so does
 -- Tools/offline/check.lua outside the game, on both clients.
 
 local _, ns = ...
@@ -140,8 +143,8 @@ local function Layout(key, name, layout, client, tip)
 		apply = function(set) set("editModeLayout", layout) end }
 end
 
--- Every module, in the order the Profile Builder lists them. key: what
--- profiles name it by. client: only on that one ("forever" or "retail";
+-- Every module, in the order the Module Editor lists them. key: what
+-- choices and profiles name it by. client: only on that one ("forever" or "retail";
 -- skipped on the other). group: one of a group per profile (a later one
 -- replaces the earlier). apply(set, client): set(key, value) writes a
 -- setting, or a list's rows (just the ones given).
@@ -410,78 +413,235 @@ ns.PROFILE_MODULES = {
 			set("chatSpeechBehind", true)
 		end },
 }
+local function CopyValue(value)
+	if type(value) ~= "table" then return value end
+	local copy = {}
+	for k, v in pairs(value) do copy[k] = CopyValue(v) end
+	return copy
+end
+
+-- A module written as data (settings = { key = value, list = { row = value } }:
+-- what the Module Editor exports) is applied as one: its lists by row
+-- (hoverGroups whole), in the settings' new form, after the old grids'
+-- settings have gone over (ns.ApplyModules).
+local function DataModule(module)
+	module.data = true
+	module.apply = function(set)
+		for key, value in pairs(module.settings) do set(key, CopyValue(value)) end
+	end
+	return module
+end
 local moduleByKey = {}
-for _, module in ipairs(ns.PROFILE_MODULES) do moduleByKey[module.key] = module end
+for _, module in ipairs(ns.PROFILE_MODULES) do
+	if module.settings and not module.apply then DataModule(module) end
+	moduleByKey[module.key] = module
+end
 ns.PROFILE_MODULE_BY_KEY = moduleByKey
 
--- A built-in profile's modules on a client, in order: the ones of the
--- profile it's from (its from, by name), then its own (each a key, or
--- { forever = key, retail = key }; "-key" takes one it's from out), the
--- other client's left out and a later module of a group in place of the
--- earlier. modules: in place of the profile's own (the Profile Builder's
--- changes). Also each one's key and where it came from (the profile's name).
-function ns.ResolveModules(profile, client, byName, modules)
+-- The dev build's Module Editor changes (db.devEdits: modules[key] = a data
+-- module, in place of the code's or new; choices[slot][part] = { modules };
+-- profiles[name] = { picks, modules }), or nil. They take effect on a
+-- profile when it's picked or reset.
+function ns.DevEdits()
+	return ns.isDev and ns.db and ns.db.devEdits or nil
+end
+
+-- A module by its key: the Editor's version of it, else the code's.
+local editedModules = setmetatable({}, { __mode = "k" })
+function ns.GetModule(key)
+	local edits = ns.DevEdits()
+	local edited = edits and edits.modules and edits.modules[key]
+	if edited then
+		-- (Made into a module once per saved table.)
+		if not editedModules[edited] then
+			local module = CopyValue(edited)
+			module.key, module.edited = key, true
+			module.scope = module.scope or {}
+			editedModules[edited] = DataModule(module)
+		end
+		return editedModules[edited]
+	end
+	return moduleByKey[key]
+end
+
+-- Every module's key: the code's in order, then the Editor's new ones.
+function ns.ModuleKeys()
+	local keys, seen = {}, {}
+	for _, module in ipairs(ns.PROFILE_MODULES) do
+		keys[#keys + 1] = module.key
+		seen[module.key] = true
+	end
+	local edits = ns.DevEdits()
+	local extra = {}
+	for key in pairs(edits and edits.modules or {}) do
+		if not seen[key] then extra[#extra + 1] = key end
+	end
+	table.sort(extra)
+	for _, key in ipairs(extra) do keys[#keys + 1] = key end
+	return keys
+end
+
+-- A slot's choice by its part (with the Editor's modules for it), or nil.
+function ns.GetChoice(slot, part)
+	local info = ns.SLOT_CHOICES and ns.SLOT_CHOICES[slot]
+	for _, choice in ipairs(info and info.choices or {}) do
+		if choice.part == part then
+			local edits = ns.DevEdits()
+			local edited = edits and edits.choices and edits.choices[slot] and edits.choices[slot][part]
+			if edited then
+				local copy = {}
+				for k, v in pairs(choice) do copy[k] = v end
+				copy.modules, copy.edited = edited.modules, true
+				return copy
+			end
+			return choice
+		end
+	end
+end
+
+-- A slot's choices players are offered on this client (not hidden), or nil
+-- with fewer than two.
+function ns.SlotChoices(slot)
 	local list = {}
-	local function Add(entry, from)
+	local info = ns.SLOT_CHOICES and ns.SLOT_CHOICES[slot]
+	for _, choice in ipairs(info and info.choices or {}) do
+		if not choice.hidden and (not choice.client or choice.client == ns.CLIENT) then
+			list[#list + 1] = ns.GetChoice(slot, choice.part)
+		end
+	end
+	return #list > 1 and list or nil
+end
+
+-- A list of module entries (keys, { forever =, retail = }, "-key" taking an
+-- earlier one out) added to list on a client: the other client's left out,
+-- a later module of a group in place of the earlier. Each entry: key,
+-- module (or missing), and what's in info (where it came from).
+local function AddModules(list, entries, client, info)
+	for _, entry in ipairs(entries or {}) do
 		local key = type(entry) == "table" and entry[client] or entry
 		if type(key) == "string" and key:sub(1, 1) == "-" then
 			for i = #list, 1, -1 do
 				if list[i].key == key:sub(2) then table.remove(list, i) end
 			end
-			return
-		end
-		local module = key and moduleByKey[key]
-		if type(entry) == "string" and not module then
-			list[#list + 1] = { key = key, from = from, missing = true }
-			return
-		end
-		if not module or (module.client and module.client ~= client) then return end
-		if module.group then
-			for i = #list, 1, -1 do
-				if list[i].module and list[i].module.group == module.group then table.remove(list, i) end
+		elseif key then
+			local module = ns.GetModule(key)
+			if type(entry) == "string" and not module then
+				local missing = { key = key, missing = true }
+				for k, v in pairs(info) do missing[k] = v end
+				list[#list + 1] = missing
+			elseif module and not (module.client and module.client ~= client) then
+				if module.group then
+					for i = #list, 1, -1 do
+						if list[i].module and list[i].module.group == module.group then table.remove(list, i) end
+					end
+				end
+				local added = { key = key, module = module }
+				for k, v in pairs(info) do added[k] = v end
+				list[#list + 1] = added
 			end
 		end
-		list[#list + 1] = { key = key, module = module, from = from }
 	end
-	local parent = profile.from and byName[profile.from]
-	if parent then
-		for _, entry in ipairs(ns.ResolveModules(parent, client, byName)) do
-			if entry.module then Add(entry.key, entry.from) else list[#list + 1] = entry end
+	return list
+end
+
+-- A choice's modules on a client, resolved (nil: no such choice).
+function ns.ChoiceModules(slot, part, client)
+	local choice = ns.GetChoice(slot, part)
+	if not choice then return nil end
+	return AddModules({}, choice.modules, client or ns.CLIENT, { slot = slot, part = part })
+end
+
+-- A profile's pick for each slot on a client, and which profile picked it:
+-- its own, else the one it's from, else the slot's default ("default").
+-- editOf(name): the Editor's { picks, modules } for a profile, in place of its own.
+local function Picks(profile, client, byName, editOf)
+	local picks, by = {}, {}
+	local function Walk(p, depth)
+		if depth > 10 then return end -- (a loop of froms)
+		if p.from and byName[p.from] then Walk(byName[p.from], depth + 1) end
+		local own = editOf and editOf(p.name) or p
+		for slot, pick in pairs(own.picks or {}) do
+			if type(pick) == "table" then pick = pick[client] end
+			if pick then picks[slot], by[slot] = pick, p.name end
 		end
 	end
-	for _, entry in ipairs(modules or profile.modules or {}) do Add(entry, profile.name) end
+	Walk(profile, 0)
+	return picks, by
+end
+ns.ProfilePicks = Picks
+
+-- A built-in profile's modules on a client, in order: each slot's choice
+-- (its picks), then the modules of its own (and of those it's from). Each
+-- entry: key, module (or missing), slot and part (the choice it's from, if
+-- any) and from (the profile that picked it or added it; "default": the
+-- slot's default). A choice that isn't there: an entry with missing and
+-- part. editOf: as for the picks.
+function ns.ResolveModules(profile, client, byName, editOf)
+	local list = {}
+	local picks, by = Picks(profile, client, byName or {}, editOf)
+	for _, slot in ipairs(ns.PROFILE_SLOTS or {}) do
+		local info = ns.SLOT_CHOICES[slot.key]
+		local part = picks[slot.key] or (info and info.default)
+		if part then
+			local choice = ns.GetChoice(slot.key, part)
+			if choice then
+				AddModules(list, choice.modules, client, { slot = slot.key, part = part, from = by[slot.key] or "default" })
+			else
+				list[#list + 1] = { key = slot.key .. ":" .. part, slot = slot.key, part = part, missing = true,
+					from = by[slot.key] }
+			end
+		end
+	end
+	local function Extras(p, depth)
+		if depth > 10 then return end
+		if p.from and byName and byName[p.from] then Extras(byName[p.from], depth + 1) end
+		local own = editOf and editOf(p.name) or p
+		AddModules(list, own.modules, client, { from = p.name })
+	end
+	Extras(profile, 0)
 	return list
 end
 
 -- The modules' settings on top of base, in order (resolved: ns.ResolveModules).
 -- A list's rows from two modules go together. onSet(key, row, value, module):
--- each write, for the checks. Modules still set the old grids' settings
--- (Turn off in and the like): they go over as they're applied
--- (ns.ConvertOffGrids, Core.lua), unless keepOld.
+-- each write, for the checks. Modules in code still set the old grids'
+-- settings (Turn off in and the like): they go over as they're applied
+-- (ns.ConvertOffGrids, Core.lua), unless keepOld; data modules (the
+-- Editor's) go on after, in the new form.
 function ns.ApplyModules(resolved, base, client, onSet, keepOld)
 	local written = {}
-	for _, entry in ipairs(resolved) do
-		if entry.module then
-			entry.module.apply(function(key, value)
-				if type(value) == "table" and key ~= "hoverGroups" then
-					if not written[key] then
-						base[key] = {}
-						written[key] = true
+	local function Pass(data)
+		for _, entry in ipairs(resolved) do
+			local module = entry.module
+			if module and (module.data or false) == data then
+				module.apply(function(key, value)
+					if type(value) == "table" and key ~= "hoverGroups" then
+						if not written[key] then
+							-- (Data modules keep what's there, the old grids' rows gone over.)
+							local old = base[key]
+							base[key] = {}
+							if data and type(old) == "table" then
+								for row, rowValue in pairs(old) do base[key][row] = rowValue end
+							end
+							written[key] = true
+						end
+						for row, rowValue in pairs(value) do
+							base[key][row] = rowValue
+							if onSet then onSet(key, row, rowValue, module) end
+						end
+					else
+						base[key] = value
+						if onSet then onSet(key, nil, value, module) end
 					end
-					for row, rowValue in pairs(value) do
-						base[key][row] = rowValue
-						if onSet then onSet(key, row, rowValue, entry.module) end
-					end
-				else
-					base[key] = value
-					if onSet then onSet(key, nil, value, entry.module) end
-				end
-			end, client)
+				end, client)
+			end
 		end
 	end
+	Pass(false)
 	if not keepOld and ns.ConvertOffGrids then
 		ns.ConvertOffGrids(base, ns.OldGridDefault, { all = true })
 	end
+	Pass(true)
 	return base
 end
 
@@ -498,6 +658,7 @@ local function Serial(value)
 	for _, k in ipairs(keys) do parts[#parts + 1] = tostring(k) .. "=" .. Serial(value[k]) end
 	return "{" .. table.concat(parts, ",") .. "}"
 end
+ns.SerialValue = Serial
 
 -- What modules change once applied (the old grids' settings gone over to
 -- the new): each setting, or list row, that differs from the defaults
@@ -527,102 +688,24 @@ function ns.ModuleEffect(resolved, client)
 			out[#out + 1] = { key, nil, b }
 		end
 	end
+	table.sort(out, function(x, y)
+		return x[1] .. "." .. tostring(x[2]) < y[1] .. "." .. tostring(y[2])
+	end)
 	return out
 end
 
--- Slots and parts: the choices the welcome window's Customise pages and
--- the Profiles demo offer (ns.SLOT_CHOICES, WelcomeDemo.lua), a part per
--- slot, each part some modules. A slot's settings are the ones any of its
--- parts change (ns.SettingSlot), so picking a part (ns.ApplyPart) puts those
--- as it has them and leaves every other setting as it is.
-ns.PROFILE_SLOTS = {
-	{ key = "layout", name = "Edit Mode layout" },
-	{ key = "frames", name = "UI manager" },
-	{ key = "bars", name = "Action bars" },
-	{ key = "camera", name = "Camera" },
-	{ key = "vfx", name = "Visual effects" },
-	{ key = "misc", name = "Chat & misc" },
-}
--- Each slot's parts: their modules ({ forever =, retail = } for one that
--- differs by client). "standard": a slot's part for a profile that names none.
-local SLOT_PARTS = {
-	layout = {
-		retail = { "layout-retail" }, forever = { "layout-forever" }, pure = { "layout-pure" },
-		preset = { "layout-preset" },
-	},
-	frames = {
-		standard = { "recovering" },
-		immersive = { "recovering", "minimap-off-in-fights", "fewer-group-plates" },
-		nofade = { "recovering", "no-fading" },
-		solo = { "recovering", "solo-only" },
-		pure = { "pure-frames", "pure-plates", "pure-tooltips", "heal-vision-everywhere" },
-	},
-	bars = {
-		standard = { { retail = "retail-groups" } },
-		grouped = {},
-		split = { "retail-groups", "micro-off-in-fights" },
-		cdm = { { retail = "retail-groups" }, "cdm", "micro-off-in-fights" },
-		pure = { { retail = "retail-groups" }, "pure-cdm" },
-	},
-	camera = {
-		immersive = { "walk-run-music" }, lite = { "lite-cameras" }, off = { "no-cameras" },
-		cinemode = { "cameras-bring-cinemode" }, pure = { "pure-cameras" },
-	},
-	vfx = {
-		noletterbox = { "no-letterbox" }, cameras = { "effects-in-cameras" },
-		pure = { "letterbox-in-fights", "no-time-message", "vitals-vision" },
-	},
-	misc = {
-		quietnpcs = { "no-npc-chat" }, immersive = { "music-fatigue", "no-npc-chat" },
-		lite = { "lite-channels", "no-npc-chat" }, nomusic = { "no-cinemode-music" },
-		pure = { "pure-chat", "no-npc-chat" },
-	},
-}
-ns.SLOT_PARTS = SLOT_PARTS
--- A part's modules on a client, resolved.
-local function PartModules(list, client)
-	return ns.ResolveModules({ modules = list }, client, {})
-end
--- ns.PROFILE_PARTS[slot][name] = { modules =, client =, editMode =, apply(set, client) }.
-ns.PROFILE_PARTS = {}
-for slot, parts in pairs(SLOT_PARTS) do
-	ns.PROFILE_PARTS[slot] = {}
-	for name, list in pairs(parts) do
-		local part = { modules = list }
-		-- (Just one client's when all its modules are: the layouts.)
-		local only = moduleByKey[type(list[1]) == "string" and list[1] or ""]
-		if #list == 1 and only and only.client then
-			part.client, part.editMode = only.client, only.editMode
-		end
-		part.apply = function(set, client)
-			for _, entry in ipairs(PartModules(list, client)) do entry.module.apply(set, client) end
-		end
-		ns.PROFILE_PARTS[slot][name] = part
-	end
-end
-
--- The parts named ({ slot = part name }, a slot not named: its standard),
--- in slot order, on top of base.
-function ns.ApplyParts(parts, base, client, keepOld)
-	local list = {}
-	for _, slot in ipairs(ns.PROFILE_SLOTS) do
-		local part = ns.PROFILE_PARTS[slot.key][parts[slot.key] or "standard"]
-		if part then
-			for _, entry in ipairs(PartModules(part.modules, client)) do list[#list + 1] = entry end
-		end
-	end
-	return ns.ApplyModules(list, base, client, nil, keepOld)
-end
-
--- The slot whose parts change a setting (or a list's row), on this client;
--- nil: none of them do.
+-- The slot whose choices change a setting (or a list's row), on this
+-- client; nil: none of them do. (Picking a choice puts just these back as
+-- it has them: ns.ApplyPart.)
 local slotOf
+function ns.ForgetSlotSettings() slotOf = nil end
 function ns.SettingSlot(key, row)
 	if not slotOf then
 		slotOf = { keys = {}, rows = {} }
 		for _, slot in ipairs(ns.PROFILE_SLOTS) do
-			for _, part in pairs(ns.PROFILE_PARTS[slot.key]) do
-				for _, change in ipairs(ns.ModuleEffect(PartModules(part.modules, ns.CLIENT), ns.CLIENT)) do
+			for _, choice in ipairs(ns.SLOT_CHOICES[slot.key] and ns.SLOT_CHOICES[slot.key].choices or {}) do
+				local modules = ns.ChoiceModules(slot.key, choice.part, ns.CLIENT)
+				for _, change in ipairs(ns.ModuleEffect(modules, ns.CLIENT)) do
 					if change[2] == nil then
 						slotOf.keys[change[1]] = slotOf.keys[change[1]] or slot.key
 					else
@@ -738,7 +821,7 @@ function ns.SettingAddress(key, row)
 	return list and list[1]
 end
 
--- Every page's addresses, in its order (for the Profile Builder and the checks).
+-- Every page's addresses, in its order (for the Module Editor and the checks).
 function ns.PageSections()
 	map = map or BuildMap()
 	return map.sections
@@ -764,83 +847,90 @@ local function AnyInScope(scope, addresses)
 end
 
 -- The checks: each module writing only inside its scope, no two of a
--- profile's modules writing the same setting, and each built-in's modules
--- there. Problems as lines; also how many settings each module writes
--- (counts[key]), the scope entries not on this client's options (absent[key]
--- = { entry... }) and the settings it writes that are on no page here
--- (nowhere[key] = { setting... }): a page or a row can be the other
--- client's only, so Tools/offline/check.lua makes those problems only when
--- they're on neither.
+-- profile's modules setting the same thing, each choice's and built-in's
+-- modules (and each built-in's picks) there, and no setting changed by the
+-- choices of two slots. Problems as lines; also how many settings each
+-- module changes (counts[key]), the scope entries not on this client's
+-- options (absent[key] = { entry... }), the settings it changes that are on
+-- no page here (nowhere[key] = { setting... }): a page or a row can be the
+-- other client's only, so Tools/offline/check.lua makes those problems only
+-- when they're on neither. And notes: things worth a look that aren't wrong
+-- (two choices of a slot the same).
 function ns.CheckModules(client, profiles)
 	map = BuildMap()
+	local problems, counts, absent, nowhere, notes = {}, {}, {}, {}, {}
+	local function Problem(text) problems[#problems + 1] = text end
 	local effects = {}
 	local function Effect(module)
 		effects[module] = effects[module] or ns.ModuleEffect({ { module = module } }, client)
 		return effects[module]
 	end
-	local problems, counts, absent, nowhere = {}, {}, {}, {}
-	local function Problem(text) problems[#problems + 1] = text end
+	local function Where(change) return change[1] .. (change[2] ~= nil and "." .. tostring(change[2]) or "") end
 	local known = {}
 	for _, list in pairs(map.sections) do
 		for _, address in ipairs(list) do known[address] = true end
 	end
 	local pages = {}
 	for page in pairs(map.sections) do pages[page] = true end
-	for _, module in ipairs(ns.PROFILE_MODULES) do
+	for _, key in ipairs(ns.ModuleKeys()) do
+		local module = ns.GetModule(key)
 		if not module.client or module.client == client then
 			for _, entry in ipairs(module.scope) do
 				if not (known[entry] or pages[entry]) then
-					absent[module.key] = absent[module.key] or {}
-					table.insert(absent[module.key], entry)
+					absent[key] = absent[key] or {}
+					table.insert(absent[key], entry)
 				end
 			end
 			-- (Each setting it sets, the old grids' too.)
-			ns.ApplyModules({ { module = module } }, {}, client, function(key)
-				if ns.DEFAULTS[key] == nil and not ns.IS_PROFILE_TABLE[key]
-					and not (ns.OldGridDefault and ns.OldGridDefault(key) ~= nil) then
-					Problem(("module %s: %s isn't a setting"):format(module.key, key))
+			ns.ApplyModules({ { module = module } }, {}, client, function(setting)
+				if ns.DEFAULTS[setting] == nil and not ns.IS_PROFILE_TABLE[setting]
+					and not (ns.OldGridDefault and ns.OldGridDefault(setting) ~= nil) then
+					Problem(("module %s: %s isn't a setting"):format(key, setting))
 				end
 			end, true)
 			-- (What it changes, the old grids' gone over to the new.)
 			local changes, said = Effect(module), {}
 			for _, change in ipairs(changes) do
-				local key, row = change[1], change[2]
-				local addresses = ns.SettingAddresses(key, row)
-				local where = key .. (row ~= nil and "." .. tostring(row) or "")
+				local addresses = ns.SettingAddresses(change[1], change[2])
 				if not addresses then
-					nowhere[module.key] = nowhere[module.key] or {}
-					table.insert(nowhere[module.key], where)
+					nowhere[key] = nowhere[key] or {}
+					table.insert(nowhere[key], Where(change))
 				elseif not AnyInScope(module.scope, addresses) and not said[addresses[1]] then
 					said[addresses[1]] = true
-					Problem(("module %s: %s is in %s, outside its scope"):format(module.key, where,
+					Problem(("module %s: %s is in %s, outside its scope"):format(key, Where(change),
 						table.concat(addresses, " and ")))
 				end
 			end
-			counts[module.key] = #changes
+			counts[key] = #changes
 		end
 	end
 	local byName = {}
 	for _, profile in ipairs(profiles) do byName[profile.name] = profile end
+	local edits = ns.DevEdits()
+	local function EditOf(name) return edits and edits.profiles and edits.profiles[name] end
 	for _, profile in ipairs(profiles) do
 		if not profile.client or profile.client == client then
 			if profile.from and not byName[profile.from] then
 				Problem(("%s: from %s, which isn't a built-in profile"):format(profile.name, profile.from))
 			end
-			local resolved = ns.ResolveModules(profile, client, byName)
+			local own = EditOf(profile.name) or profile
+			for slot in pairs(own.picks or {}) do
+				if not ns.SLOT_CHOICES[slot] then Problem(("%s: picks for %s, which isn't a slot"):format(profile.name, slot)) end
+			end
+			local resolved = ns.ResolveModules(profile, client, byName, EditOf)
 			local who = {}
 			for _, entry in ipairs(resolved) do
 				if entry.missing then
-					Problem(("%s: no module called %s"):format(profile.name, entry.key))
+					Problem(entry.part and not entry.module and entry.key == entry.slot .. ":" .. entry.part
+						and ("%s: %s has no choice %s"):format(profile.name, entry.slot, entry.part)
+						or ("%s: no module called %s"):format(profile.name, entry.key))
 				elseif entry.module.editMode and entry.module.editMode ~= ns.LAYOUT_PRESET and ns.EDIT_MODE_LAYOUTS
 					and not ns.EDIT_MODE_LAYOUTS[entry.module.editMode] then
 					Problem(("%s: layout %s isn't one of Cinematic's (Layouts.lua)"):format(profile.name,
 						entry.module.editMode))
-				end
-			end
-			for _, entry in ipairs(resolved) do
-				if entry.module then
+				else
 					for _, change in ipairs(Effect(entry.module)) do
-						local where = change[1] .. (change[2] ~= nil and "." .. tostring(change[2]) or "")
+						local where = Where(change)
 						if who[where] and who[where] ~= entry.key then
 							Problem(("%s: %s and %s both set %s"):format(profile.name, who[where], entry.key, where))
 						end
@@ -850,39 +940,61 @@ function ns.CheckModules(client, profiles)
 			end
 		end
 	end
-	-- The slots' parts: their modules there, and no setting changed by the
-	-- parts of two slots.
+	-- The slots' choices: their modules there, no setting changed by the
+	-- choices of two slots, and (a note) two choices that come out the same.
 	local slotWho = {}
 	for _, slot in ipairs(ns.PROFILE_SLOTS) do
-		for name, part in pairs(ns.PROFILE_PARTS[slot.key]) do
-			for _, entry in ipairs(ns.ResolveModules({ modules = part.modules }, client, {})) do
-				if entry.missing then
-					Problem(("part %s.%s: no module called %s"):format(slot.key, name, entry.key))
-				else
-					for _, change in ipairs(Effect(entry.module)) do
-						local where = change[1] .. (change[2] ~= nil and "." .. tostring(change[2]) or "")
-						if slotWho[where] and slotWho[where] ~= slot.key then
-							Problem(("%s is changed by parts of two slots, %s and %s"):format(where, slotWho[where],
-								slot.key))
+		local info = ns.SLOT_CHOICES[slot.key]
+		if not info then
+			Problem(("slot %s has no choices (ns.SLOT_CHOICES)"):format(slot.key))
+		else
+			if info.default and not ns.GetChoice(slot.key, info.default) then
+				Problem(("slot %s: its default, %s, isn't one of its choices"):format(slot.key, info.default))
+			end
+			local seen = {}
+			for _, choice in ipairs(info.choices) do
+				if not choice.client or choice.client == client then
+					local modules = ns.ChoiceModules(slot.key, choice.part, client)
+					local all = {}
+					for _, entry in ipairs(modules) do
+						if entry.missing then
+							Problem(("choice %s.%s: no module called %s"):format(slot.key, choice.part, entry.key))
+						else
+							for _, change in ipairs(Effect(entry.module)) do
+								local where = Where(change)
+								all[#all + 1] = where .. "=" .. Serial(change[3])
+								if slotWho[where] and slotWho[where] ~= slot.key then
+									Problem(("%s is changed by choices of two slots, %s and %s"):format(where,
+										slotWho[where], slot.key))
+								end
+								slotWho[where] = slot.key
+							end
 						end
-						slotWho[where] = slot.key
 					end
+					table.sort(all)
+					local same = table.concat(all, ";")
+					if seen[same] and not choice.hidden and not seen[same].hidden then
+						notes[#notes + 1] = ("choices %s.%s and %s.%s change the same settings"):format(slot.key,
+							seen[same].part, slot.key, choice.part)
+					end
+					seen[same] = seen[same] or choice
 				end
 			end
 		end
 	end
-	return problems, counts, absent, nowhere
+	return problems, counts, absent, nowhere, notes
 end
 
 -- /cine debug modules: the checks on this client, details in the log.
 function ns.ModulesDebug()
-	local problems, counts = ns.CheckModules(ns.CLIENT, ns.ALL_BUILTIN_PROFILES)
-	for _, module in ipairs(ns.PROFILE_MODULES) do
-		if counts[module.key] then
-			ns.Log("modules", ("%s: %d settings in %s"):format(module.key, counts[module.key],
-				table.concat(module.scope, ", ")))
+	local problems, counts, _, _, notes = ns.CheckModules(ns.CLIENT, ns.ALL_BUILTIN_PROFILES)
+	for _, key in ipairs(ns.ModuleKeys()) do
+		if counts[key] then
+			ns.Log("modules", ("%s: %d settings in %s"):format(key, counts[key],
+				table.concat(ns.GetModule(key).scope, ", ")))
 		end
 	end
 	for _, line in ipairs(problems) do ns.Log("modules", line) end
-	ns.Print(("modules: %d problems (details in /cine log)"):format(#problems))
+	for _, line in ipairs(notes) do ns.Log("modules", "note: " .. line) end
+	ns.Print(("modules: %d problems, %d notes (details in /cine log)"):format(#problems, #notes))
 end

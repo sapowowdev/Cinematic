@@ -10558,13 +10558,13 @@ ns.OnLanguage(function()
 		ns.CreateWhatsNewPanels({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
 	end
-	-- The dev build's own pages, at the very end (ProfileBuilder.lua, Layouts.lua,
+	-- The dev build's own pages, at the very end (ModuleEditor.lua, Layouts.lua,
 	-- and the Style hub's Names page here).
 	if ns.isDev then
 		CreateNameStylePanel()
 	end
-	if ns.isDev and ns.CreateProfileBuilder then
-		ns.CreateProfileBuilder({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
+	if ns.isDev and ns.CreateModuleEditor then
+		ns.CreateModuleEditor({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
 	end
 	if ns.isDev and ns.CreateProfilesDemo then

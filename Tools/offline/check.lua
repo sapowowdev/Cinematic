@@ -8,7 +8,8 @@
 -- ns.CheckModules: each module writing only inside its scope, no two of a
 -- profile's modules setting the same thing, every built-in's modules there.
 -- Also: the files loading without errors, every scope entry on at least one
--- client's options, and every module used by a built-in or a slot's part. Exits 1 on any
+-- client's options, and every module used by a built-in or a slot's choice.
+-- Notes (two choices of a slot that come out the same) are listed but pass. Exits 1 on any
 -- problem.
 
 local RUNS = {
@@ -24,16 +25,18 @@ if arg[1] then
 		-- (The minimap button compares the stand-in's numbers: not the addon's.)
 		if not warning:find("^PLAYER_LOGIN: MinimapButton") then print("problem\t" .. warning) end
 	end
-	local problems, _, absent, nowhere = ns.CheckModules(client, ns.ALL_BUILTIN_PROFILES)
+	local problems, _, absent, nowhere, notes = ns.CheckModules(client, ns.ALL_BUILTIN_PROFILES)
 	for _, line in ipairs(problems) do print("problem\t" .. line) end
+	for _, line in ipairs(notes) do print("note\t" .. line) end
 	for key, entries in pairs(absent) do
 		for _, entry in ipairs(entries) do print("absent\t" .. key .. "\t" .. entry) end
 	end
 	for key, settings in pairs(nowhere) do
 		for _, setting in ipairs(settings) do print("nowhere\t" .. key .. "\t" .. setting) end
 	end
-	for _, module in ipairs(ns.PROFILE_MODULES) do
-		if not module.client or module.client == client then print("module\t" .. module.key) end
+	for _, key in ipairs(ns.ModuleKeys()) do
+		local module = ns.GetModule(key)
+		if not module.client or module.client == client then print("module\t" .. key) end
 	end
 	for _, profile in ipairs(ns.ALL_BUILTIN_PROFILES) do
 		if not profile.client or profile.client == client then
@@ -42,10 +45,10 @@ if arg[1] then
 			end
 		end
 	end
-	-- (Or by a slot's part: the welcome window's Customise choices.)
-	for _, parts in pairs(ns.PROFILE_PARTS) do
-		for _, part in pairs(parts) do
-			for _, entry in ipairs(ns.ResolveModules({ modules = part.modules }, client, {})) do
+	-- (Or by a slot's choice: the welcome window's Customize pages.)
+	for slot, info in pairs(ns.SLOT_CHOICES) do
+		for _, choice in ipairs(info.choices) do
+			for _, entry in ipairs(ns.ChoiceModules(slot, choice.part, client) or {}) do
 				print("used\t" .. entry.key)
 			end
 		end
@@ -53,7 +56,7 @@ if arg[1] then
 	return
 end
 
-local problems, seen = {}, {}
+local problems, seen, notes = {}, {}, {}
 local function Problem(text)
 	if not seen[text] then
 		seen[text] = true
@@ -68,6 +71,11 @@ for _, run in ipairs(RUNS) do
 		local kind, a, b = line:match("^(%a+)\t([^\t]*)\t?(.*)$")
 		if kind == "problem" then
 			Problem(where .. ": " .. a)
+		elseif kind == "note" then
+			if not seen["note " .. a] then
+				seen["note " .. a] = true
+				notes[#notes + 1] = a
+			end
 		elseif kind == "absent" then
 			absent[a .. "\t" .. b] = (absent[a .. "\t" .. b] or 0) + 1
 		elseif kind == "nowhere" then
@@ -101,6 +109,8 @@ for key in pairs(looked) do
 end
 
 table.sort(problems)
+table.sort(notes)
 for _, line in ipairs(problems) do print(line) end
-print(("profile modules: %d problems"):format(#problems))
+for _, line in ipairs(notes) do print("note: " .. line) end
+print(("profile modules: %d problems, %d notes"):format(#problems, #notes))
 os.exit(#problems == 0 and 0 or 1)
