@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chat and Quests</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column; quest talk sits in it as a small game window to click through. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --win-bg: #121418; --win-panel: #1b1e23; --win-edge: #3b3f46; --win-fg: #ece9e2; --win-dim: #9a9ca2;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body); padding-block: 0 }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 56px }
+.col > *, section > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+.muted { color: var(--muted) }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px }
+section { display: grid; gap: 14px }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+
+/* Opening: the letterbox itself */
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #2b3240 0%, #151a22 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+
+/* Settings, as the pages list them */
+.opts { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden }
+.opt { padding: 11px 16px; border-top: 1px solid var(--line); display: grid; gap: 2px }
+.opt:first-child { border-top: 0 }
+.opt .l { font-weight: 600 }
+.opt .d { color: var(--muted); font-size: 15.5px }
+.note { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; color: var(--muted) }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0 }
+.chips li { font-size: 14.5px; border: 1px solid var(--line); background: var(--surface); border-radius: 4px; padding: 2px 8px }
+.chips li.off { color: var(--muted); border-style: dashed }
+.legend { font-size: 14.5px; color: var(--muted) }
+
+/* Quest talk: a game window */
+.win { background: var(--win-bg); color: var(--win-fg); border: 1px solid var(--win-edge); border-radius: 6px; overflow: hidden; font-size: 15.5px }
+.win-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px;
+  border-bottom: 1px solid var(--win-edge); background: var(--win-panel) }
+.win-title { font: 400 20px var(--font-display); color: var(--gold) }
+.seg { display: inline-flex; border: 1px solid var(--win-edge); border-radius: 5px; overflow: hidden }
+.seg button { font: 500 14px var(--font-body); background: transparent; color: var(--win-dim); border: 0; padding: 5px 11px; cursor: pointer }
+.seg button[aria-pressed="true"] { background: #2a2d33; color: var(--win-fg) }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
+.world { position: relative; padding: 18px 16px 16px; display: grid; gap: 14px; justify-items: center;
+  background: linear-gradient(#5b6f84 0%, #8f8a6c 46%, #3d4a33 47%, #26301f 100%) }
+.world:focus { outline: none }
+.world:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px }
+.bubble { position: relative; width: min(440px, 100%); padding: 14px 16px 14px 62px; border-radius: 10px; color: #3a2a12; font-size: 15.5px; line-height: 1.45; min-height: 96px;
+  background: linear-gradient(#f4e4bf, #e5cf9c); border: 2px solid #8a6a3a; box-shadow: 0 6px 18px rgba(0,0,0,.45) }
+.bubble.chat { background: #f7f7f2; border-color: #c9c9c0; color: #1d1d1d }
+.bubble::after { content: ""; position: absolute; left: 50%; bottom: -12px; width: 18px; height: 18px; margin-left: -9px; transform: rotate(45deg);
+  background: inherit; border-right: 2px solid; border-bottom: 2px solid; border-color: inherit }
+.bubble .pt { position: absolute; left: -10px; top: -10px; width: 58px; height: 58px; border-radius: 50%; border: 3px solid #c79b3b;
+  background: radial-gradient(circle at 50% 38%, #e7c49a 0 26%, #6b4a2b 27% 44%, #2c3e5a 45%) }
+.bubble .who { font-weight: 600; color: #6b4a12; margin-bottom: 2px }
+.bubble.chat .who { color: #444 }
+.bubble .more { display: block; margin-top: 6px; font-size: 13px; color: #7a5a2a }
+.npc { width: 26px; height: 52px; border-radius: 12px 12px 4px 4px; background: #2a2016; margin-top: 4px }
+.card { width: min(440px, 100%); border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px; background: rgba(12,13,16,.92); border: 1px solid #4a4433 }
+.card .obj { color: var(--win-dim); font-size: 14.5px }
+.card .obj b { color: var(--gold); font-weight: 600 }
+.rewards { display: flex; flex-wrap: wrap; gap: 8px }
+.reward { display: flex; align-items: center; gap: 8px; border: 1px solid #3b3f46; border-radius: 4px; padding: 4px 8px 4px 4px; background: #17191d; font-size: 14px; cursor: pointer; color: inherit; font-family: inherit }
+.reward i { width: 28px; height: 28px; border-radius: 3px; flex: none }
+.reward[aria-pressed="true"] { border-color: var(--gold); box-shadow: 0 0 8px rgba(226,181,63,.5) }
+.btns { display: flex; flex-wrap: wrap; gap: 8px }
+.wbtn { font: 600 14px var(--font-body); background: #6b1d12; color: #ffd27a; border: 1px solid #a0391f; border-radius: 4px; padding: 6px 12px; cursor: pointer }
+.wbtn.plain { background: #24272d; color: var(--win-fg); border-color: var(--win-edge) }
+.wbtn .k { color: #fff; opacity: .7; margin-right: 6px; font-family: var(--font-mono); font-size: 12px }
+.list { width: min(440px, 100%); list-style: none; margin: 0; padding: 0; display: grid; gap: 4px }
+.list button { width: 100%; text-align: left; display: flex; gap: 10px; align-items: center; background: rgba(12,13,16,.85); color: var(--win-fg);
+  border: 1px solid #33373e; border-radius: 4px; padding: 7px 10px; font: 500 15px var(--font-body); cursor: pointer }
+.list button:hover { border-color: var(--gold) }
+.list .n { font-family: var(--font-mono); font-size: 13px; color: var(--gold); width: 1.2em }
+.list .ic { width: 16px; text-align: center; font-weight: 700 }
+.win-foot { color: var(--win-dim); font-size: 14px; padding: 12px 16px 14px; border-top: 1px solid var(--win-edge) }
+
+/* Speech from behind you */
+.behind { position: relative; height: 170px; border-radius: 6px; overflow: hidden; border: 1px solid var(--win-edge);
+  background: linear-gradient(#52667a 0%, #8a8463 50%, #3d4a33 51%, #26301f 100%) }
+.behind .line { position: absolute; left: 50%; transform: translateX(-50%); bottom: 14px; padding: 6px 12px; border-radius: 8px; font-size: 14.5px; white-space: nowrap;
+  background: rgba(247,247,242,.85); color: #1d1d1d; border: 1px solid #c9c9c0; opacity: .8 }
+.behind .line b { color: #2a6ec0 }
+.behind .line.up { bottom: 54px; opacity: .5 }
+.behind .line::before { content: ""; position: absolute; left: 50%; top: -7px; width: 10px; height: 10px; margin-left: -5px; transform: rotate(45deg);
+  background: inherit; border-left: 1px solid #c9c9c0; border-top: 1px solid #c9c9c0 }
+
+dl.faq { display: grid; gap: 16px; margin: 0 }
+dl.faq dt { font-weight: 600 }
+dl.faq dd { margin: 2px 0 0; color: var(--muted) }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">Cinematic · Chat and quests</div>
+      <h1>Hear the world without the windows</h1>
+      <p>Chat fades with the rest of the UI and peeks back in when something worth reading arrives. People's words float over their heads, and quest givers talk to you in speech bubbles instead of a window.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter" style="padding-block:48px 40px">
+<div class="col">
+
+  <section id="chat">
+    <div class="eyebrow">The Chat page</div>
+    <h2>Chat that peeks in</h2>
+    <p>In CineMode the chat window fades with the rest of the UI. Putting the mouse over it, or typing, always brings it back. With <b>Show chat when a message arrives</b> (on to start with), a new message briefly shows just the chat window it arrived in, for 8 seconds or as long as you set in <b>Show chat for</b>.</p>
+    <h3>Which messages bring it up</h3>
+    <p class="muted">The Chat page lists every kind of message in a grid, like the rest of Cinematic's grids: tick <b>Always</b> for any time, or pick when (in fights, with a target, in certain places). The ones ticked to start with:</p>
+    <ul class="chips" aria-label="Conversation">
+      <li>Say</li><li>Yell</li><li>Emotes</li><li>Whispers</li><li>Party</li><li>Raid</li><li>Raid warnings</li><li>Instance</li><li>Guild</li><li>Officer</li><li>NPC speech</li><li>Boss emotes</li>
+    </ul>
+    <ul class="chips" aria-label="Game messages">
+      <li>Guild members</li><li>Group members</li><li>Server messages</li><li>Level ups</li><li>/who results</li><li>BG objectives</li>
+      <li class="off">Skill ups</li><li class="off">Achievements</li><li class="off">Experience</li><li class="off">Reputation</li><li class="off">Honor</li>
+      <li class="off">Loot rolls</li><li class="off">All loot</li><li class="off">Money</li><li class="off">Other players' crafting</li><li class="off">All other system messages</li>
+    </ul>
+    <p class="legend">Dashed: off to start with. <b>Channels</b> you've joined (General, Trade...) are listed one by one below them.</p>
+    <div class="opts">
+      <div class="opt"><span class="l">Hide your messages</span><span class="d">Your own emotes (a /bow, or sitting at the campfire) and what you say don't bring up chat. Other people's still do.</span></div>
+      <div class="opt"><span class="l">Hide speech you can see as a bubble</span><span class="d">Says and yells don't bring up chat when their bubble shows on your screen: you can read it there. Ones from out of view still do.</span></div>
+      <div class="opt"><span class="l">Typing</span><span class="d">Pressing Enter brings up just the input box, so you can type without the chat window. Tick the Typing row where you'd like the whole window.</span></div>
+      <div class="opt"><span class="l">Keep chat up until whispers are read</span><span class="d">A whisper in its own tab keeps the chat window up while that tab flashes, until you click it.</span></div>
+      <div class="opt"><span class="l">Always show in</span><span class="d">Cities, Dungeons, Raids or PvP: the chat window stays up there while the rest fades.</span></div>
+      <div class="opt"><span class="l">A message shows</span><span class="d">What comes up with a new message: the <b>Background</b> (to start with), the <b>Tabs</b>, the <b>Buttons</b> beside it.</span></div>
+      <div class="opt"><span class="l">Show attacks on the screen</span><span class="d">"Dun Algaz is under attack!" from the LocalDefense channel also shows in red where the zone name appears, with your faction's city bell.</span></div>
+    </div>
+    <p class="muted">To copy lines out of chat, tick <b>Copy chat button</b> on the Quality of life page: a small icon in a chat window's corner opens its lines, ready for Ctrl+C.</p>
+  </section>
+
+  <section id="bubbles">
+    <div class="eyebrow">The Chat bubbles page</div>
+    <h2>Chat bubbles</h2>
+    <p>Choose where bubbles show and how they look. The page starts switched off, leaving the game's own bubble settings as you had them; turn it on and they're Cinematic's to set, and yours come back when you turn it off.</p>
+    <div class="opts">
+      <div class="opt"><span class="l">Show in</span><span class="d">A row each for <b>Say &amp; yell</b> (NPCs' too) and <b>Party</b> bubbles: Always, or only in fights, with a target, or in certain places. Nothing ticked: never.</span></div>
+      <div class="opt"><span class="l">Text only (no background or border)</span><span class="d">Just the words, floating over the speaker, with a <b>Black outline round the text</b>: Thin, Thick or Thick + shadow.</span></div>
+      <div class="opt"><span class="l">Text size</span><span class="d">From 50% to 200%. Bubbles already up change with the next thing said.</span></div>
+    </div>
+    <p class="note">On retail, the game doesn't let addons change bubbles in instances, so Text only and the text size don't apply there.</p>
+  </section>
+
+  <section id="behind">
+    <div class="eyebrow">Speech from behind you</div>
+    <h2>Words from out of view</h2>
+    <p>Someone behind you says something, and there's no bubble on your screen to read it in. Tick <b>Show speech from behind you at the bottom</b> on the Chat page and their words show low in the middle of the screen, with their name, instead of bringing up chat.</p>
+    <div class="behind" aria-label="Two lines of speech low on the screen, the older one higher and fainter">
+      <div class="line up"><b>Tomas</b> says: Did you hear that?</div>
+      <div class="line"><b>Mira</b> yells: Over here! Bring the lantern!</div>
+    </div>
+    <div class="opts">
+      <div class="opt"><span class="l">Show who said it · In class color</span><span class="d">Start with the speaker's name, players' in their class color.</span></div>
+      <div class="opt"><span class="l">Also while chat is showing</span><span class="d">Off to start with: while the chat window is up, speech goes to chat as usual.</span></div>
+      <div class="opt"><span class="l">Move</span><span class="d">Shows a box to drag where the lines appear.</span></div>
+      <div class="opt"><span class="l">Behind you (Chat bubbles page)</span><span class="d"><b>Rise up from below the screen</b>, a smaller <b>Size</b> and fainter <b>Opacity</b> so it sounds further off, and the <b>Tail on top</b>. It also takes the page's text only, outline and text size.</span></div>
+    </div>
+  </section>
+
+  <section id="talk">
+    <div class="eyebrow">Quest Vision · Talking to NPCs</div>
+    <h2>Quest givers who talk to you</h2>
+    <p>With <b>Custom dialogue frames</b> (on to start with), what an NPC says shows in a speech bubble over their head, and what you can say back in a list near the bottom of the screen, instead of the game's gossip and quest windows. The list has everything the window would: quests to turn in, pick up or still in progress, and every other option (vendor, trainer, inn, flight master...).</p>
+
+    <div class="win">
+      <div class="win-top">
+        <span class="win-title">Quest talk</span>
+        <div class="seg" role="group" aria-label="Bubble look">
+          <button type="button" data-look="parchment" aria-pressed="true">Parchment</button>
+          <button type="button" data-look="chat" aria-pressed="false">Chat bubble</button>
+        </div>
+      </div>
+      <div class="world" id="world" tabindex="0" aria-label="Quest talk example. Number keys pick from the list, Space reads on.">
+        <div class="bubble" id="bubble" aria-live="polite"><span class="pt" aria-hidden="true"></span><div class="who">Warden Ilsa</div><div id="words"></div></div>
+        <div class="npc" aria-hidden="true"></div>
+        <div id="below" style="display:contents"></div>
+      </div>
+      <p class="win-foot">Click a reply, or click here and press its number. Space reads on, and on the last page does the card's first button.</p>
+    </div>
+
+    <h3>The quest card</h3>
+    <p>A quest offered or turned in shows its objective and rewards on a card, with its buttons (Accept, Decline, Continue, Complete Quest). Click a reward to choose it. The game's own popups, such as a cost to confirm or a party member's escort quest, come up as usual.</p>
+    <div class="opts">
+      <div class="opt"><span class="l">Number keys and Space</span><span class="d">1 to 9 and 0 pick from the list. Space shows the next paragraph, then does the card's first button. Only keys that do something there are held back from your action bars, and none in a fight.</span></div>
+      <div class="opt"><span class="l">Look</span><span class="d"><b>Bubble look</b>: Parchment like the quest window's, or the game's own Chat bubble. <b>The NPC's portrait</b> on its corner, <b>Quest card on the bubble's background</b>, <b>Bubble height</b> in lines (7 to start with) and <b>Size</b>.</span></div>
+      <div class="opt"><span class="l">Bubble position</span><span class="d"><b>Over the head</b> (following the NPC on the screen), <b>Fixed</b> (above the middle of the screen, or where you drag it) or <b>Opposite Clicked</b> (on the other half of the screen from where you clicked the NPC, so they stay clear). With nobody to stand over, such as a quest from an item, it goes where Fixed would.</span></div>
+      <div class="opt"><span class="l">Over the head</span><span class="d"><b>Space above the bubble</b> keeps it off the top edge. <b>Hold the camera still</b> stops the quest camera drifting while you talk. <b>While the camera moves</b>, the bubble and card Follow, Fade out, Dim or Wait to the side.</span></div>
+      <div class="opt"><span class="l">Quest card beside the bubble</span><span class="d"><b>Below</b> (to start with), Side, Right or Left.</span></div>
+      <div class="opt"><span class="l">"Show the game's window" link</span><span class="d">Off to start with. A link on the card that brings the game's quest window back for the rest of that conversation, for a long quest text or to read it the usual way.</span></div>
+      <div class="opt"><span class="l">List height on the screen · Put them back</span><span class="d">Drag the list (and the bubble when it isn't over an NPC) to move them; Put them back forgets where you dropped them.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Questions</div>
+    <h2>Good to know</h2>
+    <dl class="faq">
+      <div><dt>Chat keeps popping up for things I don't care about.</dt><dd>Untick those kinds on the Chat page, or untick a channel by name. Your own messages and speech you can already see in a bubble don't count, as long as their ticks are on.</dd></div>
+      <div><dt>An addon expects the game's quest window.</dt><dd>The game's windows stay open while you talk, just out of sight, so other addons still see a conversation. If you'd like to read a quest the usual way, tick the "Show the game's window" link.</dd></div>
+      <div><dt>The number keys didn't pick a reply.</dt><dd>They don't work in a fight, where the game doesn't let addons borrow keys. Click the reply instead.</dd></div>
+    </dl>
+  </section>
+
+</div>
+</main>
+
+<script>
+(function () {
+  // A made-up conversation, as quest talk shows it: a greeting with a list, a quest a paragraph at a time, then its card.
+  var STEPS = {
+    hello: { words: ["Traveler! The road to the old mill isn't safe after dark. Will you lend a hand?"],
+      list: [{ ic: "!", c: "#ffd100", t: "Lanterns in the Dark", go: "quest" }, { ic: "?", c: "#9a9ca2", t: "Flickering Lights (in progress)", go: "busy" },
+        { ic: "✉", c: "#ffffff", t: "I want to browse your goods.", go: "shop" }, { ic: "✕", c: "#9a9ca2", t: "Goodbye", go: "bye" }] },
+    quest: { words: ["Wolves have taken to the mill road, and the lanterns along it went out three nights ago.",
+      "Light them again, all four, and the wolves will keep their distance. Take this flint; it never fails."],
+      card: { obj: "Light 4 lanterns along the mill road.", rewards: [["Warden's Cloak", "#1eff00"], ["Lantern Bearer's Boots", "#1eff00"]],
+        buttons: [["Accept", "accepted"], ["Decline", "hello"]] } },
+    busy: { words: ["Still a few lights out on the east road. Come back when they're burning."], card: { obj: "Light 2 more lanterns on the east road.", rewards: [], buttons: [["Continue", "hello"]], dim: true } },
+    shop: { words: ["(The merchant window would open here.)"], list: [{ ic: "↩", c: "#9a9ca2", t: "Back", go: "hello" }] },
+    bye: { words: ["Safe travels."], list: [{ ic: "↺", c: "#9a9ca2", t: "Talk again", go: "hello" }] },
+    accepted: { words: ["Thank you. Mind the wolves, and keep the flint dry."], list: [{ ic: "↺", c: "#9a9ca2", t: "Talk again", go: "hello" }] }
+  };
+  var cur = "hello", page = 0, chosen = -1, actions = [];
+  var words = document.getElementById("words"), below = document.getElementById("below"), world = document.getElementById("world");
+  function go(step) { cur = step; page = 0; chosen = -1; draw(); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+  function draw() {
+    var s = STEPS[cur];
+    words.textContent = s.words[page];
+    if (page < s.words.length - 1) words.appendChild(el("span", "more", "Space: read on"));
+    below.textContent = ""; actions = [];
+    var last = page === s.words.length - 1;
+    if (s.list) {
+      var ul = el("ul", "list");
+      s.list.forEach(function (o, i) {
+        var li = el("li"), b = el("button"); b.type = "button";
+        b.appendChild(el("span", "n", String(i + 1)));
+        var ic = el("span", "ic", o.ic); ic.style.color = o.c; b.appendChild(ic);
+        b.appendChild(el("span", "", o.t));
+        b.addEventListener("click", function () { go(o.go); });
+        actions.push(function () { go(o.go); });
+        li.appendChild(b); ul.appendChild(li);
+      });
+      below.appendChild(ul);
+    }
+    if (s.card) {
+      var card = el("div", "card");
+      var obj = el("div", "obj"); obj.appendChild(el("b", "", "Objective: ")); obj.appendChild(document.createTextNode(s.card.obj)); card.appendChild(obj);
+      if (s.card.rewards.length) {
+        card.appendChild(el("div", "obj", "Choose one reward:"));
+        var rw = el("div", "rewards");
+        s.card.rewards.forEach(function (r, i) {
+          var b = el("button", "reward"); b.type = "button"; b.setAttribute("aria-pressed", String(chosen === i));
+          var ic = el("i"); ic.style.background = "linear-gradient(135deg," + r[1] + ",#123)"; b.appendChild(ic);
+          var n = el("span", "", r[0]); n.style.color = r[1]; b.appendChild(n);
+          b.addEventListener("click", function () { chosen = i; draw(); });
+          rw.appendChild(b);
+        });
+        card.appendChild(rw);
+      }
+      var btns = el("div", "btns");
+      s.card.buttons.forEach(function (bt, i) {
+        var b = el("button", "wbtn" + (i ? " plain" : "")); b.type = "button";
+        if (!i) b.appendChild(el("span", "k", "Space"));
+        b.appendChild(document.createTextNode(bt[0]));
+        if (!last) b.disabled = true;
+        b.addEventListener("click", function () { go(bt[1]); });
+        btns.appendChild(b);
+      });
+      card.appendChild(btns);
+      below.appendChild(card);
+    }
+  }
+  world.addEventListener("keydown", function (e) {
+    var s = STEPS[cur];
+    if (e.key === " ") {
+      e.preventDefault();
+      if (page < s.words.length - 1) { page++; draw(); }
+      else if (s.card) go(s.card.buttons[0][1]);
+    } else if (/^[0-9]$/.test(e.key)) {
+      var n = e.key === "0" ? 9 : +e.key - 1;
+      if (actions[n]) { e.preventDefault(); actions[n](); }
+    }
+  });
+  document.getElementById("bubble").addEventListener("click", function () {
+    var s = STEPS[cur]; if (page < s.words.length - 1) { page++; draw(); }
+  });
+  document.querySelectorAll("[data-look]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.getElementById("bubble").classList.toggle("chat", b.dataset.look === "chat");
+      document.querySelectorAll("[data-look]").forEach(function (o) { o.setAttribute("aria-pressed", String(o === b)); });
+    });
+  });
+  draw();
+})();
+</script>
+</body>
+</html>

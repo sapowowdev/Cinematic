@@ -42,9 +42,12 @@ main { max-width: 1040px; margin: 0 auto; padding-block: 44px 24px; display: gri
 .gb-section h2 { font: 400 30px/1.15 var(--font-display); margin: 0 }
 .gb-sline { margin: 0 0 8px; color: var(--muted) }
 .gb-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px }
-.gb-list a { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t go" "l go"; gap: 2px 16px; align-items: center;
+.gb-list a, .gb-list .gb-soon { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t go" "l go"; gap: 2px 16px; align-items: center;
   text-decoration: none; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px }
 .gb-list a:hover { border-color: var(--accent) }
+.gb-list .gb-soon { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t go" "l go"; gap: 2px 16px; align-items: center;
+  border: 1px dashed var(--line); border-radius: 8px; padding: 16px 20px; color: var(--muted) }
+.gb-list .gb-soon .gb-go { font: 600 12px/1 var(--font-body); letter-spacing: .1em; text-transform: uppercase }
 .gb-list a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 .gb-list .gb-title { grid-area: t; font: 600 20px/1.25 var(--font-body) }
 .gb-list .gb-line { grid-area: l; color: var(--muted); max-width: 70ch }

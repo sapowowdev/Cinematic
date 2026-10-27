@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cinematic Wheels</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column; a wheel to point at sits in it as a small game window. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --win-bg: #121418; --win-panel: #1b1e23; --win-edge: #3b3f46; --win-fg: #ece9e2; --win-dim: #9a9ca2;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body); padding-block: 0 }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 56px }
+.col > *, section > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+.muted { color: var(--muted) }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px }
+section { display: grid; gap: 14px }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+
+/* Opening: the letterbox itself */
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #2b3240 0%, #151a22 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+
+/* Hold and tap */
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; display: grid; gap: 8px; align-content: start }
+.card .name { font: 400 24px/1.1 var(--font-display) }
+.steps { display: grid; gap: 10px; list-style: none; margin: 0; padding: 0; counter-reset: s }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px }
+.steps li::before { content: counter(s); font: 400 20px/1.3 var(--font-display); color: var(--accent) }
+
+/* The wheel: a game window */
+.win { background: var(--win-bg); color: var(--win-fg); border: 1px solid var(--win-edge); border-radius: 6px; overflow: hidden; font-size: 15.5px }
+.win-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px;
+  border-bottom: 1px solid var(--win-edge); background: var(--win-panel) }
+.win-title { font: 400 20px var(--font-display); color: var(--gold) }
+.tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 8px; border-bottom: 1px solid var(--win-edge) }
+.tabs button { background: none; border: 0; color: var(--win-dim); font: 500 15px var(--font-body); padding: 6px 10px; border-radius: 4px; cursor: pointer }
+.tabs button[aria-current="true"] { background: #23262c; color: var(--win-fg) }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
+.stage { position: relative; height: 340px; display: grid; place-items: center; touch-action: none;
+  background: radial-gradient(70% 80% at 50% 60%, #33402f 0%, #1d2522 60%, #121418 100%) }
+.ring { position: relative; width: 280px; height: 280px }
+.ring .disc { position: absolute; inset: 22px; border-radius: 50%; background: rgba(8,9,11,.55); border: 1px solid rgba(255,255,255,.08) }
+.ring .mid { position: absolute; left: 50%; top: 50%; width: 92px; height: 92px; transform: translate(-50%, -50%); border-radius: 50%;
+  display: grid; place-items: center; text-align: center; padding: 8px; font: 600 13.5px/1.2 var(--font-body); color: var(--win-fg);
+  background: rgba(0,0,0,.55); border: 1px solid #4a4433 }
+.ring .mid small { display: block; font-weight: 400; color: var(--win-dim); font-size: 12px; margin-top: 3px }
+.slot { position: absolute; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; border: 2px solid #4a4433; cursor: pointer;
+  display: grid; place-items: center; font: 700 17px/1 var(--font-body); background: #1b1d22; color: #fff; padding: 0; transition: transform .12s, border-color .12s }
+.slot.hot { transform: scale(1.22); border-color: var(--gold); box-shadow: 0 0 14px rgba(226,181,63,.6) }
+.slot.on::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid #59ff73 }
+.win-foot { color: var(--win-dim); font-size: 14px; padding: 12px 16px 14px; border-top: 1px solid var(--win-edge) }
+@media (max-width: 420px) { .stage { height: 300px } .ring { transform: scale(.88) } }
+@media (prefers-reduced-motion: reduce) { .slot { transition: none } }
+
+/* Settings, as the pages list them */
+.opts { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden }
+.opt { padding: 11px 16px; border-top: 1px solid var(--line); display: grid; gap: 2px }
+.opt:first-child { border-top: 0 }
+.opt .l { font-weight: 600 }
+.opt .d { color: var(--muted); font-size: 15.5px }
+.note { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; color: var(--muted) }
+dl.faq { display: grid; gap: 16px; margin: 0 }
+dl.faq dt { font-weight: 600 }
+dl.faq dd { margin: 2px 0 0; color: var(--muted) }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">Cinematic · Wheels</div>
+      <h1>Everything in reach from one key</h1>
+      <p>Hold a key and a ring of icons comes up round your cursor: cameras, the game's menus, raid markers, visions, or commands of your own. Point at one and let go. No bars needed, even with the UI hidden.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter" style="padding-block:48px 40px">
+<div class="col">
+
+  <section>
+    <div class="eyebrow">Using a wheel</div>
+    <h2>Hold it, or tap it</h2>
+    <p>Every wheel works the same two ways, so pick whichever feels natural.</p>
+    <div class="two">
+      <article class="card"><div class="name">Hold</div>
+        <ol class="steps">
+          <li><span>Hold the wheel's key. The ring comes up round your cursor.</span></li>
+          <li><span>Point at an icon. Its name shows in the middle.</span></li>
+          <li><span>Let go of the key to pick it.</span></li>
+        </ol></article>
+      <article class="card"><div class="name">Tap</div>
+        <ol class="steps">
+          <li><span>Tap the key. The wheel stays up.</span></li>
+          <li><span>Click the icon you want.</span></li>
+          <li><span>Or put it away: click the middle, press Escape or tap the key again.</span></li>
+        </ol></article>
+    </div>
+    <p class="muted">Changed your mind while holding? Move back to the middle and let go: nothing is picked and the wheel stays up for a click.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Try it</div>
+    <h2>Point at a wheel</h2>
+    <p class="muted">Pick a wheel, then point at its icons (or tap them on a phone). Click one to pick it.</p>
+    <div class="win">
+      <div class="win-top"><span class="win-title">Wheels</span></div>
+      <nav class="tabs" id="tabs" aria-label="Wheels"></nav>
+      <div class="stage" id="stage">
+        <div class="ring" id="ring"><div class="disc"></div><div class="mid" id="mid" aria-live="polite"></div></div>
+      </div>
+      <p class="win-foot" id="foot"></p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">The wheels</div>
+    <h2>What each one holds</h2>
+    <div class="opts">
+      <div class="opt" id="master"><span class="l">Master wheel</span><span class="d">One icon for each of the other wheels: point at one and let go to open it, then click what you want on it. One key for all of them. Choose which wheels sit on it, and in what order, on its page (<b>Wheels on it</b>, with <b>Usual order</b> to start over).</span></div>
+      <div class="opt" id="camera"><span class="l">Camera wheel</span><span class="d">The cameras you can start by hand: AFK, Cozy, Vista, Fish, Tele and the Death camera. Picking the camera that's running stops it. It can't open in a fight.</span></div>
+      <div class="opt" id="menu"><span class="l">Menu wheel</span><span class="d">The game's menu buttons, the ones your menu bar has on your game version, in its order: character, spellbook, talents, quest log and the rest. Opens their windows even with the UI hidden, in a fight too. Picking a window that's open closes it.</span></div>
+      <div class="opt" id="marker"><span class="l">Marker wheel</span><span class="d">The raid target markers (skull, cross, square...) for your target, or with none, whatever the cursor is on. <b>None</b> takes theirs off. In a fight it always marks your target.</span></div>
+      <div class="opt" id="ground"><span class="l">Ground marker wheel</span><span class="d">The colored lights you drop on the floor: it drops under the cursor where you let go. Picking one that's already down moves it; <b>Clear all</b> takes them all up. Only in a group, on game versions with ground markers.</span></div>
+      <div class="opt" id="vision"><span class="l">Vision wheel</span><span class="d">Heal, Quest, Duel, Roll and Vitals Vision, ringed while they're on: pick one to turn it on or off, in a fight too. See <a href="visions.html">Visions</a>.</span></div>
+    </div>
+    <p class="muted">The marker, ground marker and vision wheels can hold icons of your own too, after their own (<b>Your icons on it</b>, on each wheel's page). Each runs a command, as on your own wheels.</p>
+  </section>
+
+  <section id="yours">
+    <div class="eyebrow">Your wheels</div>
+    <h2>Wheels of your own</h2>
+    <p>Make up to 8 wheels on the <b>Your wheels</b> page. Each icon on one runs a command when you pick it, such as <code>/rw Pull in 10</code> or <code>/readycheck</code>: anything a macro can do, a line each, in a fight too. They're the same for all your characters.</p>
+    <ol class="steps">
+      <li><span><b>New wheel</b> makes an empty one. Give it a <b>Name</b> (shown in its middle, on the master wheel and in the game's key bindings) and an icon.</span></li>
+      <li><span><b>Add an icon</b> for each command: pick its icon from every icon the game has, give it a name (or leave it empty to show the command's first line) and type its command. <b>Test</b> runs it now.</span></li>
+      <li><span>Give the wheel its own key, or tick <b>On the master wheel</b>.</span></li>
+    </ol>
+    <p class="note"><b>Share wheel</b> makes a line of text for friends; they add it with <b>Import a wheel</b>, which lists every command first. Read them before you add one: each runs as if you'd typed it, and <code>/run</code> lines can do anything an addon can.</p>
+    <p class="muted">The game cuts a command line at 255 letters, so keep long ones in a macro and run that.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Setting up</div>
+    <h2>Giving a wheel its key</h2>
+    <p>No wheel has a key at first. Open the <b>Wheels</b> group in Cinematic's settings: each wheel's page shows its ring as it is now, with its <b>Key</b> right there, and an <b>On the master wheel</b> tick. The same keys are on the Keybinds page, and in the game's own Key Bindings under AddOns.</p>
+    <p class="muted">A good start is a single key for the master wheel: every other wheel is then one point away.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Questions</div>
+    <h2>Good to know</h2>
+    <dl class="faq">
+      <div><dt>Why doesn't the camera wheel open in a fight?</dt><dd>Unlike the others, it isn't built from the game's protected buttons, which are the only kind that can open in a fight. Open it again once the fight is over, from its own key or the master wheel. Every other wheel works in fights.</dd></div>
+      <div><dt>The marker wheel marked the wrong thing.</dt><dd>It marks your target, or with no target, whatever is under the cursor as you press the key. In a fight it's always your target: the game doesn't let addons change who it marks then.</dd></div>
+      <div><dt>My menu wheel looks different from the one here.</dt><dd>It mirrors your menu bar, so it has the buttons your game version shows, in the same order.</dd></div>
+      <div><dt>Can I take a wheel off the master wheel?</dt><dd>Yes: untick <b>On the master wheel</b> on its page. Its own key still opens it.</dd></div>
+    </dl>
+  </section>
+
+</div>
+</main>
+
+<script>
+(function () {
+  // Each wheel as it comes up in the game: first icon at the top, then round clockwise. g: the icon's glyph, c: its color.
+  var M = [["Skull", "☠", "#f2f2f2"], ["Cross", "✖", "#ff4a3d"], ["Square", "■", "#3d8bff"], ["Moon", "☾", "#c9d3e0"],
+    ["Triangle", "▲", "#3fd06a"], ["Diamond", "◆", "#c25cff"], ["Circle", "●", "#ff9a2e"], ["Star", "★", "#ffd23d"]];
+  function markers(last) { return M.map(function (m) { return { n: m[0], g: m[1], c: m[2] }; }).concat([last]); }
+  var WHEELS = [
+    { key: "master", name: "Master wheel", foot: "Opens any of the other wheels, waiting for your click.", pick: "Opens the %s",
+      slots: [{ n: "Camera wheel", g: "◎", c: "#ffd27a" }, { n: "Menu wheel", g: "⚙", c: "#ffd27a" }, { n: "Marker wheel", g: "☠", c: "#f2f2f2" },
+        { n: "Vision wheel", g: "◉", c: "#59ff73" }, { n: "Ground marker wheel", g: "■", c: "#3d8bff" }] },
+    { key: "camera", name: "Camera wheel", foot: "Picking the camera that's running stops it.", pick: "Starts the %s", toggle: true,
+      on: "running: pick it to stop it",
+      slots: [{ n: "AFK camera", g: "z", c: "#9fb6ff" }, { n: "Cozy camera", g: "♨", c: "#ff9a4a" }, { n: "Vista camera", g: "⛰", c: "#cfe0a0" },
+        { n: "Fish camera", g: "≈", c: "#7fd0ff" }, { n: "Tele camera", g: "✧", c: "#b98cff" }, { n: "Death camera", g: "✝", c: "#c8c8c8" }] },
+    { key: "menu", name: "Menu wheel", foot: "An example: yours has the buttons on your own menu bar.", pick: "Opens %s", toggle: true,
+      on: "open: pick it to close it",
+      slots: [{ n: "Character", g: "☺", c: "#e8d3a2" }, { n: "Spellbook", g: "✦", c: "#ffd27a" }, { n: "Talents", g: "❖", c: "#9fd59f" },
+        { n: "Achievements", g: "♛", c: "#ffd23d" }, { n: "Quest log", g: "!", c: "#ffd23d" }, { n: "Guild", g: "⚑", c: "#7fd0ff" },
+        { n: "Group finder", g: "⚔", c: "#ff8a6a" }, { n: "Collections", g: "♞", c: "#c9b0ff" }, { n: "Game menu", g: "≡", c: "#d0d0d0" }] },
+    { key: "marker", name: "Marker wheel", foot: "On your target, or with none, whatever the cursor is on.", pick: "Puts the %s on them",
+      slots: markers({ n: "None", g: "○", c: "#9a9ca2" }) },
+    { key: "ground", name: "Ground marker wheel", foot: "Drops under the cursor where you let go. Only in a group.", pick: "Drops the %s here",
+      slots: markers({ n: "Clear all", g: "⌫", c: "#ffffff" }) },
+    { key: "vision", name: "Vision wheel", foot: "A ring shows round each vision that's on. Works in a fight too.", toggle: true, ringed: true,
+      slots: [{ n: "Heal Vision", g: "✚", c: "#59ff73" }, { n: "Quest Vision", g: "!", c: "#ffd100" }, { n: "Duel Vision", g: "⚔", c: "#ff594d" },
+        { n: "Roll Vision", g: "⚅", c: "#73b3ff" }, { n: "Vitals Vision", g: "♥", c: "#ff4066" }] },
+    { key: "yours", name: "A wheel of your own", tab: "Yours", foot: "Each icon runs the command you gave it, in a fight too.", pick: "Runs: %s",
+      slots: [{ n: "Ready check", g: "✔", c: "#59ff73", cmd: "/readycheck" }, { n: "Pull in 10", g: "⏱", c: "#ff8a6a", cmd: "/rw Pull in 10" },
+        { n: "Wave", g: "✋", c: "#ffd27a", cmd: "/wave" }, { n: "Mount up", g: "♘", c: "#c9b0ff", cmd: "/cast Swift Brown Steed" }] }
+  ];
+  var state = { wheel: 0, hot: -1, on: {} };
+  WHEELS[5].slots.forEach(function (s, i) { if (i < 2) state.on["vision:" + i] = true; });
+  var tabs = document.getElementById("tabs"), ring = document.getElementById("ring"), mid = document.getElementById("mid");
+  var stage = document.getElementById("stage"), foot = document.getElementById("foot");
+  var R = 112, slots = [];
+
+  function midText(title, sub) {
+    mid.textContent = "";
+    mid.appendChild(document.createTextNode(title));
+    if (sub) { var s = document.createElement("small"); s.textContent = sub; mid.appendChild(s); }
+  }
+  function idle() { var w = WHEELS[state.wheel]; midText(w.name, "point at one"); }
+  function setHot(i) {
+    state.hot = i;
+    slots.forEach(function (b, j) { b.classList.toggle("hot", j === i); });
+    var w = WHEELS[state.wheel];
+    if (i < 0) return idle();
+    var s = w.slots[i], on = state.on[w.key + ":" + i];
+    midText(s.n, s.cmd || (on && w.on) || "");
+  }
+  function pick(i) {
+    var w = WHEELS[state.wheel], s = w.slots[i], id = w.key + ":" + i;
+    if (w.toggle) {
+      var was = state.on[id];
+      if (w.key !== "vision") Object.keys(state.on).forEach(function (k) { if (k.indexOf(w.key + ":") === 0) delete state.on[k]; });
+      if (!was) state.on[id] = true; else delete state.on[id];
+      draw();
+      if (w.ringed) midText(s.n, was ? "turned off" : "turned on");
+      else midText(s.n, was ? (w.key === "camera" ? "stopped" : "closed") : (w.key === "camera" ? "started" : "opened"));
+      return;
+    }
+    if (w.key === "master") { state.wheel = [1, 2, 3, 5, 4][i]; draw(); midText(WHEELS[state.wheel].name, "opened: click one"); return; }
+    midText(s.n, (w.pick || "%s").replace("%s", s.cmd || s.n.toLowerCase()));
+  }
+  function draw() {
+    var w = WHEELS[state.wheel];
+    tabs.textContent = "";
+    WHEELS.forEach(function (x, i) {
+      var b = document.createElement("button"); b.type = "button"; b.textContent = x.tab || x.name.replace(" wheel", "");
+      if (i === state.wheel) b.setAttribute("aria-current", "true");
+      b.addEventListener("click", function () { state.wheel = i; draw(); });
+      tabs.appendChild(b);
+    });
+    slots.forEach(function (b) { b.remove(); }); slots = [];
+    w.slots.forEach(function (s, i) {
+      var a = (i / w.slots.length) * Math.PI * 2;
+      var b = document.createElement("button"); b.type = "button"; b.className = "slot";
+      if (state.on[w.key + ":" + i]) b.classList.add("on");
+      b.style.left = (140 + Math.sin(a) * R) + "px"; b.style.top = (140 - Math.cos(a) * R) + "px";
+      b.style.color = s.c; b.textContent = s.g; b.setAttribute("aria-label", s.n);
+      b.addEventListener("focus", function () { setHot(i); });
+      b.addEventListener("click", function () { pick(i); });
+      ring.appendChild(b); slots.push(b);
+    });
+    foot.textContent = w.foot;
+    state.hot = -1; idle();
+  }
+  // Pointing: the slot nearest the cursor's angle from the middle, once it's out of the middle circle.
+  stage.addEventListener("pointermove", function (e) {
+    var r = ring.getBoundingClientRect(), scale = r.width / 280;
+    var dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    if (Math.sqrt(dx * dx + dy * dy) < 46 * scale) { if (state.hot !== -1) setHot(-1); return; }
+    var n = WHEELS[state.wheel].slots.length;
+    var a = Math.atan2(dx, -dy); if (a < 0) a += Math.PI * 2;
+    var i = Math.round(a / (Math.PI * 2 / n)) % n;
+    if (i !== state.hot) setHot(i);
+  });
+  stage.addEventListener("pointerleave", function () { setHot(-1); });
+  stage.addEventListener("click", function (e) { if (e.target === stage || e.target.classList.contains("disc") || e.target === ring) { if (state.hot >= 0) pick(state.hot); } });
+  draw();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Settings Map</title>
+<meta name="description" content="Every Cinematic settings page in one line, with a link to the guide that covers it.">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column, as on the Profiles page. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --forever: #2f6f4f; --retail: #2c5a92; --classic: #7a4a1c;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607;
+  --forever: #7fd0a4; --retail: #8fb8ee; --classic: #e0ad78; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607;
+  --forever: #7fd0a4; --retail: #8fb8ee; --classic: #e0ad78; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body); padding-block: 0 }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 56px }
+.col > *, section > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+a { color: var(--accent); text-underline-offset: 2px }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.muted { color: var(--muted) }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere }
+kbd { font: 500 .82em var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; background: var(--surface); border-radius: 4px; padding: 0 5px }
+section { display: grid; gap: 14px }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+ul.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 6px }
+
+/* Opening: the letterbox itself */
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #2b3240 0%, #151a22 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+.hero code { background: #2a2d33; color: var(--bar-fg) }
+
+/* Steps, commands and questions */
+.steps { display: grid; gap: 14px; list-style: none; margin: 0; padding: 0; counter-reset: s }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px }
+.steps li::before { content: counter(s); font: 400 24px/1.1 var(--font-display); color: var(--accent) }
+.steps li > div { display: grid; gap: 4px }
+.cmds { display: grid; gap: 8px }
+.cmd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px }
+.cmd > code { font-size: 15px; background: none; padding: 0; color: var(--fg); flex: 0 1 auto }
+.cmd .what { color: var(--muted); font-size: 15px; flex: 1 1 220px }
+.copy { font: 600 13px var(--font-body); color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer }
+.copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+dl.faq { display: grid; gap: 16px; margin: 0 }
+dl.faq dt { font-weight: 600 }
+dl.faq dd { margin: 2px 0 0; color: var(--muted) }
+
+/* Reference rows: a name, then what it does; stacked on a phone */
+.rows { display: grid; margin: 0; border-top: 1px solid var(--line) }
+.row { display: grid; grid-template-columns: minmax(0, 230px) minmax(0, 1fr); gap: 4px 20px; padding: 12px 0; border-bottom: 1px solid var(--line) }
+.row > dt, .row > .k { font-weight: 600 }
+.row > dd, .row > .v { margin: 0; color: var(--muted) }
+.row .v b, .row dd b { color: var(--fg); font-weight: 600 }
+@media (max-width: 560px) { .row { grid-template-columns: 1fr } }
+
+/* Cards and callouts */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; display: grid; gap: 6px; align-content: start }
+.card .name { font: 400 22px/1.1 var(--font-display) }
+.note { background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; padding: 12px 16px }
+.chip { display: inline-block; font: 600 12px/1 var(--font-body); letter-spacing: .05em; text-transform: uppercase;
+  border: 1px solid currentColor; border-radius: 4px; padding: 3px 6px; vertical-align: 2px; white-space: nowrap }
+.chip.forever { color: var(--forever) } .chip.retail { color: var(--retail) } .chip.classic { color: var(--classic) }
+.chip.soon { color: var(--muted) }
+.row > dt a { color: var(--fg); text-decoration-color: var(--line) } .row > dt a:hover { color: var(--accent) } .hub { font: 400 22px/1.2 var(--font-display) }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">Reference · settings</div>
+      <h1>Every settings page, in one line</h1>
+      <p>Cinematic's settings are in the game's Options under <b>AddOns › Cinematic</b>, or type <code>/cine config</code>. Each name below links to the guide that explains it.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter" style="padding-block:48px 40px">
+<div class="col">
+
+  <section>
+    <h2>Finding your way</h2>
+    <p>Most pages sit inside a group, such as <b>UI Manager</b> or <b>Camera</b>: open the group and pick a page from the row of icons at its top (point at an icon to see its name). Every page or group has a search box for its settings and a <b>Reset page</b> button that puts just that page back to your profile's own values. The main page's search box looks through everything.</p>
+    <p class="muted">Pages are listed here in the order the game shows them. A tag means the page only shows on some versions of the game; see <a href="forever-vs-retail.html">WoW Forever and retail</a>.</p>
+  </section>
+
+  <section id="top">
+    <div class="eyebrow">At the top</div>
+    <dl class="rows">
+      <div class="row"><dt><a href="../start/getting-started.html">Cinematic</a></dt><dd>The main page: <b>Enable Cinematic</b>, <b>Start in CineMode</b>, the minimap button, the language, the menu look (HD or SD), where CineMode turns itself off, and a search box for every setting.</dd></div>
+      <div class="row"><dt><a href="../guides/profiles.html">Profiles</a></dt><dd>Pick a profile; make, rename, delete or reset your own, and share them with Export and Import.</dd></div>
+      <div class="row"><dt><a href="../guides/cinemode.html">CineMode</a></dt><dd>How fast the UI fades, what brings it (or parts of it) back while CineMode is on, and combat text.</dd></div>
+    </dl>
+  </section>
+
+  <section id="ui-manager">
+    <div class="hub">UI Manager</div>
+    <dl class="rows">
+      <div class="row"><dt><a href="../guides/frames.html">Standard Frames</a></dt><dd>Which of the game's frames stay up in CineMode: always, in fights, with a target, or in chosen places.</dd></div>
+      <div class="row"><dt><a href="../guides/other-addons.html">Advanced Frames</a></dt><dd>Supported addons' frames and frames you added yourself (Add mode), and how they fade.</dd></div>
+      <div class="row"><dt><a href="../guides/nameplates.html">Nameplates</a></dt><dd>Which nameplates and names stay up in CineMode: in groups, in fights and in each kind of place.</dd></div>
+      <div class="row"><dt><a href="../guides/frames.html">Unit Frames</a> <span class="chip soon">Some versions</span></dt><dd>Which parts of your frame, your pet's, and the target, focus and target of target frames show, CineMode or not.</dd></div>
+      <div class="row"><dt><a href="../guides/frames.html">Personal Resources</a></dt><dd>Your player frame, pet frame and personal resource display: kept up while you recover or run low on mana, held back at the start of a fight.</dd></div>
+      <div class="row"><dt><a href="../guides/cinemode.html">Mouseover groups</a></dt><dd>Frames in the same group come up together when you point at any of them. Make groups of your own.</dd></div>
+      <div class="row"><dt><a href="../guides/cinemode.html">Minimap</a></dt><dd>When the minimap stays up in CineMode, such as while tracking herbs or minerals.</dd></div>
+      <div class="row"><dt><a href="../guides/cinemode.html">Quest tracker</a></dt><dd>When the quest tracker comes up in CineMode, such as when you make progress or pick up a quest.</dd></div>
+      <div class="row"><dt><a href="../guides/frames.html">Swing timer</a> <span class="chip forever">WoW Forever and Classic</span></dt><dd>Which of the game's swing timer bars show, in CineMode and out.</dd></div>
+      <div class="row"><dt><a href="../guides/frames.html">Cooldown Manager</a> <span class="chip soon">With a Cooldown Manager</span></dt><dd>When the Cooldown Manager comes up in CineMode, and showing spells only when they're ready.</dd></div>
+      <div class="row"><dt><a href="../guides/cinemode.html">Tooltips</a></dt><dd>Hide tooltips in CineMode, in fights or in the camera modes, with a list of the ones that still show. Off by default.</dd></div>
+      <div class="row"><dt><a href="../guides/frames.html">Buffs/debuffs</a></dt><dd>Your buff and debuff icons fade with the UI; these bring them back, such as when you gain one.</dd></div>
+      <div class="row"><dt><a href="../guides/chat-and-quests.html">Chat</a></dt><dd>How the chat window fades, and which messages and channels make it peek in.</dd></div>
+      <div class="row"><dt><a href="../guides/chat-and-quests.html">Chat bubbles</a></dt><dd>Where chat bubbles show, and how they look.</dd></div>
+      <div class="row"><dt><a href="../guides/gamepad.html">Gamepad</a> <span class="chip forever">WoW Forever</span></dt><dd>The frames gamepad mode adds: its action bars, the button hints and the reticle.</dd></div>
+    </dl>
+  </section>
+
+  <section id="visions">
+    <div class="hub">Visions</div>
+    <dl class="rows">
+      <div class="row"><dt><a href="../guides/visions.html">General</a></dt><dd>Duel Vision (the health of a duel near you) and the Vision Helper on the minimap button.</dd></div>
+      <div class="row"><dt><a href="../guides/visions.html">Heal Vision</a></dt><dd>The party and raid frames show only who needs healing.</dd></div>
+      <div class="row"><dt><a href="../guides/visions.html">Quest Vision</a></dt><dd>Mobs and NPCs you still need for a quest keep their nameplates up with a quest mark, and the quest object in front of you glows.</dd></div>
+      <div class="row"><dt><a href="../guides/visions.html">Roll Vision</a> <span class="chip soon">With a loot history</span></dt><dd>Loot rolls in a window instead of only in chat: everyone's pick and number, the winner on top.</dd></div>
+      <div class="row"><dt><a href="../guides/visions.html">Vitals Vision</a></dt><dd>Your health at a glance, without the portrait: the screen's edges close in as it drops.</dd></div>
+    </dl>
+  </section>
+
+  <section id="wheels">
+    <div class="hub">Wheels</div>
+    <dl class="rows">
+      <div class="row"><dt><a href="../guides/wheels.html">Master wheel</a></dt><dd>A wheel of the other wheels, and which ones are on it.</dd></div>
+      <div class="row"><dt><a href="../guides/wheels.html">Your wheels</a></dt><dd>Make wheels of your own, each icon running a command, and share or import them.</dd></div>
+      <div class="row"><dt><a href="../guides/wheels.html">Camera wheel</a></dt><dd>The cameras on the camera wheel.</dd></div>
+      <div class="row"><dt><a href="../guides/wheels.html">Menu wheel</a></dt><dd>The game's menu buttons, in reach with the UI hidden.</dd></div>
+      <div class="row"><dt><a href="../guides/wheels.html">Marker wheel</a></dt><dd>Raid target markers, plus icons of your own.</dd></div>
+      <div class="row"><dt><a href="../guides/wheels.html">Ground marker wheel</a> <span class="chip soon">Some versions</span></dt><dd>Ground markers dropped under the cursor, plus icons of your own.</dd></div>
+      <div class="row"><dt><a href="../guides/wheels.html">Vision wheel</a></dt><dd>The visions, turned on and off from a ring, plus icons of your own.</dd></div>
+    </dl>
+  </section>
+
+  <section id="quality">
+    <div class="hub">Quality of life</div>
+    <dl class="rows">
+      <div class="row"><dt><a href="../guides/quality-of-life.html">General</a></dt><dd>Small helpers for getting about the world, such as the campfire button and the talent calculator on WoW Forever.</dd></div>
+      <div class="row"><dt><a href="../guides/quality-of-life.html">Fishing</a></dt><dd>Casting and catching, with the mouse or a gamepad, CineMode or not.</dd></div>
+      <div class="row"><dt><a href="../guides/quality-of-life.html">Hunter</a> <span class="chip forever">WoW Forever and Classic</span></dt><dd>Smallest ammo stack first after Clean Up Bags, and a Fill quiver button at vendors.</dd></div>
+    </dl>
+  </section>
+
+  <section id="effects">
+    <div class="hub">Visual Effects</div>
+    <dl class="rows">
+      <div class="row"><dt><a href="../guides/look.html">General</a></dt><dd>Letterbox bars, vignette, inn glow, weather and depth of field.</dd></div>
+      <div class="row"><dt><a href="../guides/look.html">Tint</a></dt><dd>The color grading over the world: a preset, the time of day and each zone's mood.</dd></div>
+      <div class="row"><dt><a href="../guides/graphics.html">Graphics+</a></dt><dd>The game's own graphics settings one by one, past its Graphics menu either way. The same in every profile.</dd></div>
+    </dl>
+  </section>
+
+  <section id="style">
+    <div class="hub">Style</div>
+    <dl class="rows">
+      <div class="row"><dt><a href="../guides/nameplates.html">Target Indicator</a></dt><dd>How your target stands out on the nameplates: a mark on its plate, and its name, health bar or border in the mark's color.</dd></div>
+    </dl>
+  </section>
+
+  <section id="audio">
+    <div class="hub">Audio</div>
+    <dl class="rows">
+      <div class="row"><dt><a href="../guides/music.html">Audio</a></dt><dd>Sound during CineMode: which cameras play music, music fatigue and muting by place. Your own sound settings are put back afterwards.</dd></div>
+    </dl>
+  </section>
+
+  <section id="camera">
+    <div class="hub">Camera</div>
+    <dl class="rows">
+      <div class="row"><dt><a href="../guides/cameras.html">Camera Modes</a></dt><dd>The settings the cameras share, and one grid for turning each camera off in places.</dd></div>
+      <div class="row"><dt><a href="../guides/cameras.html">Camera Triggers</a></dt><dd>Which camera each event or emote starts (or none), whether it brings CineMode on, and whether it starts music.</dd></div>
+      <div class="row"><dt><a href="../guides/cameras.html">Camera Settings</a></dt><dd>Each camera's own settings, in a section apiece, each with its own Reset. The flight camera's are explained in <a href="../guides/flight-cam.html">Flight Cam</a>.</dd></div>
+    </dl>
+  </section>
+
+  <section id="end">
+    <div class="eyebrow">At the end</div>
+    <dl class="rows">
+      <div class="row"><dt><a href="keybinds.html">Keybinds</a></dt><dd>Keys for Cinematic, the same bindings as under Key Bindings › AddOns.</dd></div>
+      <div class="row"><dt>What's new</dt><dd><b>New features</b>, newest first, each with a Show me link to its page; <b>All changes</b>, every change as it was made; and <b>Thanks</b> to the players who helped.</dd></div>
+    </dl>
+  </section>
+
+</div>
+</main>
+</body>
+</html>

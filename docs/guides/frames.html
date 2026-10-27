@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cinematic Frames</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column; the row explorer sits in it as a small game window. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --win-bg: #121418; --win-panel: #1b1e23; --win-edge: #3b3f46; --win-fg: #ece9e2; --win-dim: #9a9ca2;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body); padding-block: 0 }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 56px }
+.col > *, section > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+.muted { color: var(--muted) }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px }
+section { display: grid; gap: 14px }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+
+/* Opening: the letterbox itself */
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #2b3240 0%, #151a22 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+
+/* The grid's columns */
+.cols { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0 }
+.cols li { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px }
+.cols b { font-weight: 600 }
+.cols span { color: var(--muted) }
+@media (max-width: 520px) { .cols li { grid-template-columns: 1fr; gap: 2px } }
+
+/* Row explorer: a game window */
+.win { background: var(--win-bg); color: var(--win-fg); border: 1px solid var(--win-edge); border-radius: 6px; overflow: hidden; font-size: 15.5px }
+.win-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px;
+  border-bottom: 1px solid var(--win-edge); background: var(--win-panel) }
+.win-title { font: 400 20px var(--font-display); color: var(--gold) }
+.win-note { color: var(--win-dim); font-size: 13.5px }
+.sits { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 14px; border-bottom: 1px solid var(--win-edge) }
+.sits button { font: 500 14px var(--font-body); background: #16181c; color: var(--win-dim); border: 1px solid #33373e; border-radius: 4px; padding: 5px 10px; cursor: pointer }
+.sits button[aria-pressed="true"] { background: #2a2d33; color: var(--win-fg); border-color: var(--gold) }
+.grid { display: grid; gap: 0; padding: 6px 0 }
+.grow { display: grid; grid-template-columns: 22px minmax(0, 150px) minmax(0, 1fr); gap: 10px; align-items: start; padding: 8px 14px; transition: opacity .3s }
+.grow + .grow { border-top: 1px solid #23262c }
+.grow .dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 6px; background: #3a3d44 }
+.grow.on .dot { background: #57c26b; box-shadow: 0 0 0 3px rgba(87,194,107,.18) }
+.grow .nm { font-weight: 600 }
+.grow .ticks { display: flex; flex-wrap: wrap; gap: 4px }
+.grow .ticks span { font-size: 12.5px; border-radius: 3px; padding: 1px 7px; border: 1px solid #3b3f46; color: var(--win-dim) }
+.grow .ticks span.hit { color: #1a1406; background: var(--gold); border-color: var(--gold) }
+.grow .ticks .k-combat { border-color: #8a4a44 } .grow .ticks .k-target { border-color: #8a6430 } .grow .ticks .k-place { border-color: #3c6488 }
+.grow:not(.on) .nm { color: var(--win-dim) }
+.win .foot { padding: 10px 14px 14px; color: var(--win-dim); font-size: 14px; border-top: 1px solid var(--win-edge) }
+@media (max-width: 520px) { .grow { grid-template-columns: 22px minmax(0, 1fr) } .grow .ticks { grid-column: 2 } }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
+
+/* Pages */
+.pages { display: grid; gap: 12px }
+.pg { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; display: grid; gap: 8px }
+.pg .name { font: 400 23px/1.1 var(--font-display) }
+.pg ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; color: var(--muted) }
+.pg ul b { color: var(--fg); font-weight: 600 }
+.tag { justify-self: start; font: 600 12px/1 var(--font-body); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid currentColor; padding: 4px 7px; border-radius: 4px }
+.tags { display: flex; flex-wrap: wrap; gap: 6px }
+.note { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; color: var(--muted) }
+
+table.t { width: 100%; border-collapse: collapse; font-size: 15.5px }
+.t th, .t td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top }
+.t th { font-weight: 600; color: var(--muted); font-size: 13.5px; letter-spacing: .04em; text-transform: uppercase }
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px }
+
+.cmds { display: grid; gap: 8px }
+.cmd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px }
+.cmd code { font-size: 15px; background: none; padding: 0; color: var(--fg) }
+.cmd .what { color: var(--muted); font-size: 15px; flex: 1 1 220px }
+.copy { font: 600 13px var(--font-body); color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer }
+.copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+dl.faq { display: grid; gap: 16px; margin: 0 }
+dl.faq dt { font-weight: 600 }
+dl.faq dd { margin: 2px 0 0; color: var(--muted) }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">Cinematic · frames</div>
+      <h1>Every frame, when you need it</h1>
+      <p>In CineMode the game's frames fade away. You decide which come back, and when: in fights, with a target, in a dungeon, or all the time. A handful of pages then add the clever parts, like a player frame that stays while you recover.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter" style="padding-block:48px 40px">
+<div class="col">
+
+  <section>
+    <div class="eyebrow">The main page</div>
+    <h2>Standard Frames: a row per frame</h2>
+    <p>The <b>Standard Frames</b> page, in the UI Manager, lists the game's own frames, one row each. In CineMode everything on it is hidden unless its row says otherwise. Each row reads left to right:</p>
+    <ul class="cols">
+      <li><b>Always</b><span>Shows the frame all through CineMode. The other columns then have nothing to add.</span></li>
+      <li><b>Combat</b><span>A dropdown: <b>In combat</b>, <b>Calm Timer</b> (after a fight, until it runs out), <b>Out of combat</b>, or <b>In a camera mode</b> (flights, AFK, cozy and the rest).</span></li>
+      <li><b>Target</b><span>A dropdown: <b>Enemy targeted</b> or <b>Friend targeted</b>, out of fights (friends, NPCs and dead enemies count as friends here).</span></li>
+      <li><b>Location</b><span>A dropdown of places: <b>BGs &amp; Arenas</b>, <b>Open World</b> (inns included), <b>Cities</b>, <b>Instances</b> (dungeons, scenarios and raids), and <b>Grouped</b> (in a party or raid, wherever you are).</span></li>
+      <li><b>Roles</b><span>Tick roles to show the frame only while you're one of them: your specialization's, or the one picked in the group finder. None ticked means every role.</span></li>
+      <li><b>Edit</b><span>Turns the row into a rule, for when the dropdowns aren't enough. A dot shows whether the row is on right now.</span></li>
+    </ul>
+    <p class="muted">Anything ticked in the three dropdowns shows the frame; they join with OR. Frames fade in and out at the fade times on the CineMode page. Hovering a faded frame always brings it up, along with its mouseover group.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Try it</div>
+    <h2>Which rows are up?</h2>
+    <p>Pick a moment. Each row lights up when one of its ticks matches. The ticks here are an example setup, not any profile's.</p>
+    <div class="win">
+      <div class="win-top">
+        <span class="win-title">Standard Frames</span>
+        <span class="win-note">Example ticks</span>
+      </div>
+      <div class="sits" id="sits" role="group" aria-label="The moment"></div>
+      <div class="grid" id="grid"></div>
+      <p class="foot" id="foot"></p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Rules</div>
+    <h2>When a row needs more: Edit</h2>
+    <p>Press <b>Edit</b> on a row to open the rule editor. Its buttons add words in groups: <b>Logic</b> (AND, OR, NOT and brackets), <b>Combat</b>, <b>Target</b> (also Anything targeted, and by kind of unit: Enemy Players, Hostile NPCs, Friendly NPCs and the rest), <b>Location</b> (Inns, Dungeons and Raids apart too), <b>You</b> (Mounted, PvP flagged, Grouped) and <b>Role</b>. So a row can say "In combat AND (Open World OR BGs &amp; Arenas)", or "NOT Mounted".</p>
+    <p class="muted">Each button shows a green dot where it's true right now. Press <b>Done</b> to keep the rule. A rule that's just the dropdowns' words joined by OR goes back into them; anything more stays as the row's rule, shown in its place. <b>Reset to grid</b> drops the rule and brings the old ticks back.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">What's on it</div>
+    <h2>The Standard Frames sections</h2>
+    <div class="tablewrap"><table class="t">
+      <thead><tr><th>Section</th><th>Rows</th></tr></thead>
+      <tbody>
+        <tr><td>Unit frames</td><td>Player frame, pet frame, personal health bar, personal resource bar, target, target of target, focus, focus target of target, and the target circle on the ground</td></tr>
+        <tr><td>Combat</td><td>Buffs and debuffs, swing timer (Classic clients), cast bar, the game's damage meter, Essential and Utility Cooldowns, encounter bar</td></tr>
+        <tr><td>Action bars</td><td>Action bars 1 to 3 and the art round bar 1, pet bar, stance bar, totem bar, and on retail the extra action button and zone ability</td></tr>
+        <tr><td>Extra action bars</td><td>Action bars 4 and 5, and on retail 6 to 8</td></tr>
+        <tr><td>Interface</td><td>Quest tracker, micro menu, bags, experience and reputation bars, voice chat speakers, and on retail the quest waypoint</td></tr>
+        <tr><td>Minimap</td><td>The minimap, and apart from it its header, tracking button, calendar, zone name, clock and (not on retail) the day/night dial</td></tr>
+        <tr><td>Party frames</td><td>Party frames, role icons, names and status icons. Raid-style party frames follow the raid rows until you untick <b>Same as raid frames</b>, which gives them rows of their own.</td></tr>
+        <tr><td>Raid frames</td><td>Players and pets, and their parts one by one: role icons, threat highlight, target highlight, ready check, player names, pet names, group titles, buffs, debuffs, and the Raid Frame Manager</td></tr>
+        <tr><td>Battlegrounds</td><td>Flag carriers</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted">A row whose frame doesn't exist in your game isn't shown. WoW Forever's gamepad mode has rows of its own on the Gamepad page.</p>
+    <h3>Three switches at the top</h3>
+    <ul style="margin:0;padding-left:20px;display:grid;gap:6px" class="muted">
+      <li><b>In combat rows stay for the Calm Timer</b>: frames ticked In combat stay up after a fight until the Calm Timer (CineMode page) runs out. Off, they fade as soon as the fight ends.</li>
+      <li><b>Cast fade into combat</b>: out of combat, casting a spell at an enemy brings up the In combat frames as if the fight had started. They're fully up as the spell lands.</li>
+      <li><b>Show the pet frame when your pet isn't happy</b> (Classic clients): keeps a hunter's pet frame up while its happiness isn't green.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="eyebrow">The other pages</div>
+    <h2>Pages that keep a frame up for a reason</h2>
+    <p>Standard Frames says <i>when</i> a frame may show. These pages add <i>why</i>: they bring a frame up because something happened. Each has its own <b>Enable page</b> switch; off, the frame just follows its Standard Frames row.</p>
+    <div class="pages">
+
+      <article class="pg">
+        <div class="name">Unit Frames</div>
+        <p class="muted">Which parts of the unit frames show, CineMode or not, to keep just the bars if you like. Click a frame's name to open its grid: your own frame, your pet's, and the target, focus and target of target by who they show (you, enemy players, hostile NPCs, neutral players, neutral NPCs, friendly players, friendly NPCs).</p>
+        <ul>
+          <li><b>Parts</b>: portrait, name, level, frame art (the portrait ring, name box and bar borders, which the game draws as one picture), PvP icon, icons (rest Zzz, leader's crown, role, quest and raid marker), auras, hit text, threat and cast bar.</li>
+          <li><b>Same as target</b>: the focus and target of target follow the target's grid until you untick it.</li>
+        </ul>
+      </article>
+
+      <article class="pg">
+        <div class="name">Personal Resources</div>
+        <p class="muted">Your player frame, pet frame and personal resource display.</p>
+        <ul>
+          <li><b>After a fight</b>: keep your player frame, and separately your resource display, up until your health and power are full. Rage and runic power can count too, until they've drained to 0. Your pet frame can stay until its health is full.</li>
+          <li><b>Low mana</b>: below the share you pick, your resource bar shows in a fight or not, while drinking or saving mana for the pull. It can bring your player frame too.</li>
+          <li><b>At the start of a fight</b>: the resource bar, health bar and player frame can each wait until something changes. Go in with full mana and the bar comes up with your first cast; the health bar with the first hit or heal you take.</li>
+        </ul>
+      </article>
+
+      <article class="pg">
+        <div class="name">Cooldown Manager</div>
+        <p class="muted">The game's Cooldown Manager (Enhanced Cooldown Manager's bars too). Hovering it always shows it.</p>
+        <ul>
+          <li><b>Stay up while a cooldown is recharging</b>, for the Essential and Utility bars apart, optionally <b>only after combat</b> (within the Calm Timer).</li>
+          <li><b>Spell icons</b>: for each spell, when its icon shows. <b>Always</b> as the game has it; <b>When Ready</b> fades it while it recharges and brings it back once ready, or a few seconds early (<b>Show Early</b>), and can wait for the <b>Resources</b> to cast it; <b>While recharging</b>; or <b>When it procs</b>, only while the game makes it glow.</li>
+          <li><b>Close the gaps (centered)</b>: the shown icons sit together, centered, instead of faded ones leaving holes. On for Utility to start with.</li>
+        </ul>
+      </article>
+
+      <article class="pg">
+        <div class="name">Swing timer</div>
+        <div class="tags"><span class="tag">Classic clients</span></div>
+        <ul>
+          <li><b>Only show the weapons you're using</b>: main and off-hand while you auto-attack, ranged while you shoot, each fading a while after it's done.</li>
+          <li><b>Hide the off-hand bar</b>, dual wielding or not.</li>
+          <li><b>Ranged bar on top</b>, set per class (ticked for hunters, mages, priests and warlocks to start with), so one profile suits all your characters.</li>
+        </ul>
+      </article>
+
+      <article class="pg">
+        <div class="name">Buffs/debuffs</div>
+        <ul>
+          <li><b>Show buffs when you gain or refresh one</b>, for a few seconds; optionally only after combat, and not for ones you cast on yourself.</li>
+          <li><b>Show debuffs when you gain or refresh one</b>, in fights too, and <b>keep them up until the debuff is gone</b>.</li>
+          <li>Long ones (Power Word: Fortitude, Deserter) can be left out by length, and any buff or debuff by name or spell ID. Never on flights.</li>
+        </ul>
+      </article>
+
+      <article class="pg">
+        <div class="name">Minimap</div>
+        <ul>
+          <li><b>Reveal</b>: the faded minimap comes up when ore, herbs or treasure show on it, a finished quest's turn-in or a quest area shows, or another named icon appears. It can ping new nodes for you (your group sees the ping). Not on flight paths.</li>
+          <li><b>Pings</b>: someone pinging the minimap brings it up so you can see where.</li>
+          <li><b>Keep open</b>: indoors, while tracking a quest (or only for a while after progress), while tracking creatures or fish, or while tracking herbs, minerals or treasure, except in cities and battlegrounds if you like.</li>
+          <li><b>Hide in camera modes</b>, camera by camera. On retail, <b>Always show the quest waypoint</b>.</li>
+        </ul>
+      </article>
+
+      <article class="pg">
+        <div class="name">Quest tracker</div>
+        <ul>
+          <li><b>Reveal</b> on a new quest, on objective progress, or on scenario progress, optionally showing <b>just that quest</b>.</li>
+          <li><b>Stay up for the Calm Timer</b> after a fight, with the tracker ticked In combat.</li>
+          <li>Keep the <b>quest timer</b> up while a timed quest runs (not on retail), and the <b>durability figure</b> while your gear is damaged.</li>
+        </ul>
+      </article>
+
+      <article class="pg">
+        <div class="name">Advanced Frames</div>
+        <p class="muted">Other addons' frames, with the same columns as Standard Frames.</p>
+        <ul>
+          <li><b>Supported addons</b>, handled out of the box when installed: Bartender4, Cooldown Manager Centered, Deadly Boss Mods, Details!, EllesmereUI, ElvUI, FlareUI, Forever Enhanced Cooldown Manager, Horizon Suite, Naowh Forever, Plater, Questie, RestedXP Guides and WeakAuras. Some follow the rows of the frames they replace. Click an addon to show or hide its parts.</li>
+          <li><b>Custom frames</b>: hover over any frame and type <code>/cine add</code>, or press <b>Pick frames by hovering</b> to collect several.</li>
+          <li><b>Custom Visibility Rules</b>, at the bottom: give any frame, nameplate row or unit frame part a rule of its own.</li>
+        </ul>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Commands</div>
+    <h2>Adding a frame</h2>
+    <p>Type these in the chat box.</p>
+    <div class="cmds">
+      <div class="cmd"><code id="cmd1">/cine add</code><span class="what">With the mouse over a frame: fades that frame in CineMode</span><button type="button" class="copy" data-for="cmd1">Copy</button></div>
+      <div class="cmd"><code id="cmd2">/cine add mode</code><span class="what">Hover over each frame you want, then type it again to fade them all</span><button type="button" class="copy" data-for="cmd2">Copy</button></div>
+      <div class="cmd"><code id="cmd3">/cine add cancel</code><span class="what">Drops the frames picked so far</span><button type="button" class="copy" data-for="cmd3">Copy</button></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Questions</div>
+    <h2>Good to know</h2>
+    <dl class="faq">
+      <div><dt>A frame keeps coming back when I don't expect it.</dt><dd>Something other than its row may be bringing it up: hovering it (and the mouseover group it's in), or one of its page's reveals. Check its page, and the Mouseover groups page.</dd></div>
+      <div><dt>I turned off a page and the frame still fades.</dt><dd>That's expected. A page's <b>Enable page</b> switch only turns off its extras; the frame still follows its Standard Frames row. Turn off Standard Frames' own switch to leave every frame alone.</dd></div>
+      <div><dt>Where are the nameplates?</dt><dd>On the Nameplates page, with <a href="nameplates.html">a guide of their own</a>.</dd></div>
+    </dl>
+  </section>
+
+</div>
+</main>
+
+<script>
+(function () {
+  // Moments: the facts that are true then.
+  var SITS = [
+    { id: "calm", label: "Out in the world", facts: { world: 1, ooc: 1 } },
+    { id: "fight", label: "In a fight", facts: { combat: 1, world: 1 } },
+    { id: "after", label: "Just after a fight", facts: { calm: 1, world: 1 } },
+    { id: "enemy", label: "An enemy targeted", facts: { enemy: 1, ooc: 1, world: 1 } },
+    { id: "friend", label: "A friend targeted", facts: { friend: 1, ooc: 1, world: 1 } },
+    { id: "dungeon", label: "In a dungeon group", facts: { instance: 1, grouped: 1, ooc: 1 } },
+    { id: "cam", label: "On a flight", facts: { cam: 1, world: 1, ooc: 1 } }
+  ];
+  var NAMES = { always: "Always", combat: "In combat", calm: "Calm Timer", ooc: "Out of combat", cam: "In a camera mode",
+    enemy: "Enemy targeted", friend: "Friend targeted", world: "Open World", city: "Cities",
+    instance: "Instances", grouped: "Grouped" };
+  var KIND = { combat: "combat", calm: "combat", ooc: "combat", cam: "combat", enemy: "target", friend: "target",
+    world: "place", city: "place", instance: "place", grouped: "place" };
+  var ROWS = [
+    { name: "Player frame", ticks: ["combat", "calm", "enemy"] },
+    { name: "Target", ticks: ["enemy", "friend"] },
+    { name: "Action bar 1", ticks: ["combat", "instance"] },
+    { name: "Cast bar", ticks: ["combat"] },
+    { name: "Party frames", ticks: ["grouped"] },
+    { name: "Minimap", ticks: ["instance"] },
+    { name: "Quest tracker", ticks: [] }
+  ];
+
+  var state = { sit: "calm" };
+  var sitsEl = document.getElementById("sits"), gridEl = document.getElementById("grid");
+  SITS.forEach(function (s) {
+    var b = document.createElement("button");
+    b.type = "button"; b.textContent = s.label; b.dataset.id = s.id;
+    b.addEventListener("click", function () { state.sit = s.id; render(); });
+    sitsEl.appendChild(b);
+  });
+
+  function render() {
+    var sit = SITS.filter(function (s) { return s.id === state.sit; })[0];
+    sitsEl.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.id === sit.id)); });
+    gridEl.textContent = "";
+    var up = 0;
+    ROWS.forEach(function (r) {
+      var on = r.ticks.some(function (t) { return sit.facts[t]; });
+      if (on) up++;
+      var row = document.createElement("div"); row.className = "grow" + (on ? " on" : "");
+      var dot = document.createElement("span"); dot.className = "dot"; dot.setAttribute("aria-hidden", "true");
+      var nm = document.createElement("span"); nm.className = "nm"; nm.textContent = r.name;
+      var ticks = document.createElement("span"); ticks.className = "ticks";
+      if (!r.ticks.length) {
+        var none = document.createElement("span"); none.textContent = "Nothing ticked"; ticks.appendChild(none);
+      }
+      r.ticks.forEach(function (t) {
+        var s = document.createElement("span");
+        s.className = "k-" + KIND[t] + (sit.facts[t] ? " hit" : "");
+        s.textContent = NAMES[t]; ticks.appendChild(s);
+      });
+      row.setAttribute("aria-label", r.name + (on ? ": up" : ": faded"));
+      row.appendChild(dot); row.appendChild(nm); row.appendChild(ticks);
+      gridEl.appendChild(row);
+    });
+    document.getElementById("foot").textContent = up + " of " + ROWS.length + " rows up. Gold ticks match this moment. " +
+      (sit.id === "calm" ? "The quest tracker, with nothing ticked, still comes up on its page's reveals, or when you hover it." : "");
+  }
+
+  document.querySelectorAll(".copy").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var el = document.getElementById(b.dataset.for);
+      function selectIt() { var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(el.textContent).then(function () {
+          b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500);
+        }, selectIt);
+      } else selectIt();
+    });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

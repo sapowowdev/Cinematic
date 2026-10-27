@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cinematic Visions</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column; each vision gets a section, two with a small game window to try. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --win-bg: #121418; --win-panel: #1b1e23; --win-edge: #3b3f46; --win-fg: #ece9e2; --win-dim: #9a9ca2;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body); padding-block: 0 }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 56px }
+.col > *, section > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+.muted { color: var(--muted) }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px }
+section { display: grid; gap: 14px }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+
+/* Opening: the letterbox itself */
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #2b3240 0%, #151a22 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+
+/* The five at a glance */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 6px; align-content: start }
+.card .name { font: 400 22px/1.1 var(--font-display); display: flex; align-items: center; gap: 8px }
+.card .name i { width: 10px; height: 10px; border-radius: 50%; flex: none }
+.card a { color: inherit; text-decoration: none }
+.card a:hover .name, .card a:focus-visible .name { color: var(--accent) }
+.tag { justify-self: start; font: 600 12px/1 var(--font-body); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid currentColor; padding: 4px 7px; border-radius: 4px }
+.client { font: 600 12px/1 var(--font-body); letter-spacing: .04em; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; margin-left: 6px; vertical-align: 2px; white-space: nowrap }
+
+/* Settings, as the page lists them */
+.opts { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden }
+.opt { padding: 11px 16px; border-top: 1px solid var(--line); display: grid; gap: 2px }
+.opt:first-child { border-top: 0 }
+.opt .l { font-weight: 600 }
+.opt .d { color: var(--muted); font-size: 15.5px }
+.note { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; color: var(--muted) }
+
+/* Game windows */
+.win { background: var(--win-bg); color: var(--win-fg); border: 1px solid var(--win-edge); border-radius: 6px; overflow: hidden; font-size: 15.5px }
+.win-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px;
+  border-bottom: 1px solid var(--win-edge); background: var(--win-panel) }
+.win-title { font: 400 20px var(--font-display); color: var(--gold) }
+.seg { display: inline-flex; border: 1px solid var(--win-edge); border-radius: 5px; overflow: hidden }
+.seg button { font: 500 14px var(--font-body); background: transparent; color: var(--win-dim); border: 0; padding: 5px 11px; cursor: pointer }
+.seg button[aria-pressed="true"] { background: #2a2d33; color: var(--win-fg) }
+.win-foot { color: var(--win-dim); font-size: 14px; padding: 0 16px 14px }
+.wbtn { font: 500 14px var(--font-body); background: #24272d; color: var(--win-fg); border: 1px solid var(--win-edge); border-radius: 4px; padding: 6px 12px; cursor: pointer }
+.wbtn:hover { background: #2d3138 }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
+
+/* Heal Vision: a party frame */
+.party { padding: 16px; display: grid; gap: 6px; max-width: 360px }
+.member { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; align-items: center; transition: opacity .5s; cursor: pointer;
+  background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left }
+.member .role { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 700 11px var(--font-body); color: #111 }
+.member .bar { position: relative; height: 30px; background: #2a1414; border: 1px solid #000; border-radius: 2px; overflow: hidden }
+.member .fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#3fbf4f, #23862f); transition: width .4s }
+.member .nm { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-weight: 600; font-size: 14px; text-shadow: 0 1px 2px #000 }
+.member .hp { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 13px; color: #ddd; text-shadow: 0 1px 2px #000 }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 14px }
+
+/* Vitals Vision: a screen whose edges close in */
+.screen { position: relative; aspect-ratio: 16 / 8; min-height: 180px; overflow: hidden;
+  background: radial-gradient(110% 120% at 50% 100%, #5d6b4d 0%, #3c4a39 35%, #1f2a2c 70%), #222 }
+.screen .sky { position: absolute; inset: 0 0 55% 0; background: linear-gradient(#7f9bb3, #c9b48c) }
+.screen .hill { position: absolute; left: -10%; right: -10%; top: 38%; height: 50%; background: #3f4f36; border-radius: 50% 50% 0 0 }
+.screen .me { position: absolute; left: 50%; top: 52%; width: 18px; height: 38px; transform: translateX(-50%); background: #1a1a1a; border-radius: 8px 8px 3px 3px }
+.screen .edge { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .15s }
+.screen .flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; box-shadow: inset 0 0 90px 30px #ff2a2a }
+.screen .flash.go { animation: flash .5s ease-out }
+@keyframes flash { from { opacity: .9 } to { opacity: 0 } }
+.vrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 16px 14px }
+.vrow label { font-weight: 600 }
+.vrow input[type="range"] { flex: 1 1 200px; accent-color: var(--gold) }
+.vrow output { font-family: var(--font-mono); font-size: 14px; color: var(--win-dim); min-width: 4ch }
+@media (prefers-reduced-motion: reduce) { .member, .member .fill { transition: none } .screen .flash.go { animation: none } }
+
+/* Steps and commands */
+.cmds { display: grid; gap: 8px }
+.cmd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px }
+.cmd code { font-size: 15px; background: none; padding: 0; color: var(--fg) }
+.cmd .what { color: var(--muted); font-size: 15px; flex: 1 1 220px }
+.copy { font: 600 13px var(--font-body); color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer }
+.copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+dl.faq { display: grid; gap: 16px; margin: 0 }
+dl.faq dt { font-weight: 600 }
+dl.faq dd { margin: 2px 0 0; color: var(--muted) }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">Cinematic · Visions</div>
+      <h1>See only what matters right now</h1>
+      <p>With the UI faded, a vision brings back just the one thing you need: who needs healing, what your quest wants, who's winning a duel or a roll, and how hurt you are.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter" style="padding-block:48px 40px">
+<div class="col">
+
+  <section>
+    <div class="eyebrow">At a glance</div>
+    <h2>Five visions</h2>
+    <p>Each vision has a page in the <b>Visions</b> group of Cinematic's settings (Duel Vision is on its General page), with an <b>Enable page</b> switch at the top. Turning a page off keeps all its ticks for when you turn it back on.</p>
+    <div class="cards">
+      <article class="card"><a href="#heal"><div class="name"><i style="background:#59ff73"></i>Heal Vision</div></a>
+        <p class="muted">Party and raid frames show only who needs healing.</p><span class="tag">Off until you pick where</span></article>
+      <article class="card"><a href="#quest"><div class="name"><i style="background:#ffd100"></i>Quest Vision</div></a>
+        <p class="muted">What your quests still need keeps its nameplate, with a golden&nbsp;!.</p><span class="tag">On to start with</span></article>
+      <article class="card"><a href="#roll"><div class="name"><i style="background:#73b3ff"></i>Roll Vision</div></a>
+        <p class="muted">A window of everyone's loot rolls, so you needn't read them in chat.</p><span class="tag">On to start with</span></article>
+      <article class="card"><a href="#duel"><div class="name"><i style="background:#ff594d"></i>Duel Vision</div></a>
+        <p class="muted">Two players dueling near you get their nameplates.</p><span class="tag">On to start with</span></article>
+      <article class="card"><a href="#vitals"><div class="name"><i style="background:#ff4066"></i>Vitals Vision</div></a>
+        <p class="muted">Your health at the screen's edges, with no portrait to read.</p><span class="tag">On in the Cinema level</span></article>
+    </div>
+    <p class="muted">Turn any of them on or off without opening the settings: the <a href="wheels.html">vision wheel</a> does it with one key, in a fight too, and each vision has a <b>Toggle</b> keybind of its own on the Keybinds page.</p>
+    <p class="muted"><b>Vision Helper</b> (on the General page): while a vision is doing something, Cinematic's minimap button glows in that vision's color, and its menu and tooltip list it with a link to its page.</p>
+  </section>
+
+  <section id="heal">
+    <div class="eyebrow">For healers</div>
+    <h2>Heal Vision</h2>
+    <p>The game's own party and raid frames show only who needs healing: everyone (pets too) while they're below full health, and tanks as you set them. The group titles hide. Members stay in their places, so there are gaps where the healthy ones are. Out of a fight, putting the mouse over the frames brings everyone back.</p>
+
+    <div class="win" id="hv">
+      <div class="win-top">
+        <span class="win-title">Party</span>
+        <div class="seg" role="group" aria-label="Heal Vision">
+          <button type="button" data-hv="on" aria-pressed="true">Heal Vision on</button>
+          <button type="button" data-hv="off" aria-pressed="false">Off</button>
+        </div>
+      </div>
+      <div class="party" id="party"></div>
+      <div class="controls">
+        <button type="button" class="wbtn" id="hv-pull">Take some hits</button>
+        <button type="button" class="wbtn" id="hv-heal">Heal everyone</button>
+      </div>
+      <p class="win-foot">Click a member to heal them. With the page's starting values, the tank always shows, the healer and damage dealers show once they're hurt, and the pet only below 35%.</p>
+    </div>
+
+    <h3>Setting it up</h3>
+    <p>Heal Vision does nothing until you say where. Its page has a row like the other grids in Cinematic:</p>
+    <div class="opts">
+      <div class="opt"><span class="l">Show in</span><span class="d"><b>Always</b> (everywhere), or the places: Open World, Cities, Dungeons, Raids, BGs &amp; Arenas. <b>Party</b> and <b>Raid</b> turn it on while you're in one, wherever you are.</span></div>
+      <div class="opt"><span class="l">Combat and targets</span><span class="d"><b>In combat</b>, the <b>Calm Timer</b> after a fight, <b>Enemy targeted</b> and <b>Friend targeted</b> turn it on at those times only.</span></div>
+      <div class="opt"><span class="l">Roles</span><span class="d">To start with it's on only while you're a healer (your specialization's role, or the one you picked in the group finder). Tick tanks or damage too, or none for every role.</span></div>
+      <div class="opt"><span class="l">Tanks, Healers, Damage, Pets</span><span class="d">For each kind, <b>Show below health</b> (100% shows tanks always, at full health too) and <b>Opacity while hidden</b> (0% hides them completely).</span></div>
+      <div class="opt"><span class="l">Target min opacity</span><span class="d">The member you've targeted shows at least this much. 100% always shows them.</span></div>
+      <div class="opt"><span class="l">Dead, offline or far away</span><span class="d">These are hidden whatever their health, unless one is your target. Far away means more than 100 yards off, or not in your dungeon or raid.</span></div>
+    </div>
+    <p class="note">Members with debuffs can't be shown just for their debuffs: the game doesn't let addons see your group's debuffs in fights. In battlegrounds on WoW Forever, which won't say how far anyone is, members out of range of your heals (about 40 yards) fade instead.</p>
+  </section>
+
+  <section id="quest">
+    <div class="eyebrow">For questing</div>
+    <h2>Quest Vision</h2>
+    <p>Mobs and NPCs you still need for a quest objective keep their nameplates up while the rest fade, with a quest mark on them and on your target frame. Once the objective is done, they fade with the rest. Its nameplate parts need the Nameplates page enabled.</p>
+    <div class="opts">
+      <div class="opt"><span class="l">Always show their</span><span class="d"><b>Nameplate</b> (the whole plate), <b>Name</b> (just the name), <b>Quest mark (!)</b> (a golden ! on whatever the Nameplates page shows, or the ! alone; where it starts), or <b>No action</b>. In CineMode, in fights and out.</span></div>
+      <div class="opt"><span class="l">Quest icon by their nameplates or names</span><span class="d">A golden exclamation mark beside their health bars, wherever their plates show.</span></div>
+      <div class="opt"><span class="l">Quest icon on your target frame</span><span class="d">The same mark by your target frame's health bar while you target one of them, in CineMode and out.</span></div>
+      <div class="opt"><span class="l">Quest item button</span><span class="d">A big button with the item your nearest tracked quest gives you to use, where your extra ability button goes. Click it, or press its key (<b>Use the quest item</b> on the Keybinds page). It can't appear or move in a fight: it stays as it was until the fight ends.</span></div>
+      <div class="opt"><span class="l">Glow on quest objects</span><span class="d">The thing on the ground you pick up or use for an objective glows gold, with the quest mark over it: one at a time, the one in front of you that your interact key would use, up to 20 yards away. To find it, it turns on the game's soft targeting for things you can interact with while a quest in the zone needs it; your own settings come back after.</span></div>
+    </div>
+    <p class="muted">Quest Vision's page also has <b>Talking to NPCs</b>: the speech bubble and reply list that replace the game's quest windows. That has a guide of its own in <a href="chat-and-quests.html#talk">Chat and quests</a>.</p>
+  </section>
+
+  <section id="roll">
+    <div class="eyebrow">For groups</div>
+    <h2>Roll Vision</h2>
+    <p>In a group, items being rolled on show in a window, not only as lines in chat: each item, a bar for the time left, and everyone's pick (need, greed, transmog) and number, with the winner lit at the top. It opens as an item drops, just under the game's roll frame, so you can see who's picked what before you choose. Each item fades a few seconds after it's won; point at them to keep them.</p>
+    <div class="opts">
+      <div class="opt"><span class="l">Show rolls on</span><span class="d">Uncommon and up, <b>Rare and up</b> (where it starts) or Epic and up. Rolls on the rest stay in chat.</span></div>
+      <div class="opt"><span class="l">Only items you can use</span><span class="d">Skip armor or weapons you can't wear, another class's, or a level you haven't reached.</span></div>
+      <div class="opt"><span class="l">Items shown at once</span><span class="d">Up to 8, newest at the top: four down, the rest in a second column.</span></div>
+      <div class="opt"><span class="l">Players shown per item in a raid</span><span class="d">The winner first, then need before greed, highest numbers first; the rest on an "and N more" line. Click an item's panel to list everyone. In a party everyone is listed.</span></div>
+      <div class="opt"><span class="l">Always list your own roll · Only show the best pick</span><span class="d">Keep your own line, and hide greed and transmog once someone needs (they can't win it).</span></div>
+      <div class="opt"><span class="l">Beside the game's roll frames · Move apart from the game's roll frames</span><span class="d">Sit it to the right instead of below, or drag it anywhere on its own.</span></div>
+    </div>
+    <p class="note">Roll Vision reads the game's loot history, the same list <code>/loot</code> shows. On a game version without one, its page doesn't appear.</p>
+  </section>
+
+  <section id="duel">
+    <div class="eyebrow">For watching</div>
+    <h2>Duel Vision</h2>
+    <p>In CineMode, the nameplates of two players dueling near you show, so you can follow their health. Each duel has its own colored border and class icons, and the winner and loser show when it ends. It works in the open world, out of fights, and needs the Nameplates page enabled.</p>
+    <p class="muted">While it watches, it turns on friendly player nameplates, but keeps everyone's invisible and click-through except the two duelists'. Its tick is under <b>Duel Vision</b> on the Visions General page.</p>
+  </section>
+
+  <section id="vitals">
+    <div class="eyebrow">For staying alive</div>
+    <h2>Vitals Vision</h2>
+    <p>Your health at a glance, without the portrait. As it drops, the screen's edges close in, with your theme's art soaking in from them (blood, frost, fire, wind...) and its effects moving over it, a heartbeat that quickens as you weaken and a flash on big hits. The death screen takes over if you die.</p>
+
+    <div class="win" id="vv">
+      <div class="win-top"><span class="win-title">Vitals Vision</span></div>
+      <div class="screen" id="vv-screen" aria-hidden="true">
+        <div class="sky"></div><div class="hill"></div><div class="me"></div>
+        <div class="edge" id="vv-edge"></div><div class="flash" id="vv-flash"></div>
+      </div>
+      <div class="vrow">
+        <label for="vv-hp">Your health</label>
+        <input type="range" id="vv-hp" min="0" max="100" value="100">
+        <output id="vv-out" for="vv-hp">100%</output>
+        <button type="button" class="wbtn" id="vv-hit">Big hit</button>
+      </div>
+      <p class="win-foot">With the starting values, the edges creep in below 75% health and are all the way in at 15%.</p>
+    </div>
+
+    <div class="opts">
+      <div class="opt"><span class="l">Theme</span><span class="d"><b>Auto</b> picks your class and spec's (on game versions without specs, the talent tree you've put the most into), or pick any. Each class has a theme for each spec. <b>Test</b> shows it whatever your health.</span></div>
+      <div class="opt"><span class="l">What shows</span><span class="d"><b>Screen edges</b>, plus your <b>Player frame</b> and, on game versions that have one, the <b>Personal resource display</b>, each fading in as your health drops while CineMode has them hidden.</span></div>
+      <div class="opt"><span class="l">When it shows</span><span class="d"><b>Starts below</b> and <b>All the way in at</b>, and a weaker <b>Strength out of combat</b> for eating and drinking back up. <b>Only in CineMode</b> keeps it to while the UI is faded.</span></div>
+      <div class="opt"><span class="l">Heartbeat, Big hits</span><span class="d">The edges throb from 60 to 140 beats a minute as you weaken, and flash when a hit takes 8% of your health at once, or smaller hits add up to 20%.</span></div>
+      <div class="opt"><span class="l">Shadow, Theme art</span><span class="d">How far in and how dark the edges come, black or tinted, and the art's drips and effects.</span></div>
+    </div>
+    <p class="note">Some game versions keep your health secret from addons in fights. There the edges only fade in and out with it rather than following every point.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Commands</div>
+    <h2>Rolls on demand</h2>
+    <p>Type these in the chat box.</p>
+    <div class="cmds">
+      <div class="cmd"><code id="cmd1">/cine rolls</code><span class="what">Shows the latest loot rolls in the Roll Vision window</span><button type="button" class="copy" data-for="cmd1">Copy</button></div>
+      <div class="cmd"><code id="cmd2">/cine rolls test</code><span class="what">Shows made-up rolls, to see how the window looks</span><button type="button" class="copy" data-for="cmd2">Copy</button></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Questions</div>
+    <h2>Good to know</h2>
+    <dl class="faq">
+      <div><dt>I turned Heal Vision on and nothing changed.</dt><dd>Its grid starts with nothing ticked, and its roles start with healers only. Tick a place (or Always) and make sure you're in a healing spec, or tick your role too.</dd></div>
+      <div><dt>Will Quest Vision change my game settings?</dt><dd>The glow on quest objects turns on the game's soft targeting for interactable things while you need it, and puts your own settings back after. Untick <b>Glow on quest objects</b> if you'd rather it didn't.</dd></div>
+      <div><dt>Do visions work outside CineMode?</dt><dd>Some do: Roll Vision, Heal Vision, the quest icons on your target frame and the glow on quest objects work either way. Duel Vision and Quest Vision's nameplates are about what shows while CineMode fades things, so they work in CineMode.</dd></div>
+      <div><dt>Can I turn one off in a fight?</dt><dd>Yes, with the vision wheel or its Toggle keybind. Turning Heal Vision off brings all the party and raid frames back at once.</dd></div>
+    </dl>
+  </section>
+
+</div>
+</main>
+
+<script>
+(function () {
+  // Heal Vision: a party with the page's starting values (show below / hidden opacity per kind).
+  var KINDS = { tank: { below: 1, color: "#5ea3ff", t: "T" }, healer: { below: 0.95, color: "#59ff73", t: "H" },
+    damage: { below: 0.95, color: "#ff8a5c", t: "D" }, pet: { below: 0.35, color: "#c9b37a", t: "P" } };
+  var party = [
+    { name: "Thorgrim", kind: "tank", hp: 1 }, { name: "You", kind: "healer", hp: 1 },
+    { name: "Elowen", kind: "damage", hp: 1 }, { name: "Kazrak", kind: "damage", hp: 1 }, { name: "Wolf", kind: "pet", hp: 1 }
+  ];
+  var hvOn = true;
+  var partyEl = document.getElementById("party");
+  function drawParty() {
+    partyEl.textContent = "";
+    party.forEach(function (m) {
+      var k = KINDS[m.kind];
+      var shown = !hvOn || m.kind === "tank" || m.hp < k.below;
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "member"; b.style.opacity = shown ? 1 : 0.05;
+      b.setAttribute("aria-label", m.name + ", " + Math.round(m.hp * 100) + "% health" + (shown ? "" : ", hidden"));
+      var role = document.createElement("span"); role.className = "role"; role.style.background = k.color; role.textContent = k.t;
+      var bar = document.createElement("span"); bar.className = "bar";
+      var fill = document.createElement("span"); fill.className = "fill"; fill.style.width = (m.hp * 100) + "%";
+      var nm = document.createElement("span"); nm.className = "nm"; nm.textContent = m.name;
+      var hp = document.createElement("span"); hp.className = "hp"; hp.textContent = Math.round(m.hp * 100) + "%";
+      bar.appendChild(fill); bar.appendChild(nm); bar.appendChild(hp);
+      b.appendChild(role); b.appendChild(bar);
+      b.addEventListener("click", function () { m.hp = 1; drawParty(); });
+      partyEl.appendChild(b);
+    });
+  }
+  document.querySelectorAll("[data-hv]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      hvOn = b.dataset.hv === "on";
+      document.querySelectorAll("[data-hv]").forEach(function (o) { o.setAttribute("aria-pressed", String(o === b)); });
+      drawParty();
+    });
+  });
+  document.getElementById("hv-pull").addEventListener("click", function () {
+    party.forEach(function (m) { if (Math.random() < 0.6) m.hp = Math.max(0.08, m.hp - (0.1 + Math.random() * 0.45)); });
+    drawParty();
+  });
+  document.getElementById("hv-heal").addEventListener("click", function () { party.forEach(function (m) { m.hp = 1; }); drawParty(); });
+  drawParty();
+
+  // Vitals Vision: edges in between 75% and 15%, a heartbeat quickening from 60 to 140 a minute.
+  var hpIn = document.getElementById("vv-hp"), out = document.getElementById("vv-out");
+  var edge = document.getElementById("vv-edge"), flash = document.getElementById("vv-flash");
+  var reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var strength = 0, beatStart = performance.now();
+  function setHp(v) {
+    hpIn.value = v; out.textContent = v + "%";
+    strength = Math.max(0, Math.min(1, (0.75 - v / 100) / (0.75 - 0.15)));
+  }
+  function frame(now) {
+    var bpm = 60 + 80 * strength, period = 60000 / bpm;
+    var phase = ((now - beatStart) % period) / period;
+    var beat = reduced ? 0 : Math.max(0, 1 - phase * 4) * 0.25;
+    var s = strength * (1 + beat);
+    var reach = 18 + 30 * s;
+    edge.style.opacity = strength > 0 ? 1 : 0;
+    edge.style.background = "radial-gradient(ellipse at center, transparent " + (100 - reach * 1.4) + "%, rgba(110,6,10," + (0.55 * s) + ") " +
+      (100 - reach * 0.7) + "%, rgba(20,0,0," + (0.9 * s) + ") 100%)";
+    requestAnimationFrame(frame);
+  }
+  hpIn.addEventListener("input", function () { setHp(+hpIn.value); });
+  document.getElementById("vv-hit").addEventListener("click", function () {
+    setHp(Math.max(5, +hpIn.value - 20));
+    flash.classList.remove("go"); void flash.offsetWidth; flash.classList.add("go");
+  });
+  setHp(100);
+  requestAnimationFrame(frame);
+
+  document.querySelectorAll(".copy").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var el = document.getElementById(b.dataset.for);
+      function selectIt() { var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(el.textContent).then(function () {
+          b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500);
+        }, selectIt);
+      } else selectIt();
+    });
+  });
+})();
+</script>
+</body>
+</html>

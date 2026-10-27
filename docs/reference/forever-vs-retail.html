@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WoW Forever and Retail</title>
+<meta name="description" content="Which Cinematic features are on WoW Forever and the Classic versions, which are retail only, and which depend on the game.">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column, as on the Profiles page. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --forever: #2f6f4f; --retail: #2c5a92; --classic: #7a4a1c;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607;
+  --forever: #7fd0a4; --retail: #8fb8ee; --classic: #e0ad78; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607;
+  --forever: #7fd0a4; --retail: #8fb8ee; --classic: #e0ad78; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body); padding-block: 0 }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 56px }
+.col > *, section > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+a { color: var(--accent); text-underline-offset: 2px }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.muted { color: var(--muted) }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere }
+kbd { font: 500 .82em var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; background: var(--surface); border-radius: 4px; padding: 0 5px }
+section { display: grid; gap: 14px }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+ul.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 6px }
+
+/* Opening: the letterbox itself */
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #2b3240 0%, #151a22 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+.hero code { background: #2a2d33; color: var(--bar-fg) }
+
+/* Steps, commands and questions */
+.steps { display: grid; gap: 14px; list-style: none; margin: 0; padding: 0; counter-reset: s }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px }
+.steps li::before { content: counter(s); font: 400 24px/1.1 var(--font-display); color: var(--accent) }
+.steps li > div { display: grid; gap: 4px }
+.cmds { display: grid; gap: 8px }
+.cmd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px }
+.cmd > code { font-size: 15px; background: none; padding: 0; color: var(--fg); flex: 0 1 auto }
+.cmd .what { color: var(--muted); font-size: 15px; flex: 1 1 220px }
+.copy { font: 600 13px var(--font-body); color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer }
+.copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+dl.faq { display: grid; gap: 16px; margin: 0 }
+dl.faq dt { font-weight: 600 }
+dl.faq dd { margin: 2px 0 0; color: var(--muted) }
+
+/* Reference rows: a name, then what it does; stacked on a phone */
+.rows { display: grid; margin: 0; border-top: 1px solid var(--line) }
+.row { display: grid; grid-template-columns: minmax(0, 230px) minmax(0, 1fr); gap: 4px 20px; padding: 12px 0; border-bottom: 1px solid var(--line) }
+.row > dt, .row > .k { font-weight: 600 }
+.row > dd, .row > .v { margin: 0; color: var(--muted) }
+.row .v b, .row dd b { color: var(--fg); font-weight: 600 }
+@media (max-width: 560px) { .row { grid-template-columns: 1fr } }
+
+/* Cards and callouts */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; display: grid; gap: 6px; align-content: start }
+.card .name { font: 400 22px/1.1 var(--font-display) }
+.note { background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; padding: 12px 16px }
+.chip { display: inline-block; font: 600 12px/1 var(--font-body); letter-spacing: .05em; text-transform: uppercase;
+  border: 1px solid currentColor; border-radius: 4px; padding: 3px 6px; vertical-align: 2px; white-space: nowrap }
+.chip.forever { color: var(--forever) } .chip.retail { color: var(--retail) } .chip.classic { color: var(--classic) }
+.chip.soon { color: var(--muted) }
+
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">Reference · game versions</div>
+      <h1>WoW Forever and retail</h1>
+      <p>Cinematic is one addon for every version of the game. Almost everything works everywhere; a few features belong to one side, because only that game has the part they work with.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter" style="padding-block:48px 40px">
+<div class="col">
+
+  <section>
+    <h2>Two sides</h2>
+    <p>Cinematic sorts the game versions into two: <span class="chip retail">Retail</span> and everything else, which this guide calls <span class="chip forever">WoW Forever and Classic</span>. It's made first and foremost for WoW Forever, so that's where it's tested most; the other Classic versions get the same features, but please report anything that's off.</p>
+    <p class="muted">Settings that only apply to one game only show up there, and each game keeps its own settings and profiles. You won't see an option your game can't use.</p>
+  </section>
+
+  <section id="everywhere">
+    <div class="eyebrow">Everywhere</div>
+    <h2>On every version</h2>
+    <p>CineMode and fading, smart reveals and mouseover groups, every camera (flights, AFK, RP walk, auto-run, cozy, tele, vista, fish, quest and death), the tint, time of day, zone moods, inn glow, letterbox and vignette, music, the visions, the wheels, nameplates and names, chat and chat bubbles, tooltips, Graphics+, profiles and sharing.</p>
+  </section>
+
+  <section id="forever">
+    <div class="eyebrow">Not on retail</div>
+    <h2>WoW Forever and Classic only</h2>
+    <dl class="rows">
+      <div class="row"><dt>Swing timer page</dt><dd>The game's swing timer bars fade between fights, with the ranged bar on top for classes that use it.</dd></div>
+      <div class="row"><dt>Hunter page</dt><dd>The smallest ammo stack goes first after Clean Up Bags, and a <b>Fill quiver</b> button at vendors buys enough to fill your quiver or ammo pouch.</dd></div>
+      <div class="row"><dt>Unhappy pet</dt><dd>For hunters: your pet frame stays up while your pet isn't happy.</dd></div>
+      <div class="row"><dt>Campfire button</dt><dd>Point at a campfire and click the icon at your cursor to sit, kneel or lie down by the fire. It has its own row on the Camera Triggers page.</dd></div>
+      <div class="row"><dt>Stand up with Camp Benefits</dt><dd>Once the buff arrives, you stand up again, ready to go.</dd></div>
+      <div class="row"><dt>Talent calculator</dt><dd>A button on your talents window (or <code>/cine talents</code>) opens a planner that looks just like it, starting from your talents.</dd></div>
+      <div class="row"><dt>Talents when inspecting</dt><dd>A button on the inspect window opens the player's talents, and one on the talents window takes you back.</dd></div>
+      <div class="row"><dt>Day/night dial</dt><dd>A row of its own on the Standard Frames page, to keep the minimap's day/night dial up.</dd></div>
+      <div class="row"><dt>Layouts in Customize</dt><dd>The Layout area offers <b>WoW Forever's</b> (the game's own layout) and <b>Like retail</b> (action bars centered along the bottom, menus in the corner).</dd></div>
+      <div class="row"><dt>Gamepad page <span class="chip forever">WoW Forever</span></dt><dd>WoW Forever's gamepad mode fades with the rest: its action bars, button hints and reticle, each with a row of its own.</dd></div>
+      <div class="row"><dt>Naowh Forever <span class="chip forever">WoW Forever</span></dt><dd>Its top bar fades in CineMode (a row on the Advanced Frames page), and its RestedXP guide window fades with the quest tracker.</dd></div>
+      <div class="row"><dt>Menu look</dt><dd>On Auto, Cinematic's settings and windows follow your Character Models setting on WoW Forever: HD or SD.</dd></div>
+    </dl>
+  </section>
+
+  <section id="retail">
+    <div class="eyebrow">Retail</div>
+    <h2>Retail only</h2>
+    <dl class="rows">
+      <div class="row"><dt>Extra action and zone ability</dt><dd>A row of its own on the Standard Frames page.</dd></div>
+      <div class="row"><dt>Quest waypoint</dt><dd>The Minimap page can keep the quest waypoint up in CineMode too.</dd></div>
+      <div class="row"><dt>Layouts in Customize</dt><dd>The Layout area offers <b>Resources in the middle</b> (your resource display in the middle, the Cooldown Manager above it; Cinema's choice on retail), and the Action bars area offers <b>Retail's own</b> (each on its own, the micro menu up in fights).</dd></div>
+      <div class="row"><dt>Skyriding</dt><dd>The auto-run camera keeps going when you auto-run on a skyriding mount.</dd></div>
+      <div class="row"><dt>Every expansion's zones</dt><dd>Zone moods cover every expansion, from Outland's fel-scorched Hellfire to Midnight's Voidstorm.</dd></div>
+      <div class="row"><dt>Menu look</dt><dd>On Auto, Cinematic's settings and windows use the HD look.</dd></div>
+    </dl>
+  </section>
+
+  <section id="depends">
+    <div class="eyebrow">It depends</div>
+    <h2>Only where the game has the part</h2>
+    <dl class="rows">
+      <div class="row"><dt>Cooldown Manager page</dt><dd>Where the game has its own Cooldown Manager, or with the Forever Enhanced Cooldown Manager addon installed.</dd></div>
+      <div class="row"><dt>Roll Vision</dt><dd>The loot roll window, its keybind and <code>/cine rolls</code>: where the game keeps a loot history.</dd></div>
+      <div class="row"><dt>Ground marker wheel</dt><dd>Where the game has ground markers.</dd></div>
+      <div class="row"><dt>Unit Frames page</dt><dd>Where Cinematic can tell the parts of the game's unit frames apart.</dd></div>
+      <div class="row"><dt>Weather</dt><dd>Rain, snow and sandstorms tint the scene on game versions that report the weather.</dd></div>
+      <div class="row"><dt>Menu wheel</dt><dd>Shows the menu buttons your game has.</dd></div>
+    </dl>
+  </section>
+
+  <section>
+    <div class="eyebrow">Questions</div>
+    <h2>Good to know</h2>
+    <dl class="faq">
+      <div><dt>I play both. Do I set Cinematic up twice?</dt><dd>Yes: each game keeps its own settings. To bring your setup across, <a href="sharing.html">export it</a> on one and import it on the other. Settings that only apply to one game only do anything there.</dd></div>
+      <div><dt>Do the three levels differ between games?</dt><dd>A little, where the games differ: mostly the layout and action bar choices above. The <a href="../guides/profiles.html">Profiles guide</a> lets you switch between WoW Forever and retail to compare.</dd></div>
+      <div><dt>Something only goes wrong on one version.</dt><dd>Please report it, with <code>/cine log</code>: the log says which game you're on. See <a href="../help/troubleshooting.html">Troubleshooting</a>.</dd></div>
+    </dl>
+  </section>
+
+</div>
+</main>
+</body>
+</html>

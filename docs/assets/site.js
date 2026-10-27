@@ -7,12 +7,58 @@
 // the menu at the bottom. The menu (index.html) lists the pages from here too.
 (function () {
   var SECTIONS = [
+    { id: "start", name: "Start here", line: "New to Cinematic? Begin with these." },
     { id: "guides", name: "Guides", line: "How Cinematic's features work, for players." },
+    { id: "reference", name: "Reference", line: "Commands, keybinds and every settings page, to look things up." },
+    { id: "help", name: "Help", line: "When something's not right." },
     { id: "design", name: "Under the hood", line: "How it's built: design notes drawn from the addon's code." }
   ];
+  // soon: listed on the menu as coming soon, not linked, until its page is written.
   var PAGES = [
+    { section: "start", path: "start/getting-started.html", title: "Getting started",
+      line: "Installing, the welcome window, and turning CineMode on and off." },
     { section: "guides", path: "guides/profiles.html", title: "Profiles",
       line: "Pick a level, then make it yours: the three levels, Customize's six areas, and where your changes are kept." },
+    { section: "guides", path: "guides/cinemode.html", title: "CineMode and fading",
+      line: "What fades and when, smart reveals, mouseover groups, fights, and where it turns itself off." },
+    { section: "guides", path: "guides/cameras.html", title: "The cameras",
+      line: "Every camera, what starts it, the Camera Triggers page and depth of field." },
+    { section: "guides", path: "guides/flight-cam.html", title: "Flight Cam",
+      line: "Takeoff, sway, fly-bys and landing, and how each route is timed." },
+    { section: "guides", path: "guides/look.html", title: "Look and mood",
+      line: "Tints, time of day, zone moods, inn glow, weather, letterbox and vignette." },
+    { section: "guides", path: "guides/music.html", title: "Music and sound",
+      line: "Which cameras start music, music fatigue, muting by place, and your settings put back." },
+    { section: "guides", path: "guides/visions.html", title: "Visions",
+      line: "Heal, Quest, Roll, Duel and Vitals Vision." },
+    { section: "guides", path: "guides/wheels.html", title: "Wheels",
+      line: "Camera, menu, marker and vision wheels, and wheels of your own." },
+    { section: "guides", path: "guides/nameplates.html", title: "Nameplates and names",
+      line: "What shows for each kind of unit and place, plate parts and the target arrow." },
+    { section: "guides", path: "guides/frames.html", title: "Frames",
+      line: "Standard and unit frames, personal resources, the Cooldown Manager, swing timer and buffs." },
+    { section: "guides", path: "guides/chat-and-quests.html", title: "Chat and quests",
+      line: "Chat that peeks in, chat bubbles, and quest dialogue as bubbles and cards." },
+    { section: "guides", path: "guides/quality-of-life.html", title: "Quality of life",
+      line: "The campfire button, fishing casts, hunter ammo, the talent calculator and loot rolls." },
+    { section: "guides", path: "guides/other-addons.html", title: "Other addons",
+      line: "Addons handled out of the box, and Add mode for the rest." },
+    { section: "guides", path: "guides/gamepad.html", title: "Gamepad",
+      line: "Playing WoW Forever with a controller." },
+    { section: "guides", path: "guides/graphics.html", title: "Graphics+",
+      line: "What the Graphics+ page changes, and why." },
+    { section: "reference", path: "reference/commands.html", title: "Commands",
+      line: "Every /cine command." },
+    { section: "reference", path: "reference/keybinds.html", title: "Keybinds",
+      line: "Every keybind and what it does." },
+    { section: "reference", path: "reference/settings.html", title: "Settings map",
+      line: "Every settings page in one line, with a link to its guide." },
+    { section: "reference", path: "reference/sharing.html", title: "Sharing profiles",
+      line: "Export your setup as text, and import a friend's." },
+    { section: "reference", path: "reference/forever-vs-retail.html", title: "WoW Forever and retail",
+      line: "Which features are on which game." },
+    { section: "help", path: "help/troubleshooting.html", title: "Troubleshooting",
+      line: "Common fixes, /cine panic and resume, and how to report a bug with /cine log." },
     { section: "design", path: "design/profile-modules.html", title: "Profile modules",
       line: "How modules, choices and profiles fit together, with the welcome window, the coverage map and the checks." }
   ];
@@ -53,7 +99,7 @@
   }
 
   function foot() {
-    var list = PAGES.filter(function (p) { return p.section === current.section; });
+    var list = PAGES.filter(function (p) { return p.section === current.section && !p.soon; });
     var i = list.indexOf(current);
     var prev = list[i - 1], next = list[i + 1];
     function card(p, dir) {
@@ -77,11 +123,12 @@
       var pages = PAGES.filter(function (p) { return p.section === s.id; });
       var list = el("ul", { "class": "gb-list" });
       pages.forEach(function (p) {
-        list.appendChild(el("li", {}, [el("a", { href: href(p.path) }, [
+        var kids = [
           el("span", { "class": "gb-title", text: p.title }),
           el("span", { "class": "gb-line", text: p.line }),
-          el("span", { "class": "gb-go", "aria-hidden": "true", text: "→" })
-        ])]));
+          el("span", { "class": "gb-go", "aria-hidden": "true", text: p.soon ? "Soon" : "→" })
+        ];
+        list.appendChild(el("li", {}, [p.soon ? el("div", { "class": "gb-soon" }, kids) : el("a", { href: href(p.path) }, kids)]));
       });
       into.appendChild(el("section", { "class": "gb-section", id: s.id }, [
         el("h2", { text: s.name }), el("p", { "class": "gb-sline", text: s.line }), list

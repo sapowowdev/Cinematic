@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quality of Life</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column of helpers, each with the game versions it's on. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --win-bg: #121418; --win-panel: #1b1e23; --win-edge: #3b3f46; --win-fg: #ece9e2; --win-dim: #9a9ca2;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body); padding-block: 0 }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 56px }
+.col > *, section > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+.muted { color: var(--muted) }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px }
+section { display: grid; gap: 14px }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+
+/* Opening: the letterbox itself */
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #2b3240 0%, #151a22 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+
+/* Where each is */
+.where { display: flex; flex-wrap: wrap; gap: 6px }
+.client { font: 600 12px/1 var(--font-body); letter-spacing: .04em; color: var(--accent); border: 1px solid currentColor; border-radius: 4px; padding: 4px 7px }
+.client.no { color: var(--muted); border-style: dashed }
+
+/* Settings, as the pages list them */
+.opts { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden }
+.opt { padding: 11px 16px; border-top: 1px solid var(--line); display: grid; gap: 2px }
+.opt:first-child { border-top: 0 }
+.opt .l { font-weight: 600 }
+.opt .d { color: var(--muted); font-size: 15.5px }
+.note { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; color: var(--muted) }
+.steps { display: grid; gap: 10px; list-style: none; margin: 0; padding: 0; counter-reset: s }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px }
+.steps li::before { content: counter(s); font: 400 22px/1.2 var(--font-display); color: var(--accent) }
+
+/* The campfire button, as it shows at the cursor */
+.fire { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; background: var(--win-bg); color: var(--win-fg); border: 1px solid var(--win-edge); border-radius: 6px; padding: 16px }
+.fire .ico { position: relative; width: 52px; height: 52px; border-radius: 6px; border: 2px solid #c79b3b; flex: none;
+  background: radial-gradient(circle at 50% 70%, #ffdf6b 0 14%, #ff8a1f 15% 32%, #b8360f 33% 48%, #2a1a10 49%) }
+.fire .ico::after { content: ""; position: absolute; right: -10px; bottom: -12px; width: 0; height: 0;
+  border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 18px solid #f4f4f4; transform: rotate(-30deg) }
+.fire p { flex: 1 1 240px; color: var(--win-dim); font-size: 15.5px }
+.fire b { color: var(--win-fg) }
+
+/* Commands */
+.cmds { display: grid; gap: 8px }
+.cmd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px }
+.cmd code { font-size: 15px; background: none; padding: 0; color: var(--fg) }
+.cmd .what { color: var(--muted); font-size: 15px; flex: 1 1 220px }
+.copy { font: 600 13px var(--font-body); color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer }
+.copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+dl.faq { display: grid; gap: 16px; margin: 0 }
+dl.faq dt { font-weight: 600 }
+dl.faq dd { margin: 2px 0 0; color: var(--muted) }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">Cinematic · Quality of life</div>
+      <h1>Small helpers for life on the road</h1>
+      <p>Sit by a fire with one click, keep casting your line without hunting for the button, and plan your talents before you spend them. These live on the <b>Quality of life</b> pages in Cinematic's settings.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter" style="padding-block:48px 40px">
+<div class="col">
+
+  <section id="campfire">
+    <div class="eyebrow">By the fire</div>
+    <h2>The campfire button</h2>
+    <div class="where"><span class="client">WoW Forever</span><span class="client no">Not on retail</span></div>
+    <p>Hover a campfire with the cursor near the middle of the screen, and a campfire icon comes up right where your cursor is. Click it to settle down by the fire, with no emote to type. Move the cursor off it and it goes away.</p>
+    <div class="fire" aria-hidden="true">
+      <span class="ico"></span>
+      <p><b>Campfire button</b> on the General page. Tick <b>Sit</b>, <b>Kneel</b> and <b>Lie down</b> to choose what a click does; with more than one ticked, it's one of them at random each time.</p>
+    </div>
+    <p class="muted">It doesn't show in a fight or while you're mounted. Settling down by the fire has a camera of its own: it's the campfire event on the Camera Triggers page, which starts the Cozy camera.</p>
+
+    <h3 id="camp-benefits">Stand up with Camp Benefits</h3>
+    <p>Sitting by a Welcoming Campfire for its minute gives you Camp Benefits. With <b>Stand up once you get Camp Benefits</b> ticked, you stand up again as the buff arrives, ready to go.</p>
+  </section>
+
+  <section id="fishing">
+    <div class="eyebrow">At the water</div>
+    <h2>Fishing casts</h2>
+    <div class="where"><span class="client">Every game version</span></div>
+    <p>The <b>Fishing</b> page handles casting and catching, with the mouse or a gamepad, in CineMode or not. The fish camera itself is on the Camera Modes and Camera Triggers pages.</p>
+    <div class="opts">
+      <div class="opt"><span class="l">Right-click to cast again</span><span class="d">While the fish camera is on and no bobber is out, right-clicking in the world casts Fishing again. While the bobber is out, right-click clicks it as usual. In a fight, with the loot window open or with the mouse on a player or NPC, right-click is left alone.</span></div>
+      <div class="opt"><span class="l">Also the first cast, with a pole equipped</span><span class="d">With a fishing pole in your main hand, standing still, right-clicking in the world casts Fishing, so you don't have to start the first cast yourself. Swap the pole out to have right-click back everywhere.</span></div>
+      <div class="opt"><span class="l">Wait after a cast ends</span><span class="d">A short wait after a catch (0.3 seconds to start with), so the click that loots the fish doesn't cast straight away.</span></div>
+      <div class="opt"><span class="l">Pause after a missed cast</span><span class="d">When a cast doesn't land in fishable water, right-click goes back to normal for a while (30 seconds to start with). Move and stand still for a second to end it early.</span></div>
+      <div class="opt"><span class="l">Hide the Fishing cast bar</span><span class="d">Your cast bar stays hidden while it shows Fishing. Every other spell shows it as usual.</span></div>
+      <div class="opt"><span class="l">Gamepad: a button casts too</span><span class="d">In gamepad mode, a button of your choice casts whenever right-click would: the left face button (X on an Xbox pad) to start with. See <a href="gamepad.html">Gamepad</a>.</span></div>
+    </div>
+    <p class="note">Every cast still comes from your own click or press: Cinematic never fishes on its own.</p>
+  </section>
+
+  <section id="hunter">
+    <div class="eyebrow">For hunters</div>
+    <h2>Ammo that behaves</h2>
+    <div class="where"><span class="client">WoW Forever and Classic</span><span class="client no">Not on retail, which has no ammo</span></div>
+    <p>The <b>Hunter</b> page has two helpers for arrows and bullets.</p>
+    <div class="opts">
+      <div class="opt"><span class="l">Smallest ammo stack first after Clean Up Bags</span><span class="d">Clean Up Bags leaves the part stack last, but you shoot from the first, so a full one would run down and leave you two part stacks. Once the bags are cleaned up, the smallest stack is moved first, to be shot first.</span></div>
+      <div class="opt"><span class="l">Fill quiver button at vendors</span><span class="d">Arrows and bullets at a vendor get a <b>Fill</b> button that buys enough to fill your quiver or ammo pouch, as far as your money goes. Point at it to see how many and the cost first.</span></div>
+    </div>
+  </section>
+
+  <section id="talents">
+    <div class="eyebrow">Planning a build</div>
+    <h2>The talent calculator</h2>
+    <div class="where"><span class="client">WoW Forever</span><span class="client no">Not on retail</span></div>
+    <p>With <b>Talent calculator button on the talents window</b> ticked, a button on your talents window opens a planner that looks just like it: your class's three trees side by side, starting from the talents you have.</p>
+    <ol class="steps">
+      <li><span>Left-click a talent to add a point, right-click to take one back. Above the trees: the level the build needs and the points left. <b>Reset</b> and <b>Undo</b> are there too.</span></li>
+      <li><span>Nothing is learned while you plan. When you're happy, <b>Copy Over Changes</b> puts what the plan adds into your talents window.</span></li>
+      <li><span>Apply them there, as you would by hand. A button on the calculator takes you back to the talents window.</span></li>
+    </ol>
+    <p class="muted"><b>Talents button when inspecting someone</b>: inspecting a player, a button by their level and class opens their talents, and one with their portrait on the talents window takes you back. Neither works in a fight.</p>
+    <div class="cmds">
+      <div class="cmd"><code id="cmd1">/cine talents</code><span class="what">Opens the talent calculator</span><button type="button" class="copy" data-for="cmd1">Copy</button></div>
+    </div>
+  </section>
+
+  <section id="rolls">
+    <div class="eyebrow">In a group</div>
+    <h2>The loot rolls window</h2>
+    <div class="where"><span class="client">Game versions with a loot history</span></div>
+    <p>When your group rolls on an item, a window shows each item with everyone's pick (need, greed, transmog) and number, the winner lit at the top, so you needn't read the rolls in chat. It's called Roll Vision, and it has its own page in the Visions group: see <a href="visions.html#roll">Roll Vision</a>.</p>
+    <div class="cmds">
+      <div class="cmd"><code id="cmd2">/cine rolls</code><span class="what">Shows the latest loot rolls (add <code>test</code> for made-up ones)</span><button type="button" class="copy" data-for="cmd2">Copy</button></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Also on the General page</div>
+    <h2>A few more</h2>
+    <div class="opts">
+      <div class="opt"><span class="l">Open the character window when dragging gear out of your bags</span><span class="d">Drag something you can wear over the game world and the character window opens, ready to drop it on. Off to start with on game versions where the window opened this way makes harmless errors show in error catchers such as BugSack.</span></div>
+      <div class="opt"><span class="l">Open windows in the middle of the screen</span><span class="d">Windows the game opens on the left (quest log, group finder...) open on the right instead, near the top, and narrow ones (character, merchant, mail) a little in from the left edge, leaving your character and the quest giver in view.</span></div>
+      <div class="opt"><span class="l">Drag windows to move them</span><span class="d">Drag the game's windows by their title bar; each opens where you last dropped it. <b>Put windows back</b> forgets those spots.</span></div>
+      <div class="opt"><span class="l">Copy chat button</span><span class="d">A small icon in a chat window's corner opens its lines to select and copy with Ctrl+C.</span></div>
+      <div class="opt"><span class="l">Reset the zoom on login and /reload</span><span class="d">Off to start with. The camera zooms to the distance you set, instead of staying where you left it.</span></div>
+    </div>
+    <p class="muted">Each Quality of life page has an <b>Enable page</b> switch at the top: off, none of its helpers work, and each keeps its tick for when you turn it back on.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Questions</div>
+    <h2>Good to know</h2>
+    <dl class="faq">
+      <div><dt>The campfire button doesn't show.</dt><dd>Keep the cursor near the middle of the screen as you hover the fire, stand still, and make sure you're out of a fight and not mounted.</dd></div>
+      <div><dt>Right-click casts Fishing when I didn't want it to.</dt><dd>That's the first-cast option, with a pole in your main hand. Swap the pole out, or untick <b>Also the first cast, with a pole equipped</b>.</dd></div>
+      <div><dt>Does the talent calculator change my talents?</dt><dd>No. It only plans. Copy Over Changes fills in your talents window, and you still press the game's own Apply.</dd></div>
+    </dl>
+  </section>
+
+</div>
+</main>
+
+<script>
+document.querySelectorAll(".copy").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var el = document.getElementById(b.dataset.for);
+    function selectIt() { var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(el.textContent).then(function () {
+        b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500);
+      }, selectIt);
+    } else selectIt();
+  });
+});
+</script>
+</body>
+</html>

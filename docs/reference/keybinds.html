@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cinematic Keybinds</title>
+<meta name="description" content="Every Cinematic keybind and what it does.">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column, as on the Profiles page. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --forever: #2f6f4f; --retail: #2c5a92; --classic: #7a4a1c;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607;
+  --forever: #7fd0a4; --retail: #8fb8ee; --classic: #e0ad78; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607;
+  --forever: #7fd0a4; --retail: #8fb8ee; --classic: #e0ad78; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body); padding-block: 0 }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 56px }
+.col > *, section > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+a { color: var(--accent); text-underline-offset: 2px }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.muted { color: var(--muted) }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere }
+kbd { font: 500 .82em var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; background: var(--surface); border-radius: 4px; padding: 0 5px }
+section { display: grid; gap: 14px }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+ul.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 6px }
+
+/* Opening: the letterbox itself */
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #2b3240 0%, #151a22 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+.hero code { background: #2a2d33; color: var(--bar-fg) }
+
+/* Steps, commands and questions */
+.steps { display: grid; gap: 14px; list-style: none; margin: 0; padding: 0; counter-reset: s }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px }
+.steps li::before { content: counter(s); font: 400 24px/1.1 var(--font-display); color: var(--accent) }
+.steps li > div { display: grid; gap: 4px }
+.cmds { display: grid; gap: 8px }
+.cmd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px }
+.cmd > code { font-size: 15px; background: none; padding: 0; color: var(--fg); flex: 0 1 auto }
+.cmd .what { color: var(--muted); font-size: 15px; flex: 1 1 220px }
+.copy { font: 600 13px var(--font-body); color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer }
+.copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+dl.faq { display: grid; gap: 16px; margin: 0 }
+dl.faq dt { font-weight: 600 }
+dl.faq dd { margin: 2px 0 0; color: var(--muted) }
+
+/* Reference rows: a name, then what it does; stacked on a phone */
+.rows { display: grid; margin: 0; border-top: 1px solid var(--line) }
+.row { display: grid; grid-template-columns: minmax(0, 230px) minmax(0, 1fr); gap: 4px 20px; padding: 12px 0; border-bottom: 1px solid var(--line) }
+.row > dt, .row > .k { font-weight: 600 }
+.row > dd, .row > .v { margin: 0; color: var(--muted) }
+.row .v b, .row dd b { color: var(--fg); font-weight: 600 }
+@media (max-width: 560px) { .row { grid-template-columns: 1fr } }
+
+/* Cards and callouts */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; display: grid; gap: 6px; align-content: start }
+.card .name { font: 400 22px/1.1 var(--font-display) }
+.note { background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; padding: 12px 16px }
+.chip { display: inline-block; font: 600 12px/1 var(--font-body); letter-spacing: .05em; text-transform: uppercase;
+  border: 1px solid currentColor; border-radius: 4px; padding: 3px 6px; vertical-align: 2px; white-space: nowrap }
+.chip.forever { color: var(--forever) } .chip.retail { color: var(--retail) } .chip.classic { color: var(--classic) }
+.chip.soon { color: var(--muted) }
+
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">Reference · keybinds</div>
+      <h1>Every keybind</h1>
+      <p>None of these has a key until you give it one. Set them on Cinematic's <b>Keybinds</b> settings page, or in the game's Key Bindings under <b>AddOns</b>: they're the same bindings, so either place works.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter" style="padding-block:48px 40px">
+<div class="col">
+
+  <section>
+    <p class="muted">In the game's Key Bindings each name starts with <b>Cinematic:</b>, as below. The Keybinds settings page lists the same keys in groups, some with shorter names (shown after the dash). Keys marked <b>hold</b> do their thing while held: hold, point and let go, or tap and then click.</p>
+  </section>
+
+  <section id="general">
+    <div class="eyebrow">General</div>
+    <h2>CineMode and the UI</h2>
+    <dl class="rows">
+      <div class="row"><dt>Toggle CineMode</dt><dd>Turns CineMode on or off, like <code>/cine</code>.</dd></div>
+      <div class="row"><dt>Hide the UI (keep the look) <span class="muted">— Hide the UI</span></dt><dd>Like the game's Alt+Z: hides the whole UI, but keeps the tint, letterbox and time-of-day title. Made for screenshots. Press again (or the game's own key) to bring it back.</dd></div>
+      <div class="row"><dt>Toggle visual effects</dt><dd>Turns the Visual Effects page on or off (its <b>Enable page</b> switch): the letterbox, tint, vignette, weather and the rest.</dd></div>
+    </dl>
+  </section>
+
+  <section id="wheels">
+    <div class="eyebrow">Wheels</div>
+    <h2>Hold a key, pick from a ring</h2>
+    <dl class="rows">
+      <div class="row"><dt>Master wheel (hold)</dt><dd>A wheel of the wheels below (camera, menu, marker...): point at one and let go to open it, then click what you want on it. Tap it instead and the wheel stays up for you to click one. The camera wheel can't open in a fight.</dd></div>
+      <div class="row"><dt>Camera wheel (hold)</dt><dd>A wheel of the cameras, an icon for each: point at one and let go to start it. Tap it instead and the wheel stays up for you to click one. Picking the camera that's running stops it.</dd></div>
+      <div class="row"><dt>Menu wheel (hold)</dt><dd>A wheel of the game's menu buttons (character, spellbook, quest log...), the ones on your menu bar: point at one and let go to open its window, even with the UI hidden.</dd></div>
+      <div class="row"><dt>Marker wheel (hold)</dt><dd>The raid target markers (skull, cross, square...) for your target, or with none, whatever the cursor is on. Point at one and let go to put it on them, or at None to take theirs off.</dd></div>
+      <div class="row"><dt>Ground marker wheel (hold)</dt><dd>The ground markers, the colored lights you drop on the floor: point at one and let go, and it drops under the cursor. Picking one that's down moves it; Clear all takes them all up. Only in a group, and only on game versions that have ground markers.</dd></div>
+      <div class="row"><dt>Vision wheel (hold)</dt><dd>The visions (Heal, Quest, Duel...), ringed while they're on: point at one and let go to turn it on or off, in a fight too.</dd></div>
+      <div class="row"><dt>Your wheels 1 to 8</dt><dd>Wheels you make yourself on the Wheels settings page, each icon running a command of your choice. Until you make one its key is called <b>Your wheel 1 (not made yet)</b> and so on; after, it takes your wheel's name, like <b>Raid tools (hold)</b>. Set their keys on the Wheels settings page or in Key Bindings.</dd></div>
+    </dl>
+    <p class="muted">The <a href="../guides/wheels.html">Wheels guide</a> covers what goes on each wheel.</p>
+  </section>
+
+  <section id="visions">
+    <div class="eyebrow">Visions</div>
+    <h2>Turning visions on and off</h2>
+    <dl class="rows">
+      <div class="row"><dt>Toggle Heal Vision</dt><dd>Turns Heal Vision on or off (its Enable page switch), in a fight too. Off, the party and raid frames all show again.</dd></div>
+      <div class="row"><dt>Toggle Quest Vision</dt><dd>Turns Quest Vision on or off (its Enable page switch).</dd></div>
+      <div class="row"><dt>Use the quest item</dt><dd>Uses the item on Quest Vision's quest item button, while it shows.</dd></div>
+      <div class="row"><dt>Toggle Duel Vision</dt><dd>Turns Duel Vision on or off.</dd></div>
+      <div class="row"><dt>Toggle Roll Vision</dt><dd>Turns Roll Vision on or off. Only on game versions that keep a loot history.</dd></div>
+      <div class="row"><dt>Toggle Vitals Vision</dt><dd>Turns Vitals Vision on or off (its Enable page switch).</dd></div>
+    </dl>
+    <p class="muted">What each vision does is in the <a href="../guides/visions.html">Visions guide</a>.</p>
+  </section>
+
+  <section id="cameras">
+    <div class="eyebrow">Cameras</div>
+    <h2>Starting a camera on demand</h2>
+    <p class="muted">Each starts its camera now, as if its event had happened. Press it again, move or jump to stop it.</p>
+    <dl class="rows">
+      <div class="row"><dt>Start the AFK camera <span class="muted">— AFK camera</span></dt><dd>Starts the AFK camera now, without waiting out its delay.</dd></div>
+      <div class="row"><dt>Start the cozy camera <span class="muted">— Cozy camera</span></dt><dd>Starts the cozy camera now, as if you'd sat down.</dd></div>
+      <div class="row"><dt>Start the vista camera <span class="muted">— Vista camera</span></dt><dd>Starts the vista camera now, as if you'd done a <code>/stare</code>.</dd></div>
+      <div class="row"><dt>Start the fish camera <span class="muted">— Fish camera</span></dt><dd>Starts the fish camera now, without casting.</dd></div>
+      <div class="row"><dt>Start the tele camera <span class="muted">— Tele camera</span></dt><dd>Starts the tele camera now, as if you were casting your Hearthstone.</dd></div>
+      <div class="row"><dt>Test the death camera <span class="muted">— Death camera test</span></dt><dd>Pretends you're dead for 30 seconds so the death camera runs. Press again to stop. The death camera has to be turned on.</dd></div>
+    </dl>
+    <p class="muted">More in <a href="../guides/cameras.html">The cameras</a>.</p>
+  </section>
+
+  <section id="tooltips">
+    <div class="eyebrow">Tooltips</div>
+    <h2>Hidden tooltips</h2>
+    <dl class="rows">
+      <div class="row"><dt>Show hidden tooltips (hold) <span class="muted">— Show hidden tooltips</span></dt><dd>Hold to see the tooltips the Tooltips page hides, in combat and in CineMode. Pressing it while you're on a unit or something in the world brings its tooltip up; anything else, point at it again with the key held.</dd></div>
+      <div class="row"><dt>Toggle tooltip hiding</dt><dd>Turns the Tooltips page on or off (its Enable page switch).</dd></div>
+    </dl>
+  </section>
+
+</div>
+</main>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cinematic Gamepad</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column; a pad to press sits in it as a small game window. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --win-bg: #121418; --win-panel: #1b1e23; --win-edge: #3b3f46; --win-fg: #ece9e2; --win-dim: #9a9ca2;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body); padding-block: 0 }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 56px }
+.col > *, section > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+.muted { color: var(--muted) }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px }
+section { display: grid; gap: 14px }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+
+/* Opening: the letterbox itself */
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #2b3240 0%, #151a22 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+
+.where { display: flex; flex-wrap: wrap; gap: 6px }
+.client { font: 600 12px/1 var(--font-body); letter-spacing: .04em; color: var(--accent); border: 1px solid currentColor; border-radius: 4px; padding: 4px 7px }
+.client.no { color: var(--muted); border-style: dashed }
+
+/* Settings, as the page lists them */
+.opts { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden }
+.opt { padding: 11px 16px; border-top: 1px solid var(--line); display: grid; gap: 2px }
+.opt:first-child { border-top: 0 }
+.opt .l { font-weight: 600 }
+.opt .d { color: var(--muted); font-size: 15.5px }
+.note { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; color: var(--muted) }
+
+/* The pad: a game window */
+.win { background: var(--win-bg); color: var(--win-fg); border: 1px solid var(--win-edge); border-radius: 6px; overflow: hidden; font-size: 15.5px }
+.win-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px;
+  border-bottom: 1px solid var(--win-edge); background: var(--win-panel) }
+.win-title { font: 400 20px var(--font-display); color: var(--gold) }
+.scene { position: relative; height: 190px; overflow: hidden; background: linear-gradient(#5b6f84 0%, #8f8a6c 52%, #3d4a33 53%, #26301f 100%) }
+.scene .reticle { position: absolute; left: 50%; top: 45%; width: 8px; height: 8px; margin: -4px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px rgba(0,0,0,.5) }
+.scene .bars { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; gap: 18px; transition: opacity .2s }
+.scene .bars.out { transition: opacity .5s }
+.scene .cluster { display: grid; grid-template-columns: repeat(2, 30px); gap: 4px }
+.scene .cluster i { width: 30px; height: 30px; border-radius: 4px; border: 1px solid #000; background: linear-gradient(135deg, #7a5a2a, #2a1a0a) }
+.pad { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 22px; padding: 16px }
+.face { position: relative; width: 132px; height: 132px }
+.face button { position: absolute; width: 42px; height: 42px; margin: -21px; border-radius: 50%; border: 2px solid #4a4f58; background: #1b1e23;
+  color: var(--win-fg); font: 700 15px var(--font-body); cursor: pointer }
+.face button:active, .face button.down { background: #34383f }
+.face button[data-k="Y"] { left: 50%; top: 18% ; color: #f2c94c }
+.face button[data-k="X"] { left: 18%; top: 50%; color: #5aa2ff }
+.face button[data-k="B"] { left: 82%; top: 50%; color: #ff6b5a }
+.face button[data-k="A"] { left: 50%; top: 82%; color: #59d97a }
+.padnote { flex: 1 1 220px; color: var(--win-dim); font-size: 15px; display: grid; gap: 6px }
+.padnote output { color: var(--win-fg); font-weight: 600 }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
+@media (prefers-reduced-motion: reduce) { .scene .bars, .scene .bars.out { transition: none } }
+
+dl.faq { display: grid; gap: 16px; margin: 0 }
+dl.faq dt { font-weight: 600 }
+dl.faq dd { margin: 2px 0 0; color: var(--muted) }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">Cinematic · Gamepad</div>
+      <h1>Play from the couch</h1>
+      <p>WoW Forever's gamepad mode adds action bars, button hints and an aiming dot of its own. Cinematic fades them with the rest of the UI, and brings the bars back the moment you press a button.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter" style="padding-block:48px 40px">
+<div class="col">
+
+  <section>
+    <div class="eyebrow">Gamepad mode</div>
+    <h2>What the game adds</h2>
+    <div class="where"><span class="client">WoW Forever</span><span class="client no">No Gamepad page on retail</span></div>
+    <p>Turn gamepad mode on in the game's Options, under Controls, Gamepad. It brings its own frames: the gamepad <b>action bars</b>, the <b>button hints</b> in the top left, and the <b>reticle</b>, the dot in the middle you aim with. Cinematic's <b>Gamepad</b> page, in the UI Manager group, decides when each shows in CineMode.</p>
+    <p class="note">Retail's gamepad mode has no frames of its own for Cinematic to fade, so the Gamepad page shows only on WoW Forever. The gamepad fishing button below works wherever the game has gamepad support.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Try it</div>
+    <h2>Bars that come back when you press</h2>
+    <div class="win">
+      <div class="win-top"><span class="win-title">Gamepad mode</span></div>
+      <div class="scene" aria-hidden="true">
+        <div class="reticle"></div>
+        <div class="bars out" id="bars" style="opacity:0">
+          <div class="cluster"><i></i><i></i><i></i><i></i></div>
+          <div class="cluster"><i></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+      <div class="pad">
+        <div class="face" role="group" aria-label="Face buttons">
+          <button type="button" data-k="Y" aria-label="Y">Y</button>
+          <button type="button" data-k="X" aria-label="X">X</button>
+          <button type="button" data-k="B" aria-label="B">B</button>
+          <button type="button" data-k="A" aria-label="A, jump">A</button>
+        </div>
+        <div class="padnote">
+          <span>Press a button. The bars come up and stay for 3 seconds after your last press. A is jump here, and jumping doesn't count.</span>
+          <output id="last" aria-live="polite">Bars faded</output>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">The Gamepad page</div>
+    <h2>Setting it up</h2>
+    <p>The page's grid works like the Standard Frames page: each frame is hidden in CineMode unless ticked. <b>Always</b> shows it the whole time, Combat and Target only while you fight or have something targeted, and the places while you're there.</p>
+    <div class="opts">
+      <div class="opt"><span class="l">Gamepad action bars · Button hints (top left) · Reticle (center dot)</span><span class="d">A row each in the grid.</span></div>
+      <div class="opt"><span class="l">Experience and reputation bars</span><span class="d">These are also on the Standard Frames page. In gamepad mode they follow this page's row; otherwise that one's.</span></div>
+      <div class="opt"><span class="l">Show the interact prompt (X)</span><span class="d">The button prompt over things you can use or talk to (your bobber, an NPC) stays up while nameplates fade, so you can see what the gamepad can reach. On to start with.</span></div>
+      <div class="opt"><span class="l">Show the action bars when you press a button</span><span class="d">Gamepad mode's mouseover: any button press brings the bars up, and each press starts the time again. Choose the buttons in <b>Buttons that show them</b>. Presses that make you jump, and presses while you fish, don't count.</span></div>
+      <div class="opt"><span class="l">Action bar fading</span><span class="d"><b>Stay after a press</b> (3 seconds to start with), and the bars' own <b>Fade in time</b> and <b>Fade out time</b>, quicker than the rest of the UI.</span></div>
+    </div>
+    <p class="muted">On the Mouseover groups page, a group can also come up for <b>Gamepad input</b>: pressing a gamepad button.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Fishing</div>
+    <h2>Cast with a button</h2>
+    <p>On the <b>Fishing</b> page, <b>Gamepad: a button casts too</b> makes a button cast Fishing whenever right-click would: in the fish camera with no bobber out, and (if you ticked it) with a pole equipped while standing still. The rest of the time the button does what it usually does. Pick the button: the left face button (X on an Xbox pad, square on a PlayStation one) to start with, or the top, bottom or right one.</p>
+    <p class="muted">More on fishing in <a href="quality-of-life.html#fishing">Quality of life</a>.</p>
+  </section>
+
+  <section id="freeze">
+    <div class="eyebrow">A game bug</div>
+    <h2>Avoiding the Settings freeze</h2>
+    <p>In gamepad mode on WoW Forever, closing the Settings window after using an addon's settings (any addon's, not just Cinematic's) can freeze the game. Two ticks on the Gamepad page work round it, both on to start with:</p>
+    <div class="opts">
+      <div class="opt"><span class="l">Force Reload on Settings Exit</span><span class="d">Once you've opened a Cinematic page, closing Settings (X, Close, Escape or the gamepad) reloads the UI instead, which closes it without the freeze. Your settings are saved first, as on every reload. Turning it off takes effect after a reload.</span></div>
+      <div class="opt"><span class="l">Hide the minimap button in gamepad mode</span><span class="d">Using Cinematic's minimap button in gamepad mode tends to freeze the game too, so it's hidden while gamepad mode is on and comes back when it's off. Cinematic's settings are still in the game's Settings (AddOns tab), or type <code>/cine</code>.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Questions</div>
+    <h2>Good to know</h2>
+    <dl class="faq">
+      <div><dt>Where's my minimap button?</dt><dd>Hidden while gamepad mode is on, to avoid a freeze. Untick <b>Hide the minimap button in gamepad mode</b> on the Gamepad page to have it back.</dd></div>
+      <div><dt>Why did my UI reload when I closed Settings?</dt><dd>That's <b>Force Reload on Settings Exit</b>, which stops the game freezing as Settings closes in gamepad mode. Nothing is lost: settings are saved before every reload.</dd></div>
+      <div><dt>The action bars come up every time I jump.</dt><dd>They shouldn't: presses that make you jump never count. If another button brings them up when you'd rather it didn't, untick it under <b>Buttons that show them</b>.</dd></div>
+    </dl>
+  </section>
+
+</div>
+</main>
+
+<script>
+(function () {
+  var bars = document.getElementById("bars"), last = document.getElementById("last"), timer;
+  var HOLD = 3000, FADE_OUT = 500;
+  function press(k) {
+    if (k === "A") { last.textContent = "A: you jump. The bars stay as they were."; return; }
+    bars.classList.remove("out"); bars.style.opacity = 1;
+    last.textContent = k + ": bars up";
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      bars.classList.add("out"); bars.style.opacity = 0; last.textContent = "Bars faded";
+    }, HOLD - FADE_OUT);
+  }
+  document.querySelectorAll(".face button").forEach(function (b) {
+    b.addEventListener("click", function () { press(b.dataset.k); });
+  });
+})();
+</script>
+</body>
+</html>

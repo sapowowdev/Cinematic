@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Other Addons</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column: the addons handled out of the box, then how to add the rest. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body); padding-block: 0 }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 56px }
+.col > *, section > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+.muted { color: var(--muted) }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px }
+section { display: grid; gap: 14px }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+
+/* Opening: the letterbox itself */
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #2b3240 0%, #151a22 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+
+/* The addons */
+.addons { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden }
+.addon { padding: 12px 16px; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 190px) minmax(0, 1fr); gap: 4px 16px }
+.addon:first-child { border-top: 0 }
+.addon .n { font-weight: 600 }
+.addon .d { color: var(--muted); font-size: 15.5px }
+.addon .d b { color: var(--fg); font-weight: 600 }
+.client { display: inline-block; font: 600 11.5px/1 var(--font-body); letter-spacing: .04em; color: var(--accent); border: 1px solid currentColor; border-radius: 4px; padding: 3px 6px; margin-top: 4px }
+@media (max-width: 560px) { .addon { grid-template-columns: 1fr } }
+.note { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; color: var(--muted) }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px }
+.colbox { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: grid; gap: 2px }
+.colbox b { font-weight: 600 }
+.colbox span { color: var(--muted); font-size: 15px }
+.steps { display: grid; gap: 14px; list-style: none; margin: 0; padding: 0; counter-reset: s }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px }
+.steps li::before { content: counter(s); font: 400 24px/1.1 var(--font-display); color: var(--accent) }
+
+/* Commands */
+.cmds { display: grid; gap: 8px }
+.cmd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px }
+.cmd code { font-size: 15px; background: none; padding: 0; color: var(--fg) }
+.cmd .what { color: var(--muted); font-size: 15px; flex: 1 1 220px }
+.copy { font: 600 13px var(--font-body); color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer }
+.copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+dl.faq { display: grid; gap: 16px; margin: 0 }
+dl.faq dt { font-weight: 600 }
+dl.faq dd { margin: 2px 0 0; color: var(--muted) }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">Cinematic · Other addons</div>
+      <h1>Your other addons fade too</h1>
+      <p>Meters, timers, action bar addons and whole UI replacements fade with the game's own frames in CineMode. Many are handled out of the box, and anything else you can add by pointing at it.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter" style="padding-block:48px 40px">
+<div class="col">
+
+  <section>
+    <div class="eyebrow">The Advanced Frames page</div>
+    <h2>How it works</h2>
+    <p>Supported addons are listed on the <b>Advanced Frames</b> page, the ones you have loaded first, then the rest. Like the game's frames on the Standard Frames page, their frames are hidden in CineMode unless ticked:</p>
+    <div class="cols">
+      <div class="colbox"><b>Always</b><span>Leaves the addon alone: shown the whole time.</span></div>
+      <div class="colbox"><b>Combat, Target</b><span>Shows it only while you fight or have something targeted.</span></div>
+      <div class="colbox"><b>Location</b><span>Shows it in the places you pick, while you're there.</span></div>
+      <div class="colbox"><b>Edit</b><span>Turns the row into a rule of its own, with AND, NOT and more.</span></div>
+    </div>
+    <p class="muted">The page's <b>Enable page</b> switch turns all of it on or off: off, Cinematic leaves every addon's frames alone.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Out of the box</div>
+    <h2>Supported addons</h2>
+    <p>Each of these has a row (or a few) of its own:</p>
+    <div class="addons">
+      <div class="addon"><span class="n">Details! Damage Meter</span><span class="d">Its meter windows.</span></div>
+      <div class="addon"><span class="n">Deadly Boss Mods</span><span class="d">Its timer bars, info frame, range check, arrow and battle res timer. Its warnings aren't faded, like the game's raid warnings.</span></div>
+      <div class="addon"><span class="n">WeakAuras</span><span class="d">Its auras. An aura anchored to another frame fades with that frame.</span></div>
+      <div class="addon"><span class="n">Bartender4</span><span class="d">Its bar 2, class bars and bonus bar. <b>Its other bars</b> (pet, stance, bag, micro menu, status, art) follow the Standard Frames rows of the bars they replace.</span></div>
+      <div class="addon"><span class="n">ElvUI</span><span class="d">Its action bars 2 and 7 to 10, its top and bottom panels and its threat bar. <b>The rest</b> (other bars, unit frames, buffs, chat panels) follow the Standard Frames rows of the frames they replace.</span></div>
+      <div class="addon"><span class="n">EllesmereUI</span><span class="d">A row for each part: action bars 6 to 10, Cooldown Manager, resource bars, damage meters, data bars, buff reminders, QoL displays, target distance, self combat text and Forever Essentials. <b>Its bars 1 to 5</b>, pet, stance and XP bars, unit frames and quest tracker follow the Standard Frames rows. Its cast bar isn't faded, like the game's.</span></div>
+      <div class="addon"><span class="n">FlareUI</span><span class="d">Its boss frames. <b>Its unit frames</b>, cast bar, resource bars, buffs, quest tracker, party and raid frames, XP bar and totems follow the Standard Frames rows.</span></div>
+      <div class="addon"><span class="n">Cooldown Manager Centered</span><span class="d">Its buff containers, trackers and aura overlays. The game's Cooldown Manager itself is a row on the Standard Frames page.</span></div>
+      <div class="addon"><span class="n">Forever Enhanced Cooldown Manager<br><span class="client">WoW Forever</span></span><span class="d">Its cooldown and buff bars, and the pulse when a cooldown is ready.</span></div>
+      <div class="addon"><span class="n">Naowh Forever<br><span class="client">WoW Forever</span></span><span class="d">Its top bar, with its FPS and MS readout.</span></div>
+    </div>
+    <p>These follow a row or page that's already there, with no row of their own:</p>
+    <div class="addons">
+      <div class="addon"><span class="n">Plater</span><span class="d">Its nameplates fade in CineMode and follow the Nameplates page's rows. Plater can change the game's nameplate settings itself; Cinematic puts its own back afterwards.</span></div>
+      <div class="addon"><span class="n">Questie</span><span class="d">Its quest tracker and quest item buttons fade with the Quest tracker row.</span></div>
+      <div class="addon"><span class="n">Horizon Suite</span><span class="d">Its quest tracker, dungeon banner and floating quest item button fade with the Quest tracker row, without flickering on zone changes.</span></div>
+      <div class="addon"><span class="n">RestedXP Guides</span><span class="d">Its guide window, waypoint arrow, quest item and target buttons and level splits fade with the Quest tracker row.</span></div>
+    </div>
+  </section>
+
+  <section id="add">
+    <div class="eyebrow">Everything else</div>
+    <h2>Add it yourself</h2>
+    <p>For any other addon, point at its frame and add it. It joins the <b>Custom frames</b> list at the bottom of the Advanced Frames page, with the same columns as the supported addons.</p>
+    <h3>One frame</h3>
+    <ol class="steps">
+      <li><div>Put the mouse over the frame you want to fade.</div></li>
+      <li><div>Type <code>/cine add</code> in the chat box and press Enter. Cinematic says which frame it's now fading.</div></li>
+    </ol>
+    <h3>Several at once: Add mode</h3>
+    <ol class="steps">
+      <li><div>Press <b>Pick frames by hovering</b> under Custom frames, or type <code>/cine add mode</code>. Move the settings window out of the way, or close it.</div></li>
+      <li><div>Hover over each frame you want to fade.</div></li>
+      <li><div>Click <b>Stop</b>, or type <code>/cine add mode</code> again, to fade them all. <code>/cine add cancel</code> drops them instead.</div></li>
+    </ol>
+    <p class="note">The game's own frames, and ones already faded, are left out: they're on the Standard Frames page already. Windows aren't added either, since a faded window would sit there invisible. A frame its addon didn't give a name can't be added; if one of yours won't, ask for it to be supported.</p>
+
+    <h3>Keeping one up instead</h3>
+    <p>To keep a frame that fades on screen the whole time, hover over it and type <code>/cine keep</code>. To undo it, untick its CineMode box under Custom frames.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Commands</div>
+    <h2>Frame commands</h2>
+    <p>Hover over a frame first, then type these in the chat box.</p>
+    <div class="cmds">
+      <div class="cmd"><code id="cmd1">/cine add</code><span class="what">Fades the frame under the mouse too. Or name it: <code>/cine add FrameName</code></span><button type="button" class="copy" data-for="cmd1">Copy</button></div>
+      <div class="cmd"><code id="cmd2">/cine add mode</code><span class="what">Picks up every frame you hover over; again to fade them all</span><button type="button" class="copy" data-for="cmd2">Copy</button></div>
+      <div class="cmd"><code id="cmd3">/cine keep</code><span class="what">Always shows the frame under the mouse</span><button type="button" class="copy" data-for="cmd3">Copy</button></div>
+      <div class="cmd"><code id="cmd4">/cine list</code><span class="what">Shows the extra frames you've had faded</span><button type="button" class="copy" data-for="cmd4">Copy</button></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Questions</div>
+    <h2>Good to know</h2>
+    <dl class="faq">
+      <div><dt>An addon is on the list but still shows in CineMode.</dt><dd>Check its row on the Advanced Frames page (or, for one that follows the Standard Frames page, the row of the frame it replaces): with Always ticked, it stays up.</dd></div>
+      <div><dt>I use EllesmereUI's or ElvUI's action bars. Where are they?</dt><dd>Most are the same rows as the game's bars on the Standard Frames page, so they fade just as the game's would. Only the extra bars the game doesn't have get rows on the Advanced Frames page.</dd></div>
+      <div><dt>/cine add says it's a window.</dt><dd>Move the mouse off the window, onto the frame you want, and try again. Windows aren't faded so you never lose one you opened.</dd></div>
+    </dl>
+  </section>
+
+</div>
+</main>
+
+<script>
+document.querySelectorAll(".copy").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var el = document.getElementById(b.dataset.for);
+    function selectIt() { var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(el.textContent).then(function () {
+        b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500);
+      }, selectIt);
+    } else selectIt();
+  });
+});
+</script>
+</body>
+</html>

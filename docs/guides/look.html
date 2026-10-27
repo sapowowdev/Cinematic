@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cinematic Look and Mood</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column; the tint mock-up sits in it as a small game window. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --win-bg: #121418; --win-panel: #1b1e23; --win-edge: #3b3f46; --win-fg: #ece9e2; --win-dim: #9a9ca2;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body); padding-block: 0 }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 56px }
+.col > *, section > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+.muted { color: var(--muted) }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px }
+section { display: grid; gap: 14px }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+
+/* Opening: the letterbox itself */
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #3a3346 0%, #1b1a26 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+
+/* Cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; display: grid; gap: 6px; align-content: start }
+.card .name { font: 400 22px/1.1 var(--font-display) }
+
+/* The game window */
+.win { background: var(--win-bg); color: var(--win-fg); border: 1px solid var(--win-edge); border-radius: 6px; overflow: hidden; font-size: 15.5px }
+.win-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px;
+  border-bottom: 1px solid var(--win-edge); background: var(--win-panel) }
+.win-title { font: 400 20px var(--font-display); color: var(--gold) }
+.win-note { color: var(--win-dim); font-size: 13.5px }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
+
+/* The scene */
+.scene { position: relative; aspect-ratio: 16 / 9; overflow: hidden; background: #000 }
+.scene svg.world { position: absolute; inset: 0; width: 100%; height: 100% }
+.scene .layer { position: absolute; inset: 0; pointer-events: none; transition: background .6s, opacity .6s }
+.scene .tint { mix-blend-mode: multiply }
+.scene .add { mix-blend-mode: screen }
+.scene .weather { mix-blend-mode: multiply }
+.scene .inn { background: radial-gradient(90% 70% at 50% 100%, rgba(255,170,90,.55), rgba(255,170,90,0) 70%); mix-blend-mode: screen }
+.scene .lb { position: absolute; left: 0; right: 0; background: #000; transition: height .5s }
+.scene .lb.top { top: 0 } .scene .lb.bot { bottom: 0 }
+.scene .title { position: absolute; left: 0; right: 0; top: 22%; text-align: center; color: #f4d27a; text-shadow: 0 2px 4px #000;
+  font: 400 clamp(18px, 4.4vw, 34px)/1.1 var(--font-display); transition: opacity .6s }
+.scene .title small { display: block; font: 500 clamp(12px, 2.4vw, 17px) var(--font-body); color: #f1ead6; margin-top: 4px; letter-spacing: .04em }
+.rain { background-image: repeating-linear-gradient(105deg, rgba(220,230,255,.0) 0 9px, rgba(220,230,255,.22) 9px 10px); }
+.snow { background-image: radial-gradient(circle, rgba(255,255,255,.75) 0 1.4px, transparent 2px), radial-gradient(circle, rgba(255,255,255,.55) 0 1px, transparent 1.6px);
+  background-size: 38px 38px, 23px 23px; background-position: 0 0, 11px 17px }
+.sand { background: linear-gradient(180deg, rgba(220,160,90,.0), rgba(220,160,90,.28)) }
+
+.controls { display: grid; gap: 14px; padding: 14px 16px 16px }
+.row { display: grid; gap: 6px }
+.row > label, .row > .lab { font-weight: 600; font-size: 14.5px }
+.presets { display: flex; flex-wrap: wrap; gap: 6px }
+.presets button { display: inline-flex; align-items: center; gap: 7px; font: 500 14px var(--font-body); background: #16181c; color: var(--win-dim);
+  border: 1px solid #33373e; border-radius: 4px; padding: 5px 10px; cursor: pointer }
+.presets button i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #555; flex: none }
+.presets button[aria-pressed="true"] { background: #2a2d33; color: var(--win-fg); border-color: var(--gold) }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px }
+input[type="range"] { width: 100%; accent-color: var(--gold) }
+select { font: 500 14.5px var(--font-body); background: #16181c; color: var(--win-fg); border: 1px solid #33373e; border-radius: 4px; padding: 5px 8px; max-width: 100% }
+.toggles { display: flex; flex-wrap: wrap; gap: 8px 18px }
+.toggles label { display: inline-flex; align-items: center; gap: 6px; font-size: 14.5px; cursor: pointer }
+.toggles input { accent-color: var(--gold); width: 16px; height: 16px }
+.val { color: var(--win-dim); font-weight: 400 }
+.readout { color: var(--win-dim); font-size: 14px }
+.readout b { color: var(--gold); font-weight: 600 }
+.hidden { display: none !important }
+
+/* Day strip */
+.day { display: grid; gap: 6px }
+.day .strip { height: 34px; border-radius: 5px; border: 1px solid var(--line) }
+.day .ticks { display: flex; justify-content: space-between; font: 500 12.5px var(--font-mono); color: var(--muted) }
+.phases { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; list-style: none; margin: 0; padding: 0 }
+.phases li { display: flex; gap: 10px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px }
+.phases i { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line); flex: none }
+.phases span { display: grid; line-height: 1.25 } .phases small { color: var(--muted) }
+
+table.t { width: 100%; border-collapse: collapse; font-size: 15.5px }
+.t th, .t td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top }
+.t th { font-weight: 600; color: var(--muted); font-size: 13.5px; letter-spacing: .04em; text-transform: uppercase }
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px }
+
+.moods { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0 }
+.moods li { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 3px 10px 3px 4px; font-size: 14.5px }
+.moods i { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line) }
+
+.cmds { display: grid; gap: 8px }
+.cmd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px }
+.cmd code { font-size: 15px; background: none; padding: 0; color: var(--fg) }
+.cmd .what { color: var(--muted); font-size: 15px; flex: 1 1 220px }
+.copy { font: 600 13px var(--font-body); color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer }
+.copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.note { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; color: var(--muted) }
+dl.faq { display: grid; gap: 16px; margin: 0 }
+dl.faq dt { font-weight: 600 }
+dl.faq dd { margin: 2px 0 0; color: var(--muted) }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">Cinematic · look and mood</div>
+      <h1>Color the world, not the UI</h1>
+      <p>Cinematic grades the game world like a film: a tint that follows the time of day and the zone you're in, soft dark edges, a warm glow in inns, weather that grays the scene, and letterbox bars. Your UI is never tinted.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter" style="padding-block:48px 40px">
+<div class="col">
+
+  <section>
+    <div class="eyebrow">Where it lives</div>
+    <h2>Two pages under Visual Effects</h2>
+    <p>Open Cinematic's settings and pick <b>Visual Effects</b>. Its <b>General</b> page has the letterbox, vignette, inn glow, weather and depth of field, and a grid of where each one shows. The <b>Tint</b> page has the color grading: a preset, the time of day and each zone's mood. (Its third page, Graphics+, is the game's own graphics settings, with <a href="graphics.html">a guide of its own</a>.)</p>
+    <p class="muted">Both pages share one <b>Enable page</b> switch. Turning it off removes every effect at once: letterbox, tint, time of day, zone tints, vignette, inn glow, weather and depth of field. Each keeps its own settings for when you turn it back on.</p>
+    <p class="muted">The effects show in CineMode. If you turn off <b>Start in CineMode</b> on the main page, they lie over your normal UI instead. That's how the Subtle profile works: the look, with nothing faded.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Try it</div>
+    <h2>The tint, at any hour</h2>
+    <p>Pick a preset and drag through the day. The colors are the addon's own, laid over a painted scene. The game blends them over the real world, so in the game it looks softer.</p>
+
+    <div class="win" id="mock">
+      <div class="win-top">
+        <span class="win-title">Tint preview</span>
+        <span class="win-note">An approximation of the in-game effect</span>
+      </div>
+      <div class="scene" id="scene" role="img" aria-label="A painted landscape with the chosen tint, vignette, weather and letterbox over it">
+        <svg class="world" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          <defs>
+            <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fb2e6"/><stop offset=".62" stop-color="#d9e9f4"/></linearGradient>
+            <linearGradient id="lake" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9cc3df"/><stop offset="1" stop-color="#4b7a9c"/></linearGradient>
+          </defs>
+          <rect width="320" height="180" fill="url(#sky)"/>
+          <circle cx="238" cy="52" r="15" fill="#fff6d8"/>
+          <path d="M0 104 L40 70 L70 90 L110 54 L150 92 L185 66 L230 98 L270 72 L320 96 L320 180 L0 180Z" fill="#8ea0b4"/>
+          <path d="M0 118 C60 100 110 112 160 106 C220 98 270 112 320 106 L320 180 L0 180Z" fill="#6f9a58"/>
+          <rect x="0" y="128" width="320" height="22" fill="url(#lake)"/>
+          <path d="M0 146 C70 138 120 150 190 144 C250 139 290 148 320 144 L320 180 L0 180Z" fill="#557d40"/>
+          <g fill="#2f4a2a">
+            <path d="M28 150 l10 -34 l10 34z"/><path d="M44 152 l8 -26 l8 26z"/><path d="M270 150 l11 -38 l11 38z"/><path d="M290 154 l8 -24 l8 24z"/>
+          </g>
+          <g fill="#6b4a32"><rect x="196" y="126" width="34" height="22"/></g>
+          <path d="M192 128 l21 -16 l21 16z" fill="#8a3d2c"/>
+          <rect x="206" y="134" width="7" height="14" fill="#3a2618"/>
+          <rect x="219" y="132" width="7" height="6" fill="#ffd36b"/>
+          <path d="M0 180 L0 160 C80 154 160 170 320 160 L320 180Z" fill="#3e5f2e"/>
+        </svg>
+        <div class="layer tint" id="lTint"></div>
+        <div class="layer add" id="lAdd"></div>
+        <div class="layer inn hidden" id="lInn"></div>
+        <div class="layer weather" id="lWeather"></div>
+        <div class="layer" id="lFall"></div>
+        <div class="layer" id="lVig"></div>
+        <div class="title" id="lTitle">Elwynn Forest<small id="lPhase">Midday</small></div>
+        <div class="lb top" id="lbTop"></div>
+        <div class="lb bot" id="lbBot"></div>
+      </div>
+      <div class="controls">
+        <div class="row">
+          <span class="lab">Preset</span>
+          <div class="presets" id="presets" role="group" aria-label="Preset"></div>
+          <p class="readout" id="presetTip"></p>
+        </div>
+        <div class="two">
+          <div class="row" id="hourRow">
+            <label for="hour">Time <span class="val" id="hourVal"></span></label>
+            <input type="range" id="hour" min="0" max="1439" step="10" value="780">
+          </div>
+          <div class="row" id="moodRow">
+            <label for="mood">Zone mood</label>
+            <select id="mood"></select>
+          </div>
+          <div class="row" id="customRow">
+            <label for="custom">Custom color</label>
+            <input type="color" id="custom" value="#ffcc99">
+          </div>
+          <div class="row">
+            <label for="strength">Strength <span class="val" id="strengthVal"></span></label>
+            <input type="range" id="strength" min="5" max="100" step="5" value="100">
+          </div>
+          <div class="row">
+            <label for="vig">Vignette strength <span class="val" id="vigVal"></span></label>
+            <input type="range" id="vig" min="10" max="100" step="5" value="30">
+          </div>
+          <div class="row">
+            <label for="weather">Weather</label>
+            <select id="weather">
+              <option value="">Clear</option><option value="rain">Rain</option><option value="snow">Snow</option><option value="sand">Sandstorm</option>
+            </select>
+          </div>
+        </div>
+        <div class="toggles">
+          <label><input type="checkbox" id="tLb" checked> Letterbox</label>
+          <label><input type="checkbox" id="tVig" checked> Vignette</label>
+          <label><input type="checkbox" id="tInn"> Inside an inn</label>
+          <label><input type="checkbox" id="tTitle" checked> Time-of-day title</label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">The Tint page</div>
+    <h2>Presets</h2>
+    <p>The preset is the color laid over the world. Pick one on the Tint page, then set its <b>Strength</b>. Every preset works with the vignette, weather and inn glow on top.</p>
+    <div class="tablewrap"><table class="t">
+      <thead><tr><th>Preset</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>None</td><td>No color tint.</td></tr>
+        <tr><td>Warm / golden hour</td><td>Soft orange, like late-afternoon light.</td></tr>
+        <tr><td>Cool</td><td>Pale blue, crisp and wintry.</td></tr>
+        <tr><td>Night</td><td>Deep blue and darker, like moonlight.</td></tr>
+        <tr><td>Dusk gradient</td><td>Orange at the top fading to purple at the bottom, like a sunset.</td></tr>
+        <tr><td>Sepia-ish</td><td>Warm brownish yellow, old-photo warmth. The world can't be truly desaturated, hence the "ish".</td></tr>
+        <tr><td>Dreamy</td><td>A faint warm glow added over the scene. Soft and hazy.</td></tr>
+        <tr><td>Custom</td><td>Your own color, chosen with the <b>Custom color</b> swatch.</td></tr>
+        <tr><td>Time of day</td><td>Changes through the day: blue at night, pink at dawn, clear in the day, golden in the evening and purple at dusk.</td></tr>
+        <tr><td>Zone</td><td>A mood for the zone you're in. Zones without one are left untinted.</td></tr>
+        <tr><td>Zone + time of day</td><td>Both together: a desert at night is warm sand darkened by moonlight. Cinematic starts with this one.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted"><b>Subtle drift</b> (on to start with) lets the strength wander up and down by a few percent over a few minutes, so a still scene feels a little more alive. <b>Drift amount</b> sets how far. The drift pauses while the Tint page is open, so you see the strength you set.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Time of day</div>
+    <h2>From moonlight to golden hour</h2>
+    <p>The Time of day and Zone + time of day presets follow a clock through five phases, blending smoothly between them. Under <b>Follows</b>, pick the game's time (matching the game's day and night) or your computer's clock.</p>
+    <div class="day">
+      <div class="strip" id="dayStrip" aria-label="The time-of-day colors across 24 hours"></div>
+      <div class="ticks"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+    </div>
+    <ul class="phases">
+      <li><i style="background:rgb(128,148,224)"></i><span><b>Night</b><small>till about 5:00, from 21:30</small></span></li>
+      <li><i style="background:rgb(255,199,199)"></i><span><b>Dawn</b><small>pink, about 6:30</small></span></li>
+      <li><i style="background:#fff"></i><span><b>Day</b><small>clear, 8:00 to 17:00</small></span></li>
+      <li><i style="background:rgb(255,209,153)"></i><span><b>Golden hour</b><small>about 18:30</small></span></li>
+      <li><i style="background:rgb(199,158,224)"></i><span><b>Dusk</b><small>purple, about 20:00</small></span></li>
+    </ul>
+    <p class="muted"><b>Time of day strength</b> sets how strongly the clock's color applies. Lower it for softer nights; at 0 only the zone mood is left. Under <b>Phases</b>, click a phase's color to choose your own, give it a strength of its own (Night starts at 65%), or press its <b>Reset</b> to go back to the built-in one.</p>
+    <p class="muted">To see the tint at another hour without waiting, pick one in <b>Preview time</b> beside the preset. It's only a preview: the real clock comes back when you leave the page.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Title and sounds</div>
+    <h2>The time-of-day title</h2>
+    <p>With <b>Show the time of day</b> ticked (on the Tint page), a line such as "Dusk" appears under the zone name when you log in or reload, and on its own when the hour turns during play, never in a fight. It follows the same clock as the tint, with a fitting sound.</p>
+    <div class="tablewrap"><table class="t">
+      <thead><tr><th>Title</th><th>From</th><th>Sound</th></tr></thead>
+      <tbody>
+        <tr><td>Dawn</td><td>5:00</td><td>A rooster</td></tr>
+        <tr><td>Morning</td><td>8:00</td><td>A horse</td></tr>
+        <tr><td>Midday</td><td>12:00</td><td>Your faction's bell</td></tr>
+        <tr><td>Afternoon</td><td>14:00</td><td>None</td></tr>
+        <tr><td>Evening</td><td>17:00</td><td>Frogs</td></tr>
+        <tr><td>Dusk</td><td>19:00</td><td>An owl</td></tr>
+        <tr><td>Night</td><td>21:00</td><td>A wolf</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Zone moods</div>
+    <h2>Every zone its own color</h2>
+    <p>With a Zone preset, each zone has a mood of its own: pale blue snowfields, sandy deserts, sickly plaguelands, a smoky Ironforge, a golden Westfall and many more. On retail the list covers every expansion, from Outland's fel-scorched Hellfire to Midnight's Voidstorm. Zones the addon doesn't know are left untinted.</p>
+    <ul class="moods" id="moods"></ul>
+    <p class="muted">At a zone border the old mood fades out, the scene stays untinted for a moment, then the new mood fades in, so snow never turns red under a volcano's ember tint. The pause is longer in the air, where you can still see back over the old zone.</p>
+    <h3>Setting your own</h3>
+    <ol style="margin:0;padding-left:22px;display:grid;gap:6px">
+      <li>Stand in the zone, or in the town or port within it, and open the Tint page's <b>Zone tints</b> section. It shows the mood here, and whether it's built in or your choice.</li>
+      <li>Under <b>Change</b>, pick <b>the zone</b> or <b>this area</b>. An area's choices win over its zone's.</li>
+      <li>Pick a <b>Preset here</b> to replace your main preset in that place (Night in Duskwood, say, or None in a city), or pick a <b>Custom color</b> to replace its built-in mood in the Zone presets.</li>
+      <li><b>Your zone tints</b> lists every place you've changed, each with a <b>Reset</b>.</li>
+    </ol>
+    <p class="muted">Some towns already have a softer mood than their zone, such as Theramore Isle, Booty Bay, Ratchet and Gadgetzan.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">The General page</div>
+    <h2>Letterbox, vignette, inns and weather</h2>
+    <div class="cards">
+      <article class="card"><div class="name">Letterbox</div><p class="muted">Black bars slide in at the top and bottom of the screen. Set their <b>Bar height</b> (up to a quarter of the screen each) and <b>Bar opacity</b>.</p></article>
+      <article class="card"><div class="name">Vignette</div><p class="muted">Soft dark edges that draw the eye to the middle. Works with any tint. Set it with <b>Vignette strength</b>.</p></article>
+      <article class="card"><div class="name">Inn glow</div><p class="muted">With <b>Light up inns</b> on, stepping into an inn partly lifts the outdoor tint (a gloomy marsh, a moonlit night) and fades in a soft firelit glow, colored by the zone: cooler in the snow, greener in a swamp. It blends over a few seconds at the door. <b>Inn glow amount</b> sets how bright.</p></article>
+      <article class="card"><div class="name">Weather</div><p class="muted">Rain grays and cools the scene, snow turns it pale blue and a sandstorm gives it a dusty orange haze, more strongly the heavier the weather. It lifts under a roof and blends in as a storm builds. Works with any tint, None included.</p></article>
+    </div>
+    <p class="note">Weather needs a game version that reports the weather to addons. Where it doesn't, the weather row does nothing.</p>
+    <h3>Where each one shows</h3>
+    <p class="muted">The <b>Show in</b> grid at the top of the General page has a row each for the letterbox, tint, vignette and weather, laid out like every other grid in Cinematic. <b>Always</b> shows it all through CineMode. The <b>Combat</b> dropdown picks In combat, Calm Timer (after a fight, until it runs out), Out of combat, or In a camera mode (flights, AFK, cozy and the rest). <b>Location</b> picks places. With nothing ticked, the effect is off. That's how "keep the letterbox up through fights" or "tint only while a camera runs" is set.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">In passing</div>
+    <h2>Depth of field</h2>
+    <p>With <b>Haze the screen edges in the camera modes</b> ticked, a soft haze lies around the screen's edges while a camera runs, as if the camera had focused on you. Each camera sets its own strength on its Camera Settings page. <a href="cameras.html">The cameras guide</a> covers it.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Commands</div>
+    <h2>See it now</h2>
+    <p>Type these in the chat box.</p>
+    <div class="cmds">
+      <div class="cmd"><code id="cmd1">/cine tinttest</code><span class="what">Goes through each time of day in turn, its tint and its title, with the AFK camera. Type it again to stop.</span><button type="button" class="copy" data-for="cmd1">Copy</button></div>
+      <div class="cmd"><code id="cmd2">/cine doftest</code><span class="what">Shows the depth-of-field haze for 30 seconds. Again to stop.</span><button type="button" class="copy" data-for="cmd2">Copy</button></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Questions</div>
+    <h2>Good to know</h2>
+    <dl class="faq">
+      <div><dt>Why isn't my action bar tinted?</dt><dd>On purpose. The tint lies over the world only, so health bars and text keep their true colors.</dd></div>
+      <div><dt>Nights are too dark for me.</dt><dd>Lower <b>Time of day strength</b>, or give Night a lower strength of its own under Phases. At 0 you keep just the zone moods.</dd></div>
+      <div><dt>The tint is right but the hour is wrong.</dt><dd>Check <b>Follows</b>: game time follows the game's day and night, which may not match your own clock. Switch to your computer's clock if you'd rather.</dd></div>
+      <div><dt>Can I take a screenshot with the look but no UI?</dt><dd>Yes. Set a key for <b>Hide the UI</b> on the Keybinds page. It works like the game's Alt+Z, but the tint, letterbox and time-of-day title stay on screen. Press it again (or Alt+Z) to bring the UI back.</dd></div>
+    </dl>
+  </section>
+
+</div>
+</main>
+
+<script>
+(function () {
+  // The addon's own colors (0-1), as the Tint page has them.
+  var PRESETS = [
+    { key: "none", label: "None", tip: "No color tint." },
+    { key: "warm", label: "Warm", c: [1, .82, .6], tip: "Soft orange, like late-afternoon light." },
+    { key: "cool", label: "Cool", c: [.75, .88, 1], tip: "Pale blue, crisp and wintry." },
+    { key: "night", label: "Night", c: [.45, .55, .85], tip: "Deep blue and darker, like moonlight." },
+    { key: "dusk", label: "Dusk gradient", top: [1, .7, .45], bottom: [.6, .45, .85], tip: "Orange at the top fading to purple at the bottom, like a sunset." },
+    { key: "sepia", label: "Sepia-ish", c: [.95, .8, .55], tip: "Warm brownish yellow, old-photo warmth." },
+    { key: "dreamy", label: "Dreamy", add: [.3, .22, .12], tip: "A faint warm glow added over the scene. Soft and hazy." },
+    { key: "custom", label: "Custom", tip: "Your own color, from the color picker." },
+    { key: "timeofday", label: "Time of day", time: true, tip: "Blue at night, pink at dawn, clear in the day, golden in the evening and purple at dusk." },
+    { key: "zone", label: "Zone", zone: true, tip: "A mood for the zone you're in." },
+    { key: "zonetime", label: "Zone + time of day", zone: true, time: true, tip: "The zone's mood and the time-of-day color together. Cinematic starts with this one." }
+  ];
+  var MOODS = [
+    ["Snow", [.82, .9, 1]], ["Desert", [1, .86, .66]], ["Savanna", [1, .92, .78]], ["Swamp and jungle", [.8, .92, .74]],
+    ["Blighted", [.88, .92, .62]], ["Volcanic", [1, .8, .68]], ["Forest", [.92, .98, .85]], ["Dusky", [.72, .75, .92]],
+    ["Forge", [.8, .72, .62]], ["Warm", [1, .95, .88]], ["Dusty red", [1, .86, .74]], ["Sickly", [.8, .88, .7]],
+    ["Airy", [1, .98, .93]], ["Moonlit", [.84, .88, 1]], ["Gloomy", [.76, .83, .82]], ["Twilight", [.86, .8, 1]],
+    ["Deep twilight", [.72, .64, 1]], ["Golden", [1, .9, .7]], ["Autumn", [1, .88, .76]], ["Summer", [.95, .97, .96]],
+    ["Fel", [.84, 1, .76]], ["Void", [.84, .76, .96]]
+  ];
+  // Minutes after midnight -> color, blended in between (Night is 65% strength to start with).
+  var DAY = [[0, [.5, .58, .88]], [300, [.5, .58, .88]], [390, [1, .78, .78]], [480, [1, 1, 1]], [1020, [1, 1, 1]],
+    [1110, [1, .82, .6]], [1200, [.78, .62, .88]], [1290, [.5, .58, .88]], [1440, [.5, .58, .88]]];
+  var NIGHT_STRENGTH = .65;
+  var TITLES = [[300, "Dawn"], [480, "Morning"], [720, "Midday"], [840, "Afternoon"], [1020, "Evening"], [1140, "Dusk"], [1260, "Night"]];
+  var WEATHER = { rain: [.62, .66, .74], snow: [.86, .91, 1], sand: [1, .82, .6] };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { preset: "zonetime", mood: 0 };
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function mix(c, s) { return c.map(function (v) { return 1 - (1 - v) * s; }); }
+  function mul(a, b) { return [a[0] * b[0], a[1] * b[1], a[2] * b[2]]; }
+  function css(c) { return "rgb(" + c.map(function (v) { return Math.round(Math.max(0, Math.min(1, v)) * 255); }).join(",") + ")"; }
+  function dayColor(m) {
+    for (var i = 1; i < DAY.length; i++) {
+      if (m <= DAY[i][0]) {
+        var a = DAY[i - 1], b = DAY[i], t = (m - a[0]) / (b[0] - a[0]);
+        var c = [0, 1, 2].map(function (k) { return lerp(a[1][k], b[1][k], t); });
+        // Night's own strength, faded in and out with it.
+        var nightness = (m < 390 ? (m <= 300 ? 1 : 1 - (m - 300) / 90) : m >= 1290 ? 1 : m > 1200 ? (m - 1200) / 90 : 0);
+        return mix(c, 1 - nightness * (1 - NIGHT_STRENGTH));
+      }
+    }
+    return [1, 1, 1];
+  }
+  function phaseAt(m) { var t = "Night"; TITLES.forEach(function (e) { if (m >= e[0]) t = e[1]; }); return t; }
+  function hex(h) { return [1, 3, 5].map(function (i) { return parseInt(h.substr(i, 2), 16) / 255; }); }
+
+  var presetsEl = $("presets");
+  PRESETS.forEach(function (p) {
+    var b = document.createElement("button");
+    b.type = "button"; b.dataset.key = p.key;
+    var sw = document.createElement("i");
+    sw.style.background = p.top ? "linear-gradient(" + css(p.top) + "," + css(p.bottom) + ")"
+      : p.c ? css(p.c) : p.add ? css(p.add.map(function (v) { return v + .55; }))
+      : p.time ? "linear-gradient(90deg,rgb(128,148,224),rgb(255,199,199),#fff,rgb(255,209,153),rgb(199,158,224))"
+      : p.zone ? "linear-gradient(90deg,#d1e6ff,#ffdba8,#cceabd)" : p.key === "custom" ? "conic-gradient(red,yellow,lime,cyan,blue,magenta,red)" : "transparent";
+    b.appendChild(sw);
+    b.appendChild(document.createTextNode(p.label));
+    b.addEventListener("click", function () { state.preset = p.key; render(); });
+    presetsEl.appendChild(b);
+  });
+  MOODS.forEach(function (m, i) {
+    var o = document.createElement("option"); o.value = i; o.textContent = m[0]; $("mood").appendChild(o);
+    var li = document.createElement("li"), dot = document.createElement("i");
+    dot.style.background = css(mix(m[1], 1.6).map(function (v) { return Math.max(0, v); }));
+    li.appendChild(dot); li.appendChild(document.createTextNode(m[0])); $("moods").appendChild(li);
+  });
+
+  function render() {
+    var p = PRESETS.filter(function (x) { return x.key === state.preset; })[0];
+    var m = +$("hour").value, s = $("strength").value / 100;
+    document.querySelectorAll("#presets button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.key === p.key)); });
+    $("presetTip").textContent = p.tip;
+    $("hourRow").classList.toggle("hidden", !p.time);
+    $("moodRow").classList.toggle("hidden", !p.zone);
+    $("customRow").classList.toggle("hidden", p.key !== "custom");
+    var h = Math.floor(m / 60), mm = m % 60;
+    $("hourVal").textContent = (h < 10 ? "0" : "") + h + ":" + (mm < 10 ? "0" : "") + mm + " · " + phaseAt(m);
+    $("strengthVal").textContent = Math.round(s * 100) + "%";
+    $("vigVal").textContent = $("vig").value + "%";
+
+    var inn = $("tInn").checked, lift = inn ? .5 : 1; // indoors the outdoor tint partly lifts
+    var tint = null, add = null;
+    if (p.c) tint = p.c;
+    if (p.key === "custom") tint = hex($("custom").value);
+    if (p.zone) tint = MOODS[+$("mood").value][1];
+    if (p.time) tint = tint ? mul(tint, dayColor(m)) : dayColor(m);
+    if (p.add) add = p.add;
+    var lt = $("lTint");
+    if (p.top) {
+      lt.style.background = "linear-gradient(" + css(mix(p.top, s * lift)) + "," + css(mix(p.bottom, s * lift)) + ")";
+    } else lt.style.background = tint ? css(mix(tint, s * lift)) : "transparent";
+    $("lAdd").style.background = add ? css(add.map(function (v) { return v * s * lift; })) : "transparent";
+    $("lInn").classList.toggle("hidden", !inn);
+
+    var w = $("weather").value;
+    $("lWeather").style.background = w && !inn ? css(WEATHER[w]) : "transparent";
+    $("lFall").className = "layer" + (w && !inn ? " " + w : "");
+    var v = $("tVig").checked ? $("vig").value / 100 : 0;
+    $("lVig").style.background = "radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0," + (v * .95).toFixed(2) + ") 100%)";
+    var lb = $("tLb").checked ? "9%" : "0";
+    $("lbTop").style.height = lb; $("lbBot").style.height = lb;
+    $("lTitle").style.opacity = $("tTitle").checked ? 1 : 0;
+    $("lPhase").textContent = p.time ? phaseAt(m) : "Midday";
+  }
+  ["hour", "strength", "vig", "mood", "weather", "custom", "tLb", "tVig", "tInn", "tTitle"].forEach(function (id) {
+    $(id).addEventListener("input", render); $(id).addEventListener("change", render);
+  });
+
+  // The day strip under Time of day.
+  var stops = [];
+  for (var t = 0; t <= 1440; t += 30) stops.push(css(dayColor(t)) + " " + (t / 14.4).toFixed(2) + "%");
+  $("dayStrip").style.background = "linear-gradient(90deg," + stops.join(",") + ")";
+
+  document.querySelectorAll(".copy").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var el = document.getElementById(b.dataset.for);
+      function selectIt() { var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(el.textContent).then(function () {
+          b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500);
+        }, selectIt);
+      } else selectIt();
+    });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sharing Profiles</title>
+<meta name="description" content="Export your Cinematic setup as a line of text, and import a friend&#x27;s.">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column, as on the Profiles page. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --forever: #2f6f4f; --retail: #2c5a92; --classic: #7a4a1c;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607;
+  --forever: #7fd0a4; --retail: #8fb8ee; --classic: #e0ad78; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607;
+  --forever: #7fd0a4; --retail: #8fb8ee; --classic: #e0ad78; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body); padding-block: 0 }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 56px }
+.col > *, section > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+a { color: var(--accent); text-underline-offset: 2px }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.muted { color: var(--muted) }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere }
+kbd { font: 500 .82em var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; background: var(--surface); border-radius: 4px; padding: 0 5px }
+section { display: grid; gap: 14px }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+ul.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 6px }
+
+/* Opening: the letterbox itself */
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #2b3240 0%, #151a22 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+.hero code { background: #2a2d33; color: var(--bar-fg) }
+
+/* Steps, commands and questions */
+.steps { display: grid; gap: 14px; list-style: none; margin: 0; padding: 0; counter-reset: s }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px }
+.steps li::before { content: counter(s); font: 400 24px/1.1 var(--font-display); color: var(--accent) }
+.steps li > div { display: grid; gap: 4px }
+.cmds { display: grid; gap: 8px }
+.cmd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px }
+.cmd > code { font-size: 15px; background: none; padding: 0; color: var(--fg); flex: 0 1 auto }
+.cmd .what { color: var(--muted); font-size: 15px; flex: 1 1 220px }
+.copy { font: 600 13px var(--font-body); color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer }
+.copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+dl.faq { display: grid; gap: 16px; margin: 0 }
+dl.faq dt { font-weight: 600 }
+dl.faq dd { margin: 2px 0 0; color: var(--muted) }
+
+/* Reference rows: a name, then what it does; stacked on a phone */
+.rows { display: grid; margin: 0; border-top: 1px solid var(--line) }
+.row { display: grid; grid-template-columns: minmax(0, 230px) minmax(0, 1fr); gap: 4px 20px; padding: 12px 0; border-bottom: 1px solid var(--line) }
+.row > dt, .row > .k { font-weight: 600 }
+.row > dd, .row > .v { margin: 0; color: var(--muted) }
+.row .v b, .row dd b { color: var(--fg); font-weight: 600 }
+@media (max-width: 560px) { .row { grid-template-columns: 1fr } }
+
+/* Cards and callouts */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; display: grid; gap: 6px; align-content: start }
+.card .name { font: 400 22px/1.1 var(--font-display) }
+.note { background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; padding: 12px 16px }
+.chip { display: inline-block; font: 600 12px/1 var(--font-body); letter-spacing: .05em; text-transform: uppercase;
+  border: 1px solid currentColor; border-radius: 4px; padding: 3px 6px; vertical-align: 2px; white-space: nowrap }
+.chip.forever { color: var(--forever) } .chip.retail { color: var(--retail) } .chip.classic { color: var(--classic) }
+.chip.soon { color: var(--muted) }
+
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">Reference · sharing</div>
+      <h1>Pass your setup on</h1>
+      <p>Export turns one of your profiles into a line of text you can paste anywhere: Discord, a forum, a whisper. Import turns that text back into a new profile of your own.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter" style="padding-block:48px 40px">
+<div class="col">
+
+  <section id="export">
+    <div class="eyebrow">Giving</div>
+    <h2>Export a profile</h2>
+    <ol class="steps">
+      <li><div><h3>Switch to the profile you want to share</h3><p class="muted">Export always shares the active one.</p></div></li>
+      <li><div><h3>Press Export</h3><p class="muted">On the <b>Profiles</b> settings page, under <i>Share a profile with friends</i>, or type <code>/cine export</code>. A window opens with the text already selected.</p></div></li>
+      <li><div><h3>Copy it and send it</h3><p class="muted">Press <kbd>Ctrl</kbd>+<kbd>C</kbd> (or <b>Select all</b> first if you clicked away), then paste it wherever your friends will see it. It's one long line that starts with <code>CINE1:</code>.</p></div></li>
+    </ol>
+    <p class="note">The built-in profiles (Subtle, Balanced and Cinema) can't be exported: everyone has them already. To share your changes to one, make a <b>New profile</b> from it on the Profiles page and export that. If you changed things in Customize, they're already in your own profile, <b>My setup</b>.</p>
+  </section>
+
+  <section id="import">
+    <div class="eyebrow">Getting</div>
+    <h2>Import a profile</h2>
+    <ol class="steps">
+      <li><div><h3>Press Import</h3><p class="muted">On the Profiles settings page, or type <code>/cine import</code>. An empty box opens.</p></div></li>
+      <li><div><h3>Paste the text</h3><p class="muted">Press <kbd>Ctrl</kbd>+<kbd>V</kbd>. The window says what it is, for example <i>Night Rider, shared by Thrall: 42 settings changed from the defaults</i>, with its description if it has one.</p></div></li>
+      <li><div><h3>Name it and press Import</h3><p class="muted">The <b>Save as</b> box starts with the profile's own name. If you already have a profile by that name, pick another. It's added as a new profile and switched to straight away.</p></div></li>
+    </ol>
+    <p class="muted">Your own profiles stay as they are. To go back, pick your old profile on the Profiles page or with <code>/cine profile</code>.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Commands</div>
+    <h2>The two commands</h2>
+    <div class="cmds">
+<div class="cmd"><code id="cmd1">/cine export</code><span class="what">Shows the active profile as text to copy</span><button type="button" class="copy" data-for="cmd1">Copy</button></div>
+<div class="cmd"><code id="cmd2">/cine import</code><span class="what">Opens the box to paste a shared profile into</span><button type="button" class="copy" data-for="cmd2">Copy</button></div>
+    </div>
+  </section>
+
+  <section id="whats-in-it">
+    <div class="eyebrow">Inside</div>
+    <h2>What's in the text, and what isn't</h2>
+    <dl class="rows">
+      <div class="row"><dt>In it</dt><dd>The profile's name, its description and icon, the name of the character who shared it, the Cinematic version, and every setting that differs from the defaults.</dd></div>
+      <div class="row"><dt>Not in it</dt><dd>Frames you added yourself (Add mode), and your own zone and time-of-day tint colors, just as with any profile. Nothing else about you or your character.</dd></div>
+      <div class="row"><dt>Safe to paste</dt><dd>The text is only read as settings, never run. Anything that isn't a Cinematic setting of the right kind is left out.</dd></div>
+    </dl>
+  </section>
+
+  <section id="problems">
+    <div class="eyebrow">If it won't import</div>
+    <h2>What the messages mean</h2>
+    <dl class="faq">
+      <div><dt>"That isn't a whole Cinematic profile."</dt><dd>Part of the text is missing, which happens when a copy is cut short. Copy all of it and paste it again. Spaces and line breaks that crept in are fine: they're ignored.</dd></div>
+      <div><dt>"This profile needs a newer version of Cinematic."</dt><dd>It was made in a format your version can't read. Update Cinematic, then try again.</dd></div>
+      <div><dt>"... settings from a newer Cinematic will be skipped."</dt><dd>Your friend's version has settings yours doesn't know yet. The rest import fine; update Cinematic to get them all.</dd></div>
+      <div><dt>"There's already a profile called..."</dt><dd>Change the name in the Save as box.</dd></div>
+      <div><dt>Does it work between WoW Forever and retail?</dt><dd>The text imports on any version of the game. Each game keeps its own profiles, so import it on the one you'll play it on, and settings that only apply to one game, such as the swing timer, only do anything there.</dd></div>
+    </dl>
+  </section>
+
+  <section id="wheels">
+    <div class="eyebrow">Also</div>
+    <h2>Sharing wheels</h2>
+    <p>Wheels you make yourself can be shared the same way, from the <b>Your wheels</b> settings page: <b>Share wheel</b> gives a line of text, and <b>Import a wheel</b> adds a friend's as a new wheel of yours. Before you press <b>Add wheel</b>, the window lists every command on it.</p>
+    <p class="note"><b>Read every command before you add a wheel.</b> Each runs as if you'd typed it, and <code>/run</code> ones can do anything an addon can.</p>
+  </section>
+
+</div>
+</main>
+<script>
+// Copy buttons: each copies the text of the element its data-for names.
+document.querySelectorAll(".copy").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var el = document.getElementById(b.dataset.for);
+    function selectIt() { var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(el.textContent).then(function () {
+        b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500);
+      }, selectIt);
+    } else selectIt();
+  });
+});
+</script>
+</body>
+</html>

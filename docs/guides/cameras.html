@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Cameras</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column; the camera picker sits in it as a small game window. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --win-bg: #121418; --win-panel: #1b1e23; --win-edge: #3b3f46; --win-fg: #ece9e2; --win-dim: #9a9ca2;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body); padding-block: 0 }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 56px }
+.col > *, section > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+.muted { color: var(--muted) }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 3px }
+section { display: grid; gap: 14px }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+
+/* Opening: the letterbox itself */
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #2b3240 0%, #151a22 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+
+/* Cards: a grid of short items */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 6px; align-content: start }
+.card h3 { font-size: 17px }
+.card p { color: var(--muted); font-size: 15.5px }
+.note { border-left: 3px solid var(--accent); background: var(--surface); padding: 10px 14px; border-radius: 0 6px 6px 0; font-size: 15.5px }
+.note b { color: var(--accent) }
+
+/* The explorer: a game window */
+.win { background: var(--win-bg); color: var(--win-fg); border: 1px solid var(--win-edge); border-radius: 6px; overflow: hidden; font-size: 15.5px }
+.win-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px;
+  border-bottom: 1px solid var(--win-edge); background: var(--win-panel) }
+.win-title { font: 400 20px var(--font-display); color: var(--gold) }
+.seg { display: inline-flex; border: 1px solid var(--win-edge); border-radius: 5px; overflow: hidden }
+.seg button { font: 500 14px var(--font-body); background: transparent; color: var(--win-dim); border: 0; padding: 5px 11px; cursor: pointer }
+.seg button[aria-pressed="true"] { background: #2a2d33; color: var(--win-fg) }
+.win-body { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 0 }
+@media (max-width: 560px) { .win-body { grid-template-columns: 1fr } .areas { display: flex; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--win-edge) } }
+.areas { display: grid; align-content: start; padding: 8px; gap: 2px; border-right: 1px solid var(--win-edge) }
+.areas button { text-align: left; background: none; border: 0; color: var(--win-dim); font: 500 15px var(--font-body); padding: 6px 10px; border-radius: 4px; cursor: pointer }
+.areas button[aria-current="true"] { background: #23262c; color: var(--win-fg) }
+@media (max-width: 560px) { .areas { display: flex; flex-wrap: wrap } }
+.panel { padding: 14px 16px 16px; display: grid; gap: 10px; align-content: start }
+.panel .q { font: 600 18px var(--font-body) }
+.choices { display: grid; gap: 6px; list-style: none; margin: 0; padding: 0 }
+.choice { border: 1px solid #33373e; background: #16181c; border-radius: 4px; padding: 8px 12px; display: grid; gap: 2px }
+.choice .l { font-weight: 600 }
+.choice .d { color: var(--win-dim); font-size: 14.5px }
+.panel .foot { color: var(--win-dim); font-size: 14px }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px }
+
+/* Steps and commands */
+.steps { display: grid; gap: 14px; list-style: none; margin: 0; padding: 0; counter-reset: s }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px }
+.steps li::before { content: counter(s); font: 400 24px/1.1 var(--font-display); color: var(--accent) }
+.cmds { display: grid; gap: 8px }
+.cmd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px }
+.cmd code { font-size: 15px; background: none; padding: 0; color: var(--fg) }
+.cmd .what { color: var(--muted); font-size: 15px; flex: 1 1 220px }
+.copy { font: 600 13px var(--font-body); color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer }
+.copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+dl.faq { display: grid; gap: 16px; margin: 0 }
+dl.faq dt { font-weight: 600 }
+dl.faq dd { margin: 2px 0 0; color: var(--muted) }
+.tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px }
+.tags span { font-size: 12px; font-weight: 600; letter-spacing: .04em; color: #1a1406; background: var(--gold); border-radius: 3px; padding: 1px 6px }
+.panel .lead { color: var(--win-dim) }
+.panel h4 { margin: 4px 0 0; font: 600 13px var(--font-body); letter-spacing: .12em; text-transform: uppercase; color: var(--gold) }
+table.grid { width: 100%; border-collapse: collapse; font-size: 15px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden }
+table.grid th, table.grid td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top }
+table.grid th { font-weight: 600; color: var(--muted); font-size: 13px; letter-spacing: .06em; text-transform: uppercase }
+table.grid tr:last-child td { border-bottom: 0 }
+.scroll { overflow-x: auto }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">Cinematic · the cameras</div>
+      <h1>A camera for every moment</h1>
+      <p>Take a flight, sit by a campfire, stare out at a view or step away from the keyboard, and the camera comes alive. Each moment has its own camera, and they hand over to each other smoothly.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter" style="padding-block:48px 40px">
+<div class="col">
+
+  <section>
+    <div class="eyebrow">How they work</div>
+    <h2>The camera takes over, then hands it back</h2>
+    <p>While CineMode is on, something you do starts a camera: an emote, a cast, a flight, standing still. The camera then moves slowly on its own: it sways, sweeps round you, or drifts in and out. Moving by hand cancels any of them, and everything goes back to normal when the UI returns. Dragging the camera yourself pauses it for a moment, then it carries on from your new view.</p>
+    <p class="muted">Which cameras you get to start with depends on your profile: Subtle leaves the camera to you, Balanced uses a few (flights, going AFK, your Hearthstone and teleports), and Cinema uses every one. The <b>Camera</b> area in Customize changes this in one go, and the <a href="profiles.html">profiles guide</a> has more.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Pick a camera</div>
+    <h2>What starts each one</h2>
+    <p class="muted">Pick a camera to see what starts it, what ends it, and what it does. The gold tags are the events that pick it on the Camera Triggers page before you change anything.</p>
+
+    <div class="win" id="cams">
+      <div class="win-top">
+        <span class="win-title" id="camTitle">Cameras</span>
+        <div class="seg" role="group" aria-label="Game version">
+          <button type="button" data-client="forever" aria-pressed="true">WoW Forever</button>
+          <button type="button" data-client="retail" aria-pressed="false">Retail</button>
+        </div>
+      </div>
+      <div class="win-body">
+        <nav class="areas" id="camList" aria-label="Cameras"></nav>
+        <div class="panel">
+          <div class="q" id="camQ"></div>
+          <p class="lead" id="camLead"></p>
+          <h4>Starts on</h4>
+          <ul class="choices" id="camStarts"></ul>
+          <h4>Ends</h4>
+          <p class="lead" id="camEnds"></p>
+          <p class="foot" id="camFoot"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Camera Triggers page</div>
+    <h2>Choose what starts what</h2>
+    <p>The <b>Camera Triggers</b> page has a row for each event and four columns:</p>
+    <div class="cards">
+      <div class="card"><h3>Event</h3><p>Resting at a campfire, <code>/sit</code>, <code>/sleep</code>, <code>/dance</code>, <code>/kneel</code>, a chair, drawing your weapon, your Hearthstone, a teleport, logging out, <code>/stare</code>, Fishing, going AFK, standing still, a flight and a quest giver.</p></div>
+      <div class="card"><h3>Camera</h3><p>Which camera the event starts, or <b>No camera</b>. The emotes can pick the cozy, vista, fish or AFK camera; a flight only the flight camera or none.</p></div>
+      <div class="card"><h3>Music</h3><p>Whether that camera starts music as it starts. See <a href="music.html">Music and sound</a>.</p></div>
+      <div class="card"><h3>CineMode</h3><p>Only with <b>Start in CineMode</b> off: the camera brings CineMode on while it runs, and it ends with the camera.</p></div>
+    </div>
+    <p>When two things happen at once, a Hearthstone or teleport cast comes first, then logging out, going AFK, the latest emote, a drawn weapon, a campfire, and standing still last.</p>
+    <p><b>After standing still for</b> sets how long you stand still before the Stand still row's camera starts (60 seconds to start with). Going AFK with the AFK camera skips the wait. Auto-walking, auto-running and dying have their own rows below, each with its own wait.</p>
+    <div class="note"><b>A screensaver.</b> Untick <b>Start in CineMode</b> on the main page, then tick the CineMode column for <b>Stand still</b> and <b>Go AFK</b>. You keep the normal UI while you play, and CineMode with the AFK camera takes over once you've been idle a while.</div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Camera wheel</div>
+    <h2>Any camera, any time</h2>
+    <p>Bind <b>Camera wheel (hold)</b> on the Keybinds page. Hold the key and a ring of camera icons comes up around your cursor: AFK, Cozy, Vista, Fish, Tele and Death. Point at one and let go to start it, or tap the key and click one. Pick a running camera to stop it. A grayed-out icon can't start right now, and none start in a fight.</p>
+    <p class="muted">Each of those also has a keybind of its own: <b>Start the AFK camera</b>, <b>Start the cozy camera</b> and so on, and <b>Test the death camera</b> to see the Death Cam without dying.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Tuning</div>
+    <h2>Camera Settings and Camera Modes</h2>
+    <p>Each camera's own settings are on the <b>Camera Settings</b> page: click a camera's name to open them. Most have the same groups: <b>Rotation</b> (how it sways or sweeps), <b>Zoom</b>, <b>Height</b> and <b>Depth of field</b>. Each camera has its own <b>Reset</b>, and a <b>Test</b> button that runs it for 30 seconds where you stand.</p>
+    <p>The <b>Camera Modes</b> page has what they share:</p>
+    <ol class="steps">
+      <li><div><h3>Runs in</h3><p class="muted">A row per camera saying where it can start: the open world, cities, dungeons, raids, PvP and so on. Anywhere else it doesn't start, and stops if it's running; the UI stays faded with the camera left to you. For flights, Cities means taking off from one. The combat column, <b>Wait for the Calm Timer</b>, holds a camera back until the Calm Timer has run out after a fight.</p></div></li>
+      <li><div><h3>Indoors</h3><p class="muted"><b>Limit the camera indoors</b>: inside buildings and caves the cameras zoom out less and swing less, so the camera doesn't keep pushing into walls and ceilings. You set how far they may zoom out and swing, and <b>No AFK camera sweep indoors</b> keeps the AFK camera from sweeping right round you in tight rooms.</p></div></li>
+      <li><div><h3>Depth of field</h3><p class="muted">Each camera's <b>Edge haze</b> slider adds a soft haze around the edges of the screen, as if the camera had focused on you. It needs <b>Depth of field</b> on the Visual Effects page. The Tele Cam uses the Cozy Cam's.</p></div></li>
+    </ol>
+    <p class="muted">To keep the whole normal UI somewhere instead, use <b>Turn off in</b> on the main page: see <a href="cinemode.html">CineMode and fading</a>.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">At a glance</div>
+    <h2>Every camera</h2>
+    <div class="scroll">
+    <table class="grid">
+      <thead><tr><th>Camera</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><b>Flight</b></td><td>Swings behind you at takeoff, sways on the way, fly-bys, settles behind you before landing. <a href="flight-cam.html">More on the Flight Cam</a>.</td></tr>
+        <tr><td><b>AFK</b></td><td>Slowly sweeps around your character and drifts in and out.</td></tr>
+        <tr><td><b>Cozy</b></td><td>Swings round to face you, comes in close and low, and sways softly.</td></tr>
+        <tr><td><b>Tele</b></td><td>Swings in front of you and spins faster and faster as it zooms in until you're gone, then swings behind you where you arrive.</td></tr>
+        <tr><td><b>Vista</b></td><td>Lines up behind you, lowers, and sways very gently, looking out the way you face.</td></tr>
+        <tr><td><b>Fish</b></td><td>The vista camera made for fishing: a narrower sway so your bobber stays in view.</td></tr>
+        <tr><td><b>RP Walk</b></td><td>Sways gently behind you while you auto-walk, and glides round to your new heading after a turn.</td></tr>
+        <tr><td><b>Auto-run</b></td><td>A travel camera that sways behind you and drifts in and out as you go.</td></tr>
+        <tr><td><b>Quest</b></td><td>Eases in close and comes round to a shot past your shoulder at the quest giver.</td></tr>
+        <tr><td><b>Death</b></td><td>Rises and circles slowly round your body over a cold, dimmed screen, with a song of its own.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Commands</div>
+    <h2>Camera commands</h2>
+    <p>Type these in the chat box.</p>
+    <div class="cmds">
+      <div class="cmd"><code id="cmd1">/cine behind</code><span class="what">Swing the camera back behind your character</span><button type="button" class="copy" data-for="cmd1">Copy</button></div>
+      <div class="cmd"><code id="cmd2">/cine flyby</code><span class="what">Turn the camera slowly round to look back, then back behind you (again to stop)</span><button type="button" class="copy" data-for="cmd2">Copy</button></div>
+      <div class="cmd"><code id="cmd3">/cine walk</code><span class="what">Does the addon think you're walking or auto-running?</span><button type="button" class="copy" data-for="cmd3">Copy</button></div>
+      <div class="cmd"><code id="cmd4">/cine walk flip</code><span class="what">Fix it if it has walk and run backwards</span><button type="button" class="copy" data-for="cmd4">Copy</button></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Questions</div>
+    <h2>Good to know</h2>
+    <dl class="faq">
+      <div><dt>I zoomed in during a camera. Will it fight me?</dt><dd>No. Zooming or dragging pauses the camera, and it carries on from your new view after a moment. Your own zoom distance comes back once the camera ends.</dd></div>
+      <div><dt>The quest camera shows a warning about experimental settings.</dt><dd>That's the Quest Cam's <b>Move over your shoulder</b> option, which uses one of the game's experimental camera settings. Accept keeps it working, or turn the option off.</dd></div>
+      <div><dt>Does the Quest Cam need CineMode?</dt><dd>No, it works whether or not CineMode is on. <b>Not while mounted</b> leaves the camera alone when you talk from your mount.</dd></div>
+      <div><dt>My RP Walk camera doesn't start.</dt><dd>Walking is recognized from your speed. Type <code>/cine walk</code> while auto-walking to see what the addon thinks, and <code>/cine walk flip</code> if it has walk and run backwards.</dd></div>
+    </dl>
+  </section>
+
+</div>
+</main>
+
+<script>
+(function () {
+  // Each camera: what starts it (events, with "tag" for the events that pick it on the
+  // Camera Triggers page to start with), what ends it, and a line on what it does.
+  var CAMS = [
+    { name: "Flight", lead: "Swings round behind you as you take off, sways behind you on the way, and settles behind you before landing. Now and then a fly-by turns it round to look back past you.",
+      starts: [{ l: "Take a flight", d: "Taking off on a flight path", tag: 1 }],
+      ends: "Landing. Moving the camera yourself pauses it, and once you've moved it on a flight there are no more fly-bys on that flight." },
+    { name: "AFK", lead: "Slowly pulls back, then sweeps around your character, pausing between sweeps and drifting in and out.",
+      starts: [{ l: "Go AFK", d: "Being flagged AFK (/afk, or away long enough)", tag: 1 }, { l: "Stand still", d: "Standing still for a while with nothing else going on. No camera to start with; the Cinema profile picks the AFK camera" }, { l: "Any emote you set to it", d: "On the Camera Triggers page" }, { l: "Keybind or camera wheel", d: "Start the AFK camera" }],
+      ends: "Moving." },
+    { name: "Cozy", lead: "Swings slowly round to face you, comes down low and in close, then sways gently from side to side in front of you.",
+      starts: [{ l: "Resting with a listed buff (campfire)", d: "Standing or sitting still with a buff like Welcoming Campfire", tag: 1 },
+        { l: "Campfire button", d: "Clicking the Campfire button that shows at your cursor over a campfire", tag: 1, only: "forever" },
+        { l: "/sleep, /dance, /kneel", d: "Doing the emote", tag: 1 }, { l: "Sitting in a chair or on a bench", d: "Right-clicking a seat to sit on it", tag: 1 },
+        { l: "Unsheathe your weapon", d: "With your Sheathe/Unsheathe key out of combat, for a hero shot", tag: 1 },
+        { l: "Log out", d: "The 20-second countdown away from an inn or city", tag: 1 }, { l: "Keybind or camera wheel", d: "Start the cozy camera" }],
+      ends: "Moving, jumping, standing up or another emote. A drawn weapon ends it when you put it away, run or start a fight." },
+    { name: "Tele", lead: "Swings round in front of you, then spins round you faster and faster as it zooms in until you go. Once you're there, it swings round behind you.",
+      starts: [{ l: "Cast your Hearthstone", d: "Also Astral Recall, and any spell with Hearthstone in its name", tag: 1 }, { l: "Cast a teleport", d: "A mage's Teleport: Stormwind and the like, or a druid's Teleport: Moonglade", tag: 1 }, { l: "Keybind or camera wheel", d: "Start the tele camera" }],
+      ends: "Arriving. Cancel the cast (moving, jumping or Esc) and the spin slows and turns back to where the camera was." },
+    { name: "Vista", lead: "Glides round behind you, lowers, and sways very gently there, looking out the way you're facing. Like the RP walk camera, only slower and softer.",
+      starts: [{ l: "/stare", d: "Doing the emote while standing still", tag: 1 }, { l: "/sit", d: "Or pressing the sit key", tag: 1 }, { l: "Keybind or camera wheel", d: "Start the vista camera" }],
+      ends: "Moving, jumping or another emote." },
+    { name: "Fish", lead: "The vista camera made for fishing: it settles behind you and sways only a little either side, so your bobber stays in view.",
+      starts: [{ l: "Cast Fishing", d: "It carries on after the cast: looting, casting again", tag: 1 }, { l: "Keybind or camera wheel", d: "Start the fish camera" }],
+      ends: "Moving or jumping. Right-click (or a gamepad button) casts again." },
+    { name: "RP Walk", lead: "Sways gently behind you. It holds steady through turns, then glides round to your new heading.",
+      starts: [{ l: "Auto-walk", d: "Auto-run in walk mode, after a short wait", tag: 1 }],
+      ends: "Walking by hand, or stopping. Stop and stand, and the AFK camera can take over." },
+    { name: "Auto-run", lead: "A travel camera that sways behind you and drifts in and out as you go.",
+      starts: [{ l: "Auto-run", d: "The auto-run key, after a short wait", tag: 1 }, { l: "Skyriding", d: "Keeps going when you auto-run on a skyriding mount", only: "retail" }],
+      ends: "Pressing forward or back, or stopping." },
+    { name: "Quest", lead: "Eases in close and swings round behind you, coming round to one side so you see the quest giver past you. It goes back when you close the window or move off.",
+      starts: [{ l: "Talk to a quest giver", d: "A quest to pick up or hand in. Works whether or not CineMode is on", tag: 1 }, { l: "Every NPC you talk to", d: "An option on its settings: innkeepers, guards and the rest too" }],
+      ends: "Closing the window or moving off. The zoom comes back once you walk more than 10 yards away." },
+    { name: "Death", lead: "Rises and turns slowly round your body. The world dims and goes cold, \"YOU DIED\" fades in, and a song of its own plays.",
+      starts: [{ l: "Dying", d: "Until you release or are resurrected", tag: 1 }, { l: "Keybind or camera wheel", d: "Test the death camera" }],
+      ends: "Releasing or being resurrected. Moving the camera yourself hands it back to you until your next death." }
+  ];
+  var state = { cam: 0, client: "forever" };
+  try { var saved = localStorage.getItem("cine-guide-client"); if (saved === "retail" || saved === "forever") state.client = saved; } catch (e) { /* none */ }
+  var listEl = document.getElementById("camList");
+  var startsEl = document.getElementById("camStarts");
+
+  function render() {
+    document.querySelectorAll("#cams .seg button").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.client === state.client));
+    });
+    listEl.textContent = "";
+    CAMS.forEach(function (c, i) {
+      var b = document.createElement("button");
+      b.type = "button"; b.textContent = c.name;
+      if (i === state.cam) b.setAttribute("aria-current", "true");
+      b.addEventListener("click", function () { state.cam = i; render(); });
+      listEl.appendChild(b);
+    });
+    var cam = CAMS[state.cam];
+    document.getElementById("camQ").textContent = cam.name + " Cam";
+    document.getElementById("camLead").textContent = cam.lead;
+    startsEl.textContent = "";
+    cam.starts.forEach(function (s) {
+      if (s.only && s.only !== state.client) return;
+      var li = document.createElement("li"); li.className = "choice";
+      var l = document.createElement("span"); l.className = "l"; l.textContent = s.l;
+      var d = document.createElement("span"); d.className = "d"; d.textContent = s.d;
+      li.appendChild(l); li.appendChild(d);
+      if (s.tag) {
+        var t = document.createElement("span"); t.className = "tags";
+        var x = document.createElement("span"); x.textContent = "Camera Triggers"; t.appendChild(x);
+        li.appendChild(t);
+      }
+      startsEl.appendChild(li);
+    });
+    document.getElementById("camEnds").textContent = cam.ends;
+    document.getElementById("camFoot").textContent = "Shown for " + (state.client === "forever" ? "WoW Forever" : "Retail") + ". Settings: Camera Settings page, " + cam.name + " Cam.";
+  }
+
+  document.querySelectorAll("#cams .seg button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      state.client = b.dataset.client;
+      try { localStorage.setItem("cine-guide-client", state.client); } catch (e) { /* none */ }
+      render();
+    });
+  });
+
+  document.querySelectorAll(".copy").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var el = document.getElementById(b.dataset.for);
+      function selectIt() { var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(el.textContent).then(function () {
+          b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500);
+        }, selectIt);
+      } else selectIt();
+    });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
