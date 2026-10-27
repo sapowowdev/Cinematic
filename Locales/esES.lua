@@ -2334,8 +2334,6 @@ L["As NPCs talk near you, the camera zooms in and swings toward whoever's talkin
 L["Use the chat camera"] = "Usar la cámara de charla"
 L["Target the last speaker"] = "Seleccionar a quien habló último"
 L["Targets the last NPC who spoke near you (your character turns their head to them). Addons can't target on their own: the game only lets a key press do it. Out of fights."] = "Selecciona como objetivo al último PNJ que habló cerca de ti (tu personaje gira la cabeza hacia él). Los addons no pueden seleccionar objetivos por sí solos: el juego solo lo permite al pulsar una tecla. Fuera de combate."
-L["Hide names, nameplates and the target circle"] = "Ocultar nombres, placas de nombre y el círculo del objetivo"
-L["While a conversation has the camera, names over heads, nameplates and the circle under your target fade away, in or out of CineMode, and come back once it's over. (Nameplates only with the Nameplates page on.)"] = "Mientras una conversación tiene la cámara, los nombres sobre las cabezas, las placas de nombre y el círculo bajo tu objetivo se desvanecen, con o sin CineMode, y vuelven cuando termina. (Las placas de nombre solo con la página Placas de nombre activada.)"
 L["Same as setting the \"NPCs talking\" event to the chat camera (on) or no camera (off) on the Camera Triggers page."] = "Igual que poner el evento \"PNJ hablando\" en la cámara de charla (activado) o sin cámara (desactivado) en la página de activadores de cámara."
 L["Swing speed"] = "Velocidad del giro"
 L["%d°/sec"] = "%d°/s"

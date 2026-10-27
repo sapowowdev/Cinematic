@@ -16,8 +16,8 @@
 -- camera's on don't move it: the drift keeps the shot alive. A speaker with
 -- no bubble on screen leaves the camera on whoever it was on.
 --
--- The turns are sent as the camera modes' sways send theirs (see
--- RESTART_INTERVAL), along eased curves; a drift leg going a new speaker's
+-- The turns are sent as the quest cam sends its own (see
+-- SPEED_MIN_SETTING), along eased curves; a drift leg going a new speaker's
 -- way turns into the swing, one going the other way eases out first. The
 -- amount turned is counted, as the camera's angle can't be read, and undone
 -- by as much (/cine chatcam flip swaps the two directions, should the
@@ -64,11 +64,14 @@ local MIN_TURN = 2     -- degrees: a smaller swing isn't worth a move
 -- the log, and screenshots). Only one bubble ever showed at a time.
 local TAIL_MIDDLE = 40     -- units (WorldFrame's: the screen's 768 high) off the box's middle: over their head
 local PINNED_BEYOND = 100  -- ...and about how far past a pinned tail they stand
--- A tail over their head, the only bubble showing, is aimed by. A pinned
--- one's guess, or a bubble with no tail to read, places them only well
--- enough for their order: each speaker has a spot by it, left to right,
--- spread evenly from this far left of where the camera started to this far
--- right (two: either end; three: the ends and the middle), placed by their
+-- A tail over their head, the only bubble showing, well off the middle
+-- (past chatCamFrame), is aimed by. Otherwise, once two have talked, each
+-- speaker has a spot by their order, left to right, spread evenly from this
+-- far left of where the camera started to this far right (two: either end;
+-- three: the ends and the middle): in view or not (Liadrin and Zul'jarra a
+-- few degrees either side of the middle both read in view, and the camera
+-- never turned between them). A pinned tail's guess, or a bubble with no
+-- tail to read, places them well enough for that order; placed by their
 -- first good bubble if there's been one (placed again from guesses, the
 -- order once flipped and a line got no swing).
 local SIDE_TURN = 12
@@ -95,23 +98,23 @@ local DRIFT_TIME = 7   -- seconds a leg of the drift across its whole width take
 local DRIFT_EASE = 0.3
 local DRIFT_GAP = 0.35 -- seconds between legs
 local STOP_TIME = 0.8  -- seconds a move under way takes to ease to a stop for a new swing
--- Every move is sent as the camera modes' sways send theirs (Camera.lua's
--- MoveAxis): MoveView*Start at a share of your turn speed setting, re-sent as
--- the speed changes (at most every RESTART_INTERVAL, and not for changes
--- under RESTART_CHANGE), your setting never touched. (Holding one move and
--- stepping the speed setting instead, as the quest cam and fly-bys do, every
--- swing straight after a drift leg jumped about a degree as it started:
--- tested with videos, and with the drift at 0 there was barely any. Drift
--- and swings sent alike, a drift going the swing's way turns into it.)
-local RESTART_INTERVAL = 0.05 -- seconds between speed changes, at least (as the sways')
-local RESTART_CHANGE = 0.02   -- speed changes smaller than this share aren't sent
-local RESTART_BIG = 0.3       -- ...and ones over this share go at once
--- The speed sent is smoothed on top of its curve (as the sways' drift is,
--- Camera.lua's DRIFT_SMOOTH), so the re-sent steps never change it sharply. A
--- move then runs on past its time until the smoothing has settled: smoothing
--- only delays the turn, so it still covers the whole distance.
-local SMOOTH_TIME = 0.3 -- seconds
-local SETTLED = 0.05    -- degrees/sec: slower than this past its time, a move's done
+-- Every move is sent as the quest cam and fly-bys send theirs (QuestCam.lua's
+-- MoveTo): one MoveView*Start for the whole move, at the share of your turn
+-- speed setting that makes your setting its top speed, then only the setting
+-- stepped along the curve (from SPEED_MIN_SETTING up toward yours and back),
+-- yours put back SPEED_RESTORE_DELAY after it stops. (Re-sending the move at
+-- each new speed instead, your setting untouched, as the camera modes' sways
+-- do: these slow swings sent shares of 0.001 to 0.04 of a setting of 180,
+-- and a video showed their speed climbing in visible stairs, as the game
+-- handles slow speeds coarsely; see the quest cam's own note on it.) A drift
+-- leg going a new swing's way turns into it with one re-send, at the new
+-- share. (Once, stepping the setting, every swing straight after a drift leg
+-- jumped about a degree as it started; with the drift at 0, its default,
+-- that can't happen.)
+local SPEED_MIN_SETTING = 1 -- the lowest speed setting sent (lower, the game uses its full speed)
+local SPEED_CHANGE = 0.02   -- setting changes smaller than this share aren't sent
+local SPEED_PRIME_TIME = 0.2 -- seconds the lowest setting is in before the move starts
+local SPEED_RESTORE_DELAY = 0.3 -- seconds after a move stops before your setting comes back
 local BUBBLE_WAIT = 2  -- seconds after a line its bubble is waited for before saying there's none
 local AIM_EVERY = 0.25 -- seconds between looks for a new speaker's bubble
 local LET_GO_TIME = 0.3 -- seconds a move under way takes to stop as you move off (quick: it's yours)
@@ -123,8 +126,10 @@ local FOLLOW_CVARS = { values = { cameraSmoothStyle = "0" } } -- (camera follow 
 
 -- amount: degrees turned, counted (positive: toward the right of the screen).
 -- kind: "swing", "drift" or "back". stopping: easing to a stop early.
--- sent: the speed sent (degrees/sec), right: which way.
-local turn = { amount = 0, moving = false, stoppedAt = 0 }
+-- sent: the speed sent (degrees/sec), right: which way. share: the move's
+-- share of your speed setting, setting: the speed setting sent, speed: the
+-- curve's speed now, primedUntil: when the move starts.
+local turn = { amount = 0, moving = false, stoppedAt = 0, primedUntil = 0 }
 -- The conversation going on: { startedAt, lastLineAt, nextAimAt, turnedAt, on (who
 -- the camera's on), center (the drift's middle), driftOut, zoom (your
 -- distance), zoomedTo, speaker = { name, text, at, missing } }
@@ -141,7 +146,6 @@ ns.DEFAULTS.chatCamDistance = 4      -- yards it zooms in to (if you're further 
 ns.DEFAULTS.chatCamZoomSpeed = 0.5   -- yards a second the zoom in goes
 ns.DEFAULTS.chatCamZoomOutSpeed = 0.5 -- ...and the zoom back out (0: stays in)
 ns.DEFAULTS.chatCamZoomMaxTime = 8   -- seconds either zoom takes at most (from far out: quicker than its speed)
-ns.DEFAULTS.chatCamHideWorld = true  -- names, nameplates and the target circle hidden meanwhile (Effects.lua)
 ns.DEFAULTS.chatCamSwingSpeed = 15   -- degrees a second a swing goes at most
 ns.DEFAULTS.chatCamFrame = 6         -- degrees off the middle a speaker's left at, on their side
 ns.DEFAULTS.chatCamDrift = 0         -- degrees it drifts to and fro on a speaker (0: holds still)
@@ -235,26 +239,32 @@ local function StopMove()
 		Send(Command(turn.right) .. "Stop")
 	end
 	turn.moving, turn.sent, turn.stopping, turn.stoppedAt = false, nil, nil, GetTime()
+	-- (Your setting back a moment later, so the end of the move can't run at
+	-- full speed; not if a new move has started, or someone else has changed it.)
+	local last = turn.setting
+	C_Timer.After(SPEED_RESTORE_DELAY, function()
+		if not turn.moving and last and tonumber(GetCVar(CVAR)) == tonumber(("%.2f"):format(last)) then
+			ns.RestoreCVar(CVAR)
+		end
+	end)
 end
 
--- The speed now (degrees/sec), sent as a share of your setting when it's
--- changed enough (see RESTART_INTERVAL).
+local function SendSetting(setting)
+	SetCVar(CVAR, ("%.2f"):format(setting))
+	turn.setting = setting
+end
+
+-- The speed now (degrees/sec): the move goes out once, at its share; after
+-- that only your speed setting changes, when it's changed enough (see
+-- SPEED_MIN_SETTING).
 local function Push(speed)
-	local now = GetTime()
-	local sent = turn.sent
-	if speed <= 0.01 then
-		return
+	local setting = math.max(SPEED_MIN_SETTING, speed / turn.share)
+	if not turn.sent then
+		Send(Command(turn.right) .. "Start", turn.share)
+	elseif math.abs(setting - turn.setting) > turn.setting * SPEED_CHANGE then
+		SendSetting(setting)
 	end
-	if sent then
-		local change = math.abs(speed - sent)
-		if change <= sent * RESTART_CHANGE
-			or (now - turn.sentAt < RESTART_INTERVAL and change <= sent * RESTART_BIG) then
-			return
-		end
-	end
-	local yours = tonumber(GetCVar(CVAR)) or DEFAULT_SPEED
-	Send(Command(turn.right) .. "Start", speed / yours)
-	turn.sent, turn.sentAt = speed, now
+	turn.sent = turn.setting * turn.share
 end
 
 -- Turns to `target` degrees (counted) over T seconds. from: the speed it's
@@ -273,11 +283,25 @@ local function MoveTo(target, T, ease, kind, from)
 	turn.target, turn.t, turn.T, turn.ease, turn.kind = target, 0, T, ease, kind
 	turn.right = target > turn.amount
 	turn.from = from or 0
-	turn.smooth = from or 0
+	turn.speed = from or 0
 	-- (The top speed that covers the distance: speeding up from `from` over the
 	-- first ease * T seconds, then on, then slowing to rest over the last.)
 	local R = ease * T
 	turn.cruise = math.max(turn.from, (distance - turn.from * R / 2) / (T - R))
+	-- The share of your speed setting it's sent at: your setting is then its top speed.
+	ns.SaveCVar(CVAR)
+	turn.share = turn.cruise / (tonumber(ns.db.savedCVars[CVAR]) or DEFAULT_SPEED)
+	if from and turn.sent then
+		-- (Carrying on from a move under way: sent again at the new share, the
+		-- setting moved so the speed holds.)
+		SendSetting(math.max(SPEED_MIN_SETTING, from / turn.share))
+		Send(Command(turn.right) .. "Start", turn.share)
+		turn.sent, turn.primedUntil = turn.setting * turn.share, 0
+	else
+		-- (The setting at its lowest a moment before the move starts.)
+		SendSetting(SPEED_MIN_SETTING)
+		turn.primedUntil = GetTime() + SPEED_PRIME_TIME
+	end
 	turn.stopping = nil
 	turn.moving = true
 	ns.ApplyCVarSet(FOLLOW_CVARS, true)
@@ -304,7 +328,7 @@ local function EaseToStop(T)
 		StopMove()
 		return
 	end
-	turn.stopping = { from = turn.smooth or turn.sent, t = 0, T = T or STOP_TIME }
+	turn.stopping = { from = turn.speed or turn.sent, t = 0, T = T or STOP_TIME }
 end
 
 -- The speed at t along the move: up from `from` (half a cosine), on at the
@@ -322,7 +346,7 @@ local function MoveSpeed(t)
 end
 
 local function StepMove(elapsed)
-	if not turn.moving then
+	if not turn.moving or GetTime() < turn.primedUntil then
 		return
 	end
 	turn.t = turn.t + elapsed
@@ -336,15 +360,15 @@ local function StepMove(elapsed)
 		over = turn.t >= turn.T
 		speed = over and 0 or MoveSpeed(turn.t)
 	end
-	turn.smooth = (turn.smooth or 0) + (speed - (turn.smooth or 0)) * math.min(1, elapsed / SMOOTH_TIME)
-	if over and turn.smooth < SETTLED then
+	turn.speed = speed
+	if over then
 		if not turn.stopping then
 			turn.amount = turn.target -- (counted as it went: this tidies the last hundredth)
 		end
 		StopMove() -- (stopped early: where it's got to)
 		return
 	end
-	Push(turn.smooth)
+	Push(speed)
 	if turn.sent then
 		turn.amount = turn.amount + (turn.right and turn.sent or -turn.sent) * elapsed
 	end
@@ -855,35 +879,40 @@ local function Aim(now, drifting)
 	if not placed or (good and not placed.good) then
 		convo.placed[speaker.name] = { at = angle + convo.gain * turn.amount, good = good }
 	end
+	-- Each speaker's spot by their order, left to right, spread evenly from
+	-- SIDE_TURN left to SIDE_TURN right (once two have talked).
 	local frame = ns.db.chatCamFrame
-	local wanted, spot
-	if good then
-		-- (A good bubble: to chatCamFrame degrees off the middle on their side,
-		-- through the gain.)
-		local off = math.abs(angle) <= frame and 0 or (angle - (angle > 0 and frame or -frame))
-		wanted = turn.amount + off / convo.gain
-	else
-		-- (Otherwise each speaker has a spot by their order, left to right, spread
-		-- evenly from SIDE_TURN left to SIDE_TURN right; the only one so far:
-		-- SIDE_TURN their way, unless they're in view.)
-		local names = {}
-		for name in pairs(convo.placed) do
-			names[#names + 1] = name
-		end
-		if #names == 1 then
-			wanted = math.abs(angle) <= frame and turn.amount or (angle > 0 and SIDE_TURN or -SIDE_TURN)
-		else
-			local placedAt = convo.placed
-			table.sort(names, function(a, b)
-				return placedAt[a].at < placedAt[b].at or (placedAt[a].at == placedAt[b].at and a < b)
-			end)
-			for i, name in ipairs(names) do
-				if name == speaker.name then
-					wanted = -SIDE_TURN + 2 * SIDE_TURN * (i - 1) / (#names - 1)
-					spot = ("spot %d of %d from the left"):format(i, #names)
-				end
+	local spotAt, spot
+	local names = {}
+	for name in pairs(convo.placed) do
+		names[#names + 1] = name
+	end
+	if #names > 1 then
+		local placedAt = convo.placed
+		table.sort(names, function(a, b)
+			return placedAt[a].at < placedAt[b].at or (placedAt[a].at == placedAt[b].at and a < b)
+		end)
+		for i, name in ipairs(names) do
+			if name == speaker.name then
+				spotAt = -SIDE_TURN + 2 * SIDE_TURN * (i - 1) / (#names - 1)
+				spot = ("spot %d of %d from the left"):format(i, #names)
 			end
 		end
+	end
+	local off = math.abs(angle) <= frame and 0 or (angle - (angle > 0 and frame or -frame))
+	local wanted
+	if good and off ~= 0 then
+		-- (A good bubble well off the middle: to chatCamFrame degrees off it on
+		-- their side, through the gain.)
+		wanted, spot = turn.amount + off / convo.gain, nil
+	elseif spotAt then
+		-- (Otherwise their spot. Even in view: two speakers a few degrees apart
+		-- both read in view, and the camera never turned between them.)
+		wanted = spotAt
+	elseif good or off == 0 then
+		wanted = turn.amount -- (the only one so far, and in view)
+	else
+		wanted = off > 0 and SIDE_TURN or -SIDE_TURN -- (the only one so far: SIDE_TURN their way)
 	end
 	local target = math.max(turn.amount - MAX_SWING, math.min(turn.amount + MAX_SWING, wanted))
 	-- (Mid zoom in, the gain's the close-up one, not yet true: SIDE_TURN at most.)
@@ -913,7 +942,7 @@ local function Aim(now, drifting)
 	if carry then
 		Note(turn.kind .. " turned into the swing")
 	end
-	MoveTo(target, T, Ease(SWING_EASE), "swing", carry and (turn.smooth or turn.sent) or nil)
+	MoveTo(target, T, Ease(SWING_EASE), "swing", carry and (turn.speed or turn.sent) or nil)
 	-- (Looked at again once it's done: how far it really moved them.)
 	convo.check = { speaker = speaker, angle = angle, step = step, good = good, zooming = zooming }
 end
@@ -1183,12 +1212,6 @@ end
 -- minimap by it: ns.activeCam, Camera.lua).
 function ns.ChatCamActive()
 	return convo ~= nil
-end
-
--- Whether names, nameplates and the target circle are hidden now
--- (chatCamHideWorld; Effects.lua): through the conversation and its turn back.
-function ns.ChatCamHidesWorld()
-	return ns.db.chatCamHideWorld and (convo ~= nil or leaving ~= nil) or false
 end
 
 -- /cine chatcam [flip|log|steady|debug|mark <note>].

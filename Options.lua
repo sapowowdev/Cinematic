@@ -2975,11 +2975,6 @@ local function CreateChatCamPanel()
 			Refresh()
 		end), "check")
 	on.Refresh = function(self) self:SetChecked(ns.GetDB().chatCamera ~= "none") end
-	local hideWorld = stack:Add(Check(content, "chatCamHideWorld", L["Hide names, nameplates and the target circle"],
-		L["While a conversation has the camera, names over heads, nameplates and the circle under your " ..
-		"target fade away, in or out of CineMode, and come back once it's over. (Nameplates only with " ..
-		"the Nameplates page on.)"]), "check")
-	GreyUnless(hideWorld, IfOn)
 
 	local rotationHeader = stack:Header(content, L["Rotation"])
 	local speed = stack:Add(Slider(content, "chatCamSwingSpeed", L["Swing speed"], 5, 40, 1, L["%d°/sec"]), "slider")
