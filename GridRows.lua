@@ -1082,6 +1082,7 @@ function ns.GridTable(content, columnTop, rows, kit, ...)
 		rowLabel:SetWidth(LABEL_WIDTH - 4 - ns.GRID_DOT_ROOM)
 		rowLabel:SetJustifyH("LEFT")
 		rowLabel:SetWordWrap(false)
+		kit.ShowBox(content, item, rowLabel) -- (its frame on at all: item.showKey)
 		-- An asterisk, with a tip, on rows that have a page of their own.
 		if item.morePage or item.tip then
 			if item.morePage then rowLabel:SetText(item.label .. " |cffffd100*|r") end
@@ -1136,6 +1137,7 @@ function ns.GridTable(content, columnTop, rows, kit, ...)
 				"hide it in CineMode except when hovered or brought up by the other columns."]
 				or L["Show it all through CineMode, instead of hiding it. (The other columns then have nothing to add.)"] },
 			changed = item.apply,
+			enabled = item.showKey and function() return kit.RowShown(item) end or nil,
 		}
 		if not item.alwaysOnly then
 			spec.menus = parts.menus

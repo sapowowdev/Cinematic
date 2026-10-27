@@ -1579,8 +1579,13 @@ ns.COMBAT_SHOW = {
 	{ key = "focus", label = L["Focus"], default = true, frames = { "FocusFrame" } },
 	-- Follows the focus's ticks until set (see ROW_FALLBACK), as it did inside
 	-- the focus frame. (noHoverRow: hovering it is hovering the target's group.)
+	-- On WoW Forever, a box before its name turns the frame off altogether,
+	-- CineMode or not (showKey; retail shows it as the game says).
 	{ key = "focustot", label = L["Focus target of target"], default = true, frames = { "FocusFrameToT" },
-		noHoverRow = true },
+		noHoverRow = true, showKey = not ns.isRetail and "unitPartsFocusToT" or nil,
+		showTip = L["Unticked: the small frame by the focus frame, showing who your focus is targeting, doesn't " ..
+			"show at all, CineMode or not. Which of its parts show is on the Unit Frames page."],
+		showChanged = function() if ns.ApplyUnitFrameParts then ns.ApplyUnitFrameParts() end end },
 	-- The game's circle on the ground under your target: not a frame but a
 	-- setting (Effects.lua, ns.RowOnNow). Always ticked to start with
 	-- (CINE_SHOW_DEFAULT), as before it had a row.
@@ -2188,7 +2193,7 @@ local CINE_SHOW_DEFAULT = {
 	flags = true, castbar = true, partyroles = true, partynames = true, partystatus = true,
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true,
 	raiddebuffs = true, raidthreat = true, raidtarget = true, raidready = true, extra = true, voice = true,
-	encounter = true, targetcircle = true,
+	encounter = true, targetcircle = true, focustot = true,
 }
 function ns.IsCineShowOn(key)
 	local setting = ns.CINE_SHOW_SETTING[key]
@@ -2196,6 +2201,10 @@ function ns.IsCineShowOn(key)
 		return ns.db[setting] or false
 	end
 	local on = ns.db.cineShow[key]
+	-- (A default of its own wins over the row it follows: the focus's target of target.)
+	if on == nil and CINE_SHOW_DEFAULT[key] then
+		return true
+	end
 	if on == nil and ROW_FALLBACK[key] then
 		return ns.IsCineShowOn(ROW_FALLBACK[key])
 	end
@@ -6704,12 +6713,12 @@ do
 				end
 			end
 		end
-		-- The focus's target of target as a whole (Standard Frames page): held at
-		-- no alpha, and not clickable either. (Its mouse only out of combat:
-		-- the game guards it in one; set after the fight.)
+		-- The focus's target of target as a whole (its Standard Frames row's box,
+		-- WoW Forever only): held at no alpha, and not clickable either. (Its
+		-- mouse only out of combat: the game guards it in one; set after the fight.)
 		local tot = _G.FocusFrameToT
 		if tot then
-			local hide = ns.db.handleFrames ~= false and ns.db.unitPartsFocusToT == false
+			local hide = not ns.isRetail and ns.db.handleFrames ~= false and ns.db.unitPartsFocusToT == false
 			want[tot] = hide
 			-- (Shown again at the alpha its Standard Frames row fades it to now,
 			-- not the one it had when hidden.)

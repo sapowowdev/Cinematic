@@ -4331,10 +4331,32 @@ do
 	end
 end
 
+-- A row whose frame can be turned off altogether (item.showKey, a setting
+-- on unless false): a box before its name, the name moved over for it.
+-- Unticked, the row's other controls grey (RowShown).
+local SHOW_BOX_ROOM = 20
+local function RowShown(item)
+	return not item.showKey or ns.GetDB()[item.showKey] ~= false
+end
+local function ShowBox(content, item, rowLabel)
+	if not item.showKey then return end
+	local box = Check(content, item.showKey, "", item.showTip, function(value)
+		ns.GetDB()[item.showKey] = value
+		if item.showChanged then item.showChanged() end
+		Refresh()
+	end)
+	box:SetSize(22, 22)
+	box.Refresh = function(self) self:SetChecked(RowShown(item)) end
+	local point, relativeTo, relativePoint, x, y = rowLabel:GetPoint(1)
+	rowLabel:SetPoint(point, relativeTo, relativePoint, x + SHOW_BOX_ROOM, y)
+	rowLabel:SetWidth(rowLabel:GetWidth() - SHOW_BOX_ROOM)
+	box:SetPoint("RIGHT", rowLabel, "LEFT", 0, 0)
+end
+
 -- The page helpers the dropdown grids share (GridRows.lua's ns.GridRow).
 ns.GRID_KIT = { controls = controls, rolesMenu = ROLES_MENU, Label = Label, Tooltip = Tooltip,
 	FrameHeading = FrameHeading, RuleTarget = RuleTarget, RecordKey = RecordKey, RecordRow = RecordRow,
-	Refresh = Refresh, headingHeight = FRAME_HEADING_HEIGHT }
+	Refresh = Refresh, headingHeight = FRAME_HEADING_HEIGHT, ShowBox = ShowBox, RowShown = RowShown }
 
 -- The Standard Frames table under anchor: a row per frame (COMBAT_SHOW
 -- items), a column per situation. Used by the Gamepad and Chat pages too.
@@ -4377,6 +4399,7 @@ local function ShowTable(content, anchor, rows, ...)
 		rowLabel:SetWidth(LABEL_WIDTH - 4)
 		rowLabel:SetJustifyH("LEFT")
 		rowLabel:SetWordWrap(false)
+		ShowBox(content, item, rowLabel)
 		-- An asterisk, with a tip, on rows that have a page of their own.
 		if item.morePage then
 			rowLabel:SetText(item.label .. " |cffffd100*|r")
@@ -4427,7 +4450,7 @@ local function ShowTable(content, anchor, rows, ...)
 				local db = ns.GetDB()
 				self:SetChecked(isOn(item.key))
 				-- (A row with a rule that reads: the rule decides, its ticks greyed.)
-				self:SetEnabled(not ns.RuleTest(item.key) and (c == 1
+				self:SetEnabled(RowShown(item) and not ns.RuleTest(item.key) and (c == 1
 					or (not alwaysOn(item.key) and (not needsStay or db.stayInCombat))))
 			end
 		end
@@ -4541,18 +4564,6 @@ local function CreateCombatPanel()
 	local INDENT = 16
 	-- The lowest option so far, and how far in from the column edge it sits.
 	local lastCheck, lastIndent = hostileCast, 0
-	-- The focus's target of target frame shown at all, CineMode or not (its
-	-- parts: the Unit Frames page).
-	if _G.FocusFrame and _G.FocusFrameToT then
-		local focusToT = Check(content, "unitPartsFocusToT", L["Show the focus's target of target"],
-			L["Unticked: the small frame by the focus frame, showing who your focus is targeting, doesn't " ..
-			"show at all, CineMode or not. Which of its parts show is on the Unit Frames page."], function(value)
-			ns.GetDB().unitPartsFocusToT = value
-			if ns.ApplyUnitFrameParts then ns.ApplyUnitFrameParts() end
-		end)
-		focusToT:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", 0, -2)
-		lastCheck = focusToT
-	end
 
 	-- Pet happiness: classic hunters only.
 	if not ns.isRetail and select(2, UnitClass("player")) == "HUNTER" then
