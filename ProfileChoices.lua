@@ -237,6 +237,7 @@ ns.BUILTIN_PROFILES = {
 		tip = L["The UI fades and the look stays, with just a few cameras: flights, AFK, " ..
 			"and your Hearthstone and teleports. No cozy, vista, fish, RP walk, auto-run, death or quest cameras."],
 		picks = { layout = { forever = "preset" }, camera = "lite", misc = "lite" },
+		preview = "bars",
 	},
 	{
 		name = "VFX Only",
@@ -272,7 +273,9 @@ ns.WELCOME_LEVELS = {
 	{ label = "Balanced", profile = "Lite", line = "The UI fades between fights, a few cameras.",
 		tip = "Your UI fades between fights, with the letterbox and tint. The camera moves " ..
 			"on its own only on flights, when you go AFK, and for your Hearthstone and teleports." },
-	{ label = "Full", line = "Everything on: letterbox, tint, every camera.",
+	-- (flash: something shown for a moment when it's picked, besides the
+	-- profile's preview: "vitals", Vitals Vision's screen edges.)
+	{ label = "Full", flash = "vitals", line = "Everything on: letterbox, tint, every camera.",
 		tip = "Your UI fades between fights, with the letterbox and tint, and the camera comes " ..
 			"alive on flights, by campfires, at vistas, fishing and more. Point at your main action " ..
 			"bars to bring them back." },

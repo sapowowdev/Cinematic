@@ -551,9 +551,10 @@ end
 local function Wanted(now)
 	if test then
 		local t = now - test.start
-		if t > test.time + TEST_HOLD then
+		if t > test.time + (test.hold or TEST_HOLD) then
+			local quiet = test.quiet
 			test = nil
-			ns.Print(L["Vitals Vision test done."])
+			if not quiet then ns.Print(L["Vitals Vision test done."]) end
 		else
 			local progress = math.min(1, t / math.max(0.1, test.time))
 			if test.hits then -- (in steps, each a hit)
@@ -688,6 +689,18 @@ function ns.TestLowHealth()
 	db = db or ns.GetDB()
 	test = { from = db.lowHealthTestFrom, to = db.lowHealthTestTo, time = db.lowHealthTestTime,
 		start = GetTime(), hits = db.lowHealthTestHits }
+	lastHealth = test.from
+	Wake()
+end
+
+-- A quick look (the welcome window's Full level): the edges as at low
+-- health for seconds, then back to yours, with nothing said in chat. (The
+-- big-hit flash is left out: it starts there.)
+local GLIMPSE_SHARE = 0.2
+function ns.FlashVitals(seconds)
+	db = db or ns.GetDB()
+	test = { from = GLIMPSE_SHARE, to = GLIMPSE_SHARE, time = 0.1, start = GetTime(), hold = seconds or 2,
+		quiet = true }
 	lastHealth = test.from
 	Wake()
 end

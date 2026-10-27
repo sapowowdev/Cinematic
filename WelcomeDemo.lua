@@ -168,17 +168,21 @@ local function UpdatePicked()
 	if active then
 		status:SetText("|TInterface\\RaidFrame\\ReadyCheck-Ready:14|t Trying |cffffd100"
 			.. (levelOf[active] and levelOf[active].label or ns.ProfileLabel(active)) .. "|r. Close this window to keep it.")
+	elseif not ns.db.enabled then
+		status:SetText("Cinematic is off. Pick a level, or Turn on, to start it again.")
 	else
 		status:SetText("")
 	end
 	Describe(levelOf[active])
 end
 
-local function Pick(name)
+local function Pick(name, level)
 	if not ns.db.enabled then ns.SetEnabled(true) end
 	ns.SetProfile(name)
 	if ns.RestartTimers then ns.RestartTimers() end
 	ns.PreviewProfile(name)
+	-- (Full: Vitals Vision's screen edges for a moment, too.)
+	if level and level.flash == "vitals" and ns.FlashVitals then ns.FlashVitals(2) end
 	UpdatePicked()
 end
 
@@ -206,7 +210,7 @@ local function Card(parent, profile, level)
 		if not self.active then self:SetBackdropBorderColor(unpack(EDGE)) end
 		Describe(levelOf[Active()])
 	end)
-	card:SetScript("OnClick", function() Pick(profile.name) end)
+	card:SetScript("OnClick", function() Pick(profile.name, level) end)
 	return card
 end
 
@@ -371,6 +375,7 @@ local function ShowPage(n)
 	customize:SetShown(n == 1)
 	if n == 1 then UpdatePicked() elseif pages[n].Refresh then pages[n].Refresh() end
 	off:SetShown(n == 1)
+	off:SetLabel(ns.db.enabled and "Turn off" or "Turn on")
 	settings:ClearAllPoints()
 	settings:SetPoint("RIGHT", n == 1 and customize or primary, "LEFT", -8, 0)
 	back:SetShown(n > 1)
@@ -379,7 +384,9 @@ local function ShowPage(n)
 end
 
 local function OnHide()
-	if not ns.ProfileChosen() and ns.db.enabled then -- (Turn off says its own)
+	if not ns.db.enabled then -- (closed after Turn off)
+		ns.Print("turned off. /cine brings the welcome window back to pick a profile.")
+	elseif not ns.ProfileChosen() then
 		ns.Print("off until you pick a profile. This window comes back next login, or now with /cine welcome.")
 	end
 end
@@ -423,10 +430,13 @@ local function CreateWindow()
 		window:Hide()
 		ns.OpenOptions(page)
 	end)
+	-- Turn off (or on again): Cinematic, not the window, which stays open to
+	-- pick a level.
 	off = FlatButton(window, "Turn off", nil, function()
-		ns.SetEnabled(false)
-		window:Hide()
-		ns.Print("turned off. /cine brings the welcome window back to pick a profile.")
+		local on = not ns.db.enabled
+		ns.SetEnabled(on)
+		off:SetLabel(on and "Turn off" or "Turn on")
+		UpdatePicked()
 	end)
 	off:SetPoint("BOTTOMLEFT", PAD - 3, PAD + 5)
 	back = FlatButton(window, "< Back", nil, function() ShowPage(1) end)
