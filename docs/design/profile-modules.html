@@ -1,5 +1,7 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Cinematic Profile Modules</title>
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600&family=JetBrains+Mono:wght@400;500&family=Marcellus+SC&display=swap">
@@ -23,10 +25,10 @@
   --bg: #15191d; --surface: #1d2227; --fg: #e4e7ea; --muted: #9aa3ac; --line: #303840;
   --accent: #e2b53f; --accent-soft: #3a3120; --ok: #6cc28c; --warn: #e3a64a; color-scheme: dark }
 * { box-sizing: border-box }
-body { background: var(--bg); color: var(--fg); font: 16px/1.55 var(--font-body);
+body { background: var(--bg); color: var(--fg); font: 16px/1.55 var(--font-body) }
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 40px; box-sizing: content-box;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 28px 64px }
-.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 40px }
+  padding-block: 28px 48px }
 .prose { max-width: 68ch }
 .wrap > *, section > * { min-width: 0 }
 h1 { font: 400 clamp(30px, 5vw, 44px)/1.1 var(--font-display); margin: 0 0 10px; text-wrap: balance; letter-spacing: .01em }

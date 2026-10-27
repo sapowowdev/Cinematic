@@ -1,0 +1,36 @@
+/* The guidebook's shared bar (top) and footer (bottom), added by site.js. The bar is the
+   letterbox: always dark, the same in both themes. The footer takes the page's own colors. */
+:root {
+  --gb-bar: #0b0d10; --gb-bar-fg: #e9e4d8; --gb-bar-dim: #a39e93; --gb-gold: #e2b53f;
+  --gb-fg: #1b2129; --gb-muted: #58626e; --gb-line: #d2d8df; --gb-card: #ffffff; --gb-accent: #8a6400;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --gb-fg: #e3e6ea; --gb-muted: #9aa3ad; --gb-line: #2e353d; --gb-card: #1b2026; --gb-accent: #e2b53f } }
+:root[data-theme="dark"] { --gb-fg: #e3e6ea; --gb-muted: #9aa3ad; --gb-line: #2e353d; --gb-card: #1b2026; --gb-accent: #e2b53f }
+
+.gb-bar { background: var(--gb-bar); color: var(--gb-bar-fg); border-bottom: 1px solid #000;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.gb-bar .gb-inner, .gb-foot .gb-inner { max-width: 1040px; margin: 0 auto }
+.gb-bar .gb-inner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; min-height: 52px; padding-block: 8px }
+.gb-home { display: inline-flex; align-items: center; gap: 10px; color: var(--gb-bar-fg); text-decoration: none;
+  font: 400 19px/1.1 "Marcellus SC", Georgia, serif; letter-spacing: .02em }
+.gb-mark { width: 22px; height: 14px; border-block: 3px solid var(--gb-gold); background: #2b3240; flex: none }
+.gb-crumb { color: var(--gb-bar-dim); font: 500 15px "Barlow", system-ui, sans-serif }
+.gb-crumb::before { content: "/"; margin-right: 12px; opacity: .6 }
+.gb-links { margin-left: auto; display: flex; flex-wrap: wrap; gap: 4px }
+.gb-links a { color: var(--gb-bar-dim); text-decoration: none; font: 500 15px "Barlow", system-ui, sans-serif; padding: 5px 10px; border-radius: 4px }
+.gb-links a:hover { color: var(--gb-bar-fg); background: #1c2129 }
+.gb-links a[aria-current="true"] { color: var(--gb-gold) }
+.gb-bar a:focus-visible, .gb-foot a:focus-visible { outline: 2px solid var(--gb-gold); outline-offset: 2px }
+
+.gb-foot { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 8px 48px; font-family: "Barlow", system-ui, sans-serif }
+.gb-foot .gb-inner { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;
+  border-top: 1px solid var(--gb-line); padding-top: 24px }
+.gb-foot a { text-decoration: none; color: var(--gb-fg); border: 1px solid var(--gb-line); background: var(--gb-card);
+  border-radius: 8px; padding: 12px 16px; display: grid; gap: 2px; align-content: center; min-height: 64px }
+.gb-foot a:hover { border-color: var(--gb-accent) }
+.gb-foot .gb-back { font-weight: 600; color: var(--gb-accent) }
+.gb-foot .gb-dir { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--gb-muted) }
+.gb-foot .gb-title { font-weight: 600; font-size: 17px }
+.gb-foot .gb-next { text-align: right }
