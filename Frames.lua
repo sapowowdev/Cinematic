@@ -3311,6 +3311,8 @@ do
 	-- Fades every quest not in focus.quests, the headers and the background
 	-- to alpha; true if any focused quest has a block in the tracker. (Relative
 	-- to their own alpha: the background's is Edit Mode's opacity.)
+	local blockAlphas = {} -- [block] = the alpha it's faded to, for its bars
+	local BAR_KINDS = { "usedProgressBars", "usedTimerBars" }
 	local function ApplyFocus(tracker, alpha)
 		local found = false
 		for _, section in ipairs(TrackerSections(tracker)) do
@@ -3328,18 +3330,35 @@ do
 						end
 					end
 				end
+				wipe(blockAlphas)
 				for _, blocks in pairs(section.usedBlocks) do
 					if type(blocks) == "table" then
 						for id, block in pairs(blocks) do
 							if type(block) == "table" and block.SetAlpha and not IsForbidden(block) then
+								local blockAlpha = alpha
 								if scenarioSection then
-									ns.FadeRelative(block, sectionAlpha)
+									blockAlpha = sectionAlpha
 								elseif focus.quests[id] then
 									sectionHas = true
-									ns.FadeRelative(block, 1)
-								else
-									ns.FadeRelative(block, alpha)
+									blockAlpha = 1
 								end
+								blockAlphas[block] = blockAlpha
+								ns.FadeRelative(block, blockAlpha)
+							end
+						end
+					end
+				end
+				-- A quest's progress and timer bars aren't its block's children
+				-- (the section's): keyed by their objective line, whose parent is
+				-- the block.
+				for _, kind in ipairs(BAR_KINDS) do
+					local bars = section[kind]
+					if type(bars) == "table" then
+						for line, bar in pairs(bars) do
+							if type(bar) == "table" and bar.SetAlpha and not IsForbidden(bar) then
+								local owner = type(line) == "table" and line.GetParent and not IsForbidden(line)
+									and line:GetParent()
+								ns.FadeRelative(bar, owner and blockAlphas[owner] or sectionAlpha)
 							end
 						end
 					end
