@@ -115,6 +115,7 @@ local SPEED_MIN_SETTING = 1 -- the lowest speed setting sent (lower, the game us
 local SPEED_CHANGE = 0.02   -- setting changes smaller than this share aren't sent
 local SPEED_PRIME_TIME = 0.2 -- seconds the lowest setting is in before the move starts
 local SPEED_RESTORE_DELAY = 0.3 -- seconds after a move stops before your setting comes back
+local TALKED_WINDOW = 30 -- seconds after a gossip or quest window closes its NPC's lines still start it at once
 local BUBBLE_WAIT = 2  -- seconds after a line its bubble is waited for before saying there's none
 local AIM_EVERY = 0.25 -- seconds between looks for a new speaker's bubble
 local LET_GO_TIME = 0.3 -- seconds a move under way takes to stop as you move off (quick: it's yours)
@@ -139,8 +140,12 @@ local zoomingOut -- the distance the zoom back out is heading for
 
 local watcher = CreateFrame("Frame")
 
--- The Camera Triggers page's "NPCs talking" row (chatCamera: "chat" or "none").
+-- The Camera Triggers page's rows (each "chat" or "none"): "NPCs you talk
+-- to" (chatCamera) and "NPCs chatting nearby" (chatNearbyCamera, once you've
+-- stood still chatNearbyDelay seconds: see Ambient).
 ns.DEFAULTS.chatCamera = "chat"
+ns.DEFAULTS.chatNearbyCamera = "chat"
+ns.DEFAULTS.chatNearbyDelay = 10
 -- Its section on the Camera Settings page.
 ns.DEFAULTS.chatCamDistance = 4      -- yards it zooms in to (if you're further out)
 ns.DEFAULTS.chatCamZoomSpeed = 0.5   -- yards a second the zoom in goes
@@ -162,7 +167,7 @@ end
 ns.DEFAULTS.chatcamCalmWait = true
 ns.DEFAULTS.chatcamHideMinimap = false
 local function On()
-	return ns.db.enabled and ns.db.chatCamera == "chat"
+	return ns.db.enabled and (ns.db.chatCamera == "chat" or ns.db.chatNearbyCamera == "chat")
 end
 
 local function Secret(value)
@@ -1126,8 +1131,43 @@ local function Heard(text, name)
 	watcher:SetScript("OnUpdate", OnUpdate)
 end
 
+-- Lines from an NPC you're talking to (its gossip or quest window open, or
+-- closed under TALKED_WINDOW ago), your target or a party NPC start it at
+-- once (the "NPCs you talk to" row); ones from NPCs just chatting nearby (a
+-- city's citizens) only once you've stood still chatNearbyDelay seconds (the
+-- "NPCs chatting nearby" row). Any line in a conversation already going (or
+-- turning back) carries it on. (Its own clock, not the Stand still row's:
+-- the AFK camera resets that one.)
+local stillSince -- when you last stopped moving (nil: moving)
+local talking = false -- a gossip or quest window open
+local talkedAt = 0 -- ...when the last one closed
+local TALK_OPEN = { GOSSIP_SHOW = true, QUEST_GREETING = true, QUEST_DETAIL = true, QUEST_PROGRESS = true,
+	QUEST_COMPLETE = true }
+local TALK_CLOSED = { GOSSIP_CLOSED = true, QUEST_FINISHED = true }
+
+local function Plain(value)
+	return type(value) == "string" and not Secret(value) and value or nil
+end
+
+-- Why a line isn't taken by its row, or nil.
+local function Ambient(event, name, now)
+	if convo or leaving or (zoomingOut and ns.QuestCamZooming()) then
+		return nil
+	elseif event == "CHAT_MSG_MONSTER_PARTY" or talking or now - talkedAt < TALKED_WINDOW
+		or (name ~= "?" and Plain(UnitName("target")) == name) then
+		return ns.db.chatCamera ~= "chat" and "NPCs you talk to: no camera" or nil
+	elseif ns.db.chatNearbyCamera ~= "chat" then
+		return "NPCs chatting nearby: no camera"
+	end
+	stillSince = stillSince or now
+	local wait = ns.db.chatNearbyDelay or 0
+	if now - stillSince < wait then
+		return ("NPC chatting nearby: stood still %d of %d sec"):format(now - stillSince, wait)
+	end
+end
+
 -- Why a line isn't taken, or nil.
-local function NotTaken(text)
+local function NotTaken(text, event, name)
 	if type(text) ~= "string" or Secret(text) then
 		return "text can't be read"
 	elseif not On() then
@@ -1144,12 +1184,26 @@ local function NotTaken(text)
 	elseif not convo and not ns.CombatWaitOver("chatcam", GetTime()) then
 		return "Calm Timer"
 	end
+	return Ambient(event, name, GetTime())
 end
 
 watcher:SetScript("OnEvent", function(_, event, text, name, ...)
-	name = type(name) == "string" and not Secret(name) and name or "?"
+	if event == "PLAYER_STARTED_MOVING" then
+		stillSince = nil
+		return
+	elseif event == "PLAYER_STOPPED_MOVING" or event == "PLAYER_ENTERING_WORLD" then
+		stillSince = GetTime() -- (a loading screen counts as moving: a new place)
+		return
+	elseif TALK_OPEN[event] then
+		talking = true
+		return
+	elseif TALK_CLOSED[event] then
+		talking, talkedAt = false, GetTime()
+		return
+	end
+	name = Plain(name) or "?"
 	SetTargetName(name) -- (any line, the camera on or not: the key targets whoever spoke last)
-	local why = NotTaken(text)
+	local why = NotTaken(text, event, name)
 	DebugLine(event, text, name, (select(10, ...)), why)
 	if not why then
 		Heard(text, name)
@@ -1197,6 +1251,11 @@ ns.CAMERA_TESTS["Chat Cam"] = {
 }
 
 for _, event in ipairs(EVENTS) do
+	watcher:RegisterEvent(event)
+end
+for _, event in ipairs({ "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING", "PLAYER_ENTERING_WORLD",
+	"GOSSIP_SHOW", "GOSSIP_CLOSED", "QUEST_GREETING", "QUEST_DETAIL", "QUEST_PROGRESS", "QUEST_COMPLETE",
+	"QUEST_FINISHED" }) do
 	watcher:RegisterEvent(event)
 end
 
@@ -1254,8 +1313,9 @@ function ns.ChatCamCommand(arg)
 			.. " (/reload afterwards to save it)")
 		return
 	end
-	-- (The same switch as the "NPCs talking" row on the Camera Triggers page.)
-	ns.db.chatCamera = ns.db.chatCamera == "chat" and "none" or "chat"
+	-- (Both Camera Triggers rows together, NPCs you talk to and chatting nearby.)
+	local value = On() and "none" or "chat"
+	ns.db.chatCamera, ns.db.chatNearbyCamera = value, value
 	Say("(prototype) " .. (On() and "on" or "off") .. (ns.db.enabled and "" or " (Cinematic is off)")
 		.. ". If it turns away from whoever's talking: /cine chatcam flip")
 end

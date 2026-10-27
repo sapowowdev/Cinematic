@@ -2606,11 +2606,20 @@ local function CreateEventsPanel()
 				"only if your game music is on."] },
 	}
 	if ns.ChatCamCommand then -- (ChatCam.lua: the dev copy only; no music or CineMode switch yet)
-		table.insert(rows, 1, { label = L["NPCs talking"], cameraKey = "chatCamera", choices = CHAT_CAMERAS,
-			off = "none", tip = L["NPCs talking near you (their chat bubbles). The camera zooms in and " ..
-				"swings toward whoever's talking, drifting while they go on, and turns back once no one's " ..
-				"talked for a while. Moving hands the camera straight back to you. Its settings are " ..
-				"under Chat Cam on the Camera Settings page."] })
+		table.insert(rows, 1, { label = L["NPCs you talk to"], cameraKey = "chatCamera", choices = CHAT_CAMERAS,
+			off = "none", tip = L["An NPC you're talking to (its window open, or closed in the last 30 " ..
+				"seconds), your target, or a party NPC talking (their chat bubbles). The camera zooms in " ..
+				"and swings toward whoever's talking, drifting while they go on, and turns back once no " ..
+				"one's talked for a while. Moving hands the camera straight back to you. Its settings " ..
+				"are under Chat Cam on the Camera Settings page."] })
+		table.insert(rows, 2, { label = L["NPCs chatting nearby"], cameraKey = "chatNearbyCamera",
+			choices = CHAT_CAMERAS, off = "none", delayKey = "chatNearbyDelay",
+			delayLabel = L["After standing still for"],
+			delayTip = L["How long you stand still before NPCs chatting nearby start this row's camera. " ..
+				"0: straight away. Moving starts the count over."],
+			tip = L["Other NPCs talking near you, such as a city's citizens chatting among themselves. " ..
+				"The same chat camera, once you've stood still for the time below, so passers-by " ..
+				"don't swing it about while you're busy."] })
 	end
 	for _, cam in ipairs(rows) do
 		local label = Label(content, "GameFontHighlight", cam.label)
@@ -2637,7 +2646,7 @@ local function CreateEventsPanel()
 		if cam.delayKey then
 			local delay = Slider(content, cam.delayKey, cam.delayLabel, 0, 60, 1, L["%d sec"])
 			delay:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 30, -24)
-			Tooltip(delay, L["How long you keep going before this row's camera starts (and CineMode, " ..
+			Tooltip(delay, cam.delayTip or L["How long you keep going before this row's camera starts (and CineMode, " ..
 				"if its CineMode box is ticked). 0: straight away. Stopping or moving by hand first " ..
 				"starts the count over."])
 			GreyUnless(delay, function(db) return db[cam.cameraKey] ~= cam.off end)
@@ -2963,18 +2972,20 @@ local function CreateChatCamPanel()
 		"swings toward whoever's talking (by their chat bubble), drifting slowly while they go on. It " ..
 		"swings again only when someone else speaks, and turns back and zooms out once no one's " ..
 		"talked for a while. Moving, or moving the camera yourself, hands it straight back to you."], top)
-	local function IfOn(db) return db.chatCamera ~= "none" end
+	local function IfOn(db) return db.chatCamera ~= "none" or db.chatNearbyCamera ~= "none" end
 
 	local stack = Stack(subtitle, "label")
 	stack:Header(content, L["Starting"])
 	local on = stack:Add(Check(content, "chatCamera", L["Use the chat camera"],
-		L["Same as setting the \"NPCs talking\" event to the chat camera (on) or no camera (off) " ..
-		"on the Camera Triggers page."],
+		L["Same as setting both the \"NPCs you talk to\" and \"NPCs chatting nearby\" events to the " ..
+		"chat camera (on) or no camera (off) on the Camera Triggers page, where each can be set apart."],
 		function(value)
-			ns.GetDB().chatCamera = value and "chat" or "none"
+			local db = ns.GetDB()
+			db.chatCamera = value and "chat" or "none"
+			db.chatNearbyCamera = db.chatCamera
 			Refresh()
 		end), "check")
-	on.Refresh = function(self) self:SetChecked(ns.GetDB().chatCamera ~= "none") end
+	on.Refresh = function(self) self:SetChecked(IfOn(ns.GetDB())) end
 
 	local rotationHeader = stack:Header(content, L["Rotation"])
 	local speed = stack:Add(Slider(content, "chatCamSwingSpeed", L["Swing speed"], 5, 40, 1, L["%d°/sec"]), "slider")
