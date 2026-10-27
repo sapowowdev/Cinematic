@@ -1,0 +1,17 @@
+name: Checks
+
+# Lint, and the profile modules' checks on both clients (Tools/offline/check.lua:
+# the addon loaded outside the game), on every push and pull request.
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y lua5.1 luarocks
+      - run: sudo luarocks install luacheck
+      - run: luacheck . -q
+      - run: lua5.1 Tools/offline/check.lua

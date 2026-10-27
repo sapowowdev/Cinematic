@@ -24,77 +24,9 @@ local GOLD = { 1, 0.82, 0 }
 local BUTTON, BUTTON_LIT = { 0.5, 0.38, 0.05 }, { 0.62, 0.48, 0.08 }
 local WHITE, SOFT, DIM = { 1, 1, 1 }, { 0.78, 0.78, 0.78 }, { 0.5, 0.5, 0.52 }
 
--- The three levels, and the profile each picks (Full: this client's default),
--- with their own descriptions (simpler than the profiles', true on both clients).
-local LEVELS = {
-	{ label = "Subtle", profile = "VFX Only", line = "A softer look. Your UI stays put.",
-		tip = "A color tint, a vignette and weather over your normal UI. Nothing fades, " ..
-			"there's no letterbox, and the camera's left to you." },
-	{ label = "Balanced", profile = "Lite", line = "The UI fades between fights, a few cameras.",
-		tip = "Your UI fades between fights, with the letterbox and tint. The camera moves " ..
-			"on its own only on flights, when you go AFK, and for your Hearthstone and teleports." },
-	{ label = "Full", line = "Everything on: letterbox, tint, every camera.",
-		tip = "Your UI fades between fights, with the letterbox and tint, and the camera comes " ..
-			"alive on flights, by campfires, at vistas, fishing and more. Point at your main action " ..
-			"bars to bring them back." },
-}
-
--- Each profile slot (ProfileSlots.lua) as players see it: its name, the
--- options page with its settings, a question, and a choice per part
--- (ProfileParts.lua; client: only there). Shared with the Profiles demo
--- page (ProfilesDemo.lua).
-ns.SLOT_CHOICES = {
-	layout = { label = "Layout", page = "Profiles", question = "Where should your bars and menus sit?", choices = {
-		{ part = "preset", client = "forever", label = "WoW Forever's", line = "The game's own layout" },
-		{ part = "retail", client = "forever", label = "Like retail",
-			line = "Action bars centered along the bottom, menus in the corner" },
-	} },
-	frames = { label = "Interface", page = "Standard Frames", question = "When does your UI fade?", choices = {
-		{ part = "immersive", label = "Between fights", line = "Fights and opening windows bring it back" },
-		{ part = "cdm", label = "Frames in fights", line = "Between fights; your frames and buffs show in fights" },
-		{ part = "solo", label = "Only when solo", line = "Out in the world on your own; normal in groups" },
-		{ part = "pure", label = "Almost always", line = "As little UI as possible, even in fights" },
-		{ part = "nofade", label = "Never", line = "Your UI stays as the game has it" },
-	} },
-	bars = { label = "Action bars", page = "Mouseover groups", question = "How do your action bars come back?", choices = {
-		{ part = "grouped", label = "All together", line = "Point at one and the bars, menus and XP bar come up" },
-		{ part = "split", label = "Each on its own", line = "Point at the bars, the menus or the XP bar" },
-		{ part = "cdm", label = "Cooldown Manager", line = "The Cooldown Manager shows in fights instead" },
-		{ part = "pure", label = "Not in fights", line = "No bars in fights or with an enemy targeted" },
-	} },
-	camera = { label = "Camera", page = "Camera Modes", question = "When does the camera move on its own?", choices = {
-		{ part = "immersive", label = "Often", icon = "Interface\\Icons\\INV_Misc_Spyglass_03",
-			line = "Flights, campfires, vistas, fishing, quests, going AFK and more" },
-		{ part = "lite", label = "Sometimes", icon = "Interface\\Icons\\INV_Misc_Spyglass_02",
-			line = "Flights, going AFK, and your Hearthstone and teleports" },
-		{ part = "off", label = "Never", icon = "Interface\\Icons\\Spell_Nature_Sleep",
-			line = "The camera is all yours" },
-	} },
-	vfx = { label = "Look", page = "Effects", question = "How should the world look?", choices = {
-		{ part = "standard", label = "Letterbox and tint", line = "Bars top and bottom, a color tint, vignette and weather" },
-		{ part = "noletterbox", label = "Tint only", line = "The tint, vignette and weather, no letterbox" },
-		{ part = "cameras", label = "During cameras", line = "The effects only while a camera mode runs" },
-		{ part = "pure", label = "Through fights", line = "Fights don't bring the letterbox down" },
-	} },
-	misc = { label = "Sound and chat", page = "Audio", question = "How much music and chatter?", choices = {
-		{ part = "standard", label = "As the game has it", line = "Music on cameras, NPC chat as usual" },
-		{ part = "immersive", label = "Quieter", line = "Less NPC chatter, music spaced out" },
-		{ part = "lite", label = "Quieter chat", line = "Less NPC chatter, chat only for General and Trade" },
-		{ part = "nomusic", label = "No music", line = "No music in CineMode" },
-	} },
-}
-
--- A slot's choices on this client (parts it has), or nil with fewer than two.
-function ns.SlotChoices(slot)
-	local list = {}
-	for _, choice in ipairs(ns.SLOT_CHOICES[slot] and ns.SLOT_CHOICES[slot].choices or {}) do
-		if (not choice.client or choice.client == ns.CLIENT)
-			and (choice.part == "standard" or ns.PROFILE_PARTS[slot][choice.part]) then
-			list[#list + 1] = choice
-		end
-	end
-	return #list > 1 and list or nil
-end
+-- The three levels (ns.WELCOME_LEVELS), and each slot's question and
+-- choices (ns.SLOT_CHOICES, ns.SlotChoices): ProfileChoices.lua.
+local LEVELS = ns.WELCOME_LEVELS
 
 -- The Customize pages: a slot's (its question and choices), or just a question.
 local OWN_PROFILE = "My setup" -- (the profile of your own a change on a built-in starts)
@@ -236,17 +168,21 @@ local function UpdatePicked()
 	if active then
 		status:SetText("|TInterface\\RaidFrame\\ReadyCheck-Ready:14|t Trying |cffffd100"
 			.. (levelOf[active] and levelOf[active].label or ns.ProfileLabel(active)) .. "|r. Close this window to keep it.")
+	elseif not ns.db.enabled then
+		status:SetText("Cinematic is off. Pick a level, or Turn on, to start it again.")
 	else
 		status:SetText("")
 	end
 	Describe(levelOf[active])
 end
 
-local function Pick(name)
+local function Pick(name, level)
 	if not ns.db.enabled then ns.SetEnabled(true) end
 	ns.SetProfile(name)
 	if ns.RestartTimers then ns.RestartTimers() end
 	ns.PreviewProfile(name)
+	-- (Full: Vitals Vision's screen edges for a moment, too.)
+	if level and level.flash == "vitals" and ns.FlashVitals then ns.FlashVitals(2) end
 	UpdatePicked()
 end
 
@@ -274,7 +210,7 @@ local function Card(parent, profile, level)
 		if not self.active then self:SetBackdropBorderColor(unpack(EDGE)) end
 		Describe(levelOf[Active()])
 	end)
-	card:SetScript("OnClick", function() Pick(profile.name) end)
+	card:SetScript("OnClick", function() Pick(profile.name, level) end)
 	return card
 end
 
@@ -439,6 +375,7 @@ local function ShowPage(n)
 	customize:SetShown(n == 1)
 	if n == 1 then UpdatePicked() elseif pages[n].Refresh then pages[n].Refresh() end
 	off:SetShown(n == 1)
+	off:SetLabel(ns.db.enabled and "Turn off" or "Turn on")
 	settings:ClearAllPoints()
 	settings:SetPoint("RIGHT", n == 1 and customize or primary, "LEFT", -8, 0)
 	back:SetShown(n > 1)
@@ -447,7 +384,9 @@ local function ShowPage(n)
 end
 
 local function OnHide()
-	if not ns.ProfileChosen() and ns.db.enabled then -- (Turn off says its own)
+	if not ns.db.enabled then -- (closed after Turn off)
+		ns.Print("turned off. /cine brings the welcome window back to pick a profile.")
+	elseif not ns.ProfileChosen() then
 		ns.Print("off until you pick a profile. This window comes back next login, or now with /cine welcome.")
 	end
 end
@@ -491,10 +430,13 @@ local function CreateWindow()
 		window:Hide()
 		ns.OpenOptions(page)
 	end)
+	-- Turn off (or on again): Cinematic, not the window, which stays open to
+	-- pick a level.
 	off = FlatButton(window, "Turn off", nil, function()
-		ns.SetEnabled(false)
-		window:Hide()
-		ns.Print("turned off. /cine brings the welcome window back to pick a profile.")
+		local on = not ns.db.enabled
+		ns.SetEnabled(on)
+		off:SetLabel(on and "Turn off" or "Turn on")
+		UpdatePicked()
 	end)
 	off:SetPoint("BOTTOMLEFT", PAD - 3, PAD + 5)
 	back = FlatButton(window, "< Back", nil, function() ShowPage(1) end)

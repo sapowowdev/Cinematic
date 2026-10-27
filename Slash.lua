@@ -124,7 +124,7 @@ local function PrintDebugHelp()
 	print("  /cine debug health - whether your group's health can be read and sorted (run in and out of combat)")
 	print("  /cine debug healthfade [percent] - test window: blocks that show only while someone's below the percent (again to close)")
 	print("  /cine debug damage [seconds] - whether damage taken reaches addons: hit event, damage meter (15 seconds)")
-	print("  /cine debug slots [all] - profile slots and parts: anything with no slot or in the wrong one (in the log; all: also how each shared list is split)")
+	print("  /cine debug modules - profile modules: any writing outside their pages and sections, or two of a profile's setting the same thing (in the log)")
 	print("  /cine debug speech - show a sample line of speech from behind you, and print what happens to each say and yell (again to stop)")
 	print("  /cine debug speakers - log where each speaking NPC's bubble and plate are on screen, and the angle off the middle (again to stop, /reload to save)")
 	print("  /cine debug layoutexport - save the Edit Mode layout you're on as an export string (in the saved settings: /reload after)")
@@ -877,8 +877,8 @@ local function HandleSlash(msg)
 		if ns.PrintTalentLinkDebug then ns.PrintTalentLinkDebug() else ns.Print("talents link not loaded (retail, or TalentLink.lua missing)") end
 	elseif cmd == "debug" and arg == "panels" then
 		ns.PrintPanelsDebug()
-	elseif cmd == "debug" and (arg == "slots" or arg == "slots all") then
-		ns.SlotsDebug(arg == "slots all")
+	elseif cmd == "debug" and (arg == "modules" or arg == "slots") then
+		ns.ModulesDebug()
 	elseif cmd == "debug" and arg == "corpse" then
 		local c = ns.GetCorpseDebug()
 		local function yards(d) return d and ("%.1f yards"):format(d) or "unknown" end

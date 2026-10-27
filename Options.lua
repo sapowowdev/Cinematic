@@ -11,41 +11,70 @@ local controls = {}   -- widgets that mirror a db key, refreshed on show
 -- The settings each page's controls show (page content frame -> key -> true),
 -- for its "Reset page" button.
 local pageKeys = {}
-local function RecordKey(parent, key)
+-- The section of its page each setting (and list row) is in: the header or
+-- section band last put on the page before it (content frame -> its title,
+-- as shown), for the profile modules (ProfileModules.lua).
+-- (fixed: a section whose own headers don't start new ones, a camera's on
+-- the Camera Settings page.)
+local sectionNow, sectionFixed = {}, {}
+local sectionsMet = {} -- (each { frame, title }, in the order they're put on their pages)
+local function SetSection(parent, title, fixed)
+	if parent and type(title) == "string" and title ~= "" and not sectionFixed[parent] then
+		sectionNow[parent] = title
+		sectionFixed[parent] = fixed
+		sectionsMet[#sectionsMet + 1] = { parent, title }
+	end
+end
+local function SectionOf(parent)
+	local frame = parent
+	while frame and not sectionNow[frame] do frame = frame:GetParent() end
+	return frame and sectionNow[frame] or false
+end
+-- (section: its section when it's moved from elsewhere, else the one it's in.)
+local function RecordKey(parent, key, section)
 	if type(key) == "string" then
 		pageKeys[parent] = pageKeys[parent] or {}
-		pageKeys[parent][key] = true
+		if not pageKeys[parent][key] then pageKeys[parent][key] = section or SectionOf(parent) end
 	end
 end
 -- Pages sharing a list (the Standard Frames columns: Standard Frames, Gamepad,
--- Advanced Frames) reset only their own rows of it (page -> list -> row -> true).
+-- Advanced Frames) reset only their own rows of it (page -> list -> row ->
+-- its section, or false).
 local pageRows = {}
-local function RecordRow(parent, key, row)
+local function RecordRow(parent, key, row, section)
 	pageRows[parent] = pageRows[parent] or {}
 	pageRows[parent][key] = pageRows[parent][key] or {}
-	pageRows[parent][key][row] = true
+	if not pageRows[parent][key][row] then pageRows[parent][key][row] = section or SectionOf(parent) end
 end
 -- Every page's settings by the page's name (as registered): { keys = key ->
--- true, rows = list -> row -> true }, a page's sections and panels counted in
--- it. For the profile slots (ProfileSlots.lua). Unnamed: under "?".
+-- section, rows = list -> row -> section, sections = { section... } }, a
+-- page's panels counted in it (section: the title of the part of the page
+-- it's under, as shown, or false above the first; sections: in the order
+-- they're on the page). For the profile modules. Unnamed: under "?".
 function ns.PageSettings()
 	local pages = {}
 	local function Page(content)
 		local frame = content
 		while frame and not frame.pageName do frame = frame:GetParent() end
 		local name = frame and frame.pageName or "?"
-		pages[name] = pages[name] or { keys = {}, rows = {} }
+		pages[name] = pages[name] or { keys = {}, rows = {}, sections = {} }
 		return pages[name]
+	end
+	for _, met in ipairs(sectionsMet) do
+		local sections = Page(met[1]).sections
+		local seen = false
+		for _, title in ipairs(sections) do seen = seen or title == met[2] end
+		if not seen then sections[#sections + 1] = met[2] end
 	end
 	for content, keys in pairs(pageKeys) do
 		local page = Page(content)
-		for key in pairs(keys) do page.keys[key] = true end
+		for key, section in pairs(keys) do page.keys[key] = page.keys[key] or section end
 	end
 	for content, lists in pairs(pageRows) do
 		local page = Page(content)
 		for key, rows in pairs(lists) do
 			page.rows[key] = page.rows[key] or {}
-			for row in pairs(rows) do page.rows[key][row] = true end
+			for row, section in pairs(rows) do page.rows[key][row] = page.rows[key][row] or section end
 		end
 	end
 	return pages
@@ -124,6 +153,7 @@ local function PageIntro(parent, title, text, under)
 end
 
 local function Header(parent, text, anchor, yOffset)
+	SetSection(parent, text)
 	local fs = Label(parent, "GameFontNormal", text)
 	fs:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, yOffset or -18)
 	return fs
@@ -155,6 +185,7 @@ local function Stack(anchor, kind)
 		return control
 	end
 	function stack:Header(parent, text)
+		SetSection(parent, text)
 		return self:Add(Label(parent, "GameFontNormal", text), "header")
 	end
 	-- A note in small text, wrapped to width.
@@ -2135,6 +2166,7 @@ local function CameraSection(name, key)
 	body:SetHeight(1)
 	body:Hide()
 	body.searchAlways = true
+	SetSection(body, name, true)
 
 	-- The name row: click to open or close (the +/- sits in the page margin).
 	local header = CreateFrame("Button", nil, frame)
@@ -4320,6 +4352,7 @@ local function ShowTable(content, anchor, rows, ...)
 	-- One table: a row per frame, a column per situation.
 	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = rows.labelWidth or FRAME_LABEL_WIDTH, FRAME_COLUMN_WIDTH, 24
 	local COLUMNS = FRAME_COLUMNS
+	SetSection(content, (select(2, ...))) -- (its heading: the rows' section)
 	local columnTop = CreateFrame("Frame", nil, content)
 	columnTop:SetSize(1, 1)
 	columnTop:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
@@ -4430,6 +4463,7 @@ end
 -- nameRow.title is its name.
 local BAND_HEIGHT = 26
 local function SectionBand(frame, title, onClick, check)
+	SetSection(frame:GetParent(), title)
 	local nameRow = CreateFrame("Button", nil, frame)
 	nameRow:SetPoint("TOPLEFT", -18, 0)
 	nameRow:SetPoint("TOPRIGHT")
@@ -6375,11 +6409,11 @@ do
 	-- The settings a table recorded on its own frame are the page's (its Reset),
 	-- and its boxes grey while new messages don't show chat at all.
 	local function ToPage(from)
-		for key in pairs(pageKeys[from] or {}) do
-			RecordKey(chatPanel, key)
+		for key, section in pairs(pageKeys[from] or {}) do
+			RecordKey(chatPanel, key, section)
 		end
 		for key, keyRows in pairs(pageRows[from] or {}) do
-			for row in pairs(keyRows) do RecordRow(chatPanel, key, row) end
+			for row, section in pairs(keyRows) do RecordRow(chatPanel, key, row, section) end
 		end
 		pageKeys[from], pageRows[from] = nil, nil
 	end
@@ -10524,13 +10558,13 @@ ns.OnLanguage(function()
 		ns.CreateWhatsNewPanels({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
 	end
-	-- The dev build's own pages, at the very end (ProfileBuilder.lua, Layouts.lua,
+	-- The dev build's own pages, at the very end (ModuleEditor.lua, Layouts.lua,
 	-- and the Style hub's Names page here).
 	if ns.isDev then
 		CreateNameStylePanel()
 	end
-	if ns.isDev and ns.CreateProfileBuilder then
-		ns.CreateProfileBuilder({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
+	if ns.isDev and ns.CreateModuleEditor then
+		ns.CreateModuleEditor({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
 	end
 	if ns.isDev and ns.CreateProfilesDemo then
