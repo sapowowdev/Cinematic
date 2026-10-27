@@ -204,6 +204,7 @@ read_globals = {
 	"MoveViewUpStop",
 	"NO",
 	"NUM_CHAT_WINDOWS",
+	"GetChatWindowInfo",
 	"NumTaxiNodes",
 	"PlayMusic",
 	"PlaySound",

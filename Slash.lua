@@ -90,6 +90,7 @@ local function PrintDebugHelp()
 	print("  /cine debug welcomedemo - the demo of a simpler welcome window: Subtle, Balanced or Full (picking one switches to it)")
 	print("  /cine debug whatsnew - the chat line shown at login after an update, with its What's new link")
 	print("  /cine debug modes - print each camera mode change to chat (again to stop)")
+	print("  /cine debug tab - every log line, as it's logged, in a chat tab named Cinematic (make the tab yourself)")
 	print("  /cine debug emote - the last emote the game passed, and whether cozy or vista took it")
 	print("  /cine debug tent [seen|cozy [left|right]|clear] - whether a Camp Tent's been moused over near here (seen fakes one on that side of the screen, cozy also starts the cozy camera)")
 	print("  /cine debug fishing - the last red error message, and whether it paused right-click casting")
@@ -326,6 +327,8 @@ local function HandleSlash(msg)
 		end
 	elseif cmd == "debug" and arg == "whatsnew" then
 		ns.ShowUpdateNotice(2)
+	elseif cmd == "debug" and arg == "tab" then
+		ns.LiveLogDebug()
 	elseif cmd == "debug" and arg == "modes" then
 		ns.db.debugCameraMode = not ns.db.debugCameraMode
 		ns.ResetCameraModeReport() -- print the current mode straight away

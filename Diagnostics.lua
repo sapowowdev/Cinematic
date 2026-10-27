@@ -25,6 +25,7 @@ local OVERLAPPING = {
 
 local pending = {} -- lines logged before the saved settings load
 local captured -- while a /cine debug command runs: what it prints, for the copy window
+local LiveLine -- (below: each line, as it's logged, to a chat tab named Cinematic)
 
 local GetMetadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 local IsLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
@@ -41,6 +42,7 @@ function ns.Log(category, text)
 		captured[#captured + 1] = Plain(text)
 	end
 	local line = ("%s %s: %s"):format(date("%H:%M:%S"), category, Plain(text))
+	pcall(LiveLine, category, line) -- (a chat window's trouble never stops the log)
 	local log = ns.db and ns.db.log
 	if not log then
 		pending[#pending + 1] = line
@@ -54,6 +56,71 @@ function ns.Log(category, text)
 			kept[#kept + 1] = log[i]
 		end
 		ns.db.log = kept
+	end
+end
+
+-- The live log: with a chat tab named "Cinematic" (made by hand: right-click a
+-- chat tab, Create New Window), every log line also shows there as it's
+-- logged, debug modes or not, for catching a camera mode that's hard to
+-- reproduce. Only a lookup and AddMessage: the addon never makes or changes
+-- chat windows itself (they're Edit Mode frames on retail, easily tainted).
+do
+	local TAB_NAME = "cinematic"
+	local RESCAN = 5 -- seconds between looks for the tab while there's none
+	local COLORS = { ERROR = "ff4040", BLOCKED = "ff4040", safety = "ff8040", warning = "ff8040",
+		state = "e0b050", chat = "909090", session = "60c0ff" }
+	local PALETTE = { "80d080", "80b0ff", "d090ff", "ffb080", "70e0e0", "e0e070", "ff90c0" }
+	local tab, lastScan = nil, -RESCAN
+
+	-- The chat window named Cinematic (open or docked), or nil.
+	local function FindTab()
+		for i = 1, NUM_CHAT_WINDOWS or 10 do
+			local name, _, _, _, _, _, isShown, _, docked = GetChatWindowInfo(i)
+			if type(name) == "string" and name:lower() == TAB_NAME and (isShown or docked) then
+				return _G["ChatFrame" .. i]
+			end
+		end
+	end
+
+	-- Each category keeps one colour (a few fixed, the rest from the palette).
+	local function Color(category)
+		local color = COLORS[category]
+		if not color then
+			local sum = 0
+			for i = 1, #category do sum = sum + category:byte(i) end
+			color = PALETTE[sum % #PALETTE + 1]
+			COLORS[category] = color
+		end
+		return color
+	end
+
+	function LiveLine(category, line)
+		local now = GetTime()
+		if tab then
+			-- (Renamed or closed since: look again.)
+			local name, _, _, _, _, _, isShown, _, docked = GetChatWindowInfo(tab:GetID())
+			if not (type(name) == "string" and name:lower() == TAB_NAME and (isShown or docked)) then
+				tab, lastScan = nil, -RESCAN
+			end
+		end
+		if not tab and now - lastScan >= RESCAN then
+			lastScan = now
+			tab = FindTab()
+		end
+		if not tab then return end
+		local time, rest = line:match("^(%S+) (.*)$")
+		tab:AddMessage(("|cff707070%s|r |cff%s%s|r"):format(time, Color(category), (rest:gsub("|", "||"))))
+	end
+
+	-- /cine debug tab: whether the tab's found, and how to make one.
+	function ns.LiveLogDebug()
+		tab, lastScan = FindTab(), GetTime()
+		if tab then
+			ns.Print(("live log: every log line also goes to the %s chat tab"):format(tab.name or "Cinematic"))
+		else
+			ns.Print("live log: no chat tab named Cinematic. Right-click a chat tab, Create New Window, name it"
+				.. " Cinematic (untick its chat types in Settings if you like): log lines show there from then on")
+		end
 	end
 end
 
