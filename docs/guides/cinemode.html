@@ -130,7 +130,7 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
     <div class="eyebrow">The basics</div>
     <h2>What fades, and what brings it back</h2>
     <p>With CineMode on, the game's frames fade away: action bars, unit frames, the minimap, chat, buffs, the quest tracker and the rest. What's left is the world, with the letterbox bars and the tint over it. A fight brings back the frames you've picked for fights, windows you open (your bags, the spellbook, a vendor) show over it as usual, and typing just shows the chat.</p>
-    <p>Every frame has its own row on the <b>Standard Frames</b> page. Everything there is hidden in CineMode unless you tick it: <b>Always</b> shows a frame the whole time, the fight columns only while you fight or have something targeted, and the places (the open world, cities, inns, dungeons and so on) the whole time you're there. Frames from other addons are on the <b>Advanced Frames</b> page.</p>
+    <p>Every frame has its own row on the <b>Standard Frames</b> page. Everything there is hidden in CineMode unless you tick it: <b>Always</b> shows a frame the whole time; the <b>Combat</b> and <b>Target</b> dropdowns only while you fight, after a fight or with something targeted; and the <b>Location</b> dropdown the whole time you're in a place you tick (the open world, cities, inns, dungeons and so on). <b>Edit</b> turns a row into a rule of its own, for AND, NOT and more. Frames from other addons are on the <b>Advanced Frames</b> page.</p>
     <p class="muted">How fast things go and come back is on the <b>CineMode</b> page: the <b>Fade in time</b> and <b>Fade out time</b> (1.5 seconds each to start with), and a much quicker <b>Combat fade in time</b> so your UI is up the instant a fight starts.</p>
     <p>Want CineMode off for a while? Untick <b>Start in CineMode</b> on Cinematic's main page. The UI then stays as it is and the camera's left to you, with just the visual effects over it.</p>
   </section>
@@ -170,7 +170,7 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
     <div class="cards">
       <div class="card"><h3>Hover</h3><p>Point at a faded frame and it fades in. Hovering one frame can bring up its whole group (see Mouseover groups below).</p></div>
       <div class="card"><h3>Chat</h3><p>Chat pops up when a message arrives in a window you can see. The <b>Chat</b> page picks which message types and channels count.</p></div>
-      <div class="card"><h3>Portrait</h3><p>Your portrait shows while you're recovering after a fight.</p></div>
+      <div class="card"><h3>Portrait</h3><p>Your player frame stays up until your health and power are full again. It's on the Personal Resources page.</p></div>
       <div class="card"><h3>Buffs and debuffs</h3><p>Gaining or refreshing a buff briefly shows your buffs and debuffs (not on flights). The <b>Buffs/debuffs</b> page can limit it to after combat.</p></div>
       <div class="card"><h3>Durability</h3><p>The durability figure shows while your gear is damaged, and can hide in the camera modes. It's on the <b>Quest tracker</b> page.</p></div>
       <div class="card"><h3>Quest tracker</h3><p>The tracker comes up as you make progress or pick up a quest.</p></div>
@@ -190,15 +190,15 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
   <section>
     <div class="eyebrow">Fights</div>
     <h2>Staying cinematic in fights</h2>
-    <p>CineMode stays on through fights, and shows the frames you've picked for them on the Standard Frames page. That's how the profiles differ: Balanced brings your whole UI back for a fight, while Cinema keeps almost all of it away. Each row has its own fight columns:</p>
+    <p>CineMode stays on through fights, and shows the frames you've picked for them on the Standard Frames page. That's how the profiles differ: Balanced brings your UI back for a fight, while Cinema keeps almost all of it away. Each row has its own <b>Combat</b> and <b>Target</b> dropdowns:</p>
     <div class="cards">
-      <div class="card"><h3>In combat</h3><p>Shows while you fight. With <b>In combat rows stay for the Calm Timer</b> on, it stays up after the fight until the Calm Timer runs out.</p></div>
+      <div class="card"><h3>In combat</h3><p>Shows while you fight. Tick <b>Calm Timer</b> in the same dropdown to keep it up after the fight until the Calm Timer runs out, or turn on <b>In combat rows stay for the Calm Timer</b> (off to start with) for every In combat row at once.</p></div>
       <div class="card"><h3>Enemy targeted</h3><p>Shows while you have an enemy targeted. Targeting an enemy only ever shows the frames chosen for it.</p></div>
       <div class="card"><h3>Friend targeted</h3><p>Shows while you have a friendly player or NPC targeted.</p></div>
     </div>
     <p><b>Cast fade into combat</b> brings up your In combat frames as you cast at an enemy out of combat, as if the fight had already started: they fade in over the cast and are fully up as it lands.</p>
     <p>To switch CineMode off for every fight instead, tick <b>Combat</b> under <b>Turn off in</b> on the main page: being in combat then brings the whole UI back.</p>
-    <p class="muted">The letterbox and tint can each stay up or step aside during fights, on the <b>Visual Effects</b> page. Party and raid frames fade part by part (role icons, names, the threat glow), and the cast bar can stay hidden outside fights.</p>
+    <p class="muted">The letterbox, tint, vignette and weather can each stay up or step aside during fights, from the <b>Show in</b> grid on the Visual Effects page. Party and raid frames fade part by part (role icons, names, the threat glow), and the cast bar can stay hidden outside fights.</p>
   </section>
 
   <section>
@@ -221,9 +221,9 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
     <div class="cards">
       <div class="card"><h3>Open world</h3><p>Anywhere outside cities, dungeons and raids (inns too), while you're not PvP flagged. Flights still go cinematic.</p></div>
       <div class="card"><h3>Cities</h3><p>Capital cities, including Dalaran. Flights leaving a city still go cinematic.</p></div>
-      <div class="card"><h3>Dungeons and raids</h3><p>Keep the normal UI in dungeons and scenarios, and in raids.</p></div>
+      <div class="card"><h3>Dungeons, Raids</h3><p>Two boxes: keep the normal UI in dungeons and scenarios, and in raids.</p></div>
       <div class="card"><h3>PvP</h3><p>While you're flagged for PvP, and in battlegrounds and arenas.</p></div>
-      <div class="card"><h3>Party or raid group</h3><p>While you're in a party (but not a raid group), or in a raid group wherever you are.</p></div>
+      <div class="card"><h3>Party, Raid group</h3><p>Two boxes: while you're in a party (but not a raid group), and while you're in a raid group, wherever you are.</p></div>
       <div class="card"><h3>Moving</h3><p>Walking or riding about brings the UI back, say to look for an NPC in a city. <b>Keep VFX on</b> leaves the letterbox and tint up meanwhile. Auto-run, RP walking and flights stay in CineMode.</p></div>
     </div>
     <p class="muted">CineMode comes back once you've stood still, or kept moving, for the <b>Back after</b> time. Each camera can also be turned off by place, on the Camera Modes page: see <a href="cameras.html">The cameras</a>.</p>
@@ -232,7 +232,7 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
   <section>
     <div class="eyebrow">Other addons</div>
     <h2>Add mode: fade anything</h2>
-    <p>Details!, Bartender4, Plater, EllesmereUI, FlareUI, the Cooldown Manager and Forever Enhanced Cooldown Manager are handled out of the box. For anything else, pick the frames yourself:</p>
+    <p>Details!, Bartender4, ElvUI, Plater, EllesmereUI, FlareUI, WeakAuras, Deadly Boss Mods, Questie, RestedXP Guides, Horizon Suite, Naowh Forever, the game's Cooldown Manager, Cooldown Manager Centered and Forever Enhanced Cooldown Manager are handled out of the box, each with rows on the Advanced Frames page. For anything else, pick the frames yourself:</p>
     <ol class="steps">
       <li><div><h3>One frame</h3><p class="muted">Hover over it and type <code>/cine add</code>. Or type <code>/cine add</code> and its frame name.</p></div></li>
       <li><div><h3>Several at once</h3><p class="muted">Type <code>/cine add mode</code> (or press <b>Pick frames by hovering</b> on the Advanced Frames page) and hover over each one. A gold box marks each frame you pick. Click Stop, or type <code>/cine add mode</code> again, to fade them all. <code>/cine add cancel</code> drops them.</p></div></li>
@@ -290,14 +290,14 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
     { name: "A fight starts", q: "You're attacked",
       lines: [["CineMode switches off", "Your whole UI is back for the fight"]],
       ui: ["bars", "unit", "tgt", "map", "chat"], lb: false,
-      stay: { lines: [["CineMode stays on", "The frames ticked In combat fade in, at the quick Combat fade in time"], ["Enemy targeted", "Its frames show too, if you ticked any"], ["Effects", "The letterbox and tint stay or step aside, as the Visual Effects page says"]], ui: ["unit", "tgt"], lb: true } },
+      stay: { lines: [["CineMode stays on", "The frames ticked In combat fade in, at the quick Combat fade in time"], ["Enemy targeted", "Its frames show too, if you ticked any"], ["Effects", "The letterbox and tint stay or step aside, as the Visual Effects page's Show in grid says"]], ui: ["unit", "tgt"], lb: true } },
     { name: "Friend targeted", q: "You click a friendly NPC, out of combat",
       lines: [["Friend targeted frames show", "Only the ones you ticked for it"]],
       ui: ["tgt"], lb: true },
     { name: "After the fight", q: "The last enemy falls",
       lines: [["CineMode comes back", "Your UI fades away again"]],
       ui: ["bars", "unit", "map"], lb: false,
-      stay: { lines: [["The Calm Timer starts", "60 seconds to start with, or less once you're healthy"], ["In combat rows stay", "Until it runs out, then fade at the Fade out time"], ["The cameras wait", "RP walk, auto-run and cozy wait for it too"]], ui: ["unit"], lb: true } },
+      stay: { lines: [["The Calm Timer starts", "60 seconds to start with, or less once you're healthy"], ["Rows ticked Calm Timer stay", "Until it runs out, then fade at the Fade out time"], ["The cameras wait", "RP walk, auto-run and cozy wait for it too"]], ui: ["unit"], lb: true } },
     { name: "In a city", q: "With Cities ticked under Turn off in",
       lines: [["Normal UI", "CineMode stays off while you're there"], ["Flights still go cinematic", "Taking off from a city still goes cinematic"]],
       ui: ["bars", "unit", "map", "chat"], lb: false }

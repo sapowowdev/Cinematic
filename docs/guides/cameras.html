@@ -164,13 +164,13 @@ table.grid tr:last-child td { border-bottom: 0 }
     <h2>Choose what starts what</h2>
     <p>The <b>Camera Triggers</b> page has a row for each event and four columns:</p>
     <div class="cards">
-      <div class="card"><h3>Event</h3><p>Resting at a campfire, <code>/sit</code>, <code>/sleep</code>, <code>/dance</code>, <code>/kneel</code>, a chair, drawing your weapon, your Hearthstone, a teleport, logging out, <code>/stare</code>, Fishing, going AFK, standing still, a flight and a quest giver.</p></div>
+      <div class="card"><h3>Event</h3><p>Resting at a campfire, <code>/sit</code>, the Campfire button (not on retail), <code>/sleep</code>, <code>/dance</code>, <code>/kneel</code>, a chair, drawing your weapon, your Hearthstone, a teleport, logging out, <code>/stare</code>, Fishing, going AFK, standing still, a flight and a quest giver.</p></div>
       <div class="card"><h3>Camera</h3><p>Which camera the event starts, or <b>No camera</b>. The emotes can pick the cozy, vista, fish or AFK camera; a flight only the flight camera or none.</p></div>
       <div class="card"><h3>Music</h3><p>Whether that camera starts music as it starts. See <a href="music.html">Music and sound</a>.</p></div>
       <div class="card"><h3>CineMode</h3><p>Only with <b>Start in CineMode</b> off: the camera brings CineMode on while it runs, and it ends with the camera.</p></div>
     </div>
     <p>When two things happen at once, a Hearthstone or teleport cast comes first, then logging out, going AFK, the latest emote, a drawn weapon, a campfire, and standing still last.</p>
-    <p><b>After standing still for</b> sets how long you stand still before the Stand still row's camera starts (60 seconds to start with). Going AFK with the AFK camera skips the wait. Auto-walking, auto-running and dying have their own rows below, each with its own wait.</p>
+    <p><b>After standing still for</b> sets how long you stand still before the Stand still row's camera starts (60 seconds to start with). Going AFK with the AFK camera skips the wait. Auto-walking, auto-running and dying have rows of their own below; auto-walk and auto-run each have their own wait too.</p>
     <div class="note"><b>A screensaver.</b> Untick <b>Start in CineMode</b> on the main page, then tick the CineMode column for <b>Stand still</b> and <b>Go AFK</b>. You keep the normal UI while you play, and CineMode with the AFK camera takes over once you've been idle a while.</div>
   </section>
 
@@ -187,7 +187,7 @@ table.grid tr:last-child td { border-bottom: 0 }
     <p>Each camera's own settings are on the <b>Camera Settings</b> page: click a camera's name to open them. Most have the same groups: <b>Rotation</b> (how it sways or sweeps), <b>Zoom</b>, <b>Height</b> and <b>Depth of field</b>. Each camera has its own <b>Reset</b>, and a <b>Test</b> button that runs it for 30 seconds where you stand.</p>
     <p>The <b>Camera Modes</b> page has what they share:</p>
     <ol class="steps">
-      <li><div><h3>Runs in</h3><p class="muted">A row per camera saying where it can start: the open world, cities, dungeons, raids, PvP and so on. Anywhere else it doesn't start, and stops if it's running; the UI stays faded with the camera left to you. For flights, Cities means taking off from one. The combat column, <b>Wait for the Calm Timer</b>, holds a camera back until the Calm Timer has run out after a fight.</p></div></li>
+      <li><div><h3>Runs in</h3><p class="muted">A row per camera saying where it can start: the open world, cities, dungeons, raids, PvP and so on. Anywhere else it doesn't start, and stops if it's running; the UI stays faded with the camera left to you. For flights, Cities means taking off from one, and Open World taking off anywhere else. <b>Wait for the Calm Timer</b>, in each row's Combat dropdown, holds a camera back until the Calm Timer has run out after a fight.</p></div></li>
       <li><div><h3>Indoors</h3><p class="muted"><b>Limit the camera indoors</b>: inside buildings and caves the cameras zoom out less and swing less, so the camera doesn't keep pushing into walls and ceilings. You set how far they may zoom out and swing, and <b>No AFK camera sweep indoors</b> keeps the AFK camera from sweeping right round you in tight rooms.</p></div></li>
       <li><div><h3>Depth of field</h3><p class="muted">Each camera's <b>Edge haze</b> slider adds a soft haze around the edges of the screen, as if the camera had focused on you. It needs <b>Depth of field</b> on the Visual Effects page. The Tele Cam uses the Cozy Cam's.</p></div></li>
     </ol>

@@ -135,12 +135,11 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
         <div class="name">Balanced</div>
         <p class="line">Clears your screen between fights.</p>
         <p class="muted">The clutter clears between fights: your UI fades away for the letterbox and tint, and comes straight back for a fight, a window or a look with the mouse. The camera takes over now and then: on flights, when you go AFK, and for your Hearthstone and teleports.</p>
-        <span class="tag">Where new players start</span>
       </article>
       <article class="level">
         <div class="meter" aria-label="3 of 3"><i class="on"></i><i class="on"></i><i class="on"></i></div>
         <div class="name">Cinema</div>
-        <p class="line">Just the world, like a film. Every camera.</p>
+        <p class="line">Full immersion: just you and the world.</p>
         <p class="muted">The game's UI stays away even in fights, and Cinematic shows what you need its own way: your health at the screen's edges, an arrow over your target, your resources and the Cooldown Manager in fights. The letterbox stays up, and the camera comes alive on flights, by campfires, at vistas and more.</p>
       </article>
     </div>
@@ -149,8 +148,8 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
   <section>
     <div class="eyebrow">Step two</div>
     <h2>Customize, one area at a time</h2>
-    <p>Press <b>Customize</b> in the welcome window. Your setup is split into six areas. Each asks one question, and picking an answer changes only that area. Everything else stays as your level set it, and each change shows in the game straight away.</p>
-    <p class="muted">Pick an area below to see its choices. A gold tag marks the choice a level uses. Some choices exist on only one version of the game, so pick yours.</p>
+    <p>Press <b>Customize</b> in the welcome window to change one part of your level. Your setup is split into seven areas, and each asks one question: picking an answer changes only that area. Everything else stays as your level set it, and each change shows in the game straight away. An eighth page, <b>Visions</b>, turns each <a href="visions.html">vision</a> on or off.</p>
+    <p class="muted">Pick an area below to see its choices, in the order Customize lists them. A gold tag marks the choice a level uses. Some choices exist on only one version of the game, so pick yours.</p>
 
     <div class="win" id="cust">
       <div class="win-top">
@@ -200,7 +199,7 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
       <div><dt>Will it move my action bars and menus?</dt><dd>Only through the Layout area. Pick <b>Your own</b> there and Cinematic leaves your Edit Mode layout exactly as it is.</dd></div>
       <div><dt>Can I change a single setting instead?</dt><dd>Yes. Press <b>Settings</b> in the welcome window, or open Cinematic in the game's AddOns options. Every page there works as before, and your changes go into your own profile.</dd></div>
       <div><dt>How do I stop Cinematic for now?</dt><dd>Press <b>Turn off</b> in the welcome window. It stays off until you pick a level or press Turn on.</dd></div>
-      <div><dt>I used Default, CDM, Lite or another older profile. What happened to it?</dt><dd>Older profiles that are no longer offered became a profile of your own at login, with your settings as they were. Lite is now called Balanced, and Pure Cinema is now Cinema.</dd></div>
+      <div><dt>I used Default, CDM, Lite or another older profile. What happened to it?</dt><dd>Older profiles that are no longer offered (Default, CDM, Retail, Forever, Camera Only and Solo Explorer) became a profile of your own at login, with your settings as they were. Three were only renamed: VFX Only is now Subtle, Lite is now Balanced, and Pure Cinema is now Cinema.</dd></div>
     </dl>
   </section>
 
@@ -210,43 +209,51 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
 <script>
 (function () {
   // The areas and choices as players see them in Customize. levels: the levels that use the choice, per game version.
+  // (In Customize's order. A level with no pick of its own has the area's starting choice; on WoW Forever that's All together for the bars.)
+  var ALL = ["Subtle", "Balanced", "Cinema"];
   var AREAS = [
-    { name: "Layout", q: "Where should your bars and menus sit?", choices: [
-      { l: "WoW Forever's", d: "The game's own layout", only: "forever", levels: { forever: ["Subtle", "Balanced", "Cinema"] } },
-      { l: "Like retail", d: "Action bars centered along the bottom, menus in the corner", only: "forever" },
-      { l: "Resources in the middle", d: "Your resource display in the middle, the Cooldown Manager above it", only: "retail", levels: { retail: ["Cinema"] } },
-      { l: "Your own", d: "Cinematic leaves your Edit Mode layout as it is", levels: { retail: ["Subtle", "Balanced"] } } ] },
     { name: "Interface", q: "When does your UI fade?", choices: [
-      { l: "Softly", d: "Between fights, with the minimap and group plates as usual", levels: { both: ["Balanced"] } },
       { l: "Between fights", d: "Fights and opening windows bring it back" },
       { l: "Only when solo", d: "Out in the world on your own; normal in groups" },
       { l: "Almost always", d: "As little UI as possible, even in fights", levels: { both: ["Cinema"] } },
-      { l: "Never", d: "Your UI stays as the game has it", levels: { both: ["Subtle"] } } ] },
+      { l: "Never", d: "Your UI stays as the game has it", levels: { both: ["Subtle"] } },
+      { l: "Softly", d: "Between fights, with the minimap and group plates as usual", levels: { both: ["Balanced"] } } ] },
     { name: "Action bars", q: "How do your action bars come back?", choices: [
       { l: "All together", d: "Point at one and the bars, menus and XP bar come up", levels: { forever: ["Subtle", "Balanced"] } },
       { l: "Each on its own", d: "Point at the bars, the menus or the XP bar" },
-      { l: "Retail's own", d: "Each on its own, the micro menu up in fights", only: "retail", levels: { retail: ["Subtle", "Balanced"] } },
-      { l: "Cooldown Manager", d: "The Cooldown Manager shows in fights instead" },
-      { l: "Not in fights", d: "No bars in fights or with an enemy targeted", levels: { both: ["Cinema"] } } ] },
+      { l: "Cooldown Manager", d: "The Cooldown Manager in fights, pet and stance bars too" },
+      { l: "Cooldown Manager only", d: "In fights just the Cooldown Manager: no bars or menus", levels: { both: ["Cinema"] } },
+      { l: "Retail's own", d: "Each on its own, the micro menu up in fights", only: "retail", levels: { retail: ["Subtle", "Balanced"] } } ] },
+    { name: "Layout", q: "Where should your bars and menus sit?", choices: [
+      { l: "Your own", d: "Cinematic leaves your Edit Mode layout as it is", levels: { retail: ["Subtle", "Balanced"] } },
+      { l: "WoW Forever's", d: "The game's own layout", only: "forever", levels: { forever: ALL } },
+      { l: "Like retail", d: "Action bars centered along the bottom, menus in the corner. Cinematic makes it for you", only: "forever" },
+      { l: "Resources in the middle", d: "Your resources in the middle, the Cooldown Manager above. Cinematic makes it for you", only: "retail", levels: { retail: ["Cinema"] } } ] },
     { name: "Camera", q: "When does the camera move on its own?", choices: [
-      { l: "Every camera", d: "Every camera, as the defaults have them" },
+      { l: "All the time", d: "Every camera, standing still too, and none waits after a fight", levels: { both: ["Cinema"] } },
       { l: "Often", d: "Flights, campfires, vistas, fishing, quests, going AFK and more" },
       { l: "Sometimes", d: "Flights, going AFK, and your Hearthstone and teleports", levels: { both: ["Balanced"] } },
-      { l: "Never", d: "The camera is all yours" },
-      { l: "Cameras bring CineMode", d: "Every camera brings CineMode on, and can start music" },
-      { l: "Always ready", d: "Standing still starts the AFK camera, and the cameras don't wait after a fight", levels: { both: ["Cinema"] } } ] },
+      { l: "Never", d: "The camera is all yours", levels: { both: ["Subtle"] } } ] },
     { name: "Look", q: "How should the world look?", choices: [
       { l: "Letterbox and tint", d: "Bars top and bottom, a color tint, vignette and weather", levels: { both: ["Balanced"] } },
       { l: "Tint only", d: "The tint, vignette and weather, no letterbox", levels: { both: ["Subtle"] } },
       { l: "During cameras", d: "The effects only while a camera mode runs" },
       { l: "Through fights", d: "Fights don't bring the letterbox down", levels: { both: ["Cinema"] } } ] },
-    { name: "Sound and chat", q: "How much music and chatter?", choices: [
-      { l: "As the game has it", d: "Music on cameras, NPC chat as usual" },
-      { l: "Quieter", d: "Less NPC chatter, music spaced out" },
-      { l: "Quieter chat", d: "Less NPC chatter, chat only for General and Trade", levels: { both: ["Balanced"] } },
-      { l: "No music", d: "No music in CineMode", levels: { both: ["Subtle"] } },
+    { name: "Visions", q: "Which Visions do you want?", ticks: true, choices: [
+      { l: "Heal Vision", d: "Party and raid frames show only who needs healing", levels: { both: ALL } },
+      { l: "Quest Vision", d: "Quest mobs keep their nameplates, with a quest mark", levels: { both: ALL } },
+      { l: "Duel Vision", d: "Watch duels near you: the duelists' health shows", levels: { both: ALL } },
+      { l: "Roll Vision", d: "Group loot rolls in a window: who picked what", levels: { both: ALL } },
+      { l: "Vitals Vision", d: "The screen's edges close in as your health drops", levels: { both: ["Cinema"] } } ] },
+    { name: "Chat", q: "How much chatter?", choices: [
+      { l: "As the game has it", d: "NPC speech and every channel as usual", levels: { both: ["Subtle"] } },
       { l: "No NPC chatter", d: "Chat doesn't peek for NPC speech" },
-      { l: "Quietest", d: "No General or LocalDefense chat, speech from behind you low on the screen", levels: { both: ["Cinema"] } } ] }
+      { l: "Quieter chat", d: "No NPC chatter, and only General and Trade", levels: { both: ["Balanced"] } },
+      { l: "Quietest", d: "No General or LocalDefense chat, speech from behind you low on the screen", levels: { both: ["Cinema"] } } ] },
+    { name: "Sound", q: "How much music?", choices: [
+      { l: "Music on cameras", d: "A camera can bring music in, as the defaults have it", levels: { both: ["Balanced", "Cinema"] } },
+      { l: "Spaced out", d: "Music on cameras, with half a minute between starts" },
+      { l: "No music", d: "No music in CineMode", levels: { both: ["Subtle"] } } ] }
   ];
   var state = { client: "forever", area: 0 };
   try { var saved = localStorage.getItem("cine-guide-client"); if (saved === "retail" || saved === "forever") state.client = saved; } catch (e) { /* none */ }
@@ -285,8 +292,9 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
       }
       choicesEl.appendChild(li);
     });
-    document.getElementById("foot").textContent = shown + " choices on " +
-      (state.client === "forever" ? "WoW Forever" : "Retail") + ". Picking one changes only this area.";
+    document.getElementById("foot").textContent = area.ticks
+      ? "Each vision is ticked on or off on its own. A gold tag marks the levels that turn it on."
+      : shown + " choices on " + (state.client === "forever" ? "WoW Forever" : "Retail") + ". Picking one changes only this area.";
   }
 
   document.querySelectorAll(".seg button").forEach(function (b) {

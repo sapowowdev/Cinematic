@@ -183,7 +183,7 @@ table.t { width: 100%; border-collapse: collapse; font-size: 15.5px }
       </article>
       <article class="g">
         <div class="name">Friendly Plates in Dungeons and Raids</div>
-        <p class="muted">In dungeons and raids the game won't let addons fade friendly nameplates, so each kind (players, pets and minions, NPCs) is either all on or all off there: <b>Hidden</b>, <b>Shown</b>, or <b>With a friendly target</b> (on while you have one of that kind targeted, out of fights; every plate of that kind shows then, not just your target's). The game won't switch nameplates on or off during a fight: they stay as the fight found them.</p>
+        <p class="muted">In dungeons and raids the game won't let addons fade friendly nameplates, so each kind (players, pets and minions, NPCs) is either all on or all off there: <b>Hidden</b> or <b>Shown</b>, and for players and NPCs also <b>With a friendly target</b> (on while you have one of that kind targeted, out of fights; every plate of that kind shows then, not just your target's). Friendly players' setting covers their pets too, so with pets shown, friendly players' plates show as well. The game won't switch nameplates on or off during a fight: they stay as the fight found them.</p>
         <p class="muted">To start with, friendly players and NPCs show with one targeted, and pets never.</p>
       </article>
       <article class="g">
@@ -208,7 +208,7 @@ table.t { width: 100%; border-collapse: collapse; font-size: 15.5px }
       </article>
       <article class="g">
         <div class="name">Names</div>
-        <ul class="chips"><li>My Name</li><li>Hostile NPCs</li><li>Neutral NPCs</li><li>Friendly NPCs</li><li>Critters and Companions</li><li>Friendly Players</li><li>Minions</li><li>Enemy Players</li><li>Minions</li><li>Guild Names</li><li>Target</li><li>Raid Marker</li></ul>
+        <ul class="chips"><li>My Name</li><li>Hostile NPCs</li><li>Neutral NPCs</li><li>Friendly NPCs</li><li>Critters and Companions</li><li>Friendly Players</li><li>Minions</li><li>Enemy Players</li><li>Minions</li><li>Guild Names</li><li>Raid Marker</li></ul>
         <p class="muted">Names over heads, for units without a plate showing. Ticking any box turns those names on in the game's options; ticking none turns them off. <b>Raid Marker</b> keeps skulls and moons over their units as their plates fade, so your group can still see what's marked.</p>
       </article>
       <article class="g">
@@ -313,7 +313,7 @@ table.t { width: 100%; border-collapse: collapse; font-size: 15.5px }
       why: "In dungeons and raids the game won't let addons fade friendly plates one by one, so this setting, all on or all off for " +
         (u.pet ? "pets and minions" : u.id === "friendnpc" ? "friendly NPCs" : "friendly players") + ", takes the grids' place." +
         (u.target ? " That goes for your friendly target's plate too." : ""),
-      more: ["Hidden, Shown, or With a friendly target (on while you have one of that kind targeted, out of fights).",
+      more: [u.pet ? "Hidden or Shown. (Showing pets shows friendly players' plates too.)" : "Hidden, Shown, or With a friendly target (on while you have one of that kind targeted, out of fights).",
         state.fight ? "In a fight nothing switches: plates stay as the fight found them." : "Changes wait until you're out of combat."] };
     if (u.target) return { who: "Target Nameplate grid: " + u.row,
       why: "Your target's own plate, by what it is, whatever the other grids say. It starts with Always ticked, so it's up here.",
