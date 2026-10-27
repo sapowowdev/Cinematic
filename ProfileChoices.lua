@@ -60,10 +60,6 @@ ns.SLOT_CHOICES = {
 		default = "standard", choices = {
 		{ part = "immersive", label = "Between fights", line = "Fights and opening windows bring it back",
 			modules = { "recovering", "minimap-off-in-fights", "fewer-group-plates" } },
-		-- (The same settings as Between fights since the CDM part's own frames
-		-- turned out no different: give it modules of its own, or drop it.)
-		{ part = "cdm", label = "Frames in fights", line = "Between fights; your frames and buffs show in fights",
-			modules = { "recovering", "minimap-off-in-fights", "fewer-group-plates" } },
 		{ part = "solo", label = "Only when solo", line = "Out in the world on your own; normal in groups",
 			modules = { "recovering", "solo-only" } },
 		{ part = "pure", label = "Almost always", line = "As little UI as possible, even in fights",
@@ -165,7 +161,7 @@ ns.BUILTIN_PROFILES = {
 		tip = L["Default, with the Cooldown Manager in place of action bars 1 to 3, the micro menu and the " ..
 			"XP bar in fights and with an enemy targeted. After a fight it stays up until its cooldowns are ready."],
 		from = "Forever Default",
-		picks = { frames = "cdm", bars = "cdm" },
+		picks = { bars = "cdm" },
 		preview = "cooldowns",
 	},
 	{
@@ -204,7 +200,7 @@ ns.BUILTIN_PROFILES = {
 		tip = L["Default, with the Cooldown Manager in place of action bars 1 to 3, the micro menu and the " ..
 			"XP bar in fights and with an enemy targeted. After a fight it stays up until its cooldowns are ready."],
 		from = "Retail Default",
-		picks = { frames = "cdm", bars = "cdm" },
+		picks = { bars = "cdm" },
 		preview = "cooldowns",
 	},
 	{
