@@ -563,8 +563,9 @@ local function PageShown(refresh, content)
 		local refreshed = debugprofilestop()
 		FitContentHeight(content)
 		local fitted = debugprofilestop()
-		-- (Dev copy: a line in chat when a page is slow to open, to find why.)
-		if ns.isDev and fitted - started > 30 then
+		-- (Dev copy: a line in chat when a page is slow to open, to find why.
+		-- Off for now; set ns.pageTimingLog = true to bring it back.)
+		if ns.isDev and ns.pageTimingLog and fitted - started > 30 then
 			local timing, slow = ns.pageTiming, {}
 			for _, each in ipairs(timing and timing.slowest or {}) do
 				slow[#slow + 1] = ("%s %.0f"):format(each[2], each[1])
