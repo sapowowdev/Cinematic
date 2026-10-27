@@ -1199,7 +1199,6 @@ do
 			{ "Tint", "Interface\\Icons\\INV_Misc_Gem_Variety_02" },
 			{ "Graphics+", "Interface\\Icons\\INV_Misc_Gem_Pearl_04" },
 		} },
-		-- (The Names page: the dev copy's only.)
 		{ name = "Style", pages = {
 			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names" },
 			{ "Target Indicator", "Interface\\Icons\\Ability_Marksmanship" },
@@ -5893,7 +5892,8 @@ local function CreatePlatesPanel()
 		"own names away from over the heads of units with a plate. So where a name is kept up over a faded " ..
 		"plate, Cinematic draws it on the plate itself, made to look like the game's names: colored, and " ..
 		"smaller further off. Beyond nameplate range the game's own names show, so a name can " ..
-		"change a little in size or place as its unit crosses that range."]
+		"change a little in size or place as its unit crosses that range."] ..
+		L[" Their look: the Style hub's Names page."]
 	Tooltip(namesNote, namesNoteText)
 	namesNote.searchNote = namesNoteText
 	namesNote.searchEdges = { top = namesHeader, bottom = namesHeader, left = namesHeader, right = namesNote }
@@ -6012,13 +6012,12 @@ local function CreatePlatesPanel()
 	RegisterSubpage(canvas, "Nameplates")
 end
 
--- Dev build's page: how names look on nameplates showing just the name
--- (CineMode), with a preview of them at the top, to tune the defaults
--- (Core's DEFAULTS) players get. PlateParts draws them.
+-- The Style hub's Names page: how names look on nameplates showing just the
+-- name (CineMode), with a preview of them at the top. PlateParts draws them.
 local function CreateNameStylePanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "|cffff4040DEV ONLY|r Names")
+	local title = Label(content, "GameFontNormalLarge", L["Names"])
 	title:SetPoint("TOPLEFT", 16, -16)
 	local subtitle = PageIntro(content, title,
 		L["How names look on nameplates showing just the name: in CineMode, away from dungeons and raids, " ..
@@ -6213,7 +6212,7 @@ local function CreateNameStylePanel()
 	local OUTLINE_NAMES = { [0] = L["None"], L["Thin"], L["Thick"] }
 	StyleSlider("plateNameOutline", L["Outline"], 0, 2, 1,
 		function(value) return OUTLINE_NAMES[value] or "" end, 1,
-		L["A black border round the letters. The game's names over heads have none."])
+		L["A black border around the letters. The game's names over heads have none."])
 	StyleSlider("plateNameAlpha", L["Opacity"], 20, 100, 5, "%d%%", 100,
 		L["How see-through the names are, on top of their fades."])
 	if ns.isRetail then
@@ -10652,7 +10651,8 @@ ns.OnLanguage(function()
 	CreateEffectsPanel()
 	CreateTintPanel()
 	CreateGraphicsPanel()
-	-- (its hub, Style, listed after Visual Effects)
+	-- (their hub, Style, listed after Visual Effects)
+	CreateNameStylePanel()
 	CreateTargetArrowPanel()
 	CreateAudioPanel()
 	CreateCameraPanel()
@@ -10665,11 +10665,7 @@ ns.OnLanguage(function()
 		ns.CreateWhatsNewPanels({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
 	end
-	-- The dev build's own pages, at the very end (ModuleEditor.lua, Layouts.lua,
-	-- and the Style hub's Names page here).
-	if ns.isDev then
-		CreateNameStylePanel()
-	end
+	-- The dev build's own pages, at the very end (ModuleEditor.lua, Layouts.lua).
 	if ns.isDev and ns.CreateModuleEditor then
 		ns.CreateModuleEditor({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })

@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-27", page = "Name Style", title = "Name styles",
+		text = "The names Cinematic draws on faded nameplates in CineMode have a page of their own: their " ..
+		"colors, outline, opacity, size and height, with presets and a preview." },
 	{ date = "2026-10-27", page = "Profiles", title = "A new welcome window",
 		text = "Pick how much Cinematic does, Subtle, Balanced or Cinema, then Customize changes one part " ..
 		"at a time: your layout, camera, look, Visions, chat and sound." },

@@ -1993,6 +1993,7 @@ L["This Edit Mode layout's action bars come on or off after a reload. Reload now
 
 -- Options.lua: the Name Style page (and its tick on the Nameplates page)
 L["In CineMode, away from dungeons and raids, nameplates stay on (just faded), and the game takes its own names away from over the heads of units with a plate. So where a name is kept up over a faded plate, Cinematic draws it on the plate itself, made to look like the game's names: colored, and smaller further off. Beyond nameplate range the game's own names show, so a name can change a little in size or place as its unit crosses that range."] = "En CineMode, fuera de mazmorras y bandas, las placas de nombre siguen activas (solo desvanecidas), y el juego quita sus propios nombres de encima de las cabezas de las unidades con placa. Así que donde se mantiene un nombre sobre una placa desvanecida, Cinematic lo dibuja en la propia placa, hecho para parecerse a los nombres del juego: con color y más pequeño a lo lejos. Más allá del alcance de las placas se ven los nombres propios del juego, así que un nombre puede cambiar un poco de tamaño o de sitio cuando su unidad cruza ese alcance."
+L[" Their look: the Style hub's Names page."] = " Su aspecto: la página Nombres del grupo Estilo."
 L["Style names like the game's"] = "Nombres con el estilo del juego"
 L["In CineMode a name kept up over a faded nameplate is drawn by the nameplate, not by the game's names over heads. Ticked, it looks like those: red, yellow or green by how the unit sees you, with a soft shadow, and smaller further off. Unticked, it's as the nameplate draws it: white or gray for every unit, with a heavy black outline, growing and shrinking with distance."] = "En CineMode, el nombre que se mantiene sobre una placa de nombre desvanecida lo dibuja la placa, no los nombres del juego sobre las cabezas. Marcado, se ve como estos: rojo, amarillo o verde según cómo te ve la unidad, con una sombra suave y más pequeño a lo lejos. Sin marcar, se ve como lo dibuja la placa: blanco o gris para todas las unidades, con un contorno negro grueso, creciendo y encogiendo con la distancia."
 L["Adjust..."] = "Ajustar..."
@@ -2033,7 +2034,7 @@ L["Thick"] = "Grueso"
 L["Size"] = "Tamaño"
 L["How big the names are, next to the plates' own."] = "Qué tamaño tienen los nombres, comparados con los de las placas."
 L["Outline"] = "Contorno"
-L["A black border round the letters. The game's names over heads have none."] = "Un borde negro alrededor de las letras. Los nombres del juego sobre las cabezas no lo tienen."
+L["A black border around the letters. The game's names over heads have none."] = "Un borde negro alrededor de las letras. Los nombres del juego sobre las cabezas no lo tienen."
 L["Opacity"] = "Opacidad"
 L["How see-through the names are, on top of their fades."] = "Cuánto se transparentan los nombres, además de sus desvanecimientos."
 L["Same size at any distance"] = "Mismo tamaño a cualquier distancia"
@@ -2788,3 +2789,7 @@ L["Cinematic makes it for you"] = "Cinematic la crea por ti"
 -- What's new: welcome window
 L["A new welcome window"] = "Una nueva ventana de bienvenida"
 L["Pick how much Cinematic does, Subtle, Balanced or Cinema, then Customize changes one part at a time: your layout, camera, look, Visions, chat and sound."] = "Elige cuánto hace Cinematic, Discreto, Equilibrado o Cine, y luego Personalizar cambia una parte cada vez: tu disposición, cámara, aspecto, Visiones, chat y sonido."
+
+-- What's new: Name styles
+L["Name styles"] = "Estilos de nombre"
+L["The names Cinematic draws on faded nameplates in CineMode have a page of their own: their colors, outline, opacity, size and height, with presets and a preview."] = "Los nombres que Cinematic dibuja en las placas atenuadas en el modo Cine tienen su propia página: sus colores, contorno, opacidad, tamaño y altura, con estilos predefinidos y una vista previa."
