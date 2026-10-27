@@ -2,7 +2,7 @@
 -- the game's nameplates (health bar, name, cast bar, auras...) shows as its
 -- row says, fading like the plates themselves. Outside CineMode, or with the
 -- page's master switch off, the parts are left to the game.
-local _, ns = ...
+local ADDON_NAME, ns = ...
 
 -- Each part's frame on a plate's unit frame: the first of these it has, or
 -- (all) every one of them, for parts drawn by several textures. The
@@ -942,11 +942,199 @@ function RefreshQuestIcon(plate)
 	end
 end
 
+-- The Target Arrow row: a mark on your target's plate, for when no target
+-- frame shows what you've targeted (Pure Cinema). Shown like the class
+-- icons, but not faded with the plate: one faded right out, or showing just
+-- its name, still has it. It hides with the plate. Its look is the Style
+-- hub's Target Arrow page's: an arrow or chevron over the plate (clear of
+-- the name), a glow behind its health bar, or brackets either side of it;
+-- colored, sized, raised and moving as that page says.
+-- (Media/make_target_arrow.py and make_target_marks.py)
+local ARROW_ART = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\"
+local ARROW_OVER = { arrow = "TargetArrow", chevron = "TargetChevron" }
+local GOLD = { 1, 0.82, 0 }
+local arrows = {} -- [plate] = arrow frame
+
+-- An arrow setting (the Target Arrow page's, see Core's DEFAULTS).
+local function ArrowSetting(key)
+	return Style("targetArrow" .. key)
+end
+
+-- Red, yellow or green by how a unit sees you (hostile: no unit, the preview).
+local function ReactionColour(unit)
+	local ok, reaction = pcall(UnitReaction, unit or "", "player")
+	reaction = ok and Known(reaction) and type(reaction) == "number" and reaction or 2
+	if reaction >= 5 then
+		return 0, 1, 0
+	elseif reaction == 4 then
+		return 1, 1, 0
+	end
+	return 1, 0.1, 0.1
+end
+
+-- The arrow's colour for a unit (nil: the preview's, a hostile NPC).
+local function ArrowColour(unit)
+	local how = ArrowSetting("Color")
+	if how == "custom" then
+		return ArrowSetting("R"), ArrowSetting("G"), ArrowSetting("B")
+	elseif how == "class" and unit then
+		-- (By GUID: Forever's UnitIsPlayer can say no for a player.)
+		local okGuid, guid = pcall(UnitGUID, unit)
+		local ok, _, class = pcall(UnitClass, unit)
+		local colour = okGuid and Known(guid) and type(guid) == "string" and guid:find("^Player%-")
+			and ok and Known(class) and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+		if colour then
+			return colour.r, colour.g, colour.b
+		end
+	end
+	if how == "reaction" or how == "class" then
+		return ReactionColour(unit)
+	end
+	return unpack(GOLD)
+end
+
+-- A looping move (or, no x or y, a pulse) on one of an arrow's pieces.
+local function Bob(piece, x, y)
+	local group = piece:CreateAnimationGroup()
+	group:SetLooping("BOUNCE")
+	local anim = group:CreateAnimation(x and "Translation" or "Alpha")
+	if not x then
+		anim:SetFromAlpha(1)
+		anim:SetToAlpha(0.55)
+	end
+	anim:SetDuration(0.6)
+	anim:SetSmoothing("IN_OUT")
+	group.anim, group.x, group.y = anim, x, y
+	return group
+end
+
+-- Makes a target arrow on a frame, over bar (a plate's health bar, or the
+-- page's preview's): its pieces for every style, styled by StyleArrow.
+local function MakeArrow(parent, bar)
+	local arrow = CreateFrame("Frame", nil, parent)
+	arrow:SetAllPoints(bar)
+	arrow:SetFrameLevel((bar.GetFrameLevel and bar:GetFrameLevel() or 0) + 5)
+	arrow.over = arrow:CreateTexture(nil, "OVERLAY")
+	-- (The glow behind the bar, on a frame of its own below it.)
+	arrow.glowFrame = CreateFrame("Frame", nil, arrow)
+	arrow.glowFrame:SetAllPoints()
+	arrow.glowFrame:SetFrameLevel(math.max(0, arrow:GetFrameLevel() - 6))
+	arrow.glow = arrow.glowFrame:CreateTexture(nil, "BACKGROUND")
+	arrow.glow:SetTexture(ARROW_ART .. "TargetGlow")
+	arrow.left = arrow:CreateTexture(nil, "OVERLAY")
+	arrow.right = arrow:CreateTexture(nil, "OVERLAY")
+	for _, side in ipairs({ arrow.left, arrow.right }) do
+		side:SetTexture(ARROW_ART .. "TargetBracket")
+	end
+	arrow.right:SetTexCoord(1, 0, 0, 1)
+	arrow.bobs = { Bob(arrow.over, 0, 1), Bob(arrow.glow), Bob(arrow.left, 1, 0), Bob(arrow.right, -1, 0) }
+	return arrow
+end
+
+-- Gives an arrow its look for a unit, as the Target Arrow page says.
+local function StyleArrow(arrow, unit)
+	local style, size = ArrowSetting("Style"), ArrowSetting("Size")
+	local r, g, b = ArrowColour(unit)
+	local over = ARROW_OVER[style]
+	arrow.over:SetShown(over ~= nil)
+	if over then
+		arrow.over:SetTexture(ARROW_ART .. over)
+		arrow.over:SetSize(20 * size, 20 * size)
+		arrow.over:ClearAllPoints()
+		arrow.over:SetPoint("BOTTOM", arrow, "TOP", 0, 18 + ArrowSetting("Y"))
+	end
+	arrow.glow:SetShown(style == "glow")
+	arrow.glow:ClearAllPoints()
+	arrow.glow:SetPoint("TOPLEFT", arrow, "TOPLEFT", -24 * size, 14 * size)
+	arrow.glow:SetPoint("BOTTOMRIGHT", arrow, "BOTTOMRIGHT", 24 * size, -14 * size)
+	arrow.left:SetShown(style == "brackets")
+	arrow.right:SetShown(style == "brackets")
+	arrow.left:ClearAllPoints()
+	arrow.left:SetPoint("RIGHT", arrow, "LEFT", -3, 0)
+	arrow.right:ClearAllPoints()
+	arrow.right:SetPoint("LEFT", arrow, "RIGHT", 3, 0)
+	for _, piece in ipairs({ arrow.over, arrow.glow, arrow.left, arrow.right }) do
+		piece:SetVertexColor(r, g, b)
+	end
+	arrow.left:SetSize(11 * size, 24 * size)
+	arrow.right:SetSize(11 * size, 24 * size)
+	-- Moving: the arrow and chevron bob, the brackets close in, the glow pulses.
+	local moving = ArrowSetting("Bob")
+	for _, bob in ipairs(arrow.bobs) do
+		if bob.x then
+			bob.anim:SetOffset(bob.x * 3 * size, bob.y * 4 * size)
+		end
+		if moving and not bob:IsPlaying() then
+			bob:Play()
+		elseif not moving and bob:IsPlaying() then
+			bob:Stop()
+		end
+	end
+	arrow.styled = true
+end
+
+-- For the Target Arrow page's preview.
+function ns.MakeTargetArrow(parent, bar)
+	return MakeArrow(parent, bar)
+end
+ns.StyleTargetArrow = StyleArrow
+
+local function TargetArrow(plate)
+	local arrow = arrows[plate]
+	local unitFrame = plate.UnitFrame
+	if arrow or not Usable(unitFrame) then
+		return arrow
+	end
+	arrow = MakeArrow(unitFrame, unitFrame.HealthBarsContainer or unitFrame.healthBar or unitFrame)
+	arrow:SetIgnoreParentAlpha(true)
+	arrows[plate] = arrow
+	return arrow
+end
+
+-- Shows or hides a plate's arrow as its row says, on your target's alone.
+local function RefreshTargetArrow(plate)
+	if not plate or (plate.IsForbidden and plate:IsForbidden()) then
+		return
+	end
+	local level = plate ~= PersonalPlate() and levels.TargetArrow or 0
+	if level > 0 then
+		local ok, targetPlate = pcall(C_NamePlate.GetNamePlateForUnit, "target")
+		if not (ok and targetPlate == plate) then
+			level = 0
+		end
+	end
+	local arrow = arrows[plate]
+	if level <= 0 then
+		if arrow then
+			arrow:Hide()
+			arrow.styled = false -- (styled again for its next unit)
+		end
+		return
+	end
+	arrow = TargetArrow(plate)
+	if arrow then
+		if not arrow.styled then
+			StyleArrow(arrow, plate.namePlateUnitToken or plate.UnitFrame.unit)
+		end
+		arrow:SetAlpha(level)
+		arrow:Show()
+	end
+end
+
+-- After a change on the Target Arrow page: the arrows styled anew.
+function ns.RefreshTargetArrows()
+	for plate, arrow in pairs(arrows) do
+		arrow.styled = false
+		RefreshTargetArrow(plate)
+	end
+end
+
 -- A plate's icons (the role icon goes by where the class icon is).
 function ns.RefreshClassIcon(plate)
 	RefreshClass(plate)
 	RefreshRoleIcon(plate)
 	RefreshQuestIcon(plate)
+	RefreshTargetArrow(plate)
 end
 
 local function RefreshClassIcons()
@@ -974,6 +1162,7 @@ watcher:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 watcher:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 watcher:RegisterEvent("UNIT_FACTION")
 watcher:RegisterEvent("GROUP_ROSTER_UPDATE")
+watcher:RegisterEvent("PLAYER_TARGET_CHANGED")
 pcall(watcher.RegisterEvent, watcher, "PLAYER_ROLES_ASSIGNED") -- (not every client has it)
 watcher:SetScript("OnEvent", function(_, event, unit)
 	if not (ns.db and C_NamePlate and C_NamePlate.GetNamePlateForUnit) then
@@ -983,6 +1172,15 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 		wipe(plateRole)
 		if AnyClassIcons() or next(roleIcons) then
 			RefreshClassIcons()
+		end
+		return
+	end
+	-- (The arrow moves to the new target's plate.)
+	if event == "PLAYER_TARGET_CHANGED" then
+		if (levels.TargetArrow or 0) > 0 or next(arrows) then
+			for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
+				RefreshTargetArrow(plate)
+			end
 		end
 		return
 	end
@@ -1011,10 +1209,14 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 		if questIcons[plate] then
 			questIcons[plate]:Hide()
 		end
+		if arrows[plate] then
+			arrows[plate]:Hide()
+			arrows[plate].styled = false
+		end
 		return
 	end
 	plateClass[plate], plateRole[plate] = nil, nil
-	if AnyClassIcons() or icons[plate] or roleIcons[plate] or questIcons[plate] then
+	if AnyClassIcons() or icons[plate] or roleIcons[plate] or questIcons[plate] or arrows[plate] then
 		ns.RefreshClassIcon(plate)
 	end
 	if event == "NAME_PLATE_UNIT_ADDED" and AnyFaded() then
