@@ -1,6 +1,6 @@
--- Edit Mode layouts: Cinematic's own (EDIT_MODE_LAYOUTS), and the profile
--- layout slot's switching (ns.ApplyProfileLayout). A built-in profile whose
--- layout part names one (db.editModeLayout) switches Edit Mode to it when
+-- Edit Mode layouts: Cinematic's own (EDIT_MODE_LAYOUTS), and switching to
+-- a profile's (ns.ApplyProfileLayout). A built-in profile whose
+-- layout module names one (db.editModeLayout) switches Edit Mode to it when
 -- it's picked, making it first if it isn't there; a profile without one
 -- puts back the layout the player was on before. The dev build's Dev page
 -- has a button per layout to make it or bring it up to date.
@@ -377,7 +377,7 @@ login:SetScript("OnEvent", function(self)
 	end)
 end)
 
--- The profile's Edit Mode layout (db.editModeLayout, from its layout part,
+-- The profile's Edit Mode layout (db.editModeLayout, from its layout module,
 -- or picked on the Profiles page): on switching profile (Profiles.lua) and
 -- logging in, Edit Mode goes to it, after the fight if in one; one of ours
 -- is made if it isn't there. "": the player's own, the one they were on
@@ -634,7 +634,7 @@ function ns.CreateLayoutPanel(kit)
 	title:SetPoint("TOPLEFT", 16, -16)
 	local intro = kit.Label(content, "GameFontHighlight", "Makes each layout in Edit Mode, or brings it up " ..
 		"to date from the code if it's there, and switches to it. Delete them in Edit Mode. A profile whose " ..
-		"layout part names one makes it when picked, too.")
+		"layout module names one makes it when picked, too.")
 	intro:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
 	intro:SetWidth(560)
 	intro:SetJustifyH("LEFT")

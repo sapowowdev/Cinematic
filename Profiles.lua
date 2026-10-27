@@ -33,13 +33,17 @@ local PROFILE_TABLES = {
 	"tankHide", "healerHide", "damageHide",
 }
 ns.PROFILE_TABLES = PROFILE_TABLES
+ns.IS_PROFILE_TABLE = {}
+for _, key in ipairs(PROFILE_TABLES) do ns.IS_PROFILE_TABLE[key] = true end
 
 local DEFAULT_PROFILE -- (this client's first built-in: set after the list)
 
--- The built-in profiles, in the order they're listed. parts: the part each
--- slot uses (ProfileParts.lua; a slot not named: its "standard" part), or
--- { forever = part, retail = part } for one that differs by client.
--- client: only on that one ("forever" or "retail"). label: the name shown,
+-- The built-in profiles, in the order they're listed. modules: the modules
+-- it's made of (ProfileModules.lua), in order, each a module's key or
+-- { forever = key, retail = key } for one that differs by client (a module
+-- of the other client's: left out there). from: the built-in it starts
+-- from, its modules first (a module of the same group in place of one of
+-- them). client: only on that one ("forever" or "retail"). label: the name shown,
 -- when it isn't the saved name (two clients' profiles can't share a name in
 -- this list). oldNames: what it was called before: settings and picks saved
 -- under those move to it at login. dev: only in the dev build (one being made).
@@ -58,7 +62,8 @@ ns.BUILTIN_PROFILES = {
 		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode, with the action " ..
 			"bars, micro menu, bags and XP bar coming up together when you point at one. WoW Forever's default, " ..
 			"and how the developer plays every day."],
-		parts = { layout = "preset", frames = "immersive", camera = "immersive", misc = "immersive" },
+		modules = { "layout-preset", "recovering", "minimap-off-in-fights", "fewer-group-plates", "walk-run-music",
+			"music-fatigue", "no-npc-chat" },
 		preview = "bars",
 	},
 	{
@@ -69,7 +74,8 @@ ns.BUILTIN_PROFILES = {
 		icon = "Interface\\Icons\\Spell_Shadow_AntiShadow", -- (Preparation)
 		tip = L["Default, with the Cooldown Manager in place of action bars 1 to 3, the micro menu and the " ..
 			"XP bar in fights and with an enemy targeted. After a fight it stays up until its cooldowns are ready."],
-		parts = { layout = "preset", frames = "cdm", bars = "cdm", camera = "immersive", misc = "immersive" },
+		from = "Forever Default",
+		modules = { "cdm", "micro-off-in-fights" },
 		preview = "cooldowns",
 	},
 	{
@@ -82,7 +88,8 @@ ns.BUILTIN_PROFILES = {
 			"the micro menu and bags, and the XP bar each coming up on its own when you point at it. Picking it " ..
 			"adds the layout to Edit Mode if you haven't got it; the other profiles go back to the game's own layout " ..
 			"(Classic if you were on it, otherwise Modern)."],
-		parts = { layout = "retail", frames = "immersive", bars = "split", camera = "immersive", misc = "immersive" },
+		from = "Forever Default",
+		modules = { "layout-retail", "retail-groups", "micro-off-in-fights" },
 		preview = "bars",
 	},
 	-- Retail's own three, the same way round.
@@ -95,7 +102,8 @@ ns.BUILTIN_PROFILES = {
 		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode, with action bars " ..
 			"1 to 3, the micro menu and bags, and the XP bar each coming up on its own when you point at it. " ..
 			"Retail's default."],
-		parts = { frames = "immersive", bars = "split", camera = "immersive", misc = "immersive" },
+		modules = { "recovering", "minimap-off-in-fights", "fewer-group-plates", "retail-groups",
+			"micro-off-in-fights", "walk-run-music", "music-fatigue", "no-npc-chat" },
 		preview = "bars",
 	},
 	{
@@ -106,7 +114,8 @@ ns.BUILTIN_PROFILES = {
 		icon = "Interface\\Icons\\Ability_Rogue_Preparation",
 		tip = L["Default, with the Cooldown Manager in place of action bars 1 to 3, the micro menu and the " ..
 			"XP bar in fights and with an enemy targeted. After a fight it stays up until its cooldowns are ready."],
-		parts = { frames = "cdm", bars = "cdm", camera = "immersive", misc = "immersive" },
+		from = "Retail Default",
+		modules = { "cdm" },
 		preview = "cooldowns",
 	},
 	{
@@ -118,7 +127,8 @@ ns.BUILTIN_PROFILES = {
 		icon = "Interface\\Icons\\INV_Misc_PocketWatch_01",
 		tip = "Default, looking like WoW Forever: its layout (CINE_RETAIL_FOREVER_LAYOUT, not designed yet: " ..
 			"a copy of Modern), with the action bars, micro menu, bags and XP bar coming up together.",
-		parts = { layout = "forever", frames = "immersive", bars = "grouped", camera = "immersive", misc = "immersive" },
+		modules = { "layout-forever", "recovering", "minimap-off-in-fights", "fewer-group-plates", "walk-run-music",
+			"music-fatigue", "no-npc-chat" },
 		preview = "bars",
 	},
 	-- Both clients'.
@@ -129,22 +139,25 @@ ns.BUILTIN_PROFILES = {
 			"the letterbox down. Fights bring up only your resource bar and the Cooldown Manager, the cast bar " ..
 			"shows all through CineMode, your health shows at the screen's edges (Vitals Vision), and every " ..
 			"camera can start music."],
-		parts = { layout = { forever = "preset", retail = "pure" }, frames = "pure", bars = "pure", camera = "pure",
-			vfx = "pure", misc = "pure" },
+		modules = { { forever = "layout-preset", retail = "layout-pure" }, { retail = "retail-groups" }, "pure-frames",
+			"pure-cdm", "pure-plates", "pure-tooltips", "heal-vision-everywhere", "no-quest-timer", "pure-cameras",
+			"letterbox-in-fights", "no-time-message", "vitals-vision", "no-npc-chat", "pure-chat" },
 	},
 	{
 		name = "Lite",
 		icon = "Interface\\Icons\\Spell_Holy_HolyBolt",
 		tip = L["The UI fades and the look stays, with just a few cameras: flights (and fly-bys), AFK, " ..
 			"and your Hearthstone and teleports. No cozy, vista, fish, RP walk, auto-run, death or quest cameras."],
-		parts = { layout = { forever = "preset" }, camera = "lite", misc = "lite" },
+		modules = { { forever = "layout-preset" }, "recovering", { retail = "retail-groups" }, "lite-cameras",
+			"lite-channels", "no-npc-chat" },
 	},
 	{
 		name = "VFX Only",
 		icon = "Interface\\Icons\\Spell_Nature_Lightning",
 		tip = L["Just the visual effects (tint, vignette, weather) over your normal UI: nothing fades, no " ..
 			"letterbox, and the camera's left to you."],
-		parts = { layout = { forever = "preset" }, frames = "nofade", vfx = "noletterbox", misc = "nomusic" },
+		modules = { { forever = "layout-preset" }, "recovering", "no-fading", { retail = "retail-groups" },
+			"no-letterbox", "no-cinemode-music" },
 	},
 	{
 		name = "Camera Only",
@@ -152,14 +165,15 @@ ns.BUILTIN_PROFILES = {
 		tip = L["The normal UI until a camera starts (standing still, going AFK, a flight, an emote...), " ..
 			"then CineMode until it ends. The letterbox, tint, vignette and weather show only while a " ..
 			"camera mode runs; no soft edges. Standing still starts the AFK camera, and every camera can start music."],
-		parts = { layout = { forever = "preset" }, frames = "nofade", camera = "cinemode", vfx = "cameras", misc = "quietnpcs" },
+		modules = { { forever = "layout-preset" }, "recovering", "no-fading", { retail = "retail-groups" },
+			"cameras-bring-cinemode", "effects-in-cameras", "no-npc-chat" },
 	},
 	{
 		name = "Solo Explorer",
 		icon = "Interface\\Icons\\Ability_Mount_RidingHorse",
 		tip = L["Everything on while you're out in the world on your own; the normal UI in a group, " ..
 			"in dungeons, raids and PvP."],
-		parts = { layout = { forever = "preset" }, frames = "solo" },
+		modules = { { forever = "layout-preset" }, "recovering", "solo-only", { retail = "retail-groups" } },
 	},
 }
 -- Each client's order, by name, where it isn't the list's (those not in it
@@ -185,9 +199,13 @@ do
 end
 DEFAULT_PROFILE = ns.BUILTIN_PROFILES[1].name
 ns.OnLanguage(function() ns.TranslateFields(ns.ALL_BUILTIN_PROFILES, "tip") end)
-local builtinByName, allBuiltinNames = {}, {}
+local builtinByName, allBuiltinNames, allBuiltinByName = {}, {}, {}
 for _, profile in ipairs(ns.BUILTIN_PROFILES) do builtinByName[profile.name] = profile end
-for _, profile in ipairs(ns.ALL_BUILTIN_PROFILES) do allBuiltinNames[profile.name] = true end
+for _, profile in ipairs(ns.ALL_BUILTIN_PROFILES) do
+	allBuiltinNames[profile.name] = true
+	allBuiltinByName[profile.name] = profile
+end
+ns.ALL_BUILTIN_BY_NAME = allBuiltinByName
 
 -- Just switched to a profile (Profiles page, welcome window): a built-in
 -- with a preview shows its mouseover group of that preset for a few
@@ -235,18 +253,15 @@ local function CopyTable(source)
 	return result
 end
 
--- A built-in's parts, with the dev build's Profile Builder changes
--- (db.devRecipes[name][slot] = part name: this client's) on top.
-function ns.BuiltinParts(profile)
-	local changed = ns.isDev and ns.db and ns.db.devRecipes and ns.db.devRecipes[profile.name]
-	if not changed or not next(changed) then return profile.parts end
-	local parts = {}
-	for slot, part in pairs(profile.parts) do parts[slot] = part end
-	for slot, part in pairs(changed) do parts[slot] = part end
-	return parts
+-- A built-in's modules on this client, resolved (ns.ResolveModules), with
+-- the dev build's Profile Builder changes (db.devModules[name] = its own
+-- module keys, in place of the code's) in place of its own.
+function ns.BuiltinModules(profile)
+	local changed = ns.isDev and ns.db and ns.db.devModules and ns.db.devModules[profile.name]
+	return ns.ResolveModules(profile, ns.CLIENT, allBuiltinByName, changed)
 end
 
--- The values a profile starts from: the defaults, with a built-in's changes.
+-- The values a profile starts from: the defaults, with a built-in's modules.
 local baseCache = {}
 function ns.ProfileBase(name)
 	name = name or ns.ActiveProfile()
@@ -254,12 +269,12 @@ function ns.ProfileBase(name)
 	local base = {}
 	for k, v in pairs(ns.DEFAULTS) do base[k] = v end
 	local builtin = builtinByName[name]
-	if builtin then ns.ApplyParts(ns.BuiltinParts(builtin), base, ns.CLIENT) end
+	if builtin then ns.ApplyModules(ns.BuiltinModules(builtin), base, ns.CLIENT) end
 	baseCache[name] = base
 	return base
 end
 
--- After a built-in's parts change (Profile Builder): worked out again when
+-- After a built-in's modules change (Profile Builder): worked out again when
 -- next wanted. The live settings stay as they are.
 function ns.ForgetProfileBases()
 	wipe(baseCache)
@@ -641,6 +656,7 @@ function ns.InitProfiles()
 	db.profiles = db.profiles or {}
 	db.profileNotes = db.profileNotes or {}
 	db.profileIcons = db.profileIcons or {}
+	db.devRecipes = nil -- (the Profile Builder's changes from before modules)
 	-- Built-ins called something else before: their settings and picks move over.
 	local liveRenamed = false
 	for _, profile in ipairs(ns.BUILTIN_PROFILES) do
