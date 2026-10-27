@@ -97,12 +97,42 @@ local function Client(client)
 				by[address] = by[address] or {}
 				by[address][module.key] = (by[address][module.key] or 0) + 1
 			end)
+			local picks, pickedBy = ns.ProfilePicks(profile, client, ns.ALL_BUILTIN_BY_NAME)
+			local slots = {}
+			for _, slot in ipairs(ns.PROFILE_SLOTS) do
+				local info = ns.SLOT_CHOICES[slot.key]
+				slots[slot.key] = { part = picks[slot.key] or info.default, by = pickedBy[slot.key] or "default" }
+			end
 			out.profiles[#out.profiles + 1] = { name = profile.name, label = profile.label or profile.name,
 				tip = profile.tip, from = profile.from, hidden = profile.hidden, dev = profile.dev,
 				listed = ns.IsBuiltinProfile(profile.name), icon = profile.icon, preview = profile.preview,
-				modules = modules, writes = by }
+				modules = modules, writes = by, picks = slots }
 		end
 	end
+	-- The slots and their choices, and the welcome window's levels.
+	out.slots = {}
+	for _, slot in ipairs(ns.PROFILE_SLOTS) do
+		local info = ns.SLOT_CHOICES[slot.key]
+		local choices = {}
+		for _, choice in ipairs(info.choices) do
+			if not choice.client or choice.client == client then
+				local keys = {}
+				for _, entry in ipairs(ns.ChoiceModules(slot.key, choice.part, client)) do keys[#keys + 1] = entry.key end
+				choices[#choices + 1] = { part = choice.part, label = choice.label, line = choice.line,
+					hidden = choice.hidden, modules = keys,
+					changes = #ns.ModuleEffect(ns.ChoiceModules(slot.key, choice.part, client), client) }
+			end
+		end
+		out.slots[#out.slots + 1] = { key = slot.key, label = info.label, question = info.question, page = info.page,
+			default = info.default, choices = choices }
+	end
+	out.levels = {}
+	for _, level in ipairs(ns.WELCOME_LEVELS) do
+		out.levels[#out.levels + 1] = { label = level.label, line = level.line, tip = level.tip,
+			profile = level.profile or ns.BUILTIN_PROFILES[1].name }
+	end
+	local _, _, _, _, notes = ns.CheckModules(client, ns.ALL_BUILTIN_PROFILES)
+	out.notes = notes
 	return out
 end
 
