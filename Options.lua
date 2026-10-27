@@ -6450,7 +6450,7 @@ end
 -- (In a block: the main chunk's locals are near Lua's cap.)
 local CreateChatPanel
 do
-	local CHAT_LABEL_WIDTH = 200
+	local CHAT_LABEL_WIDTH = 176 -- (wider and Edit goes under the scrollbar)
 	local channelHolders = {} -- channel name -> its row's frame (made once, reused)
 
 	-- The message types' and channels' tables: their tips, as what each column
