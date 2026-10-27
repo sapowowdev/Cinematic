@@ -4467,7 +4467,7 @@ do
 				Goal(icon, line, shown % lineLength + (lineLength - inLine) / 2)
 				shown = shown + 1
 			else
-				Goal(icon, lastLine, (lineLength - inLast) / 2 + inLast + faded)
+				Goal(icon, lastLine, count == 0 and faded or (lineLength - inLast) / 2 + inLast + faded)
 				faded = faded + 1
 			end
 		end
@@ -4485,6 +4485,38 @@ do
 		end
 	end
 
+	-- The game just laid a bar out again, putting its icons back in their
+	-- places (maybe new ones: it reuses icons for other spells): those places
+	-- are read again, and the icons go straight back where they showed and
+	-- on to their goals, the same frame, so they don't jump back and forth.
+	local hooked, seenAt, relaying = {}, {}, false
+	local function LaidOut()
+		if relaying then return end
+		relaying = true
+		for icon, at in pairs(putAt) do
+			local was = seenAt[icon] or {}
+			was[1], was[2] = at[1], at[2]
+			seenAt[icon] = was
+			putAt[icon] = nil
+		end
+		ns.CenterCooldownIcons()
+		for icon, was in pairs(seenAt) do
+			if goal[icon] then Put(icon, was[1], was[2]) end
+			seenAt[icon] = nil
+		end
+		relaying = false
+	end
+
+	local function HookBars()
+		for name in pairs(ns.COOLDOWN_BAR_GROUPS) do
+			local viewer = _G[name]
+			if not hooked[name] and type(viewer) == "table" and type(viewer.Layout) == "function" then
+				hooked[name] = true
+				hooksecurefunc(viewer, "Layout", LaidOut)
+			end
+		end
+	end
+
 	-- Each pass of the When Ready check: every centered bar's goals.
 	function ns.CenterCooldownIcons()
 		local on = false
@@ -4492,6 +4524,7 @@ do
 			on = on or ns.CooldownGroupCentered(group)
 		end
 		if not on and not next(putAt) then return end
+		if on then HookBars() end
 		wipe(wanted)
 		local editMode = _G.EditModeManagerFrame
 		if on and not (editMode and editMode.IsEditModeActive and ns.Flag(editMode:IsEditModeActive())) then
@@ -4519,9 +4552,12 @@ do
 			elseif slot then
 				local x, y = slot[4], slot[5]
 				if was then x, y = was[1], was[2] end
-				if x ~= at[1] or y ~= at[2] then
-					local alpha = readyAlpha[icon]
-					local share = (alpha and alpha < 0.2) and 1 or math.min(1, elapsed * SLIDE_RATE)
+				local alpha = readyAlpha[icon]
+				local faint = alpha and alpha < 0.2
+				-- (One fading out waits where it is till it's nearly gone,
+				-- rather than sliding across the others.)
+				if (x ~= at[1] or y ~= at[2]) and (faint or readyTargets[icon] ~= 0) then
+					local share = faint and 1 or math.min(1, elapsed * SLIDE_RATE)
 					x, y = x + (at[1] - x) * share, y + (at[2] - y) * share
 					if math.abs(at[1] - x) < 0.5 and math.abs(at[2] - y) < 0.5 then x, y = at[1], at[2] end
 					Put(icon, x, y)
