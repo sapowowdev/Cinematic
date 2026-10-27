@@ -149,7 +149,7 @@ ns.DEFAULTS.chatCamZoomMaxTime = 8   -- seconds either zoom takes at most (from 
 ns.DEFAULTS.chatCamSwingSpeed = 15   -- degrees a second a swing goes at most
 ns.DEFAULTS.chatCamFrame = 6         -- degrees off the middle a speaker's left at, on their side
 ns.DEFAULTS.chatCamDrift = 0         -- degrees it drifts to and fro on a speaker (0: holds still)
-ns.DEFAULTS.chatCamQuiet = 10        -- seconds with no one talking before it's over
+ns.DEFAULTS.chatCamQuiet = 20       -- seconds with no one talking before it's over
 -- A row on the Camera Modes page's grid (Turn off in, Calm Timer) and a box in
 -- the Minimap page's "Hide in camera modes", as key "chatcam" (the Chat page's
 -- own settings start with "chat"). Added here, so after Core.lua made the
@@ -837,7 +837,9 @@ local function TakenOver()
 end
 
 -- The first bubble seen in the conversation: in to the quest cam's distance
--- (not if you're zooming yourself, or already close).
+-- (not if you're zooming yourself, or already close). Talking again on the
+-- zoom back out: in again from wherever it's got to, not on out to your
+-- distance mid-conversation.
 local function ZoomIn(now)
 	convo.zoomChecked = true
 	local db = ns.db
@@ -846,12 +848,12 @@ local function ZoomIn(now)
 	end
 	if ns.PlayerZoomedSince(now - (ns.PLAYER_ZOOM_WAIT or 1)) then
 		Say("you're zooming: no zoom in")
-	elseif GetCameraZoom() > db.chatCamDistance + ZOOM_MARGIN then
+	elseif GetCameraZoom() > db.chatCamDistance + ZOOM_MARGIN or ns.QuestCamZooming() then
 		convo.zoom = convo.zoom or (ns.PlayerZoom and ns.PlayerZoom()) or GetCameraZoom()
 		convo.zoomedTo = db.chatCamDistance
 		Say(("zooming in to %.1f yards"):format(db.chatCamDistance))
 		ns.QuestCamZoomTo(db.chatCamDistance, math.min(db.chatCamZoomMaxTime,
-			(GetCameraZoom() - db.chatCamDistance) / db.chatCamZoomSpeed))
+			math.abs(GetCameraZoom() - db.chatCamDistance) / db.chatCamZoomSpeed))
 	end
 end
 
