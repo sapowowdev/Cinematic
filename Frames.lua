@@ -3151,7 +3151,22 @@ end
 do
 	local auraWatcher = CreateFrame("Frame")
 	auraWatcher:RegisterUnitEvent("UNIT_AURA", "player")
-	auraWatcher:SetScript("OnEvent", ns.Profiled("UNIT_AURA (peeks)", function(_, _, _, updateInfo)
+	auraWatcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+	auraWatcher:SetScript("OnEvent", ns.Profiled("UNIT_AURA (peeks)", function(_, event, isLogin, updateInfo)
+		-- Logging in or a /reload with a debuff already on you (a zone's, say):
+		-- with debuffPeekUntilGone the hold picks up where it was, since nothing
+		-- will be gained to start it. (updateInfo here: PLAYER_ENTERING_WORLD's
+		-- isReloadingUi.)
+		if event == "PLAYER_ENTERING_WORLD" then
+			if isLogin or updateInfo then
+				C_Timer.After(0, function()
+					if ns.db and ns.db.debuffPeekUntilGone and PeekAllowed(true) and HasDebuff() then
+						debuffHeld = true
+					end
+				end)
+			end
+			return
+		end
 		-- (Removals count here: the last debuff going lets them fade.)
 		if debuffHeld and not (ns.db and ns.db.debuffPeekUntilGone and HasDebuff()) then
 			debuffHeld = false
