@@ -2230,6 +2230,10 @@ L["Flash on big hits"] = "Destello con golpes fuertes"
 L["The edges flash in the theme's color when a hit takes a lot at once."] = "Los bordes destellan en el color del tema cuando un golpe quita mucho de una vez."
 L["A big hit takes"] = "Un golpe fuerte quita"
 L["The share of your health a hit has to take at once to count as big (and bring on its effects)."] = "La parte de tu salud que un golpe tiene que quitar de una vez para contar como fuerte (y traer sus efectos)."
+L["Or hits adding up to"] = "O golpes que sumen"
+L["Smaller hits count as a big one too once they've taken this much of your health together " ..
+	"(since the last one; again each fight)."] = "Los golpes más pequeños también cuentan como uno fuerte cuando entre todos te han quitado esta parte de la salud " ..
+	"(desde el último; de nuevo en cada combate)."
 L["Try a theme whatever your health: it falls from one share to another over some seconds."] = "Prueba un tema tengas la salud que tengas: baja de un valor a otro en unos segundos."
 L["From"] = "Desde"
 L["To"] = "Hasta"

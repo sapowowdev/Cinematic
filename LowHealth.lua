@@ -36,6 +36,7 @@ DEFAULTS.lowHealthLiftSpeed = 0.4  -- the most it lifts a second after healing (
                                    -- it eases up to that speed and slows as it settles
 DEFAULTS.lowHealthFlash = true     -- a flash at the edges on a big hit
 DEFAULTS.lowHealthFlashHit = 0.08  -- share of your health lost at once that counts
+DEFAULTS.lowHealthFlashAdded = 0.2 -- ...or lost in smaller hits adding up (since the last, in a fight)
 DEFAULTS.lowHealthCalm = 0.6       -- strength out of combat (eating up, say)
 -- Health bars: faded out in CineMode, they fade in between Starts below
 -- (hidden above) and All the way in at (fully up below), Frames.lua.
@@ -49,9 +50,11 @@ DEFAULTS.lowHealthTestHits = true  -- falls in hits (flashing) rather than smoot
 
 local db
 local EDGE_START = 0.05      -- share of the screen the shadow covers as it starts in
-local ART_OUT = 1.8          -- the art's size (screens) as it starts: all past the edges
+-- (The art is the outer tenth or so of its texture, so a little over a
+-- screen already puts it past the edges: much more and it only shows at full.)
+local ART_OUT = 1.35         -- the art's size (screens) as it starts: about all past the edges
 local ART_DEEPEST = 1        -- ...and at full with Reach 100% (no smaller: it must cover the screen)
-local ART_SHALLOWEST = 1.5   -- ...and at full with Reach 0%
+local ART_SHALLOWEST = 1.2   -- ...and at full with Reach 0%
 local FLASH_TIME = 0.6       -- seconds a hit's flash takes to fade
 local FLASH_TINT = 0.6       -- how far a flash turns the shadow to the theme's flash colour
 local DEATH_FADE = 0.5       -- seconds to clear as you die (the death screen takes over)
@@ -91,6 +94,10 @@ local liftSpeed = 0 -- (lifting now: a share of all the way a second)
 local lastHealth -- (share, for spotting big hits)
 local test -- the page's test running: { from, to, time, start, hits }
 local secretCurve -- (health that's secret: its alpha from the game, by this curve)
+-- (Health secret, so Update can't see hits: the hit event's, since the last
+-- frame. Lost: a share of your health.)
+local woundLost, woundHit = 0, false
+local lostAdding = 0 -- (lost since the last flash, for Hits adding up to; again each fight)
 local testShare -- (the test's health now, for the health bars)
 local shadowColor = { 0, 0, 0 }
 
@@ -218,6 +225,10 @@ local function Create()
 		effects[i] = { tex = tex }
 	end
 	edges = ns.CreateVignette(frame)
+	-- (The shadow under everything: over the art, it hid it.)
+	for _, piece in pairs(edges) do
+		piece:SetDrawLayer("BACKGROUND", -8)
+	end
 	frame:Hide()
 	for i, name in ipairs(ns.LOW_HEALTH_CELLS) do
 		cellIndex[name] = i
@@ -602,9 +613,20 @@ local function Update(_, elapsed)
 	if theme ~= shownTheme then UseTheme(theme) end
 	local share, on, testing, dead = Wanted(now)
 	testShare = testing and share or nil
-	-- A big hit: a flash (only by what was shown: a heal doesn't), and the
-	-- theme's effects for it.
-	if share and lastHealth and lastHealth - share >= db.lowHealthFlashHit and on then
+	-- A big hit, or smaller ones adding up to Hits adding up to: a flash (only
+	-- by what was shown: a heal doesn't), and the theme's effects for it.
+	-- (Secret health, in fights on retail: by the hit event's amounts, plain.)
+	local lostNow, bigHit = 0, false
+	if on and share and lastHealth then
+		lostNow = math.max(0, lastHealth - share)
+		bigHit = lostNow >= db.lowHealthFlashHit
+	elseif on and share == nil then
+		lostNow, bigHit = woundLost, woundHit
+	end
+	woundLost, woundHit = 0, false
+	lostAdding = on and lostAdding + lostNow or 0
+	if bigHit or lostAdding >= db.lowHealthFlashAdded then
+		lostAdding = 0
 		if db.lowHealthFlash then flash = 1 end
 		SpawnEffects("hit")
 	end
@@ -718,13 +740,24 @@ for _, event in ipairs(TALENT_EVENTS) do isTalentEvent[event] = true end
 
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_LOGIN")
-events:SetScript("OnEvent", function(_, event)
-	if event == "PLAYER_LOGIN" then
+events:SetScript("OnEvent", function(_, event, _, action, _, amount)
+	if event == "UNIT_COMBAT" then
+		-- A hit while your health is secret (retail fights): the amount still
+		-- comes plain, so it's counted by that. (Plain health: Update's.)
+		if action ~= "WOUND" or Secret(amount) or type(amount) ~= "number" or HealthShare() then return end
+		local max = UnitHealthMax("player")
+		if Secret(max) or type(max) ~= "number" or max <= 0 then return end
+		woundLost = woundLost + amount / max
+		woundHit = woundHit or amount / max >= db.lowHealthFlashHit
+	elseif event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
+		lostAdding = 0 -- (Hits adding up to: again each fight)
+	elseif event == "PLAYER_LOGIN" then
 		db = ns.GetDB()
 		Create()
 		driver:SetScript("OnUpdate", Update)
 		events:RegisterUnitEvent("UNIT_HEALTH", "player")
 		events:RegisterUnitEvent("UNIT_MAXHEALTH", "player")
+		events:RegisterUnitEvent("UNIT_COMBAT", "player")
 		for _, other in ipairs({ "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_DEAD",
 			"PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_ENTERING_WORLD" }) do
 			events:RegisterEvent(other)
@@ -760,6 +793,31 @@ function ns.VitalsFrameAlpha(which, plate)
 	if share then return LevelAt(share) end
 	if plate or not SecretCurve() then return 1 end
 	return "secret"
+end
+
+-- /cine debug vitals: what the edges and the theme's art are doing now (run
+-- it in a fight: health can be secret there).
+function ns.ReportVitals()
+	if not frame then ns.Print("Vitals Vision: not set up yet") return end
+	local function Show(value)
+		if Secret(value) then return "secret" end
+		if type(value) == "number" then return ("%.2f"):format(value) end
+		return tostring(value)
+	end
+	local health, max = UnitHealth("player"), UnitHealthMax("player")
+	ns.Print(("Vitals: on %s, edges %s, art %s, combat %s, test %s"):format(Show(db.lowHealth),
+		Show(db.lowHealthEdges), Show(db.lowHealthBlood), Show(ns.Flag(UnitAffectingCombat("player"))),
+		Show(test ~= nil)))
+	ns.Print(("  health %s / %s, share %s, curve %s, level %.2f, art size %.2f screens"):format(Show(health),
+		Show(max), Show(HealthShare()), Show(SecretCurve() and true), level, artScale))
+	ns.Print(("  theme %s (edge %s), frame shown %s, alpha %s, driver %s"):format(Show(shownTheme and shownTheme.key),
+		Show(shownTheme and shownTheme.edge), Show(frame:IsShown()), Show(frame:GetAlpha()), Show(driver:IsShown())))
+	for name, tex in pairs({ art = body, glow = glow }) do
+		local _, _, _, a = tex:GetVertexColor()
+		local width, height = tex:GetSize()
+		ns.Print(("  %s: shown %s, texture %s, size %s x %s, alpha %s"):format(name, Show(tex:IsShown()),
+			Show(tex:GetTexture()), Show(width), Show(height), Show(a)))
+	end
 end
 
 function ns.SetVitalsSecretAlpha(frame)
@@ -972,6 +1030,9 @@ function ns.CreateVitalsVisionPanel(kit)
 		L["The edges flash in the theme's color when a hit takes a lot at once."], Edges)
 	Slide("lowHealthFlashHit", L["A big hit takes"], 2, 40, 1, "%d%%", 100,
 		L["The share of your health a hit has to take at once to count as big (and bring on its effects)."], Edges)
+	Slide("lowHealthFlashAdded", L["Or hits adding up to"], 5, 60, 1, "%d%%", 100,
+		L["Smaller hits count as a big one too once they've taken this much of your health together " ..
+			"(since the last one; again each fight)."], Edges)
 
 	-- The test: its own settings, and Test and Stop. (Not page controls:
 	-- they work with the page off.)
