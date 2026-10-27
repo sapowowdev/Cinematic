@@ -95,7 +95,6 @@ ProfileChoices.lua
 Profiles.lua
 Share.lua
 Welcome.lua
-WelcomeDemo.lua
 Layouts.lua
 ModuleEditor.lua
 Options.lua

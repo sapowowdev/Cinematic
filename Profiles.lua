@@ -67,7 +67,7 @@ for _, profile in ipairs(ns.BUILTIN_PROFILES) do
 	if profile.default then DEFAULT_PROFILE = profile.name end
 end
 ns.DEFAULT_PROFILE = DEFAULT_PROFILE
-ns.OnLanguage(function() ns.TranslateFields(ns.ALL_BUILTIN_PROFILES, "tip") end)
+ns.OnLanguage(function() ns.TranslateFields(ns.ALL_BUILTIN_PROFILES, "tip", "label") end)
 local builtinByName, allBuiltinNames, allBuiltinByName = {}, {}, {}
 for _, profile in ipairs(ns.BUILTIN_PROFILES) do builtinByName[profile.name] = profile end
 for _, profile in ipairs(ns.ALL_BUILTIN_PROFILES) do

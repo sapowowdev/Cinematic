@@ -87,7 +87,6 @@ local function PrintDebugHelp()
 	print("  /cine debug mode - which camera mode it thinks you're in")
 	print("  /cine debug cooldowns - what the Cooldown Manager's \"stay up while recharging\" check sees")
 	print("  /cine debug newplayer - back to no profile picked, as on a fresh install (the welcome window)")
-	print("  /cine debug welcomedemo - the demo of a simpler welcome window: Subtle, Balanced or Full (picking one switches to it)")
 	print("  /cine debug whatsnew - the chat line shown at login after an update, with its What's new link")
 	print("  /cine debug modes - print each camera mode change to chat (again to stop)")
 	print("  /cine debug tab - every log line, as it's logged, in a chat tab named Cinematic (make the tab yourself)")
@@ -1173,8 +1172,6 @@ local function HandleSlash(msg)
 		ns.db.profileChosen = false
 		ns.Print("no profile picked: Cinematic is off until you pick one")
 		ns.ShowWelcome()
-	elseif cmd == "debug" and arg == "welcomedemo" then
-		ns.ShowWelcomeDemo()
 	elseif cmd == "debug" then
 		-- Hover over something and run this to see how the addon sees it.
 		local found = false

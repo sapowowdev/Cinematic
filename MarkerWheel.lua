@@ -834,6 +834,9 @@ local function ToggleVision(vision, quiet)
 	end
 end
 
+-- (The welcome window's Visions page ticks them too: Welcome.lua.)
+ns.VISION_LIST, ns.VisionOn, ns.ToggleVision = VISIONS, VisionOn, ToggleVision
+
 -- The Toggle Heal Vision (Quest, Duel, Roll) keybinds (Bindings.xml).
 function Cinematic_ToggleVision(key)
 	local vision = visionByKey[key]

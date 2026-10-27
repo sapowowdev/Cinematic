@@ -715,7 +715,7 @@ function ns.TestLowHealth()
 	Wake()
 end
 
--- A quick look (the welcome window's Full level): the page's test, shorter,
+-- A quick look (the welcome window's Cinema level): the page's test, shorter,
 -- with nothing said in chat. Health falls in hits to low, so the theme's art
 -- soaks in with its flashes and effects, held for seconds, then back to yours.
 local GLIMPSE_FROM, GLIMPSE_TO, GLIMPSE_TIME = 0.7, 0.1, 1.4
@@ -724,6 +724,17 @@ function ns.FlashVitals(seconds)
 	test = { from = GLIMPSE_FROM, to = GLIMPSE_TO, time = GLIMPSE_TIME, start = GetTime(), hits = true,
 		hold = seconds or 2, quiet = true }
 	lastHealth = test.from
+	Wake()
+end
+
+-- That look cut short (another level picked): gone at once, not eased out,
+-- then back to your own health.
+function ns.StopVitalsFlash()
+	if not (test and test.quiet) then return end
+	test, testShare, lastHealth = nil, nil, nil
+	level, flash, liftSpeed = 0, 0, 0
+	ClearSprites()
+	if frame then frame:Hide() end
 	Wake()
 end
 
