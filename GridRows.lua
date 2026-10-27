@@ -47,7 +47,7 @@ function ns.RulePieces()
 			{ "target", L["Anything targeted"] }, { "targetself", L["You"] }, { "enemyplayer", L["Enemy Players"] },
 			{ "hostilenpc", L["Hostile NPCs"] }, { "neutralplayer", L["Neutral Players"] },
 			{ "neutralnpc", L["Neutral NPCs"] }, { "friendlyplayer", L["Friendly Players"] },
-			{ "friendlynpc", L["Friendly NPCs"] } } },
+			{ "friendlynpc", L["Friendly NPCs"] }, { "noplate", L["Plate off screen"] }, { "near", L["Near (11 yards)"] }, { "near28", L["Near (28 yards)"] } } },
 		{ L["Location"], { 0.45, 0.75, 1 }, location },
 		{ L["You"], { 0.8, 0.6, 1 }, { { "mounted", L["Mounted"] }, { "flagged", L["PvP flagged"] },
 			{ "group", L["Grouped"] } } },

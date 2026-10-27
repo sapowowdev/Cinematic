@@ -1810,6 +1810,9 @@ function ns.PrintRangeDebug()
 		parts[#parts + 1] = "autoattack=" .. Answer(pcall(isSpell, 6603, unit))
 		return table.concat(parts, " ")
 	end
+	ns.Print(("client: %s; in combat: %s; target's plate: %s"):format(ns.isRetail and "retail" or "Forever",
+		tostring(InCombatLockdown() and true or false),
+		C_NamePlate and C_NamePlate.GetNamePlateForUnit("target") and "on screen" or "none"))
 	for _, unit in ipairs({ "target", "mouseover" }) do
 		if UnitExists(unit) then
 			ns.Print(unit .. " " .. tostring(UnitName(unit)) .. ": " .. Describe(unit))

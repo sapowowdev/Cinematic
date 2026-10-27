@@ -2311,6 +2311,7 @@ ns.RULE_WORDS = {
 	-- (Your target by what it is, as the Target Nameplate rows have it.)
 	targetself = "targetself", enemyplayer = "enemyplayer", hostilenpc = "hostilenpc", neutralplayer = "neutralplayer",
 	neutralnpc = "neutralnpc", friendlyplayer = "friendlyplayer", friendlynpc = "friendlynpc",
+	noplate = "noplate", plateoff = "noplate", offscreen = "noplate", near = "near", close = "near", near28 = "near28",
 	bg = "bg", bgs = "bg", pvp = "bg", battleground = "battleground", arena = "arena", arenas = "arena",
 	world = "world", group = "group", grouped = "group", instance = "instance",
 	dungeon = "dungeon", raid = "raid", city = "city", inn = "inn",
@@ -2436,6 +2437,14 @@ do
 		return (ns.CompileRule(text))
 	end
 
+	-- Whether your target is within an interact distance (the rules' near:
+	-- 2, about 11 yards; near28: 4, about 28). Plain in fights too on retail
+	-- (tested; Auto Attack's range was nil there). False when it can't say.
+	local function TargetWithin(index)
+		local ok, near = pcall(CheckInteractDistance, "target", index)
+		return ok and near ~= nil and not (issecretvalue and issecretvalue(near)) and near and true or false
+	end
+
 	-- The facts for where you are now (inCombat: as the In combat column has
 	-- it). Worked out once a frame (the nameplates ask for each kind).
 	local facts = {}
@@ -2467,6 +2476,15 @@ do
 		facts.enemyplayer, facts.hostilenpc = row == "TargetEnemyPlayer", row == "TargetEnemyNPC"
 		facts.neutralplayer, facts.neutralnpc = row == "TargetNeutralPlayer", row == "TargetNeutralNPC"
 		facts.friendlyplayer, facts.friendlynpc = row == "TargetFriendlyPlayer", row == "TargetFriendlyNPC"
+		-- (Your target with no nameplate: behind the camera, off the side or too
+		-- far. The game only makes plates for units in view; a plate CineMode
+		-- fades is still there. Nameplates turned off for its kind count too.
+		-- Plates can't be measured (restricted), so one pinned at the top counts as shown.)
+		facts.noplate = hasTarget and not targetSelf and C_NamePlate ~= nil
+			and C_NamePlate.GetNamePlateForUnit("target") == nil or false
+		-- (Your target up close, where its plate goes to the top: see TargetWithin.)
+		facts.near = hasTarget and not targetSelf and TargetWithin(2) or false
+		facts.near28 = hasTarget and not targetSelf and TargetWithin(4) or false
 		facts.bg = place == "pvp"
 		-- (Apart, for rules: battlegrounds, and arenas.)
 		facts.arena = facts.bg and select(2, IsInInstance()) == "arena"
