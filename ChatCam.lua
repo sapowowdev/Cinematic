@@ -836,8 +836,8 @@ local function TakenOver()
 	return nil
 end
 
--- The first look at the conversation: in to the quest cam's distance (not if
--- you're zooming yourself, or already close).
+-- The first bubble seen in the conversation: in to the quest cam's distance
+-- (not if you're zooming yourself, or already close).
 local function ZoomIn(now)
 	convo.zoomChecked = true
 	local db = ns.db
@@ -866,9 +866,16 @@ local function Aim(now, drifting)
 	if not angle then
 		if not speaker.missing and now - speaker.at > BUBBLE_WAIT then
 			speaker.missing = true
-			Say(("%s: no bubble on screen, staying on %s"):format(speaker.name, convo.on or "where it is"))
+			Say(("%s: no bubble on screen, staying on %s%s"):format(speaker.name, convo.on or "where it is",
+				convo.zoomChecked and "" or " (no zoom in)"))
 		end
 		return
+	end
+	-- Zoomed in only once a bubble's on screen: after walking off, say, the
+	-- speaker may be behind you or out of sight, and a close-up shows nothing.
+	if not convo.zoomChecked then
+		ZoomIn(now)
+		zooming = ns.QuestCamZooming and ns.QuestCamZooming()
 	end
 	local good, reading = BubbleReading(sy, others, how)
 	-- (Where they'd be on screen with the camera where it started, to compare
@@ -983,9 +990,9 @@ local function OnUpdate(_, elapsed)
 		elseif now - convo.lastLineAt >= ns.db.chatCamQuiet then
 			End(("no one's talked for %d seconds"):format(ns.db.chatCamQuiet))
 		else
+			-- (The zoom in waits for the speaker's bubble on screen: see Aim.)
 			if not convo.zoomChecked then
 				convo.turnedAt = convo.turnedAt or now
-				ZoomIn(now)
 			end
 			local zooming = ns.QuestCamZooming and ns.QuestCamZooming()
 			local check = convo.check
