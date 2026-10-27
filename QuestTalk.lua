@@ -1066,6 +1066,15 @@ local function SetButtons(first, second)
 			b:SetWidth(math.max(110, (Plain(b:GetTextWidth()) or 80) + 30))
 			b.onClick = spec.onClick
 			b:SetEnabled(not spec.off)
+			-- (A number key too, after the rows', shown as theirs are.)
+			local key
+			if #keyed < 10 then
+				key = #keyed + 1
+				keyed[key] = function()
+					if b:IsEnabled() and b.onClick then b.onClick() end
+				end
+			end
+			b.key:SetText(key and Setting("questTalkKeys") and tostring(key % 10) or "")
 			b:Show()
 		end
 	end
@@ -1792,6 +1801,8 @@ local function CreatePanel()
 		b:SetScript("OnClick", function(self)
 			if self.onClick then self.onClick() end
 		end)
+		b.key = b:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+		b.key:SetPoint("LEFT", 8, 0)
 		b:Hide()
 		buttons[i] = b
 	end
