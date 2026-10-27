@@ -5829,21 +5829,29 @@ local function CreatePlatesPanel()
 		{ "TargetArrow", L["Target Arrow"], L[" An arrow over your target's nameplate, shown even while the rest of " ..
 			"the plate is faded or shows just its name."], icon = true },
 	}
-	-- (The class and role icons are the addon's own: off unless ticked, and outside
-	-- CineMode shown only with Always ticked.)
+	-- (The class and role icons and the arrow are the addon's own: off unless
+	-- ticked, outside CineMode shown only with Always ticked, and in a section
+	-- of their own, Cinematic Plate Parts, below the game's.)
 	local iconTip = L[" Off unless ticked. In CineMode, on the nameplates that are up; outside it, only with Always ticked."]
-	local partsSection = Section(L["Plate Parts"], "Parts")
-	BeginSection(partsSection)
-	local partsTop = TableTop(partsSection.frame, PLATE_LAYOUT)
-	local r = 0
-	for _, part in ipairs(PARTS) do
-		if not (part[1] == "Level" and ns.isRetail) then
-			r = r + 1
-			UNIT_ROW_TIPS["Part" .. part[1]] = part[3] .. (part.icon and iconTip or partTip)
-			AddPlateRow(partsTop, r, { "Part" .. part[1], part[2] })
+	local r
+	local function PartsSection(heading, key, ours)
+		local section = Section(heading, key)
+		BeginSection(section)
+		local top = TableTop(section.frame, PLATE_LAYOUT)
+		r = 0
+		for _, part in ipairs(PARTS) do
+			if (not part.icon) == (not ours) and not (part[1] == "Level" and ns.isRetail) then
+				r = r + 1
+				UNIT_ROW_TIPS["Part" .. part[1]] = part[3] .. (part.icon and iconTip or partTip)
+				AddPlateRow(top, r, { "Part" .. part[1], part[2],
+					rulePath = ours and "Cinematic plate parts" or nil })
+			end
 		end
+		EndSection(section, lastLabel)
+		return top
 	end
-	EndSection(partsSection, lastLabel)
+	local partsTop = PartsSection(L["Plate Parts"], "Parts")
+	local ourPartsTop = PartsSection(L["Cinematic Plate Parts"], "CinematicParts", true)
 
 	-- Names, laid out the same way. Outside cinematic mode the game's own
 	-- name options decide.
@@ -5962,7 +5970,7 @@ local function CreatePlatesPanel()
 	end
 	EndSection(targetNamesSection, lastLabel)
 
-	for _, top in ipairs({ columnTop, enemyTop, targetTop, partsTop, namesTop, targetNamesTop }) do
+	for _, top in ipairs({ columnTop, enemyTop, targetTop, partsTop, ourPartsTop, namesTop, targetNamesTop }) do
 		ns.GridDots(content, top.rows or {})
 	end
 
@@ -6249,8 +6257,8 @@ do
 		title:SetPoint("TOPLEFT", 16, -16)
 		local subtitle = PageIntro(content, title,
 			L["How the Target Arrow looks: the mark on your target's nameplate, for when no target frame shows " ..
-			"what you've targeted. When it shows is the Target Arrow row's, on the Nameplates page's Plate Parts " ..
-			"grid. Changes show at once, here and on your target."])
+			"what you've targeted. When it shows is the Target Arrow row's, on the Nameplates page's Cinematic Plate " ..
+			"Parts grid. Changes show at once, here and on your target."])
 
 		local preview -- (below: drawn again as each setting changes)
 		local function Changed()
