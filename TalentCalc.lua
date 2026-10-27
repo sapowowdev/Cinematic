@@ -1524,127 +1524,24 @@ end
 
 -- /cine debug talentart: every part of the talents window (open on your
 -- talents) to the log, with its size, place, texture or atlas and colours,
--- to draw the calculator with the same art; and what the game says about
--- each tree.
-do
-	local MAX_LINES = 4000
-	local MANY = 4 -- nameless children logged per frame (a pool of talent buttons): the first few only
-	local logged
-
-	local function Safe(fn, ...)
-		local ok, a, b, c, d, e, f, g, h = pcall(fn, ...)
-		if ok then
-			return a, b, c, d, e, f, g, h
-		end
+-- to draw the calculator with the same art (ns.LogFrameParts, Diagnostics.lua);
+-- and what the game says about each tree.
+function ns.LogTalentArt()
+	local frame = PlayerSpellsFrame
+	if not (frame and frame:IsShown()) then
+		ns.Print("talentart: open your talents first, then run it again")
+		return
 	end
-
-	local function Str(value)
-		if issecretvalue and issecretvalue(value) then
-			return "secret"
-		end
-		if type(value) == "number" then
-			return value == math.floor(value) and tostring(value) or ("%.3f"):format(value)
-		end
-		return tostring(value)
-	end
-
-	local function Log(depth, text)
-		logged = logged + 1
-		if logged <= MAX_LINES then
-			ns.Log("talentart", ("  "):rep(depth) .. text)
-		end
-	end
-
-	local function Describe(object, key)
-		local kind = Safe(object.GetObjectType, object) or "?"
-		local w, h = Safe(object.GetSize, object)
-		local parts = { ("%s %s %sx%s"):format(kind, Str(key or Safe(object.GetDebugName, object)), Str(w), Str(h)) }
-		parts[#parts + 1] = "shown " .. Str(Safe(object.IsShown, object))
-		local point, relativeTo, relativePoint, x, y = Safe(object.GetPoint, object, 1)
-		if point then
-			parts[#parts + 1] = ("at %s %s %s %s,%s"):format(Str(point),
-				Str(relativeTo and Safe(relativeTo.GetDebugName, relativeTo)), Str(relativePoint), Str(x), Str(y))
-		end
-		if kind == "Texture" or kind == "MaskTexture" then
-			parts[#parts + 1] = "atlas " .. Str(Safe(object.GetAtlas, object))
-			parts[#parts + 1] = "file " .. Str(Safe(object.GetTexture, object))
-			local ulx, uly, _, lly, urx = Safe(object.GetTexCoord, object)
-			if ulx then
-				parts[#parts + 1] = ("coords %s %s %s %s"):format(Str(ulx), Str(urx), Str(uly), Str(lly))
+	local logged = ns.LogFrameParts(frame, "PlayerSpellsFrame", "talentart")
+	if ReadTalents() then
+		for _, group in ipairs(C_Traits.GetGroupDisplayInfoByTreeID(treeID) or {}) do
+			local fields = {}
+			for k, v in pairs(group) do
+				fields[#fields + 1] = tostring(k) .. "=" .. ns.LogValue(v)
 			end
-			local r, g, b, a = Safe(object.GetVertexColor, object)
-			parts[#parts + 1] = ("colour %s %s %s %s"):format(Str(r), Str(g), Str(b), Str(a))
-			parts[#parts + 1] = ("layer %s %s, blend %s, grey %s"):format(Str(Safe(object.GetDrawLayer, object)),
-				Str(select(2, Safe(object.GetDrawLayer, object))), Str(Safe(object.GetBlendMode, object)),
-				Str(Safe(object.IsDesaturated, object)))
-		elseif kind == "FontString" then
-			local font = Safe(object.GetFontObject, object)
-			parts[#parts + 1] = ("text %q, font %s, size %s"):format(Str(Safe(object.GetText, object)),
-				Str(font and Safe(font.GetName, font)), Str(select(2, Safe(object.GetFont, object))))
-			local r, g, b = Safe(object.GetTextColor, object)
-			parts[#parts + 1] = ("colour %s %s %s"):format(Str(r), Str(g), Str(b))
-		else
-			parts[#parts + 1] = "level " .. Str(Safe(object.GetFrameLevel, object))
-		end
-		return table.concat(parts, ", ")
-	end
-
-	local function Walk(object, key, depth)
-		Log(depth, Describe(object, key))
-		if depth >= 8 or Safe(object.IsForbidden, object) then
-			return
-		end
-		-- Its parts by the names its table gives them.
-		local keys = {}
-		for k, v in pairs(object) do
-			if type(v) == "table" and type(k) == "string" and v.GetObjectType then
-				keys[v] = k
-			end
-		end
-		for _, region in ipairs({ Safe(function() return { object:GetRegions() } end) or {} }) do
-			for _, part in ipairs(region) do
-				Log(depth + 1, Describe(part, keys[part]))
-			end
-		end
-		-- Every part with a name; of a run of nameless ones (a pool of talent
-		-- buttons), the first few.
-		local children = Safe(function() return { object:GetChildren() } end) or {}
-		local nameless, skipped = 0, 0
-		for _, child in ipairs(children) do
-			if keys[child] or Safe(child.GetName, child) then
-				Walk(child, keys[child], depth + 1)
-			else
-				nameless = nameless + 1
-				if nameless <= MANY then
-					Walk(child, nil, depth + 1)
-				else
-					skipped = skipped + 1
-				end
-			end
-		end
-		if skipped > 0 then
-			Log(depth + 1, ("... and %d more nameless children"):format(skipped))
+			table.sort(fields)
+			ns.Log("talentart", "group: " .. table.concat(fields, ", "))
 		end
 	end
-
-	function ns.LogTalentArt()
-		local frame = PlayerSpellsFrame
-		if not (frame and Safe(frame.IsShown, frame)) then
-			ns.Print("talentart: open your talents first, then run it again")
-			return
-		end
-		logged = 0
-		Walk(frame, "PlayerSpellsFrame", 0)
-		if ReadTalents() then
-			for _, group in ipairs(C_Traits.GetGroupDisplayInfoByTreeID(treeID) or {}) do
-				local fields = {}
-				for k, v in pairs(group) do
-					fields[#fields + 1] = tostring(k) .. "=" .. Str(v)
-				end
-				table.sort(fields)
-				ns.Log("talentart", "group: " .. table.concat(fields, ", "))
-			end
-		end
-		ns.Print(("talentart: logged %d parts of the talents window. /reload to write the log"):format(math.min(logged, MAX_LINES)))
-	end
+	ns.Print(("talentart: logged %d parts of the talents window. /reload to write the log"):format(logged))
 end

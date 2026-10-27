@@ -21,6 +21,22 @@
 	</Binding>
 	<Binding name="CLICK CinematicVisionWheelButton:LeftButton" category="ADDONS">
 	</Binding>
+	<Binding name="CLICK CinematicCustomWheel1Button:LeftButton" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK CinematicCustomWheel2Button:LeftButton" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK CinematicCustomWheel3Button:LeftButton" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK CinematicCustomWheel4Button:LeftButton" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK CinematicCustomWheel5Button:LeftButton" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK CinematicCustomWheel6Button:LeftButton" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK CinematicCustomWheel7Button:LeftButton" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK CinematicCustomWheel8Button:LeftButton" category="ADDONS">
+	</Binding>
 	<Binding name="CINEMATIC_VISION_HEAL" category="ADDONS">
 		Cinematic_ToggleVision("heal")
 	</Binding>

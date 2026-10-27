@@ -202,11 +202,8 @@ function ns.ReadSharedProfile(text)
 	if #payload < 9 or Checksum(body) ~= sum then return nil, "broken" end
 	local data = Read(body)
 	if type(data) ~= "table" or type(data.settings) ~= "table" then return nil, "broken" end
-	-- (Its icon only if it's one this version can pick.)
-	local icon
-	for _, file in ipairs(ns.HOVER_GROUP_ICONS) do
-		if data.icon == file then icon = file end
-	end
+	-- (Its icon: any of the game's, as a file path or ID: ns.CleanSharedIcon, below.)
+	local icon = ns.CleanSharedIcon(data.icon)
 	local settings, count, skipped = {}, 0, 0
 	for key, value in pairs(data.settings) do
 		if ns.KnownProfileSetting(key, value) then
@@ -313,13 +310,14 @@ local function CreateWindow()
 		tile = true, tileSize = 16, edgeSize = 16,
 		insets = { left = 4, right = 4, top = 4, bottom = 4 },
 	})
+	ns.SkinWindow(window) -- (the menu look: Skin.lua)
 	tinsert(UISpecialFrames, "CinematicShareWindow") -- Escape closes it
 
 	local title = window:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	title:SetPoint("TOPLEFT", 16, -14)
 	window.title = title
 
-	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
+	local close = ns.SkinClose(CreateFrame("Button", nil, window, "UIPanelCloseButton"))
 	close:SetPoint("TOPRIGHT", -2, -2)
 
 	local hint = window:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -340,7 +338,8 @@ local function CreateWindow()
 		insets = { left = 3, right = 3, top = 3, bottom = 3 },
 	})
 	holder:SetBackdropColor(0, 0, 0, 0.6)
-	local scroll = CreateFrame("ScrollFrame", nil, holder, "UIPanelScrollFrameTemplate")
+	ns.SkinWindow(holder, true)
+	local scroll = ns.SkinScroll(CreateFrame("ScrollFrame", nil, holder, "UIPanelScrollFrameTemplate"))
 	scroll:SetPoint("TOPLEFT", 8, -6)
 	scroll:SetPoint("BOTTOMRIGHT", -28, 6)
 	local box = CreateFrame("EditBox", nil, scroll)
@@ -386,7 +385,7 @@ local function CreateWindow()
 	local nameLabel = nameRow:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	nameLabel:SetPoint("LEFT", 0, 0)
 	nameLabel:SetText(L["Save as:"])
-	local nameBox = CreateFrame("EditBox", nil, nameRow, "InputBoxTemplate")
+	local nameBox = ns.SkinEditBox(CreateFrame("EditBox", nil, nameRow, "InputBoxTemplate"))
 	nameBox:SetSize(220, 20)
 	nameBox:SetPoint("LEFT", nameLabel, "RIGHT", 12, 0)
 	nameBox:SetAutoFocus(false)
@@ -398,7 +397,7 @@ local function CreateWindow()
 	nameBox:SetScript("OnEscapePressed", function() window:Hide() end)
 	window.nameRow, window.nameBox = nameRow, nameBox
 
-	local accept = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+	local accept = ns.PanelButton(window)
 	accept:SetSize(110, 22)
 	accept:SetPoint("BOTTOMRIGHT", -16, 14)
 	accept:SetText(L["Import"])
@@ -407,7 +406,7 @@ local function CreateWindow()
 
 	-- Export's: addons can't put text on the clipboard (the game keeps that
 	-- for its own UI), so this selects it all, ready for Ctrl+C.
-	local selectAll = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+	local selectAll = ns.PanelButton(window)
 	selectAll:SetSize(110, 22)
 	selectAll:SetPoint("BOTTOMRIGHT", -16, 14)
 	selectAll:SetText(L["Select all"])
@@ -434,7 +433,7 @@ function ns.ShowExport(name)
 	window.hint:SetText(L["Press Ctrl+C to copy this, then paste it wherever your friends will see it. " ..
 		"They add it with Import on their Cinematic Profiles page (or /cine import)."])
 	window.status:SetText(L["Only Cinematic settings are in it: nothing about you or your character " ..
-		"but its name. Not in it, as with any profile: frames you added and your zone and time tint colours."])
+		"but its name. Not in it, as with any profile: frames you added and your zone and time tint colors."])
 	window.nameRow:Hide()
 	window.accept:Hide()
 	window.selectAll:Show()
@@ -459,4 +458,71 @@ function ns.ShowImport()
 	window.box:SetText("")
 	window.box:SetFocus()
 	UpdateImport()
+end
+
+-- Sharing a wheel of your own (Wheels > Your wheels): the same kind of
+-- text as a profile's, but "CINEW1:" (W for wheel) and holding the wheel's
+-- name, icon and icons, each a label, icon and command. Read back as data,
+-- like a profile; the Your wheels page shows every command before it's added.
+local WHEEL_FORMAT = 1
+local WHEEL_PREFIX = "CINEW" .. WHEEL_FORMAT .. ":"
+local MAX_WHEEL_NAME = 40
+local MAX_COMMAND = 1023 -- (a macro's text can't be longer)
+
+function ns.ExportWheel(wheel)
+	local slots = {}
+	for _, slot in ipairs(wheel.slots or {}) do
+		slots[#slots + 1] = { label = slot.label, icon = slot.icon, command = slot.command }
+	end
+	local data = { format = WHEEL_FORMAT, version = Version(), from = UnitName("player"), name = wheel.name,
+		icon = wheel.icon, slots = slots }
+	local out = {}
+	Write(data, out)
+	local body = table.concat(out)
+	return WHEEL_PREFIX .. Encode(body .. Checksum(body))
+end
+
+-- An icon from a shared string (a profile's or a wheel's): a file path or
+-- ID (no | in it, which would turn into an escape), else nil.
+local function CleanIcon(icon)
+	if type(icon) == "number" and icon > 0 and icon == floor(icon) then return icon end
+	if type(icon) == "string" and #icon <= 200 and icon:match("^[%w_%-%.\\/ ]+$") then return icon end
+end
+
+ns.CleanSharedIcon = CleanIcon
+
+-- What a pasted wheel holds: { name, icon, from, version, slots }, or nil
+-- and why not ("empty", "newer", "profile" or "broken").
+function ns.ReadSharedWheel(text)
+	text = (text or ""):gsub("%s", "")
+	if text == "" then return nil, "empty" end
+	if text:match("^CINE%d+:") then return nil, "profile" end
+	local format, encoded = text:match("^CINEW(%d+):(.*)")
+	format = tonumber(format)
+	if not format then return nil, "broken" end
+	if format > WHEEL_FORMAT then return nil, "newer" end
+	local payload = Decode(encoded)
+	local body, sum = payload:sub(1, -9), payload:sub(-8)
+	if #payload < 9 or Checksum(body) ~= sum then return nil, "broken" end
+	local data = Read(body)
+	if type(data) ~= "table" or type(data.slots) ~= "table" then return nil, "broken" end
+	local slots = {}
+	for i = 1, ns.CUSTOM_WHEEL_SLOTS or 12 do
+		local slot = data.slots[i]
+		if type(slot) == "table" then
+			-- (Commands keep their lines; other control characters go.)
+			local command = type(slot.command) == "string" and slot.command:gsub("[%c]", function(c)
+				return c == "\n" and c or ""
+			end):sub(1, MAX_COMMAND) or ""
+			slots[#slots + 1] = { label = Clean(slot.label, MAX_WHEEL_NAME) or "", icon = CleanIcon(slot.icon),
+				command = command }
+		end
+	end
+	return {
+		name = Clean(data.name, MAX_WHEEL_NAME) or L["Shared wheel"],
+		icon = CleanIcon(data.icon),
+		from = Clean(data.from, 48),
+		version = Clean(data.version, 32),
+		slots = slots,
+	}
 end

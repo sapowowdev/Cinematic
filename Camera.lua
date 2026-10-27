@@ -142,7 +142,7 @@ function ns.TriggerStartsCine()
 	if travel then
 		ns.travelCine = db[travel .. "Cine"] and db[travel .. "Camera"] ~= "none"
 			and not ns.IsCameraOffHere(travel) or false
-	elseif not (ns.autoRunning and ns.playerMoving and not UnitOnTaxi("player")) then
+	elseif not (ns.autoRunning and ns.playerMoving and not ns.OnTaxi()) then
 		ns.travelCine = false
 	end
 	if ns.travelCine then
@@ -157,7 +157,7 @@ end
 local flightSince -- when this flight took off, or nil on the ground
 local flightCamStarted = false -- this flight's camera has started (takeoff swing done)
 function ns.FlightStarted()
-	return ns.db ~= nil and UnitOnTaxi("player") and flightSince ~= nil
+	return ns.db ~= nil and ns.OnTaxi() and flightSince ~= nil
 end
 function ns.FlightCameraOn()
 	return ns.FlightStarted() and ns.db.eventFlightCamera ~= "none" and not ns.IsCameraOffHere("flight")
@@ -648,7 +648,7 @@ do
 		end
 		local fishCam = ns.IsFish and ns.IsFish()
 		local poleReady = ns.db and ns.db.fishPoleRightClickCast and poleEquipped and not fishCam
-			and not ns.playerMoving and not ns.Flag(IsMounted()) and not UnitOnTaxi("player")
+			and not ns.playerMoving and not ns.Flag(IsMounted()) and not ns.OnTaxi()
 			and not ns.Flag(UnitIsDeadOrGhost("player"))
 		-- (The Fishing page's switch off: no casting from here.)
 		local ready = ns.db and ns.db.handleFishing and not ns.Flag(UnitChannelInfo("player"))
@@ -723,7 +723,7 @@ local function OnPlayerZoom()
 	if not drivingCamera then
 		-- Zoomed yourself on a flight: your distance stays at landing (see
 		-- taxiLandZoom), rather than going back to the one you took off with.
-		if UnitOnTaxi("player") and ns.db then
+		if ns.OnTaxi() and ns.db then
 			ns.db.takeoffZoom = nil
 		end
 		if CancelIdleZoom then CancelIdleZoom() end
@@ -938,7 +938,7 @@ function ns.UpdateMouseSteer()
 	local travel = (walking and not ns.IsCozy() and not ns.IsCameraOffHere("walk"))
 		or (not walking and ns.IsAutoRunning and ns.IsAutoRunning() and not ns.IsCameraOffHere("run"))
 	ns.mouseSteering = (travel and IsMouselooking and IsMouselooking() and not IsMouseButtonDown("LeftButton")
-		and not UnitOnTaxi("player")) or false
+		and not ns.OnTaxi()) or false
 	if ns.mouseSteering then
 		ns.orbit.angle = 0 -- mouselook keeps the camera behind you: sway on from there
 	end
@@ -1273,7 +1273,7 @@ do
 	end
 
 	function CurrentEvent()
-		if not ns.db or UnitOnTaxi("player") then
+		if not ns.db or ns.OnTaxi() then
 			return nil
 		end
 		local weapon = EventLive("Weapon", WeaponCozy())
@@ -1304,8 +1304,8 @@ do
 		if ns.NPCWindowOpen and ns.NPCWindowOpen() then
 			return nil -- talking to an NPC: waits until the window closes
 		end
-		if ns.MenuWindowOpen and ns.MenuWindowOpen() then
-			return nil -- in a menu or game window: waits until it closes
+		if ns.MenuWindowOpen and ns.MenuWindowOpen() and not ns.cameraTesting then
+			return nil -- in a menu or game window: waits until it closes (not for a Test button's run)
 		end
 		if ns.manualCam then
 			return "Manual", ns.manualCam -- started from a key binding (Cinematic_StartCam)
@@ -1528,7 +1528,7 @@ local TRAVEL_ORBIT = { walkOrbit = true, runOrbit = true, vistaOrbit = true, fis
 -- and the flag flicking on and off changed the zoom mid-flight (snapping a
 -- fly-by's turn).
 local function Indoors()
-	if not ns.db.indoorLimits or UnitOnTaxi("player") then
+	if not ns.db.indoorLimits or ns.OnTaxi() then
 		return false
 	end
 	local ok, indoors = pcall(IsIndoors)
@@ -1983,7 +1983,8 @@ end
 -- Optionally the max zoom distance is raised meanwhile; on the way back it's
 -- only restored once the camera is inside the old limit again, or the game
 -- would clamp the zoom with a visible snap.
-local ZOOM_MAX_CVARS = { values = { cameraDistanceMaxZoomFactor = "2.6" } }
+local ZOOM_MAX_CVARS = { values = { cameraDistanceMaxZoomFactor = "2.6" },
+	slack = 0.5 } -- (yards past where a zoom started that still counts as inside it)
 -- Raised only: a max already past it (Graphics+) is left as it is.
 local function RaiseZoomMax()
 	if not ZOOM_MAX_CVARS.active and (tonumber(GetCVar("cameraDistanceMaxZoomFactor")) or 0)
@@ -2338,18 +2339,26 @@ function ns.CancelDeathZoom()
 end
 
 local function FinishRestore()
+	local saved = idleZoom.saved
 	idleZoom.restoring = false
 	idleZoom.saved = nil
 	-- The camera's back inside the old limit. Putting the limit back can still
 	-- jolt the camera (a hair outside it gets pulled in at once), so on a
 	-- flight it waits until you land, where the dismount moves the camera
-	-- anyway (see UpdateTaxi).
-	if not UnitOnTaxi("player") then
-		ns.ApplyCVarSet(ZOOM_MAX_CVARS, false)
+	-- anyway (see UpdateTaxi). Zoomed yourself while still past it (taking
+	-- over mid-zoom), the game pulled the camera in to the limit in one big
+	-- jump: it waits until you're back inside where the zoom started.
+	if not ns.OnTaxi() then
+		if ZOOM_MAX_CVARS.active and saved and GetCameraZoom and GetCameraZoom() > saved + ZOOM_MAX_CVARS.slack then
+			idleZoom.limitHeldTo = saved
+		else
+			ns.ApplyCVarSet(ZOOM_MAX_CVARS, false)
+		end
 	end
 end
 
 local function StartIdleZoom()
+	idleZoom.limitHeldTo = nil -- (raised again anyway)
 	if idleZoom.restoring then
 		idleZoom.restoring = false -- still heading back: keep the original distance
 	else
@@ -2478,7 +2487,7 @@ function ns.TakeOverZoom()
 	idleZoom.active, idleZoom.restoring, idleZoom.saved = false, false, nil
 end
 function ns.RestoreZoomLimit()
-	if not idleZoom.active and not idleZoom.restoring then
+	if not idleZoom.active and not idleZoom.restoring and not idleZoom.limitHeldTo then
 		ns.ApplyCVarSet(ZOOM_MAX_CVARS, false)
 	end
 end
@@ -2493,7 +2502,7 @@ function ns.StopIdleZoomNow()
 			CallCameraFunction(diff > 0 and "CameraZoomIn" or "CameraZoomOut", math.abs(diff))
 		end
 	end
-	idleZoom.saved = nil
+	idleZoom.saved, idleZoom.limitHeldTo = nil, nil
 	ns.ApplyCVarSet(ZOOM_MAX_CVARS, false)
 end
 
@@ -2501,6 +2510,12 @@ end
 -- (until the camera settles before landing). Once per standing-still spell or
 -- flight; switching between the two starts afresh.
 local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
+	-- A raised max held after you took over (see FinishRestore): put back once inside.
+	if idleZoom.limitHeldTo and not idleZoom.active and not idleZoom.restoring
+		and GetCameraZoom() <= idleZoom.limitHeldTo + ZOOM_MAX_CVARS.slack then
+		idleZoom.limitHeldTo = nil
+		ns.ApplyCVarSet(ZOOM_MAX_CVARS, false)
+	end
 	local still = not onTaxi and ns.stillSince ~= nil and now - ns.stillSince >= ns.db.idleOrbitDelay
 	local context = onTaxi and "taxi" or travel or "idle"
 	local allowed
@@ -2764,7 +2779,7 @@ end
 -- The "Print the camera mode to chat" option: one line each time the mode
 -- changes (nil: none of them).
 local reportedMode = false -- (false: nothing printed yet)
-local CAMERA_REPORT_NAMES = { walk = "RP walk", run = "auto-run", idle = "AFK" }
+local CAMERA_REPORT_NAMES = { walk = "RP walk", run = "auto-run", idle = "AFK", chatcam = "chat" }
 function ns.ReportCameraMode(mode)
 	if mode == reportedMode then
 		return
@@ -2784,7 +2799,7 @@ function ns.ResetCameraModeReport()
 end
 
 function ns.UpdateOrbit(cinematic, elapsed)
-	local onTaxi = UnitOnTaxi("player")
+	local onTaxi = ns.OnTaxi()
 	local active = IsPlayerActive()
 	local now = GetTime()
 	ns.UpdateMouseSteer()
@@ -2795,13 +2810,18 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	-- An NPC window open (auction house, vendor, quest giver...): you're busy,
 	-- not idling, so the standing-still timer waits too.
 	local atNPC = ns.NPCWindowOpen and ns.NPCWindowOpen()
-	-- Same for a menu or game window (options, spellbook...).
-	local inMenu = ns.MenuWindowOpen and ns.MenuWindowOpen()
+	-- Same for a menu or game window (options, spellbook...), but not while a
+	-- camera's Test button runs one (the options are open then).
+	local inMenu = ns.MenuWindowOpen and ns.MenuWindowOpen() and not ns.cameraTesting
 	-- Casting (crafting, say) is busy too. (The cozy camera keeps going: cooking
-	-- at a campfire is still cozy.)
+	-- at a campfire is still cozy.) So is a Chat Cam conversation (NPCs talking to you).
 	local casting = (ns.Flag(UnitCastingInfo("player")) or ns.Flag(UnitChannelInfo("player")))
 		and not ns.IsFishingEvent() and not ns.IsDepartEvent()
-	if onTaxi or active or atNPC or inMenu or (casting and not ns.IsCozy()) then
+	-- A movie or in-game cutscene playing: you're watching, not standing about,
+	-- so the timer starts once it's over.
+	local movie = (MovieFrame and ns.Flag(MovieFrame:IsShown())) or (CinematicFrame and ns.Flag(CinematicFrame:IsShown()))
+	if onTaxi or active or atNPC or inMenu or movie or (casting and not ns.IsCozy())
+		or (ns.ChatCamActive and ns.ChatCamActive()) then
 		ns.stillSince = nil
 	elseif not ns.stillSince then
 		-- Stopping from the RP walk or auto-run camera goes straight into the
@@ -2894,7 +2914,8 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		or travel or (vista and "vista") or (fish and "fish") or (tele and "tele") or (cozy and "cozy")
 		or (ns.stillSince and now - ns.stillSince >= ns.db.idleOrbitDelay
 			and not ns.IsCameraOffHere("idle") and ns.StillRunsAFK() and "idle")))
-		or (ns.QuestCamActive and ns.QuestCamActive() and "quest") or nil -- (in or out of cinematic mode)
+		or (ns.QuestCamActive and ns.QuestCamActive() and "quest")
+		or (ns.ChatCamActive and ns.ChatCamActive() and "chatcam") or nil -- (in or out of cinematic mode)
 	-- (logged always; printed with /cine debug modes)
 	ns.ReportCameraMode(ns.activeCam and (CAMERA_REPORT_NAMES[ns.activeCam] or ns.activeCam))
 	if travel and cinematic then
@@ -3446,7 +3467,7 @@ end
 -- where it's pointing is the flight camera's tracking on flights (or with a
 -- camera running), straight behind you otherwise.
 local function TakeOver()
-	local tracked = ns.orbit.level > 0 or UnitOnTaxi("player")
+	local tracked = ns.orbit.level > 0 or ns.OnTaxi()
 	flyby.view = tracked and -ns.orbit.angle or 0
 	-- Whatever the flight camera was doing (its drift, or a sway the arrival
 	-- shot cut into, tilt and all) eases out first: stopped dead, it showed
@@ -3471,7 +3492,7 @@ local function TakeOver()
 		StopOrbitTilt()
 	end
 	flyby.active, flyby.started = true, GetTime()
-	flyby.onTaxi = UnitOnTaxi("player")
+	flyby.onTaxi = ns.OnTaxi()
 end
 
 -- Starts a fly-by, or stops the one running. Returns false and why if it
@@ -3494,7 +3515,7 @@ function ns.ToggleFlyBy(quiet)
 	end
 	-- On a flight the flight camera makes it, between its sways (see
 	-- ns.OrbitSpecial): just ask.
-	if UnitOnTaxi("player") and ns.orbit.level > 0 and orbitPrefix == "taxiOrbit" then
+	if ns.OnTaxi() and ns.orbit.level > 0 and orbitPrefix == "taxiOrbit" then
 		if ns.orbit.special or ns.orbit.flyByWanted then
 			return false, L["one's already under way"]
 		elseif ns.orbit.noNewSways or ns.orbit.settleWanted then
@@ -3548,7 +3569,7 @@ local function StepFlyBy(now, elapsed)
 	-- (Turning the addon off, with its key or /cine, stops it where it is.)
 	local why = (not ns.db.enabled and "turned off")
 		or (lastCameraInput > flyby.started and "you moved the camera")
-		or (InCombatLockdown() and "combat") or (flyby.onTaxi and not UnitOnTaxi("player") and "landed")
+		or (InCombatLockdown() and "combat") or (flyby.onTaxi and not ns.OnTaxi() and "landed")
 	if why then
 		EndFlyBy(why)
 		return false
@@ -3843,7 +3864,7 @@ function ns.UpdateFlyBy(now, elapsed)
 		end
 		if now < (flyby.logUntil or 0) then
 			LogFlyBy(now, elapsed, not driving and (special or "after") or nil)
-		elseif UnitOnTaxi("player") then
+		elseif ns.OnTaxi() then
 			flyby.before = flyby.before or {}
 			LogFlyBy(now, elapsed, "before")
 			if #flyby.before > FLYBY.BEFORE_FRAMES then
@@ -4096,7 +4117,7 @@ end
 function ns.GetFlightDebug()
 	local now = GetTime()
 	return {
-		onTaxi = UnitOnTaxi("player"),
+		onTaxi = ns.OnTaxi(),
 		pending = pendingRoute, pendingAge = pendingRoute and now - pendingRouteAt,
 		route = ns.flight.route, elapsed = ns.flight.start and ns.flight.route and now - ns.flight.start,
 		known = KnownFlightTime(ns.flight.route),
@@ -4130,7 +4151,7 @@ function ns.RecenterFlight()
 end
 
 function ns.UpdateTaxi()
-	local onTaxi = UnitOnTaxi("player")
+	local onTaxi = ns.OnTaxi()
 	local now = GetTime()
 	if onTaxi and not ns.wasOnTaxi then
 		ns.orbit.angle, ns.orbit.pitch = 0, 0 -- assume the camera starts behind the character
@@ -4164,7 +4185,7 @@ function ns.UpdateTaxi()
 			ns.ZoomBackTo(ns.db.takeoffZoom)
 		end
 		ns.db.takeoffZoom, ns.db.takeoffInCity = nil, nil
-		if not idleZoom.active and not idleZoom.restoring then
+		if not idleZoom.active and not idleZoom.restoring and not idleZoom.limitHeldTo then
 			ns.ApplyCVarSet(ZOOM_MAX_CVARS, false) -- (held back on the flight: see FinishRestore)
 		end
 	end

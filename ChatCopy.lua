@@ -136,7 +136,7 @@ local function ChatLines(chatFrame)
 			}
 			if rawView then
 				-- (|| shows a code as text rather than using it)
-				line.raw = ("%s  {id %s, event %s, colour %s}"):format(raw:gsub("|", "||"),
+				line.raw = ("%s  {id %s, event %s, color %s}"):format(raw:gsub("|", "||"),
 					tostring(id), Readable(event) and event or "?",
 					r and g and b and Hex(r, g, b):sub(3) or "none")
 			end
@@ -321,15 +321,15 @@ local function CreateWindow()
 	colours:SetPoint("TOPRIGHT", -80, -31)
 	local coloursLabel = window:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	coloursLabel:SetPoint("LEFT", colours, "RIGHT", 2, 0)
-	coloursLabel:SetText(L["Colours"])
+	coloursLabel:SetText(L["Colors"])
 	colours:SetScript("OnClick", function(self)
 		ns.db.chatCopyColours = self:GetChecked() and true or false
 		Refresh()
 	end)
 	colours:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_TOPLEFT")
-		GameTooltip:SetText(L["Colours"])
-		GameTooltip:AddLine(L["Shows the lines in their chat colours. Copied text keeps the colour codes, so untick this to copy plain text."], 1, 1, 1, true)
+		GameTooltip:SetText(L["Colors"])
+		GameTooltip:AddLine(L["Shows the lines in their chat colors. Copied text keeps the color codes, so untick this to copy plain text."], 1, 1, 1, true)
 		GameTooltip:Show()
 	end)
 	colours:SetScript("OnLeave", GameTooltip_Hide)

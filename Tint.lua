@@ -19,7 +19,7 @@ end
 -- blends the tint toward no change. A vignette of four edge gradients can sit
 -- on top. Both fade with cinematic mode.
 local TINT_PRESETS = {
-	{ key = "none", label = L["None"], tip = L["No colour tint."] },
+	{ key = "none", label = L["None"], tip = L["No color tint."] },
 	{ key = "warm", label = L["Warm / golden hour"], mode = "MOD", color = { 1, 0.82, 0.6 },
 		tip = L["Soft orange, like late-afternoon light."] },
 	{ key = "cool", label = L["Cool"], mode = "MOD", color = { 0.75, 0.88, 1 },
@@ -34,7 +34,7 @@ local TINT_PRESETS = {
 	{ key = "dreamy", label = L["Dreamy"], mode = "ADD", color = { 0.3, 0.22, 0.12 },
 		tip = L["A faint warm glow added over the scene. Soft and hazy."] },
 	{ key = "custom", label = L["Custom"], mode = "MOD",
-		tip = L["Your own colour, chosen with the colour picker below."] },
+		tip = L["Your own color, chosen with the color picker below."] },
 	{ key = "timeofday", label = L["Time of day"], mode = "MOD", dynamic = true,
 		tip = L["Changes through the day: blue at night, pink at dawn, clear in the day, " ..
 			"golden in the evening and purple at dusk."] },
@@ -43,7 +43,7 @@ local TINT_PRESETS = {
 			"in swamps and jungles, sickly in blighted lands, ember red near volcanoes. " ..
 			"Other zones are left untinted."] },
 	{ key = "zonetime", label = L["Zone + time of day"], mode = "MOD", dynamic = true,
-		tip = L["The zone's mood and the time-of-day colour together: a desert at night is warm " ..
+		tip = L["The zone's mood and the time-of-day color together: a desert at night is warm " ..
 			"sand darkened by moonlight."] },
 }
 
@@ -352,7 +352,7 @@ end
 local function ZoneTint(zoneName)
 	local override = db.zoneTints and db.zoneTints[zoneName]
 	if type(override) == "table" then
-		return override, L["Custom colour"], true
+		return override, L["Custom color"], true
 	elseif override == "none" then
 		return { 1, 1, 1 }, L["No tint"], true
 	elseif override and ZONE_MOODS[override] then
@@ -442,7 +442,7 @@ local function SameColor(a, b)
 end
 
 local function InTheAir()
-	return UnitOnTaxi("player") or (IsFlying and IsFlying()) or false
+	return ns.OnTaxi() or (IsFlying and IsFlying()) or false
 end
 
 -- Moves the shown zone colour and strength toward the zone's: a new mood

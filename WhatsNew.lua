@@ -84,7 +84,7 @@ local function CreateFeaturesPanel(kit)
 
 		local show
 		if entry.page then
-			show = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+			show = ns.PanelButton(row)
 			show:SetSize(80, 20)
 			show:SetPoint("TOPRIGHT")
 			show:SetText(L["Show me"])

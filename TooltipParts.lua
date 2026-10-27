@@ -3,7 +3,7 @@
 -- (tooltipShow<part>First), and once the tooltip's been up tooltipFullAfter
 -- seconds or not (...Later): the background and border, the health bar
 -- under unit tooltips, and lines of unit tooltips (players, NPCs and mobs):
--- guild and titles, level, spec and class, creature type, faction and PvP,
+-- guild and titles, level, spec and class, creature type, corpse, faction and PvP,
 -- reputation faction, threat, quest lines; and the quest lines of objects
 -- in the world.
 -- A line is taken out by moving the lines under it up one (text and colour,
@@ -169,7 +169,9 @@ local function LinesToCut(tooltip, count, unit, object)
 				return "Quest" -- (an objective under its quest)
 			end
 			inQuest = false
-			if text:find("^<.*>$") then
+			if text == (CORPSE or "Corpse") then
+				return "Corpse"
+			elseif text:find("^<.*>$") then
 				return "Guild"
 			elseif guildName and text:find(guildName, 1, true) then
 				return "Guild" -- (a player's guild with no brackets, as on retail: "Top Opp")
@@ -300,7 +302,7 @@ local function CutLines(tooltip, object)
 	end
 end
 
-local LINE_PARTS = { "Guild", "Level", "Spec", "Type", "Faction", "Rep", "Threat", "Quest" }
+local LINE_PARTS = { "Guild", "Level", "Spec", "Type", "Corpse", "Faction", "Rep", "Threat", "Quest" }
 local function AnyLineCut()
 	for _, part in ipairs(LINE_PARTS) do
 		if Cut(part) then
@@ -402,6 +404,13 @@ fader:SetScript("OnUpdate", function()
 		if done then done() end
 	end
 end)
+
+-- The fade in is the tooltip coming up at all, not each new thing in it: the
+-- game hides and shows it again for every new thing hovered, so a show within
+-- KEEP_UP seconds of a hide carries on from the alpha it had then (sweeping
+-- the mouse across buttons doesn't flicker it).
+local KEEP_UP = 0.3
+local hiddenAt, hiddenAlpha = 0, 0
 
 local function StartFade(kind, from, to, length, done)
 	fade = { kind = kind, from = from, to = to, start = GetTime(), length = length, set = from, done = done }
@@ -601,7 +610,8 @@ function ns.HookTooltipParts()
 		UpdateBorder(tooltip)
 		StartCountdown(tooltip)
 		if FadeTime() and tooltip == GameTooltip then
-			StartFade("in", 0, 1, FadeTime())
+			local from = GetTime() - hiddenAt <= KEEP_UP and hiddenAlpha or 0
+			StartFade("in", from, 1, FadeTime() * (1 - from))
 		elseif fade then
 			StopFade(true)
 		end
@@ -620,6 +630,7 @@ function ns.HookTooltipParts()
 		end
 		revealed, linesCut, shownName = false, false, nil
 		hiddenBars = {}
+		hiddenAt, hiddenAlpha = GetTime(), Alpha(GameTooltip) or (fade and fade.set) or 1
 		StopFade(true)
 	end)
 	-- The health bar hides each time it shows.

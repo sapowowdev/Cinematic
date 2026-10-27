@@ -66,6 +66,10 @@ local FRAME_GROUPS = {
 		"GamepadPlayerCastingBarFrame",
 	},
 	meters = { "DamageMeter" },
+	-- The encounter bar: the extra power bar some bosses, quests and vehicles
+	-- bring up. Retail's PlayerPowerBarAlt sits inside EncounterBar, which
+	-- Edit Mode places (one of them, so it isn't faded twice).
+	encounter = { _G.EncounterBar and "EncounterBar" or "PlayerPowerBarAlt" },
 	-- Voice chat's notices of who's talking (above the chat): the game makes
 	-- them inside this frame.
 	voice = { "VoiceActivityManager" },
@@ -1577,6 +1581,12 @@ ns.COMBAT_SHOW = {
 	-- the focus frame. (noHoverRow: hovering it is hovering the target's group.)
 	{ key = "focustot", label = L["Focus target of target"], default = true, frames = { "FocusFrameToT" },
 		noHoverRow = true },
+	-- The game's circle on the ground under your target: not a frame but a
+	-- setting (Effects.lua, ns.RowOnNow). Always ticked to start with
+	-- (CINE_SHOW_DEFAULT), as before it had a row.
+	{ key = "targetcircle", label = L["Target circle"], default = false, noHoverRow = true,
+		tip = L["The selection circle on the ground under your target. Hidden, your own setting is put " ..
+			"back when the UI returns."] },
 	-- The Standard Frames page's Party frames section (page = "party"); the
 	-- raid-style ones are the Raid frames section's.
 	{ key = "party", label = L["Party frames"], default = true, page = "party", groups = { "party" } },
@@ -1671,8 +1681,17 @@ ns.COMBAT_SHOW = {
 	{ key = "castbar", label = L["Cast bar"], default = false, frames = FRAME_GROUPS.castbar },
 	-- The game's own damage meter (made when first opened).
 	{ key = "meters", label = L["Damage meter (the game's)"], default = false, frames = FRAME_GROUPS.meters },
-	{ key = "cooldowns", label = L["Cooldown Manager"], default = false, addon = "Blizzard_CooldownViewer",
-		frames = FRAME_GROUPS.cooldowns, morePage = "Cooldown Manager" },
+	-- The Cooldown Manager's two spell bars, a row each (the tracked buffs go
+	-- with the Essential bar). Utility follows Essential's ticks until set
+	-- (see ROW_FALLBACK), as it was one row before.
+	{ key = "cooldowns", label = L["Essential Cooldowns"], default = false, addon = "Blizzard_CooldownViewer",
+		frames = { "EssentialCooldownViewer", "BuffIconCooldownViewer", "BuffBarCooldownViewer" },
+		morePage = "Cooldown Manager" },
+	{ key = "cooldownsutility", label = L["Utility Cooldowns"], default = false, addon = "Blizzard_CooldownViewer",
+		frames = { "UtilityCooldownViewer" }, morePage = "Cooldown Manager" },
+	-- Always ticked to start with (CINE_SHOW_DEFAULT): a boss's or quest's bar to watch.
+	{ key = "encounter", label = L["Encounter bar"], default = false, frames = FRAME_GROUPS.encounter,
+		tip = L["The extra bar some bosses, quests and vehicles bring up, such as a boss's own power."] },
 	-- Numbered as retail's Edit Mode numbers them; Classic doesn't number its
 	-- bars, so there each also says where it sits.
 	{ key = "mainbar", label = L["Action bar 1"], default = true,
@@ -1740,7 +1759,9 @@ ns.COMBAT_SHOW = {
 -- above. (Kept in the order above within each.)
 local ROW_SECTIONS = {
 	player = "units", petframe = "units", prd = "units", prdpower = "units", target = "units", tot = "units", focus = "units", focustot = "units",
+	targetcircle = "units",
 	buffs = "combat", swing = "combat", castbar = "combat", meters = "combat", cooldowns = "combat",
+	cooldownsutility = "combat", encounter = "combat",
 	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars",
 	pet = "bars", stance = "bars", totems = "bars", extra = "bars",
 	right1 = "extrabars", right2 = "extrabars", bar6 = "extrabars", bar7 = "extrabars", bar8 = "extrabars",
@@ -1843,7 +1864,7 @@ local HOVER_ROW_BY_GROUP = {
 	minimap = "minimap", buffs = "buffs", quests = "quests", questtimer = "questtimer", misc = "durability",
 	swing = "swing", castbar = "castbar", meters = "meters", cooldowns = "cooldowns", waypoint = "waypoint",
 	gamepadbars = "gamepadbars", gamepadlegend = "gamepadlegend", gamepadreticle = "gamepadreticle",
-	chat = "chat", barart = "mainbar", voice = "voice",
+	chat = "chat", barart = "mainbar", voice = "voice", encounter = "encounter",
 }
 function ns.HoverRowFor(entry)
 	return (entry.name and HOVER_ROW_BY_NAME[entry.name]) or HOVER_ROW_BY_GROUP[entry.group] or entry.group
@@ -1878,7 +1899,7 @@ ns.HOVER_TRIGGERS = {
 -- you make.)
 ns.HOVER_GROUPS_DEFAULT = {
 	{ preset = "bars", icon = "Interface\\Icons\\INV_Sword_04", name = L["Action bars"],
-		members = { "mainbar", "bottomleft", "bottomright", "pet", "stance", "totems", "micro", "bags", "xp", "extra" } },
+		members = { "mainbar", "bottomleft", "bottomright", "pet", "stance", "totems", "micro", "bags", "xp" } },
 	{ preset = "side", icon = "Interface\\Icons\\Ability_Warrior_DefensiveStance", name = L["Side bars"],
 		members = { "right1", "right2" } },
 	-- (Off: with it off, the mouse on bars 6-8 brings up nothing: groupOnly.)
@@ -1915,7 +1936,7 @@ ns.HOVER_GROUPS_DEFAULT = {
 	{ preset = "chat", icon = "Interface\\Icons\\INV_Scroll_03", name = L["Chat"],
 		members = { "chat" }, triggers = { whisper = true, typing = true } },
 	{ preset = "cooldowns", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", name = L["Cooldowns"],
-		members = { "cooldowns", "addon:fecm" }, triggers = { cooldown = true } },
+		members = { "cooldowns", "cooldownsutility", "addon:fecm" }, triggers = { cooldown = true } },
 }
 
 -- The icons a group you make can have (the Mouseover groups page's picker).
@@ -2116,11 +2137,14 @@ end
 local ROW_FALLBACK = {
 	art = "mainbar", petframe = "player", prdpower = "prd", focustot = "focus", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
 	minimapzone = "minimap", minimapclock = "minimap", minimapdial = "minimap", bags = "micro",
+	cooldownsutility = "cooldowns",
 }
 -- (And the raid-style party frames' rows the raid frames'.)
 for raidKey, key in pairs(ns.RAID_STYLE_PARTY) do
 	ROW_FALLBACK[key] = raidKey
 end
+-- (For the settings: ticking a row gives those that follow it ticks of their own first, GridRows.lua.)
+ns.ROW_FALLBACK = ROW_FALLBACK
 
 function ns.IsCombatShowOn(key)
 	local on = ns.db.combatShow[key]
@@ -2130,6 +2154,9 @@ function ns.IsCombatShowOn(key)
 		end
 		if IsExtraKey(key) then
 			return true
+		end
+		if ns.LIST_DEFAULTS.combatShow[key] ~= nil then
+			return ns.LIST_DEFAULTS.combatShow[key]
 		end
 		for _, item in ipairs(ns.COMBAT_SHOW) do
 			if item.key == key then return item.default end
@@ -2147,7 +2174,8 @@ local function IsListOn(list, key, defaults)
 		if IsExtraKey(key) then
 			return defaults == ENEMY_SHOW_DEFAULT
 		end
-		return defaults[key] or false
+		local more = ns.LIST_DEFAULTS[list]
+		return defaults[key] or (more and more[key]) or false
 	end
 	return on
 end
@@ -2160,6 +2188,7 @@ local CINE_SHOW_DEFAULT = {
 	flags = true, castbar = true, partyroles = true, partynames = true, partystatus = true,
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true,
 	raiddebuffs = true, raidthreat = true, raidtarget = true, raidready = true, extra = true, voice = true,
+	encounter = true, targetcircle = true,
 }
 function ns.IsCineShowOn(key)
 	local setting = ns.CINE_SHOW_SETTING[key]
@@ -2176,6 +2205,24 @@ function ns.IsCineShowOn(key)
 	return on
 end
 function ns.IsEnemyShowOn(key) return IsListOn("enemyShow", key, ENEMY_SHOW_DEFAULT) end
+-- Whether a row's on for the Calm Timer after a fight, the cool-down (the
+-- Combat dropdown's Calm Timer: a time of its own, beside In combat and Out of
+-- combat): its own tick, else what it follows, else its default, else, for a
+-- row ticked In combat, combatShowCalm (the page's one switch, before: those
+-- rows stayed for it).
+function ns.IsCalmShowOn(key)
+	local on = ns.db.calmShow and ns.db.calmShow[key]
+	if on == nil and ROW_FALLBACK[key] then
+		return ns.IsCalmShowOn(ROW_FALLBACK[key])
+	end
+	if on == nil and ns.LIST_DEFAULTS.calmShow[key] ~= nil then
+		return ns.LIST_DEFAULTS.calmShow[key]
+	end
+	if on == nil then
+		return ns.db.combatShowCalm and ns.IsCombatShowOn(key) and true or false
+	end
+	return on
+end
 function ns.IsFriendlyShowOn(key) return IsListOn("friendlyShow", key, TARGET_SHOW_DEFAULT) end
 
 -- The frames pages' place columns, after the others: ticked, a row's frames
@@ -2186,7 +2233,8 @@ function ns.IsFriendlyShowOn(key) return IsListOn("friendlyShow", key, TARGET_SH
 ns.PLACE_SHOW = {
 	{ list = "bgShow", label = L["BGs & Arenas"], tip = L["Show all through CineMode in battlegrounds and arenas."] },
 	{ list = "worldShow", label = L["Open World"],
-		tip = L["Show all through CineMode everywhere else, cities and inns included."] },
+		tip = L["Show all through CineMode out in the world, inns included (capital cities are Cities)."] },
+	{ list = "cityShow", label = L["Cities"], tip = L["Show all through CineMode in capital cities."] },
 	{ list = "groupShow", label = L["Grouped"],
 		tip = L["Show all through CineMode while you're in a party or raid, wherever you are."] },
 	{ list = "instanceShow", label = L["Instances"],
@@ -2207,6 +2255,11 @@ local function PlaceDefaults(list)
 	return PLACE_SHOW_DEFAULTS[list] or NO_DEFAULTS
 end
 function ns.IsPlaceShowOn(list, key) return IsListOn(list, key, PlaceDefaults(list)) end
+-- The Combat dropdown's Out of combat (quietShow: on out of fights, and with
+-- the row's Calm Timer past it) and In a camera mode (camShow), for the grids
+-- that offer them (Visual Effects, music, tooltips...).
+function ns.IsQuietShowOn(key) return IsListOn("quietShow", key, NO_DEFAULTS) end
+function ns.IsCamShowOn(key) return IsListOn("camShow", key, NO_DEFAULTS) end
 
 -- The place columns that apply where you are now.
 -- Tables UpdateFrames (and what it calls) fills afresh each tick, kept rather
@@ -2228,7 +2281,7 @@ local function PlaceListsHere()
 	local place = ns.GetPlaceType()
 	local lists = wipe(tickTables.placeLists)
 	lists[1] = (place == "pvp" and "bgShow")
-		or ((place == "dungeon" or place == "raid") and "instanceShow") or "worldShow"
+		or ((place == "dungeon" or place == "raid") and "instanceShow") or (place == "city" and "cityShow") or "worldShow"
 	if ns.InGroup() then
 		lists[2] = "groupShow"
 	end
@@ -2244,9 +2297,12 @@ end
 -- The situations a rule can name, each a field of the facts table (aliases too).
 ns.RULE_WORDS = {
 	always = "always", ["true"] = "always", never = "never", ["false"] = "never",
-	combat = "combat", fighting = "combat",
+	combat = "combat", fighting = "combat", calm = "calm", nocombat = "nocombat", camera = "camera", cam = "camera",
 	enemy = "enemy", friendly = "friendly", target = "target",
-	bg = "bg", bgs = "bg", arena = "bg", pvp = "bg",
+	-- (Your target by what it is, as the Target Nameplate rows have it.)
+	targetself = "targetself", enemyplayer = "enemyplayer", hostilenpc = "hostilenpc", neutralplayer = "neutralplayer",
+	neutralnpc = "neutralnpc", friendlyplayer = "friendlyplayer", friendlynpc = "friendlynpc",
+	bg = "bg", bgs = "bg", pvp = "bg", battleground = "battleground", arena = "arena", arenas = "arena",
 	world = "world", group = "group", grouped = "group", instance = "instance",
 	dungeon = "dungeon", raid = "raid", city = "city", inn = "inn",
 	flagged = "flagged", mounted = "mounted",
@@ -2387,14 +2443,30 @@ do
 		local enemy = hasTarget and ns.IsEnemyUnit("target") and not ns.Flag(UnitIsDeadOrGhost("target"))
 		facts.always, facts.never = true, false
 		facts.combat = inCombat and true or false
+		facts.camera = ns.activeCam ~= nil -- (a camera mode running: flights, AFK, cozy and the rest)
+		facts.calm = ns.InCalm and ns.InCalm() or false -- (just after a fight, till the Calm Timer runs out)
+		-- (Out of combat: no fight, and the Calm Timer after one run out.)
+		facts.nocombat = not facts.combat and not facts.calm
 		facts.target = hasTarget and true or false
 		facts.enemy = enemy and true or false
 		facts.friendly = (hasTarget and not enemy) and true or false
+		-- Your target by what it is: yourself, else as the Target Nameplate rows
+		-- go (Effects.lua: players and NPCs, enemy, neutral or friendly; the dead friendly).
+		local targetSelf = hasTarget and ns.Flag(UnitIsUnit("target", "player")) and true or false
+		local row = hasTarget and not targetSelf and ns.TargetNameRow and ns.TargetNameRow("target")
+		facts.targetself = targetSelf
+		facts.enemyplayer, facts.hostilenpc = row == "TargetEnemyPlayer", row == "TargetEnemyNPC"
+		facts.neutralplayer, facts.neutralnpc = row == "TargetNeutralPlayer", row == "TargetNeutralNPC"
+		facts.friendlyplayer, facts.friendlynpc = row == "TargetFriendlyPlayer", row == "TargetFriendlyNPC"
 		facts.bg = place == "pvp"
+		-- (Apart, for rules: battlegrounds, and arenas.)
+		facts.arena = facts.bg and select(2, IsInInstance()) == "arena"
+		facts.battleground = facts.bg and not facts.arena
 		facts.dungeon, facts.raid = place == "dungeon", place == "raid"
 		facts.instance = facts.dungeon or facts.raid
-		facts.world = not facts.bg and not facts.instance
 		facts.city, facts.inn = place == "city", place == "inn"
+		-- (The open world: not capital cities, as the grids' Cities is apart.)
+		facts.world = not facts.bg and not facts.instance and not facts.city
 		facts.group = ns.InGroup() and true or false
 		facts.flagged = ns.IsPvPFlagged() and true or false
 		facts.mounted = ns.Flag(IsMounted()) and true or false
@@ -2419,6 +2491,11 @@ end
 -- When the player was last in combat (for "only after combat").
 local lastCombatAt = -math.huge
 ns.OnCalmEnd(function(cut) lastCombatAt = math.min(lastCombatAt, cut) end)
+-- Whether it's just after a fight, till the Calm Timer runs out (the rules' calm).
+function ns.InCalm()
+	local fighting = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+	return not fighting and GetTime() - lastCombatAt < (ns.db.calmTime or 0)
+end
 
 -- Casting at an enemy out of combat (Standard Frames page, "Cast fade into
 -- combat"): the cast counts as the fight
@@ -2548,7 +2625,9 @@ end
 -- friends, NPCs, dead enemies).
 -- Rows with Always ticked are always in it: they don't fade in CineMode at all.
 -- Rows with a Calm Timer option of their own on their page: their In combat
--- tick lasts until the Calm Timer runs out even with combatShowCalm off.
+-- tick lasts until the Calm Timer runs out even with combatShowCalm off. And
+-- each row's own Calm Timer tick (ns.IsCalmShowOn): its In combat tick lasts
+-- till then, the target columns counting meanwhile.
 local GetCombatShownFrames
 do
 	local CALM_ROW_SETTING = { quests = "questCombatCalm" }
@@ -2571,9 +2650,11 @@ do
 	function GetCombatShownFrames()
 		local fighting = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 		local calm = not fighting and GetTime() - lastCombatAt < (ns.db.calmTime or 0)
+		-- (The rules' combat as it always was; the ticks' just the fight, each
+		-- row's Calm Timer tick keeping it after.)
 		local inCombat = fighting or (calm and ns.db.combatShowCalm)
 		local isOn
-		if inCombat then
+		if fighting then
 			if ns.db.stayInCombat then
 				isOn = ns.IsCombatShowOn
 			end
@@ -2585,7 +2666,7 @@ do
 			end
 		end
 		-- (Casting at an enemy: the In combat rows as well, see ns.HostileCastLeft.)
-		if not inCombat and ns.db.stayInCombat and ns.HostileCastLeft(GetTime()) then
+		if not fighting and ns.db.stayInCombat and ns.HostileCastLeft(GetTime()) then
 			targetIsOn = isOn
 			isOn = CastIsOn
 		end
@@ -2599,8 +2680,8 @@ do
 		local roleHide = ns.RoleHides(facts)
 		for _, item in ipairs(ns.COMBAT_SHOW) do
 			local applies = not (gamepad and item.notGamepad) and not (item.gamepadOnly and not gamepad)
-			local calmRow = calm and ns.db.stayInCombat and ns.db[CALM_ROW_SETTING[item.key] or ""]
-				and ns.PageOn("handleQuests") and ns.IsCombatShowOn(item.key)
+			local calmRow = calm and ns.db.stayInCombat and (ns.IsCalmShowOn(item.key)
+				or ns.IsCombatShowOn(item.key) and ns.db[CALM_ROW_SETTING[item.key] or ""] and ns.PageOn("handleQuests"))
 			-- (A row's rule, when it has one that reads, decides instead of its ticks.)
 			local ticked = ns.RuleShows(item.key, facts)
 			if ticked == nil then
@@ -2608,6 +2689,12 @@ do
 					or calmRow
 			end
 			if roleHide[item.key] then ticked = false end
+			-- (Your bars held back at a fight's start, Personal Resources page:
+			-- up only where Always or a place keeps them.)
+			if ticked and (fighting or isOn == CastIsOn) and ns.FightHold(item.key)
+				and not (ns.IsCineShowOn(item.key) or KeptHere(placeLists, item.key)) then
+				ticked = false
+			end
 			if applies and ticked then
 				for _, name in ipairs(item.frames or NO_DEFAULTS) do
 					shown[name] = true
@@ -2623,6 +2710,7 @@ do
 			local ticked = ns.RuleShows(key, facts)
 			if ticked == nil then
 				ticked = KeptHere(placeLists, key) or (isOn and isOn(key))
+					or (calm and ns.db.stayInCombat and ns.IsCalmShowOn(key))
 			end
 			ticked = ticked and not roleHide[key]
 			if ticked then
@@ -2633,11 +2721,14 @@ do
 	end
 
 	-- Whether a grid row that isn't a frame (the Chat page's: a message type,
-	-- a channel) is on now, as a Standard Frames row would show: its rule if
-	-- it has one, else Always (always: its own setting, when it has one), a
-	-- place column that applies here, or In combat / Tar Enemy / Tar Friendly;
-	-- never while you're a role its roles button has unticked.
-	function ns.RowOnNow(key, always)
+	-- a channel; Chat bubbles', tooltips', Visual Effects', music's, Camera
+	-- Modes') is on now, as a Standard Frames row would show: its rule if it
+	-- has one, else Always (always: its own setting, when it has one), a place
+	-- that applies here, In a camera mode, In combat / Out of combat, or Tar
+	-- Enemy / Tar Friendly; never while you're a role its roles button has
+	-- unticked. anyFight: In combat counts in any fight (else only while
+	-- CineMode stays on in them).
+	function ns.RowOnNow(key, always, anyFight)
 		local fighting = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 		local calm = not fighting and GetTime() - lastCombatAt < (ns.db.calmTime or 0)
 		local inCombat = fighting or (calm and ns.db.combatShowCalm)
@@ -2655,9 +2746,23 @@ do
 		if always or KeptHere(PlaceListsHere(), key) then
 			return true
 		end
-		if inCombat then
-			return ns.db.stayInCombat and ns.IsCombatShowOn(key) and true or false
-		elseif HasAnyTarget() then
+		if ns.IsCamShowOn(key) and facts.camera then
+			return true
+		end
+		-- (In combat counts while CineMode stays on in fights, for the rows of
+		-- the UI; anyFight: any fight, for the rest.)
+		local stays = anyFight or ns.db.stayInCombat
+		-- (Three times, each its own tick: the fight, the Calm Timer after it,
+		-- and the rest, Out of combat.)
+		if fighting then
+			return stays and ns.IsCombatShowOn(key) and true or false
+		end
+		if calm then
+			if ns.IsCalmShowOn(key) then return true end
+		elseif ns.IsQuietShowOn(key) then
+			return true
+		end
+		if HasAnyTarget() then
 			if ns.IsEnemyUnit("target") and not ns.Flag(UnitIsDeadOrGhost("target")) then
 				return ns.IsEnemyShowOn(key) and true or false
 			end
@@ -2673,6 +2778,7 @@ GetCombatShownFrames = ns.Profiled("GetCombatShownFrames", GetCombatShownFrames)
 -- isn't recovering, so only health matters.
 local EMPTY_AT_REST = { RAGE = true, RUNIC_POWER = true, INSANITY = true, MAELSTROM = true,
 	LUNAR_POWER = true, FURY = true, PAIN = true }
+ns.EMPTY_AT_REST = EMPTY_AT_REST -- (Personal Resources: drained after a fight)
 
 local function IsSecretValue(value)
 	return issecretvalue and issecretvalue(value) or false
@@ -3062,7 +3168,7 @@ do
 		-- "Only after combat").
 		local inFight = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 			or GetTime() - lastCombatAt < COMBAT_END_AURA_GRACE
-		local fightPeeks = inFight and not ns.db.debuffPeekAfterCombat and not UnitOnTaxi("player")
+		local fightPeeks = inFight and not ns.db.debuffPeekAfterCombat and not ns.OnTaxi()
 		-- (No count, as on retail in a fight: the game's debuff icons, kept
 		-- counted out of fights too, to compare with.)
 		if PeekAllowed(true) then
@@ -3075,7 +3181,7 @@ do
 			return
 		end
 		-- (wasOnTaxi: landed this instant, before the flight code has noticed.)
-		if UnitOnTaxi("player") or ns.wasOnTaxi or GetTime() < landedQuietUntil then
+		if ns.OnTaxi() or ns.wasOnTaxi or GetTime() < landedQuietUntil then
 			return
 		end
 		local hold
@@ -3175,7 +3281,8 @@ local hoverHeldUntil = {} -- [row key] = when the mouse's hold on it ends (Mouse
 local questRevealUntil = 0
 do
 	local QUEST_REVEAL_EVENTS = { QUEST_ACCEPTED = "questRevealOnAccept", QUEST_WATCH_UPDATE = "questRevealOnProgress" }
-	local QUEST_REVEAL_CALM = { questRevealOnAccept = "questAcceptCalm", questRevealOnProgress = "questProgressCalm" }
+	local QUEST_REVEAL_CALM = { questRevealOnAccept = "questAcceptCalm", questRevealOnProgress = "questProgressCalm",
+		questRevealOnScenario = "questScenarioCalm" }
 	local questWatcher = CreateFrame("Frame")
 	for event in pairs(QUEST_REVEAL_EVENTS) do
 		pcall(questWatcher.RegisterEvent, questWatcher, event)
@@ -3187,8 +3294,13 @@ do
 	-- background stay faded. They keep their place, so there can be a gap
 	-- above. Hovering the tracker or a fight bringing it up shows the lot for
 	-- the rest of that reveal. (Retail-style tracker: sections with
-	-- usedBlocks, keyed by quest ID.)
+	-- usedBlocks, keyed by quest ID.) Scenario progress focuses the scenario
+	-- section the same way, key SCENARIO: its header, stage and objectives.
 	local focus = { on = false, quests = {}, since = 0, othersAlpha = 1 }
+	local SCENARIO = "scenario"
+	local function IsScenarioSection(section)
+		return section == _G.ScenarioObjectiveTracker or type(section.StageBlock) == "table"
+	end
 	local FOCUS_FIND_TIME = 0.5 -- none of its quests found in the tracker by then: show the lot
 	local function TrackerSections(tracker)
 		if type(tracker.modules) == "table" then
@@ -3204,11 +3316,25 @@ do
 		for _, section in ipairs(TrackerSections(tracker)) do
 			if type(section) == "table" and type(section.usedBlocks) == "table" and not IsForbidden(section) then
 				local sectionHas = false
+				local scenarioSection = IsScenarioSection(section)
+				local sectionAlpha = alpha
+				if scenarioSection then
+					-- (Its stage and other blocks aren't all in usedBlocks.)
+					sectionHas = focus.quests[SCENARIO] and true or false
+					sectionAlpha = sectionHas and 1 or alpha
+					for _, child in ipairs({ section:GetChildren() }) do
+						if child.SetAlpha and not IsForbidden(child) then
+							ns.FadeRelative(child, sectionAlpha)
+						end
+					end
+				end
 				for _, blocks in pairs(section.usedBlocks) do
 					if type(blocks) == "table" then
 						for id, block in pairs(blocks) do
 							if type(block) == "table" and block.SetAlpha and not IsForbidden(block) then
-								if focus.quests[id] then
+								if scenarioSection then
+									ns.FadeRelative(block, sectionAlpha)
+								elseif focus.quests[id] then
 									sectionHas = true
 									ns.FadeRelative(block, 1)
 								else
@@ -3221,7 +3347,7 @@ do
 				found = found or sectionHas
 				local header = section.Header
 				if type(header) == "table" and header.SetAlpha and not IsForbidden(header) then
-					ns.FadeRelative(header, alpha)
+					ns.FadeRelative(header, sectionAlpha)
 				end
 			end
 		end
@@ -3233,7 +3359,7 @@ do
 		return found
 	end
 	local function Focus(questID)
-		if not (ns.db and ns.db.questRevealOnlyThat and type(questID) == "number") then
+		if not (ns.db and ns.db.questRevealOnlyThat and (type(questID) == "number" or questID == SCENARIO)) then
 			focus.on = false
 			return
 		end
@@ -3383,6 +3509,57 @@ do
 			if not pending then
 				pending = true
 				C_Timer.After(0.2, Scan)
+			end
+		end)
+	end
+
+	-- Scenarios (a raid boss's or dungeon's stages and objectives, as in the
+	-- tracker's scenario block) aren't quests: their progress is the stage
+	-- number plus each criterion's count plus the step's weighted percent,
+	-- summed after a scenario update, and a sum gone up reveals the tracker
+	-- (with "Show just that quest", just the scenario section). Entering a
+	-- scenario doesn't.
+	local scenario = C_ScenarioInfo
+	if scenario and scenario.GetScenarioInfo and scenario.GetScenarioStepInfo and scenario.GetCriteriaInfo then
+		local lastSum, lastName
+		local scenarioPending = false
+		local function Number(value)
+			return type(value) == "number" and not IsSecretValue(value) and value or 0
+		end
+		local function ScanScenario()
+			scenarioPending = false
+			local info = scenario.GetScenarioInfo()
+			local name = info and info.name
+			if type(name) ~= "string" or IsSecretValue(name) or name == "" then
+				lastSum, lastName = nil, nil
+				return
+			end
+			local sum = Number(info.currentStage) * 1e6
+			local step = scenario.GetScenarioStepInfo()
+			if step then
+				sum = sum + Number(step.weightedProgress)
+				for i = 1, Number(step.numCriteria) do
+					local criteria = scenario.GetCriteriaInfo(i)
+					if criteria then
+						sum = sum + Number(criteria.quantity)
+					end
+				end
+			end
+			if name == lastName and lastSum and sum > lastSum then
+				Reveal("questRevealOnScenario", SCENARIO)
+				ns.questActivityAt = GetTime()
+			end
+			lastSum, lastName = sum, name
+		end
+		local scenarioWatcher = CreateFrame("Frame")
+		for _, event in ipairs({ "SCENARIO_UPDATE", "SCENARIO_CRITERIA_UPDATE", "CRITERIA_COMPLETE",
+			"PLAYER_ENTERING_WORLD" }) do
+			pcall(scenarioWatcher.RegisterEvent, scenarioWatcher, event)
+		end
+		scenarioWatcher:SetScript("OnEvent", function()
+			if not scenarioPending then
+				scenarioPending = true
+				C_Timer.After(0.2, ScanScenario)
 			end
 		end)
 	end
@@ -5324,7 +5501,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 			math.max(0, buffPeekUntil - now), math.max(0, ns.debuffPeekUntil - now)))
 	end
 	-- (Not on flight paths, Minimap page: no pings, reveals or tracking bring it up then.)
-	local taxiHidesMinimap = minimapPage and ns.db.minimapHideOnTaxi and ns.Flag(UnitOnTaxi("player"))
+	local taxiHidesMinimap = minimapPage and ns.db.minimapHideOnTaxi and ns.Flag(ns.OnTaxi())
 	events.ping = minimapPage and pingReveal and not taxiHidesMinimap
 	-- (Keep open and Reveal, Minimap page: "Except in" is for gathering tracking only.)
 	events.tracking = minimapPage and not taxiHidesMinimap and ((keepForGathering and not trackingPaused) or keepForCreatures
@@ -5396,8 +5573,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 		local listShown = combatShown
 			and (entry.name and combatShown[entry.name] or combatShown[GROUP_KEY[ownRow or entry.group]])
 		local fightingShown = listShown
-		if not fightingShown and PORTRAIT_FRAMES[entry.name] and ns.db[PORTRAIT_FRAMES[entry.name]] and cinematic
-			and portraitAllowed and IsPlayerRecovering() then
+		-- (Your frames kept up while you recover, or on low mana: PersonalResources.lua.)
+		if not fightingShown and cinematic and (PORTRAIT_FRAMES[entry.name] or entry.name == "PetFrame")
+			and ns.KeepYourFrameUp(PORTRAIT_FRAMES[entry.name], entry, portraitAllowed, fighting) then
 			fightingShown = true -- shown like a combat frame, at the normal fade speeds
 		end
 		if cinematic and not hovered[row] and not chatShowing and not tracking
@@ -5406,6 +5584,18 @@ function ns.UpdateFrames(cinematic, elapsed)
 		end
 		if deathFade and not hovered[row] and not typingShown then
 			target = 0
+		end
+		-- (Vitals Vision's health bars: up as far as your health says, LowHealth.lua.)
+		entry.vitalsSecret = nil
+		if target == 0 and cinematic and not deathFade and PORTRAIT_FRAMES[entry.name]
+			and entry.name ~= "CinematicPersonalPower" then
+			local vitals = ns.VitalsFrameAlpha(PORTRAIT_FRAMES[entry.name] == "prdWhenNotFull" and "prd" or "portrait",
+				entry.frame == personalPower.healthStandIn)
+			if vitals == "secret" then
+				entry.vitalsSecret = true
+			elseif vitals then
+				target = vitals
+			end
 		end
 		-- (Swing timer page: in CineMode and out, hovering included.)
 		if entry.group == "swing" and ns.IsSwingBarUnused(entry.name) then
@@ -5474,6 +5664,10 @@ function ns.UpdateFrames(cinematic, elapsed)
 				duration = deathFade and DEATH_FADE_TIME or GroupFadeTime(entry.group, false)
 			end
 			ns.SetEntryAlpha(entry, ns.Approach(entry.alpha, target, elapsed, duration))
+		end
+		-- (Secret health: the game sets a faded-out health bar's alpha from it.)
+		if entry.vitalsSecret and target == 0 and entry.alpha == 0 and not ns.layoutFadeUntil and not ns.previewRows then
+			ns.SetVitalsSecretAlpha(entry.frame)
 		end
 		if NEVER_NESTED[entry.name] and entry.group == "chat" then
 			chatButtonsAlpha = math.max(chatButtonsAlpha or 0, entry.alpha)
@@ -5823,8 +6017,8 @@ do
 			return
 		end
 		local count = #EndAddMode()
-		ns.Print((count == 1 and L["add mode cancelled: %d frame left as it was."]
-			or L["add mode cancelled: %d frames left as they were."]):format(count))
+		ns.Print((count == 1 and L["add mode canceled: %d frame left as it was."]
+			or L["add mode canceled: %d frames left as they were."]):format(count))
 		AddModeChanged()
 	end
 end

@@ -30,7 +30,14 @@ local KEY_ADDRESSES = {
 	editModeLayout = "Profiles/Edit Mode layout", -- (its dropdown sits under the profiles)
 	cooldownManagerOn = "Cooldown Manager/top", -- (the game's own switch: no box of ours)
 	chatPeekChannelList = "Chat/Other",
+	-- (with the rows as dropdowns, what rows without a Calm Timer of their own go by)
+	combatShowCalm = "Standard Frames/top",
+	-- (the effects' switches, set from their row of the Visual Effects grid)
+	letterbox = "Effects/Show in", vignette = "Effects/Show in", weatherTint = "Effects/Show in",
 }
+-- Lists whose rows go with the same rows of the grids: a row's rule or the
+-- roles it shows for is where that row is.
+local ROW_RULE_LISTS = { frameRules = true, tankHide = true, healerHide = true, damageHide = true }
 
 -- Switches cameras off: an event's camera to none, or (for the ones no
 -- event starts) its row of the Camera Modes page's "Turn off in" grid.
@@ -70,7 +77,7 @@ end
 -- The Standard Frames columns' rows that are action bars (and the other
 -- bars: the Cooldown Manager, micro menu, bags, XP bars, gamepad bars and
 -- other addons' bars), as against the rest.
-local BAR_ROWS = { cooldowns = true, micro = true, bags = true, xp = true, gamepadbars = true, gamepadxp = true,
+local BAR_ROWS = { cooldowns = true, cooldownsutility = true, micro = true, bags = true, xp = true, gamepadbars = true, gamepadxp = true,
 	["addon:bt4Bars"] = true, ["addon:euiBars"] = true, ["addon:euiCooldowns"] = true,
 	["addon:euiEssentials"] = true, ["addon:euiDataBars"] = true }
 local function IsBarRow(item)
@@ -109,7 +116,7 @@ local function SplitBarGroups(set)
 		if group.preset == "bars" then
 			local bars = Copy(group)
 			bars.name = L["Action bars 1-3"]
-			bars.members = { "mainbar", "bottomleft", "bottomright", "pet", "stance", "totems", "extra" }
+			bars.members = { "mainbar", "bottomleft", "bottomright", "pet", "stance", "totems" }
 			groups[#groups + 1] = bars
 			groups[#groups + 1] = { icon = "Interface\\Icons\\INV_Misc_Bag_07", name = L["Micro menu and bags"],
 				members = { "micro", "bags" } }
@@ -152,7 +159,7 @@ ns.PROFILE_MODULES = {
 		"The personal resource display in the middle, the Cooldown Manager above it."),
 
 	-- What fades, and when
-	{ key = "recovering", name = "Up while recovering", scope = { "Standard Frames/top" },
+	{ key = "recovering", name = "Up while recovering", scope = { "Standard Frames/top", "Personal Resources" },
 		tip = "In combat rows stay for the Calm Timer, and the player frame and personal resource display " ..
 		"stay up until health and power are full.",
 		apply = function(set)
@@ -215,7 +222,7 @@ ns.PROFILE_MODULES = {
 
 	-- Pure Cinema's, page by page
 	{ key = "pure-frames", name = "Pure: frames",
-		scope = { "Standard Frames", "Advanced Frames/Supported addons", "Gamepad/top" },
+		scope = { "Standard Frames", "Personal Resources", "Advanced Frames/Supported addons", "Gamepad/top" },
 		tip = "Fights bring up only your resource bar: no portrait, target, buffs, minimap or swing timer, " ..
 		"nothing for an enemy or friend targeted, nothing in dungeons and raids, and the cast bar shows all " ..
 		"through CineMode. The player frame and resource display don't stay up until full; no focus's target of target.",
@@ -255,17 +262,23 @@ ns.PROFILE_MODULES = {
 		end },
 	{ key = "pure-plates", name = "Pure: nameplates", scope = { "Nameplates" },
 		tip = "Enemies' nameplates (and their minions') in fights, not kept up otherwise; in PvP and " ..
-		"battlegrounds, none; in instances, friendly players' and NPCs' hidden; no group members' or friendly targets'.",
+		"battlegrounds, none; in instances, friendly players' and NPCs' hidden; no group members' or friendly " ..
+		"targets'; an arrow over your target's plate all through CineMode.",
 		apply = function(set)
 			for _, key in ipairs({ "plateAlwaysGroupMembers", "plateAlwaysGroupMinions", "plateGroupFriends",
 				"plateGroupFriendlyMinions", "plateAlwaysMyFriendlyNPCTarget", "plateAlwaysMyFriendlyPlayerTarget",
-				"plateCinematicEnemies", "plateCombatPvPEnemies", "plateCombatPvPEnemyMinions", "plateCombatPvPFriends",
+				"plateCinematicEnemies", "plateInCitiesEnemies", "plateCombatPvPEnemies", "plateCombatPvPEnemyMinions", "plateCombatPvPFriends",
 				"plateInBGsEnemies", "plateInBGsFriends", "plateInPvPEnemies", "plateAlwaysPartClassEnemy",
 				"plateAlwaysPartRoleHealer", "plateAlwaysPartRoleTank" }) do
 				set(key, false)
 			end
 			set("plateCombatEnemies", true)
 			set("plateCombatEnemyMinions", true)
+			-- An arrow over your target's plate all through CineMode, with no
+			-- target frame to show what you've targeted.
+			for _, prefix in ipairs({ "plateCinematic", "plateCombat", "plateInPvP", "plateInBGs", "plateInInstances" }) do
+				set(prefix .. "PartTargetArrow", true)
+			end
 			set("plateInstanceFriends", "hide")
 			set("plateInstanceFriendlyNPCs", "hide")
 		end },
@@ -293,9 +306,6 @@ ns.PROFILE_MODULES = {
 			set("tankHide", { healVision = false })
 			set("damageHide", { healVision = false })
 		end },
-	{ key = "no-quest-timer", name = "No quest timer", scope = { "Quest tracker/top" },
-		tip = "No quest timer box.",
-		apply = function(set) set("questTimerShow", false) end },
 
 	-- Cameras
 	{ key = "walk-run-music", name = "Music on walks and runs", scope = { "Camera Triggers/Event" },
@@ -304,11 +314,16 @@ ns.PROFILE_MODULES = {
 			set("musicCamWalk", true)
 			set("musicCamRun", true)
 		end },
-	{ key = "lite-cameras", name = "Just a few cameras", scope = { "Camera Triggers/Event", "Camera Modes/Turn off in" },
+	{ key = "lite-cameras", name = "Just a few cameras", scope = { "Camera Triggers/Event", "Camera Modes/Runs in" },
 		tip = "Just flights (and fly-bys), AFK, and your Hearthstone and teleports: no cozy, vista, fish, " ..
 		"RP walk, auto-run, death or quest cameras.",
 		apply = function(set)
 			CamsOff(set, { "cozy", "vista", "fish", "walk", "run", "death", "quest" })
+		end },
+	{ key = "no-cameras", name = "No cameras", scope = { "Camera Triggers/Event", "Camera Modes" },
+		tip = "No camera moves on its own.",
+		apply = function(set)
+			CamsOff(set, { "flight", "idle", "cozy", "tele", "vista", "fish", "walk", "run", "death", "quest" })
 		end },
 	{ key = "cameras-bring-cinemode", name = "Cameras bring CineMode", scope = { "Camera Triggers/Event",
 		"Camera Settings/Death Cam" },
@@ -330,7 +345,7 @@ ns.PROFILE_MODULES = {
 			set("musicCamWalk", true)
 			set("musicCamRun", true)
 		end },
-	{ key = "pure-cameras", name = "Pure: cameras", scope = { "Camera Triggers/Event", "Camera Modes/Turn off in" },
+	{ key = "pure-cameras", name = "Pure: cameras", scope = { "Camera Triggers/Event", "Camera Modes/Runs in" },
 		tip = "Standing still starts the AFK camera and every event's camera can start music; the cameras " ..
 		"don't wait for things to calm down after a fight, auto-run carries on in cities and instances (as RP " ..
 		"walk always does), and the death camera runs in instances too.",
@@ -346,10 +361,10 @@ ns.PROFILE_MODULES = {
 		end },
 
 	-- The look
-	{ key = "no-letterbox", name = "No letterbox", scope = { "Effects/Turn off in" },
+	{ key = "no-letterbox", name = "No letterbox", scope = { "Effects/Show in" },
 		tip = "No letterbox: the other effects show over the normal UI.",
 		apply = function(set) set("letterbox", false) end },
-	{ key = "effects-in-cameras", name = "Effects only in cameras", scope = { "Effects/Turn off in",
+	{ key = "effects-in-cameras", name = "Effects only in cameras", scope = { "Effects/Show in",
 		"Effects/Depth of field" },
 		tip = "The letterbox, tint, vignette and weather only while a camera mode runs; no soft edges.",
 		apply = function(set)
@@ -358,15 +373,18 @@ ns.PROFILE_MODULES = {
 			end
 			set("depthOfField", false)
 		end },
-	{ key = "letterbox-in-fights", name = "Letterbox stays in fights", scope = { "Effects/Turn off in" },
+	{ key = "letterbox-in-fights", name = "Letterbox stays in fights", scope = { "Effects/Show in" },
 		tip = "Fights don't bring the letterbox down.",
 		apply = function(set) set("letterboxOffInCombat", false) end },
 	{ key = "no-time-message", name = "No time of day message", scope = { "Tint/Time of day" },
 		tip = "No time of day title under the zone name.",
 		apply = function(set) set("timeOfDayMessage", false) end },
-	{ key = "vitals-vision", name = "Vitals Vision on", scope = { "Vitals Vision/top" },
-		tip = "Your health at the screen's edges.",
-		apply = function(set) set("lowHealth", true) end },
+	{ key = "vitals-vision", name = "Vitals Vision on", scope = { "Vitals Vision" },
+		tip = "Your health at the screen's edges, and the personal resource display fading in as it drops.",
+		apply = function(set)
+			set("lowHealth", true)
+			set("lowHealthPrd", true)
+		end },
 
 	-- Sound and chat
 	{ key = "music-fatigue", name = "Music fatigue", scope = { "Audio/Fatigue" },
@@ -437,8 +455,10 @@ end
 
 -- The modules' settings on top of base, in order (resolved: ns.ResolveModules).
 -- A list's rows from two modules go together. onSet(key, row, value, module):
--- each write, for the checks.
-function ns.ApplyModules(resolved, base, client, onSet)
+-- each write, for the checks. Modules still set the old grids' settings
+-- (Turn off in and the like): they go over as they're applied
+-- (ns.ConvertOffGrids, Core.lua), unless keepOld.
+function ns.ApplyModules(resolved, base, client, onSet, keepOld)
 	local written = {}
 	for _, entry in ipairs(resolved) do
 		if entry.module then
@@ -459,7 +479,162 @@ function ns.ApplyModules(resolved, base, client, onSet)
 			end, client)
 		end
 	end
+	if not keepOld and ns.ConvertOffGrids then
+		ns.ConvertOffGrids(base, ns.OldGridDefault, { all = true })
+	end
 	return base
+end
+
+-- A value as text, the same for the same value (keys sorted), to compare.
+local function Serial(value)
+	if type(value) ~= "table" then return type(value) .. ":" .. tostring(value) end
+	local keys = {}
+	for k in pairs(value) do keys[#keys + 1] = k end
+	table.sort(keys, function(a, b)
+		if type(a) ~= type(b) then return type(a) < type(b) end
+		return a < b
+	end)
+	local parts = {}
+	for _, k in ipairs(keys) do parts[#parts + 1] = tostring(k) .. "=" .. Serial(value[k]) end
+	return "{" .. table.concat(parts, ",") .. "}"
+end
+
+-- What modules change once applied (the old grids' settings gone over to
+-- the new): each setting, or list row, that differs from the defaults
+-- applied the same way, as { key, row (or nil), value }. hoverGroups as a whole.
+function ns.ModuleEffect(resolved, client)
+	local function Defaults()
+		local values = {}
+		for k, v in pairs(ns.DEFAULTS) do values[k] = v end
+		return values
+	end
+	local before = ns.ApplyModules({}, Defaults(), client)
+	local after = ns.ApplyModules(resolved, Defaults(), client)
+	local keys, out = {}, {}
+	for k in pairs(before) do keys[k] = true end
+	for k in pairs(after) do keys[k] = true end
+	for key in pairs(keys) do
+		local a, b = before[key], after[key]
+		if ns.IS_PROFILE_TABLE[key] and key ~= "hoverGroups" and (type(a) == "table" or type(b) == "table") then
+			a, b = type(a) == "table" and a or {}, type(b) == "table" and b or {}
+			local rows = {}
+			for row in pairs(a) do rows[row] = true end
+			for row in pairs(b) do rows[row] = true end
+			for row in pairs(rows) do
+				if Serial(a[row]) ~= Serial(b[row]) then out[#out + 1] = { key, row, b[row] } end
+			end
+		elseif Serial(a) ~= Serial(b) then
+			out[#out + 1] = { key, nil, b }
+		end
+	end
+	return out
+end
+
+-- Slots and parts: the choices the welcome window's Customise pages and
+-- the Profiles demo offer (ns.SLOT_CHOICES, WelcomeDemo.lua), a part per
+-- slot, each part some modules. A slot's settings are the ones any of its
+-- parts change (ns.SettingSlot), so picking a part (ns.ApplyPart) puts those
+-- as it has them and leaves every other setting as it is.
+ns.PROFILE_SLOTS = {
+	{ key = "layout", name = "Edit Mode layout" },
+	{ key = "frames", name = "UI manager" },
+	{ key = "bars", name = "Action bars" },
+	{ key = "camera", name = "Camera" },
+	{ key = "vfx", name = "Visual effects" },
+	{ key = "misc", name = "Chat & misc" },
+}
+-- Each slot's parts: their modules ({ forever =, retail = } for one that
+-- differs by client). "standard": a slot's part for a profile that names none.
+local SLOT_PARTS = {
+	layout = {
+		retail = { "layout-retail" }, forever = { "layout-forever" }, pure = { "layout-pure" },
+		preset = { "layout-preset" },
+	},
+	frames = {
+		standard = { "recovering" },
+		immersive = { "recovering", "minimap-off-in-fights", "fewer-group-plates" },
+		nofade = { "recovering", "no-fading" },
+		solo = { "recovering", "solo-only" },
+		pure = { "pure-frames", "pure-plates", "pure-tooltips", "heal-vision-everywhere" },
+	},
+	bars = {
+		standard = { { retail = "retail-groups" } },
+		grouped = {},
+		split = { "retail-groups", "micro-off-in-fights" },
+		cdm = { { retail = "retail-groups" }, "cdm", "micro-off-in-fights" },
+		pure = { { retail = "retail-groups" }, "pure-cdm" },
+	},
+	camera = {
+		immersive = { "walk-run-music" }, lite = { "lite-cameras" }, off = { "no-cameras" },
+		cinemode = { "cameras-bring-cinemode" }, pure = { "pure-cameras" },
+	},
+	vfx = {
+		noletterbox = { "no-letterbox" }, cameras = { "effects-in-cameras" },
+		pure = { "letterbox-in-fights", "no-time-message", "vitals-vision" },
+	},
+	misc = {
+		quietnpcs = { "no-npc-chat" }, immersive = { "music-fatigue", "no-npc-chat" },
+		lite = { "lite-channels", "no-npc-chat" }, nomusic = { "no-cinemode-music" },
+		pure = { "pure-chat", "no-npc-chat" },
+	},
+}
+ns.SLOT_PARTS = SLOT_PARTS
+-- A part's modules on a client, resolved.
+local function PartModules(list, client)
+	return ns.ResolveModules({ modules = list }, client, {})
+end
+-- ns.PROFILE_PARTS[slot][name] = { modules =, client =, editMode =, apply(set, client) }.
+ns.PROFILE_PARTS = {}
+for slot, parts in pairs(SLOT_PARTS) do
+	ns.PROFILE_PARTS[slot] = {}
+	for name, list in pairs(parts) do
+		local part = { modules = list }
+		-- (Just one client's when all its modules are: the layouts.)
+		local only = moduleByKey[type(list[1]) == "string" and list[1] or ""]
+		if #list == 1 and only and only.client then
+			part.client, part.editMode = only.client, only.editMode
+		end
+		part.apply = function(set, client)
+			for _, entry in ipairs(PartModules(list, client)) do entry.module.apply(set, client) end
+		end
+		ns.PROFILE_PARTS[slot][name] = part
+	end
+end
+
+-- The parts named ({ slot = part name }, a slot not named: its standard),
+-- in slot order, on top of base.
+function ns.ApplyParts(parts, base, client, keepOld)
+	local list = {}
+	for _, slot in ipairs(ns.PROFILE_SLOTS) do
+		local part = ns.PROFILE_PARTS[slot.key][parts[slot.key] or "standard"]
+		if part then
+			for _, entry in ipairs(PartModules(part.modules, client)) do list[#list + 1] = entry end
+		end
+	end
+	return ns.ApplyModules(list, base, client, nil, keepOld)
+end
+
+-- The slot whose parts change a setting (or a list's row), on this client;
+-- nil: none of them do.
+local slotOf
+function ns.SettingSlot(key, row)
+	if not slotOf then
+		slotOf = { keys = {}, rows = {} }
+		for _, slot in ipairs(ns.PROFILE_SLOTS) do
+			for _, part in pairs(ns.PROFILE_PARTS[slot.key]) do
+				for _, change in ipairs(ns.ModuleEffect(PartModules(part.modules, ns.CLIENT), ns.CLIENT)) do
+					if change[2] == nil then
+						slotOf.keys[change[1]] = slotOf.keys[change[1]] or slot.key
+					else
+						slotOf.rows[change[1]] = slotOf.rows[change[1]] or {}
+						slotOf.rows[change[1]][change[2]] = slotOf.rows[change[1]][change[2]] or slot.key
+					end
+				end
+			end
+		end
+	end
+	if row ~= nil and slotOf.rows[key] and slotOf.rows[key][row] then return slotOf.rows[key][row] end
+	return slotOf.keys[key]
 end
 
 -- Where each setting is, made once the options pages are: keys[key] and
@@ -530,13 +705,29 @@ local function BuildMap()
 		end
 		sections[page] = list
 	end
-	map = { keys = keys, rows = rows, sections = sections }
+	-- (Each row's addresses in any list, for the rules and roles.)
+	local anyRow = {}
+	for key, list in pairs(rows) do
+		if not ROW_RULE_LISTS[key] then
+			for row, addresses in pairs(list) do
+				anyRow[row] = anyRow[row] or {}
+				for _, address in ipairs(addresses) do Add(anyRow[row], address) end
+			end
+		end
+	end
+	map = { keys = keys, rows = rows, sections = sections, anyRow = anyRow }
 	return map
 end
 
 -- A setting's addresses, or a list row's ({ "Page/Section"... }); nil: on no page.
 function ns.SettingAddresses(key, row)
 	map = map or BuildMap()
+	if row ~= nil and ROW_RULE_LISTS[key] and map.anyRow[row] then
+		local list = {}
+		for _, address in ipairs(map.anyRow[row]) do list[#list + 1] = address end
+		for _, address in ipairs(map.rows[key] and map.rows[key][row] or {}) do list[#list + 1] = address end
+		return list
+	end
 	if row ~= nil and map.rows[key] and map.rows[key][row] then return map.rows[key][row] end
 	return map.keys[key]
 end
@@ -582,6 +773,11 @@ end
 -- they're on neither.
 function ns.CheckModules(client, profiles)
 	map = BuildMap()
+	local effects = {}
+	local function Effect(module)
+		effects[module] = effects[module] or ns.ModuleEffect({ { module = module } }, client)
+		return effects[module]
+	end
 	local problems, counts, absent, nowhere = {}, {}, {}, {}
 	local function Problem(text) problems[#problems + 1] = text end
 	local known = {}
@@ -598,9 +794,17 @@ function ns.CheckModules(client, profiles)
 					table.insert(absent[module.key], entry)
 				end
 			end
-			local count, said = 0, {}
-			ns.ApplyModules({ { module = module } }, {}, client, function(key, row)
-				count = count + 1
+			-- (Each setting it sets, the old grids' too.)
+			ns.ApplyModules({ { module = module } }, {}, client, function(key)
+				if ns.DEFAULTS[key] == nil and not ns.IS_PROFILE_TABLE[key]
+					and not (ns.OldGridDefault and ns.OldGridDefault(key) ~= nil) then
+					Problem(("module %s: %s isn't a setting"):format(module.key, key))
+				end
+			end, true)
+			-- (What it changes, the old grids' gone over to the new.)
+			local changes, said = Effect(module), {}
+			for _, change in ipairs(changes) do
+				local key, row = change[1], change[2]
 				local addresses = ns.SettingAddresses(key, row)
 				local where = key .. (row ~= nil and "." .. tostring(row) or "")
 				if not addresses then
@@ -611,11 +815,8 @@ function ns.CheckModules(client, profiles)
 					Problem(("module %s: %s is in %s, outside its scope"):format(module.key, where,
 						table.concat(addresses, " and ")))
 				end
-				if ns.DEFAULTS[key] == nil and not ns.IS_PROFILE_TABLE[key] then
-					Problem(("module %s: %s isn't a setting"):format(module.key, key))
-				end
-			end)
-			counts[module.key] = count
+			end
+			counts[module.key] = #changes
 		end
 	end
 	local byName = {}
@@ -636,13 +837,38 @@ function ns.CheckModules(client, profiles)
 						entry.module.editMode))
 				end
 			end
-			ns.ApplyModules(resolved, {}, client, function(key, row, _, module)
-				local where = key .. (row ~= nil and "." .. tostring(row) or "")
-				if who[where] and who[where] ~= module.key then
-					Problem(("%s: %s and %s both set %s"):format(profile.name, who[where], module.key, where))
+			for _, entry in ipairs(resolved) do
+				if entry.module then
+					for _, change in ipairs(Effect(entry.module)) do
+						local where = change[1] .. (change[2] ~= nil and "." .. tostring(change[2]) or "")
+						if who[where] and who[where] ~= entry.key then
+							Problem(("%s: %s and %s both set %s"):format(profile.name, who[where], entry.key, where))
+						end
+						who[where] = entry.key
+					end
 				end
-				who[where] = module.key
-			end)
+			end
+		end
+	end
+	-- The slots' parts: their modules there, and no setting changed by the
+	-- parts of two slots.
+	local slotWho = {}
+	for _, slot in ipairs(ns.PROFILE_SLOTS) do
+		for name, part in pairs(ns.PROFILE_PARTS[slot.key]) do
+			for _, entry in ipairs(ns.ResolveModules({ modules = part.modules }, client, {})) do
+				if entry.missing then
+					Problem(("part %s.%s: no module called %s"):format(slot.key, name, entry.key))
+				else
+					for _, change in ipairs(Effect(entry.module)) do
+						local where = change[1] .. (change[2] ~= nil and "." .. tostring(change[2]) or "")
+						if slotWho[where] and slotWho[where] ~= slot.key then
+							Problem(("%s is changed by parts of two slots, %s and %s"):format(where, slotWho[where],
+								slot.key))
+						end
+						slotWho[where] = slot.key
+					end
+				end
+			end
 		end
 	end
 	return problems, counts, absent, nowhere

@@ -138,21 +138,87 @@ local function FromTooltip(unit)
 	return nil
 end
 
+-- Classic gives units no quest lines (and UnitIsRelatedToActiveQuest says no):
+-- there, the kill objectives in the log not yet done ("Young Nightsaber slain:
+-- 3/7"), by the mob's name. Items that drop from mobs can't be told this way.
+local killNames -- [name] = true, or nil until needed
+
+local function KillName(text)
+	if type(text) ~= "string" or not Known(text) then
+		return nil
+	end
+	local name = text:match("^(.-):%s*%d+%s*/%s*%d+")
+	if not name then
+		return nil
+	end
+	-- (" slain", from the game's own "%s slain: %d/%d".)
+	local suffix = type(QUEST_MONSTERS_KILLED) == "string" and QUEST_MONSTERS_KILLED:match("^%%s(.-):")
+	if suffix and suffix ~= "" and name:sub(-#suffix) == suffix then
+		name = name:sub(1, -#suffix - 1)
+	end
+	return name ~= "" and name or nil
+end
+
+local function KillNames()
+	if killNames then
+		return killNames
+	end
+	killNames = {}
+	pcall(function()
+		local log = C_QuestLog
+		if log and log.GetInfo and log.GetQuestObjectives then
+			for i = 1, log.GetNumQuestLogEntries() do
+				local info = log.GetInfo(i)
+				local questID = info and not info.isHeader and info.questID
+				for _, objective in ipairs(type(questID) == "number" and log.GetQuestObjectives(questID) or {}) do
+					local name = objective.type == "monster" and not objective.finished and KillName(objective.text)
+					if name then
+						killNames[name] = true
+					end
+				end
+			end
+		elseif GetQuestLogTitle and GetNumQuestLeaderBoards and GetQuestLogLeaderBoard then
+			for i = 1, GetNumQuestLogEntries() do
+				local _, _, _, isHeader = GetQuestLogTitle(i)
+				for j = 1, not isHeader and GetNumQuestLeaderBoards(i) or 0 do
+					local text, kind, finished = GetQuestLogLeaderBoard(j, i)
+					local name = kind == "monster" and not finished and KillName(text)
+					if name then
+						killNames[name] = true
+					end
+				end
+			end
+		end
+	end)
+	return killNames
+end
+
+-- Whether the unit is an enemy named by a kill objective not yet done (see above).
+local function FromKillLog(unit)
+	if ns.isRetail or IsFriendly(unit) then
+		return false
+	end
+	local name = NameOf(unit)
+	return name and KillNames()[name] == true or false
+end
+
 local function Read(unit)
 	local ok, isPlayer = pcall(UnitIsPlayer, unit)
 	if not ok or not Known(isPlayer) or isPlayer then
 		return false
 	end
 	local found = FromTooltip(unit)
-	if found ~= nil then
-		return found
+	if found then
+		return true
 	end
-	local related = C_QuestLog and C_QuestLog.UnitIsRelatedToActiveQuest
+	local related = found == nil and C_QuestLog and C_QuestLog.UnitIsRelatedToActiveQuest
 	if related then
 		local okRelated, yes = pcall(related, unit)
-		return okRelated and Known(yes) and yes and true or false
+		if okRelated and Known(yes) and yes then
+			return true
+		end
 	end
-	return false
+	return FromKillLog(unit)
 end
 
 -- Whether a unit counts for a quest objective you haven't finished.
@@ -384,6 +450,7 @@ watcher:SetScript("OnEvent", function()
 	wipe(passiveAnswers)
 	settleAt = GetTime() + SETTLE
 	barTexts = nil
+	killNames = nil
 end)
 
 -- The golden exclamation mark shown for them (plates' Quest Icon row, the
@@ -392,14 +459,11 @@ end)
 -- proxy setting is true then) or where a client lacks that atlas. Marks follow
 -- the setting as it changes.
 ns.QUEST_MOB_TEXTURE = "Interface\\GossipFrame\\AvailableQuestIcon"
-local MODELS_SETTING = "PROXY_CHARACTER_MODELS_TOGGLE"
+local MODELS_SETTING = "PROXY_CHARACTER_MODELS_TOGGLE" -- (to follow it as it changes)
 local marks = setmetatable({}, { __mode = "k" })
 
 local function StandardModels()
-	local ok, value = pcall(function()
-		return Settings.GetSetting(MODELS_SETTING):GetValue()
-	end)
-	return ok and value == true
+	return ns.StandardModels() == true
 end
 
 local function HasAtlas(name)
@@ -626,6 +690,17 @@ end)
 -- For /cine debug plates: what the target's quest lines say.
 function ns.DescribeQuestMob(unit)
 	return ("quest mob=%s (tooltip=%s)"):format(tostring(ns.IsQuestMob(unit)), tostring(FromTooltip(unit)))
+end
+
+-- For /cine debug questmob: what the tooltip says, and the kill objectives in the log (Classic).
+function ns.DescribeQuestKills(unit)
+	local names = {}
+	for name in pairs(KillNames()) do
+		names[#names + 1] = name
+	end
+	table.sort(names)
+	return ("tooltip says=%s, kill log match=%s, kill objectives: %s"):format(tostring(FromTooltip(unit)),
+		tostring(FromKillLog(unit)), #names > 0 and table.concat(names, ", ") or "none")
 end
 
 -- For /cine debug questmob: the unit's GUID and whether it counts as done.

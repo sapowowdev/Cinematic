@@ -228,8 +228,8 @@ local COMBAT_TEXT_CVARS = {
 }
 
 -- The selection circle the game draws on the ground under your target (a box
--- on WoW Forever): off in cinematic mode out of combat, so a target kept
--- lazily doesn't show; back for fights.
+-- on WoW Forever): off in CineMode unless its Standard Frames row
+-- (targetcircle) says to show it now.
 local TARGET_CIRCLE_CVARS = {
 	playerWins = true,
 	values = { ObjectSelectionCircle = "0" },
@@ -261,6 +261,16 @@ local function NameKeptHere(key, inCombat)
 		end
 		return false
 	end
+	-- (Its roles, and its rule, edited on its row: name:<row>.)
+	local facts = ns.RuleFactsNow()
+	local ruleKey = ns.NameRuleKey(key)
+	if ns.RoleHides(facts)[ruleKey] then
+		return false
+	end
+	local rule = ns.RuleShows(ruleKey, facts)
+	if rule ~= nil then
+		return rule
+	end
 	if ns.db["nameAlways" .. key] or (ns.db["nameGroup" .. key] and ns.InGroup()) then
 		return true
 	end
@@ -268,11 +278,35 @@ local function NameKeptHere(key, inCombat)
 	if inCombat or (ns.FightLingering() and fightKept) then
 		return fightKept
 	end
+	-- (Its Target dropdown, out of fights: an enemy targeted, or anything else.)
+	if ns.db["nameTargetEnemy" .. key] and facts.enemy or ns.db["nameTargetFriendly" .. key] and facts.friendly then
+		return true
+	end
 	local place = ns.PlateSuffix()
 	return ns.db[place and ("nameIn" .. place .. key) or ("nameKeep" .. key)]
 end
 
 local lastCinematic = false
+
+-- A names row's key for its rule and roles (name:<row>), made once each, not each tick.
+do
+	local keys = {}
+	function ns.NameRuleKey(key)
+		local ruleKey = keys[key]
+		if not ruleKey then
+			ruleKey = "name:" .. key
+			keys[key] = ruleKey
+		end
+		return ruleKey
+	end
+end
+
+-- Chat Cam (ChatCam.lua, the dev copy) hiding names, plates and the target
+-- circle while a conversation has the camera (chatCamHideWorld), in or out
+-- of CineMode.
+local function ChatCamHides()
+	return (ns.ChatCamHidesWorld and ns.ChatCamHidesWorld()) or false
+end
 
 -- fightStarting: called as a fight starts, just before combat lockdown.
 function ns.UpdateCVars(cinematic, fightStarting)
@@ -281,12 +315,13 @@ function ns.UpdateCVars(cinematic, fightStarting)
 	for _, set in ipairs(CVAR_SETS) do
 		-- (Nameplates page's master switch off: names are left to the game.)
 		local want = cinematic and ns.db.handlePlates and not NameKeptHere(set.key, inCombat)
-		ns.ApplyCVarSet(set, want or false)
+		ns.ApplyCVarSet(set, want or ChatCamHides() or false)
 	end
 	-- (Kept through the Calm Timer after a fight, like the plates.)
 	local fighting = inCombat or (ns.FightLingering and ns.FightLingering())
 	ns.ApplyCVarSet(COMBAT_TEXT_CVARS, (cinematic and ns.db.hideCombatText and not fighting) or false)
-	ns.ApplyCVarSet(TARGET_CIRCLE_CVARS, (cinematic and ns.db.hideTargetCircle and not fighting) or false)
+	ns.ApplyCVarSet(TARGET_CIRCLE_CVARS, (cinematic and ns.PageOn("handleFrames")
+		and not ns.RowOnNow("targetcircle", nil, true)) or ChatCamHides())
 	-- The red error text ("Target not in line of sight"): its own In combat
 	-- and Out of combat boxes, CineMode or not (the addon off: always shown).
 	if UIErrorsFrame then
@@ -526,8 +561,10 @@ local function UpdateCombatMusic(elapsed, playerOverride)
 	end
 	-- Stays muted until the Calm Timer (calmTime) has passed since the last
 	-- fight ended, so back-to-back fights don't bring the music in and out.
-	local fighting = handlesMusic and ns.db.musicOffInCombat
-		and now - combatMusic.lastFightAt < ns.db.calmTime
+	-- (Stopped while its Show in row, Audio page, is off: in a fight (and
+	-- the Calm Timer after) or somewhere, told apart for the player's own music.)
+	local musicOff = handlesMusic and not ns.RowOnNow("music", ns.db.musicAlways, true)
+	local fighting = musicOff and now - combatMusic.lastFightAt < ns.db.calmTime
 	-- Music belongs to the camera modes (flying, RP walking, standing still,
 	-- vista, cozy, fishing, the quest cam...): once you leave them all and move
 	-- on, it fades out, and the next one starts it again (music fatigue
@@ -549,7 +586,7 @@ local function UpdateCombatMusic(elapsed, playerOverride)
 		combatMusic.movingPaused = true
 		combatMusic.pauseFade = true
 	end
-	local blocked = handlesMusic and ns.IsMusicBlocked()
+	local blocked = musicOff and not fighting
 	local moving = combatMusic.movingPaused
 	-- Music the move-on pause faded right out rests until the fatigue time
 	-- (Audio page) since it last started is up: a camera starting meanwhile
@@ -1325,7 +1362,12 @@ local function KeptHere(kind)
 		return rule
 	end
 	local key = placeSuffix and ("plateIn" .. placeSuffix .. kind) or ("plateCinematic" .. kind)
-	return (ns.db[key] or ns.db["plateAlways" .. kind] or (ns.db["plateGroup" .. kind] and ns.InGroup()))
+	if ns.db[key] or ns.db["plateAlways" .. kind] or (ns.db["plateGroup" .. kind] and ns.InGroup()) then
+		return true
+	end
+	-- (Its Target dropdown: an enemy targeted, or anything else.)
+	local facts = ns.RuleFactsNow()
+	return (ns.db["plateTargetEnemy" .. kind] and facts.enemy or ns.db["plateTargetFriendly" .. kind] and facts.friendly)
 		and true or false
 end
 
@@ -1608,7 +1650,7 @@ do
 			return "in combat"
 		elseif GetTime() < duels.selfUntil then
 			return "dueling yourself"
-		elseif Ask(UnitOnTaxi, "player") then
+		elseif Ask(ns.OnTaxi) then
 			return "on a flight"
 		elseif NO_DUEL_PLACES[ns.GetPlaceType() or ""] then
 			return "no duels here (" .. ns.GetPlaceType() .. ")"
@@ -2321,7 +2363,8 @@ local function PlateAlphas(unit, plate)
 	if alpha <= 0 then
 		return 0, 1, 0, 0
 	end
-	return alpha, body / alpha, name / alpha, mark / alpha
+	-- (Chat Cam holding every plate down: see UpdatePlates.)
+	return alpha * (1 - (ns.plates.hold or 0)), body / alpha, name / alpha, mark / alpha
 end
 
 -- (For /cine debug names: why a plate's name is kept or not.)
@@ -2563,7 +2606,7 @@ function ns.PrintPlatesDebug()
 		if found == 0 then
 			ns.Print("  nothing")
 		end
-		ns.Print("  name colour: " .. ns.DescribePlateName(overPlate.UnitFrame))
+		ns.Print("  name color: " .. ns.DescribePlateName(overPlate.UnitFrame))
 	elseif UnitExists("mouseover") then
 		ns.Print("mouseover " .. tostring(UnitName("mouseover")) .. ": NO plate")
 	end
@@ -2611,7 +2654,7 @@ function ns.PrintPlatesDebug()
 					Show(function() return container:IsShown() end), Show(function() return container:GetAlpha() end),
 					Show(function() return UnitHealth("target"), UnitHealthMax("target") end)))
 			end
-			ns.Print("  name colour: " .. ns.DescribePlateName(frame))
+			ns.Print("  name color: " .. ns.DescribePlateName(frame))
 			local parts, fields, healthFields = ns.DescribePlateParts(frame)
 			ns.Print("  parts: " .. parts)
 			ns.Print("  fields: " .. fields)
@@ -2668,7 +2711,7 @@ function ns.PrintDuelsDebug()
 		end
 		local info = found[a.plate]
 		ns.Print(("  %s (%s)%s, can attack: %s, shown %.2f"):format(Known(a.name) and tostring(a.name) or "?",
-			a.unit, info and (" DUELING (colour " .. info.pair.color .. ")") or "",
+			a.unit, info and (" DUELING (color " .. info.pair.color .. ")") or "",
 			#canAttack > 0 and table.concat(canAttack, ", ") or "-", duels.Level(a.plate)))
 	end
 	ns.Print(("duel lines: %s / %s (the game's own; nil: English used)"):format(tostring(DUEL_WINNER),
@@ -2808,7 +2851,8 @@ function ns.EnsurePlateRows()
 			ns.EnablePlateRow(kind) -- (a rule may show it)
 		end
 		for _, prefix in ipairs({ "plateAlways", "plateGroup", "plateCombat", "plateCombatPvP",
-			"plateCinematic", "plateInInstances", "plateInPvP", "plateInBGs" }) do
+			"plateCinematic", "plateInCities", "plateInInstances", "plateInPvP", "plateInBGs", "plateTargetEnemy",
+			"plateTargetFriendly" }) do
 			if ns.db[prefix .. kind] then
 				ns.EnablePlateRow(kind)
 				break
@@ -3085,6 +3129,14 @@ function ns.UpdatePlates(cinematic, elapsed)
 	local target = hide and 0 or 1
 	local changed = UpdateTargetFade(elapsed)
 	changed = duels.Update(elapsed) or changed
+	-- Chat Cam hiding every plate meanwhile (see PlateAlphas): ns.plates.hold
+	-- fades from 0 (as usual) to 1 (all hidden).
+	local holdTarget = ChatCamHides() and 1 or 0
+	if (ns.plates.hold or 0) ~= holdTarget then
+		ns.plates.hold = ns.Approach(ns.plates.hold or 0, holdTarget, elapsed,
+			holdTarget > 0 and ns.FadeOutTime() or ns.FadeInTime())
+		changed = true
+	end
 	changed = ns.plates.level ~= target or changed
 	if changed then
 		local duration = target > ns.plates.level and ns.FadeInTime() or ns.FadeOutTime()
@@ -3424,9 +3476,13 @@ local function ShowsFriend(tooltip)
 	return TooltipUnitIsEnemy(tooltip) == false
 end
 
--- Hide out of combat: db key -> test. One that's more than one kind (a quest
--- mob is an enemy too) hides only if every kind it is is ticked.
--- Each kind hides always (tooltipHide<kind>) or in fights (tooltipHideCombat<kind>).
+-- The kinds, each a Show in row (tooltip:<kind>, its Always tooltipAlways<kind>):
+-- hidden while it's off. One that's more than one kind (a quest mob is an
+-- enemy too) hides only if every kind it is is off.
+local TOOLTIP_ROW = setmetatable({}, { __index = function(rows, kind)
+	rows[kind] = "tooltip:" .. kind
+	return rows[kind]
+end })
 local HIDE_KINDS = {
 	{ kind = "Quest", test = ShowsQuestObjective, why = "quest objective" },
 	{ kind = "Gather", test = ShowsGatheringNode, why = "gatherable" },
@@ -3480,9 +3536,9 @@ local function HidesByKind(tooltip)
 	if unitOrWorld and mode and ns.db[TOOLTIP_HIDE_IN[mode]] then
 		return true, mode
 	end
-	local combat = InCombat()
+	-- (Hidden: its Show in row, tooltip:<kind>, off here and now.)
 	local function Ticked(kind)
-		return ns.db["tooltipHide" .. kind] or (combat and ns.db["tooltipHideCombat" .. kind]) or false
+		return not ns.RowOnNow(TOOLTIP_ROW[kind], ns.db["tooltipAlways" .. kind], true)
 	end
 	local why
 	if unitOrWorld then
@@ -3598,7 +3654,7 @@ end
 
 local function ViewMoved(note)
 	local ok, speed = pcall(GetUnitSpeed, "player")
-	if (ok and Readable(speed) and speed > 0) or UnitOnTaxi("player") or IsMouselooking()
+	if (ok and Readable(speed) and speed > 0) or ns.OnTaxi() or IsMouselooking()
 		or (ns.yawAxis and ns.yawAxis.moving) or (ns.pitchAxis and ns.pitchAxis.moving) then
 		return true
 	end

@@ -15,6 +15,7 @@ local CAMERAS = {
 	{ key = "tele", manual = "tele", label = "Tele camera", icon = "Interface\\Icons\\INV_Misc_Rune_01" },
 	{ key = "death", label = "Death camera", icon = "Interface\\Icons\\Ability_Rogue_FeignDeath" },
 }
+ns.CAMERA_WHEEL_LIST = CAMERAS -- (the Wheels page's preview)
 local MASK = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\RoundIcon" -- soft rounded corners
 local CIRCLE = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask" -- (a round mask every client has)
 local RADIUS = 110     -- from the middle to each icon's centre (UI units)
@@ -59,7 +60,7 @@ local function CanStart(camera)
 	if camera.key == "death" then
 		return db.deathOrbit and not ns.playerMoving
 	end
-	if not db.enabled or ns.playerMoving or ns.Flag(UnitOnTaxi("player")) then
+	if not db.enabled or ns.playerMoving or ns.Flag(ns.OnTaxi()) then
 		return false
 	end
 	return camera.key ~= "idle" or db.idleOrbit

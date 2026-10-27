@@ -25,8 +25,10 @@ ns.GRAPHICS_PLUS = {
 	-- (How far away nameplates show, in yards. The game caps it at its own limit.)
 	{ key = "graphicsPlusPlateDistance", cvar = "nameplateMaxDistance", min = 10, menu = 60, max = 100, step = 5,
 		group = "Camera and nameplates", noMenu = true, secure = true, resetToDefault = true },
-	-- (How far out the camera zooms, times the game's base distance. The game caps it at its own limit.)
-	{ key = "graphicsPlusZoomMax", cvar = "cameraDistanceMaxZoomFactor", min = 1, menu = 2.6, max = 4, step = 0.1,
+	-- (How far out the camera zooms, times the game's base distance. The game caps it at its own limit:
+	-- 2.6 on retail, where a higher value reads back as 2.6.)
+	{ key = "graphicsPlusZoomMax", cvar = "cameraDistanceMaxZoomFactor", min = 1, menu = 2.6,
+		max = (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE) and 2.6 or 4, step = 0.1,
 		group = "Camera and nameplates", noMenu = true, decimals = 1 },
 	{ key = "graphicsPlusClutter", cvar = "groundEffectDensity", min = 16, menu = 48, max = 256, step = 8,
 		group = "Ground clutter" },

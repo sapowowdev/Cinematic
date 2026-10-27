@@ -13,7 +13,7 @@
 --
 -- Not part of a profile: the minimap button and its position, the on/off
 -- switch, debug options, frames you added or stopped fading, zone and time
--- tint colours you picked, and things the addon keeps for itself (flight
+-- tint colours you picked, the master wheel's wheels and your own wheels, and things the addon keeps for itself (flight
 -- times, the log, game settings it's holding).
 
 local _, ns = ...
@@ -21,12 +21,13 @@ local L = ns.L
 
 local GLOBAL_KEYS = {
 	enabled = true, minimapButton = true, minimapAngle = true, logDetail = true, language = true,
+	masterWheelOrder = true, masterWheelOff = true, customWheels = true, wheelExtras = true, -- (Wheels pages)
 }
 -- Lists kept as tables that belong to a profile (their defaults are in code;
 -- see EnsureTables in Core.lua). Missing from a profile: emptied, which means defaults.
 local PROFILE_TABLES = {
-	"chatPeekTypes", "chatPeekChannelList", "combatShow", "cineShow", "targetShow", "enemyShow",
-	"friendlyShow", "bgShow", "worldShow", "groupShow", "instanceShow", "addonFrames", "gamepadPressButtons",
+	"chatPeekTypes", "chatPeekChannelList", "combatShow", "calmShow", "quietShow", "camShow", "cineShow", "targetShow", "enemyShow",
+	"friendlyShow", "bgShow", "worldShow", "cityShow", "groupShow", "instanceShow", "addonFrames", "gamepadPressButtons",
 	"hoverGroups", "cooldownReadyOnly", "cooldownReadyEarly", "cooldownEarlyOn", "cooldownRechargeOnly", "cooldownNeedsPower",
 	"cooldownGroupDefaults", "cooldownProcOnly", "cooldownAlwaysShow",
 	"frameRules", -- (none in any built-in profile: each starts with no Custom Visibility Rules)
@@ -83,7 +84,7 @@ ns.BUILTIN_PROFILES = {
 		label = "Retail",
 		client = "forever",
 		icon = "Interface\\Icons\\INV_Misc_Wrench_01",
-		tip = L["Default, looking like retail: Cinematic's own Edit Mode layout (the action bars centred along " ..
+		tip = L["Default, looking like retail: Cinematic's own Edit Mode layout (the action bars centered along " ..
 			"the bottom, the micro menu and bags in the corner, the XP bar under them), with action bars 1 to 3, " ..
 			"the micro menu and bags, and the XP bar each coming up on its own when you point at it. Picking it " ..
 			"adds the layout to Edit Mode if you haven't got it; the other profiles go back to the game's own layout " ..
@@ -99,8 +100,8 @@ ns.BUILTIN_PROFILES = {
 		client = "retail",
 		oldNames = { "Immersive" },
 		icon = "Interface\\Icons\\Spell_Holy_PowerInfusion",
-		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode, with action bars " ..
-			"1 to 3, the micro menu and bags, and the XP bar each coming up on its own when you point at it. " ..
+		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode, with your main " ..
+			"action bars, the micro menu and bags, and the XP bar each coming up on its own when you point at it. " ..
 			"Retail's default."],
 		modules = { "recovering", "minimap-off-in-fights", "fewer-group-plates", "retail-groups",
 			"micro-off-in-fights", "walk-run-music", "music-fatigue", "no-npc-chat" },
@@ -137,16 +138,17 @@ ns.BUILTIN_PROFILES = {
 		icon = "Interface\\Icons\\Ability_Stealth",
 		tip = L["As little UI as possible: nameplates show only for enemies in fights, and fights don't bring " ..
 			"the letterbox down. Fights bring up only your resource bar and the Cooldown Manager, the cast bar " ..
-			"shows all through CineMode, your health shows at the screen's edges (Vitals Vision), and every " ..
+			"shows all through CineMode, your health shows at the screen's edges and " ..
+			"your personal resource display fades in as it drops (Vitals Vision), and every " ..
 			"camera can start music."],
 		modules = { { forever = "layout-preset", retail = "layout-pure" }, { retail = "retail-groups" }, "pure-frames",
-			"pure-cdm", "pure-plates", "pure-tooltips", "heal-vision-everywhere", "no-quest-timer", "pure-cameras",
+			"pure-cdm", "pure-plates", "pure-tooltips", "heal-vision-everywhere", "pure-cameras",
 			"letterbox-in-fights", "no-time-message", "vitals-vision", "no-npc-chat", "pure-chat" },
 	},
 	{
 		name = "Lite",
 		icon = "Interface\\Icons\\Spell_Holy_HolyBolt",
-		tip = L["The UI fades and the look stays, with just a few cameras: flights (and fly-bys), AFK, " ..
+		tip = L["The UI fades and the look stays, with just a few cameras: flights, AFK, " ..
 			"and your Hearthstone and teleports. No cozy, vista, fish, RP walk, auto-run, death or quest cameras."],
 		modules = { { forever = "layout-preset" }, "recovering", { retail = "retail-groups" }, "lite-cameras",
 			"lite-channels", "no-npc-chat" },
@@ -271,6 +273,16 @@ function ns.ProfileBase(name)
 	local builtin = builtinByName[name]
 	if builtin then ns.ApplyModules(ns.BuiltinModules(builtin), base, ns.CLIENT) end
 	baseCache[name] = base
+	return base
+end
+
+-- The same before the old grids' settings go over (ns.ConvertOffGrids, Core.lua):
+-- what a profile saved before they did was a change from. Not kept.
+function ns.RawProfileBase(name)
+	local base = {}
+	for k, v in pairs(ns.DEFAULTS) do base[k] = v end
+	local builtin = builtinByName[name]
+	if builtin then ns.ApplyModules(ns.BuiltinModules(builtin), base, ns.CLIENT, nil, true) end
 	return base
 end
 
@@ -472,6 +484,77 @@ function ns.SetProfile(name)
 	ns.Log("state", "profile: " .. name)
 end
 
+-- One part on its own over the live settings (the welcome window's Customise
+-- pages): just its slot's settings (and its rows of shared lists) are set
+-- as the part has them, the rest left as they are.
+do
+	-- The settings with that part: the defaults, with it on top.
+	local function PartValues(slot, part)
+		local values = {}
+		for k, v in pairs(ns.DEFAULTS) do values[k] = v end
+		return ns.ApplyParts({ [slot] = part }, values, ns.CLIENT)
+	end
+	-- fn(key, row, value) for each of the slot's settings and list rows.
+	local function EachInSlot(slot, values, fn)
+		for k in pairs(ns.DEFAULTS) do
+			if IsProfileKey(k) and type(values[k]) ~= "table" and ns.SettingSlot(k) == slot then
+				fn(k, nil, values[k])
+			end
+		end
+		for _, k in ipairs(PROFILE_TABLES) do
+			local want, live, seen = values[k], ns.db[k], {}
+			for _, list in ipairs({ type(want) == "table" and want or {}, type(live) == "table" and live or {} }) do
+				for row in pairs(list) do
+					if not seen[row] and ns.SettingSlot(k, row) == slot then
+						seen[row] = true
+						fn(k, row, type(want) == "table" and want[row] or nil)
+					end
+				end
+			end
+		end
+	end
+
+	-- The live settings are that part's, in its slot. (A list row holding a
+	-- table isn't compared.)
+	function ns.SlotPartMatches(slot, part)
+		local same = true
+		EachInSlot(slot, PartValues(slot, part), function(k, row, value)
+			local live = ns.db[k]
+			if row ~= nil then live = type(live) == "table" and live[row] or nil end
+			if type(value) ~= "table" and live ~= value then same = false end
+		end)
+		return same
+	end
+
+	-- On a built-in, a profile of your own (named ownName, numbered if
+	-- taken) from it, switched to, so a change leaves the built-in as it is.
+	function ns.EnsureOwnProfile(ownName)
+		if builtinByName[ns.ActiveProfile()] and ownName then
+			local name, n = ownName, 1
+			while ns.ProfileExists(name) do
+				n = n + 1
+				name = ownName .. " " .. n
+			end
+			ns.NewProfile(name)
+		end
+	end
+
+	function ns.ApplyPart(slot, part, ownName)
+		ns.EnsureOwnProfile(ownName)
+		EachInSlot(slot, PartValues(slot, part), function(k, row, value)
+			if row == nil then
+				ns.db[k] = value
+			else
+				if type(ns.db[k]) ~= "table" then ns.db[k] = {} end
+				ns.db[k][row] = CopyTable(value)
+			end
+		end)
+		ns.SaveProfile()
+		SettingsChanged()
+		ns.Log("state", ("part: %s %s on %s"):format(slot, part, ns.ActiveProfile()))
+	end
+end
+
 -- A profile of your own's description (db.profileNotes: kept apart from its
 -- settings, which are written over each time it's saved).
 function ns.ProfileNote(name)
@@ -484,7 +567,7 @@ function ns.SetProfileNote(name, text)
 end
 
 -- A profile's icon: a built-in's own, or the one picked for yours
--- (db.profileIcons, one of HOVER_GROUP_ICONS).
+-- (db.profileIcons: any of the game's icons, picked on the Profiles page).
 function ns.ProfileIcon(name)
 	local builtin = builtinByName[name]
 	return builtin and builtin.icon or ns.db.profileIcons[name] or ns.HOVER_GROUP_ICONS[1]
@@ -616,6 +699,8 @@ function ns.KnownProfileSetting(key, value)
 		if k == key then return type(value) == "table" end
 	end
 	local default = ns.DEFAULTS[key]
+	-- (An old grid's setting, from before they went over: kept, to go over as it's added.)
+	if default == nil then default = ns.OldGridDefault(key) end
 	return default ~= nil and IsProfileKey(key) and type(value) == type(default)
 end
 
@@ -623,6 +708,8 @@ end
 -- defaults, as your own are), switched to.
 function ns.AddSharedProfile(name, settings, note, icon)
 	if ns.ProfileExists(name) then return false end
+	-- (One shared from before the old grids went over: theirs go over now.)
+	ns.ConvertOffGrids(settings, ns.OldGridDefault, { switches = true })
 	ns.db.profileIcons[name] = icon or ns.UnusedProfileIcon()
 	ns.db.profiles[name] = settings
 	ns.db.profileNotes[name] = note

@@ -163,7 +163,8 @@ local DESIGN = {
 -- (system, index, in its default spot, point, relative point, relative to,
 -- x, y, -1, settings), in the game's own export format, so it's put together
 -- into an export string (ExportFromSystems). The personal resource display
--- moved to the middle, the Cooldown Manager above it.
+-- moved to the middle (its health bar shown: its first setting, HideHealth,
+-- 0), the Cooldown Manager above it.
 local PURE_CINEMA_SYSTEMS = {
 	"0 0 1 7 7 UIParent 0.0 45.0 -1 ##$$%/&('%)#+#,$",
 	"0 1 1 7 7 UIParent 0.0 45.0 -1 ##$$%/&('%(#,$",
@@ -186,7 +187,7 @@ local PURE_CINEMA_SYSTEMS = {
 	"3 5 1 5 5 UIParent 0.0 0.0 -1 &#*$3#",
 	"3 6 1 5 5 UIParent 0.0 0.0 -1 -=.+/#4$5#6(7-7$8(9(",
 	"3 7 1 4 4 UIParent 0.0 0.0 -1 3#",
-	"4 -1 1 7 7 UIParent 0.0 45.0 -1 #",
+	"4 -1 0 2 2 UIParent -414.5 -277.8 -1 #",
 	"5 -1 0 4 4 UIParent 0.0 -141.2 -1 #",
 	"6 0 1 2 2 UIParent -255.0 -10.0 -1 ##$#%#&.(()(",
 	"6 1 1 2 2 UIParent -270.0 -155.0 -1 ##$#%#'+(()(-$",
@@ -209,7 +210,7 @@ local PURE_CINEMA_SYSTEMS = {
 	"20 1 1 7 7 UIParent 0.0 240.0 -1 ##$*%$&('%(-($)#+$,$-$",
 	"20 2 1 7 7 UIParent 0.0 370.0 -1 ##$$%$&('((-($)#+$,$-$",
 	"20 3 1 7 7 UIParent 420.0 430.0 -1 #$$$%#&('((-($)#*#+$,$-$.-.$",
-	"21 -1 0 4 4 UIParent 0.0 -217.2 -1 #$%#&#'((()#*-*$+#,&-#.#/(0#1#",
+	"21 -1 0 4 4 UIParent 0.0 -225.5 -1 ##%#&#'((()#*-*$+#,&-#.#/(0#1#",
 	"22 0 1 8 7 UIParent -457.0 336.0 -1 #$$$%#&('((#)U*$+%,$-#.#/U0%",
 	"22 1 1 1 1 UIParent 0.0 -40.0 -1 &('()U*#+%",
 	"22 2 1 1 1 UIParent 0.0 -90.0 -1 &('()U*#+%",
@@ -343,16 +344,8 @@ function ns.RegenerateLayout(name)
 	return ok
 end
 
--- Whether one of ours is there: nil: no; "active" or "made" (another in use).
-function ns.LayoutState(name)
-	if not (C_EditMode and C_EditMode.GetLayouts) then return nil end
-	local info, index = FindLayout(name)
-	if not index then return nil end
-	return ActiveName(info) == name and "active" or "made"
-end
-
 -- On logging in (or a reload), once Edit Mode has its layouts: the layout
--- just made (the Dev page's Update), switched to again; otherwise the
+-- just remade, switched to again; otherwise the
 -- profile's, as on switching to it. Edit Mode keeps a layout per character,
 -- so one logged into from a character on another profile can be on the
 -- wrong one (Retail's on a character whose profile isn't Retail).
@@ -625,53 +618,3 @@ ns.OnLanguage(function()
 		timeout = 0, whileDead = true, hideOnEscape = true,
 	}
 end)
-
--- The Dev page (dev build): each of our layouts, whether it's there, and a
--- button to make it or bring it up to date from the code.
-function ns.CreateLayoutPanel(kit)
-	local canvas, content = kit.CreateScrollPage(true)
-	local title = kit.Label(content, "GameFontNormalLarge", "|cffff4040DEV ONLY|r Edit Mode layouts")
-	title:SetPoint("TOPLEFT", 16, -16)
-	local intro = kit.Label(content, "GameFontHighlight", "Makes each layout in Edit Mode, or brings it up " ..
-		"to date from the code if it's there, and switches to it. Delete them in Edit Mode. A profile whose " ..
-		"layout module names one makes it when picked, too.")
-	intro:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
-	intro:SetWidth(560)
-	intro:SetJustifyH("LEFT")
-
-	local names = {}
-	for name in pairs(ns.EDIT_MODE_LAYOUTS) do names[#names + 1] = name end
-	table.sort(names)
-	local rows, anchor = {}, intro
-	for _, name in ipairs(names) do
-		local status = kit.Label(content, "GameFontHighlight")
-		status:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -14)
-		local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
-		button:SetSize(200, 24)
-		button:SetPoint("TOPLEFT", status, "BOTTOMLEFT", -2, -8)
-		rows[#rows + 1] = { name = name, status = status, button = button }
-		anchor = button
-	end
-
-	local function Refresh()
-		for _, row in ipairs(rows) do
-			local state = ns.LayoutState(row.name)
-			row.status:SetText(row.name .. ": " .. (state == "active" and "|cff40ff40there, in use|r"
-				or state and "|cffffd100there, not in use|r" or "|cff808080not made yet|r"))
-			row.button:SetText(state and "Update the layout" or "Create the layout")
-		end
-	end
-	for _, row in ipairs(rows) do
-		row.button:SetScript("OnClick", function()
-			ns.RegenerateLayout(row.name)
-			Refresh()
-		end)
-	end
-
-	-- (made or deleted in Edit Mode itself, too)
-	canvas:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
-	canvas:SetScript("OnEvent", function(self) if self:IsVisible() then Refresh() end end)
-	canvas:SetScript("OnShow", kit.PageShown(Refresh, content))
-	canvas:Hide()
-	kit.RegisterSubpage(canvas, "Dev", "Dev")
-end

@@ -106,7 +106,7 @@ local function CanSit()
 		return false
 	end
 	if (ns.IsSitting and ns.IsSitting()) or InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")) or ns.Flag(UnitIsDeadOrGhost("player"))
-		or ns.Flag(UnitOnTaxi("player")) or (IsMounted and ns.Flag(IsMounted()))
+		or ns.Flag(ns.OnTaxi()) or (IsMounted and ns.Flag(IsMounted()))
 		or (UnitInVehicle and ns.Flag(UnitInVehicle("player"))) then
 		return false
 	end

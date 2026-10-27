@@ -40,7 +40,8 @@
 -- started talking (quest givers often stand together: talk to another and
 -- that's the new spot, the zoom back out still to come), or you take a
 -- flight. Then it goes at its
--- own speed (questCamZoomOutSpeed), but takes ZOOM_HURRY at most.
+-- own speed (questCamZoomOutSpeed), but takes ZOOM_HURRY at most. Either
+-- zoom takes questCamZoomMaxTime at most: from far out, quicker than its speed.
 -- It isn't queued behind the turn back (walking, the RP walk and auto-run
 -- cameras' own swing behind you held the queue up, and it never came), and
 -- turning the camera yourself as you go doesn't stop it: only zooming
@@ -182,9 +183,15 @@ local function Command(m)
 	return grow and m.grow or m.shrink
 end
 
+-- The drift's wanted: set, and not held still for Quest talk's bubble over
+-- the NPC's head (following their plate, it jiggled as the camera drifted).
+local function DriftWanted()
+	return (ns.db.questCamDrift or 0) >= 1 and not (ns.QuestTalkHoldsCamera and ns.QuestTalkHoldsCamera())
+end
+
 -- Settled and drifting to and fro (or about to).
 local function Drifting()
-	return cam.active and not cam.handedOver and (ns.db.questCamDrift or 0) >= 1
+	return cam.active and not cam.handedOver and DriftWanted()
 end
 
 local function StopMove(m)
@@ -513,7 +520,7 @@ end
 -- (the tilt and the zoom go together). waitZoom: not while the zoom's moving.
 local function StepSequence(now)
 	while true do
-		local drift = cam.active and not cam.handedOver and #cam.steps == 0 and (ns.db.questCamDrift or 0) >= 1
+		local drift = cam.active and not cam.handedOver and #cam.steps == 0 and DriftWanted()
 		if movers.yaw.moving or movers.pitch.moving
 			or now - math.max(movers.yaw.stoppedAt or 0, movers.pitch.stoppedAt or 0) < (drift and DRIFT_GAP or STEP_GAP) then
 			return
@@ -633,7 +640,8 @@ local function Start()
 		ns.RestoreZoomLimit()
 	elseif cam.zoom and GetCameraZoom and GetCameraZoom() > db.questCamDistance + ZOOM_MARGIN then
 		cam.zoomedTo = db.questCamDistance
-		ZoomTo(db.questCamDistance, (GetCameraZoom() - db.questCamDistance) / db.questCamZoomSpeed)
+		ZoomTo(db.questCamDistance, math.min(db.questCamZoomMaxTime or math.huge,
+			(GetCameraZoom() - db.questCamDistance) / db.questCamZoomSpeed))
 		swing = db.questCamTime
 	else
 		ns.RestoreZoomLimit() -- (close already: inside it)
@@ -681,7 +689,7 @@ local function Start()
 		-- With nothing after it but the drift, the turn flows straight into it
 		-- (stopping and starting again showed as a pause).
 		local tail
-		if (db.questCamDrift or 0) >= 1 and db.questCamLower <= 0 then
+		if DriftWanted() and db.questCamLower <= 0 then
 			tail = { extra = db.questCamDrift / 2, R = DRIFT_EASE * DRIFT_TIME,
 				speed = db.questCamDrift / (DRIFT_TIME * (1 - DRIFT_EASE)) }
 		end
@@ -720,7 +728,8 @@ local function Stop()
 		and not ns.PlayerZoomedSince(cam.startedAt)
 		and (zoomer.moving or math.abs(GetCameraZoom() - cam.zoomedTo) < ZOOM_YOURS) then
 		-- (Held until you've walked off: see OnUpdate.)
-		zoomer.pending = { to = cam.zoom, x = cam.talkX, y = cam.talkY, since = GetTime(), walked = 0 }
+		-- (A test from the Test button goes back out at once: now.)
+		zoomer.pending = { to = cam.zoom, x = cam.talkX, y = cam.talkY, since = GetTime(), walked = 0, now = cam.test }
 		Note("zoom out held")
 	end
 	if not cam.handedOver then
@@ -739,7 +748,7 @@ end
 local function Wanted()
 	local db = ns.db
 	return db and db.enabled and db.eventQuestCamera ~= "none" and not InCombatLockdown()
-		and not cam.movie and not UnitOnTaxi("player") and not ns.IsCameraOffHere("quest")
+		and not cam.movie and not ns.OnTaxi() and not ns.IsCameraOffHere("quest")
 		and ns.CombatWaitOver("quest", GetTime())
 end
 
@@ -761,7 +770,14 @@ clickWatcher:SetScript("OnEvent", function()
 	local x = GetCursorPosition() / UIParent:GetEffectiveScale()
 	lastClick.at = GetTime()
 	lastClick.side = x > UIParent:GetWidth() / 2 and "right" or "left"
+	lastClick.x = x / UIParent:GetWidth()
 end)
+
+-- How far across the screen (a share of its width) the click that opened the
+-- conversation was, or nil if it wasn't a click (Quest talk's Opposite Clicked).
+function ns.ClickedX()
+	return GetTime() - lastClick.at <= CLICK_WINDOW and lastClick.x or nil
+end
 
 local OPENS = {
 	QUEST_GREETING = true, QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true,
@@ -846,7 +862,7 @@ local function OnEvent(_, event)
 		-- on the same frame count as one.)
 		local now, delay = GetTime(), ns.db and ns.db.questCamDelay or 0
 		if not cam.since then
-			cam.since, cam.cancelled = now, nil -- a new conversation
+			cam.since, cam.cancelled, cam.test = now, nil, false -- a new conversation
 			-- Opened by clicking them (not an interact key): the side they were on.
 			cam.clickSide = cam.since - lastClick.at <= CLICK_WINDOW and lastClick.side or nil
 			cam.startAt = now + delay
@@ -911,14 +927,14 @@ local function OnUpdate(_, elapsed)
 	-- (a flight doesn't count as moving, so it was held the whole way, and
 	-- the flight camera's zoom waited on it).
 	local pending = zoomer.pending
-	local onTaxi = pending and UnitOnTaxi("player")
+	local onTaxi = pending and ns.OnTaxi()
 	if pending and ns.PlayerZoomedSince(pending.since) then
 		Note("you zoomed: no zoom out")
 		zoomer.pending = nil
-	elseif pending and (ns.playerMoving or onTaxi) then
+	elseif pending and (ns.playerMoving or onTaxi or pending.now) then
 		local x, y = PlayerPosition()
 		local far
-		if onTaxi then
+		if onTaxi or pending.now then
 			far = true
 		elseif x and pending.x then
 			far = (x - pending.x) ^ 2 + (y - pending.y) ^ 2 >= ZOOM_OUT_DISTANCE ^ 2
@@ -928,7 +944,8 @@ local function OnUpdate(_, elapsed)
 		end
 		if far then
 			zoomer.pending = nil
-			ZoomTo(pending.to, math.abs(pending.to - GetCameraZoom()) / ns.db.questCamZoomOutSpeed)
+			ZoomTo(pending.to, math.min(ns.db.questCamZoomMaxTime or math.huge,
+				math.abs(pending.to - GetCameraZoom()) / ns.db.questCamZoomOutSpeed))
 			zoomer.leaving = true
 			HurryZoom(ZOOM_HURRY)
 		end
@@ -996,6 +1013,48 @@ end
 -- Whether the quest cam is running now.
 function ns.QuestCamActive()
 	return cam.active and true or false
+end
+
+-- The Test button (CameraTests.lua): a conversation with nobody, as if a
+-- quest giver's window had opened and the wait were over, until it's
+-- stopped (then everything goes back, the zoom straight away). False if the
+-- quest camera can't start now.
+function ns.QuestCamTest(on)
+	if on then
+		if not Wanted() or ns.playerMoving then
+			return false
+		end
+		local now = GetTime()
+		cam.since, cam.cancelled, cam.clickSide, cam.test = now, nil, nil, true
+		cam.startAt, cam.windowAt, cam.closingAt = now, now, nil
+		return true
+	end
+	if cam.test and cam.since then
+		cam.closingAt = GetTime() - CLOSE_GRACE -- (over next frame)
+	end
+end
+-- (Walked off, it's over: the conversation's only kept for the window that never closes.)
+function ns.QuestCamTesting()
+	return cam.test and cam.since ~= nil and not cam.cancelled
+end
+
+-- Running, or still turning or tilting back (the Chat Cam waits for it).
+function ns.QuestCamBusy()
+	return cam.active or #cam.steps > 0 or movers.yaw.moving or movers.pitch.moving
+end
+
+-- The Chat Cam (ChatCam.lua, the dev copy) borrows the eased zoom:
+-- it's stepped here (OnUpdate) whoever started it, and stops if you zoom.
+function ns.QuestCamZoomTo(distance, T)
+	ns.TakeOverZoom()
+	ZoomTo(distance, T)
+end
+function ns.QuestCamZooming()
+	return zoomer.moving
+end
+function ns.QuestCamStopZoom()
+	StopZoom(true)
+	ns.RestoreZoomLimit()
 end
 
 -- For /cine debug: whether the quest cam is on now, its moves and the shoulder state.

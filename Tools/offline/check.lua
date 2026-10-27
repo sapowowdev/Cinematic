@@ -8,7 +8,7 @@
 -- ns.CheckModules: each module writing only inside its scope, no two of a
 -- profile's modules setting the same thing, every built-in's modules there.
 -- Also: the files loading without errors, every scope entry on at least one
--- client's options, and every module used by a built-in. Exits 1 on any
+-- client's options, and every module used by a built-in or a slot's part. Exits 1 on any
 -- problem.
 
 local RUNS = {
@@ -38,6 +38,14 @@ if arg[1] then
 	for _, profile in ipairs(ns.ALL_BUILTIN_PROFILES) do
 		if not profile.client or profile.client == client then
 			for _, entry in ipairs(ns.ResolveModules(profile, client, ns.ALL_BUILTIN_BY_NAME)) do
+				print("used\t" .. entry.key)
+			end
+		end
+	end
+	-- (Or by a slot's part: the welcome window's Customise choices.)
+	for _, parts in pairs(ns.PROFILE_PARTS) do
+		for _, part in pairs(parts) do
+			for _, entry in ipairs(ns.ResolveModules({ modules = part.modules }, client, {})) do
 				print("used\t" .. entry.key)
 			end
 		end
@@ -89,7 +97,7 @@ for pair, count in pairs(nowhere) do
 	end
 end
 for key in pairs(looked) do
-	if not used[key] then Problem(("module %s: no built-in profile uses it"):format(key)) end
+	if not used[key] then Problem(("module %s: no built-in profile or part uses it"):format(key)) end
 end
 
 table.sort(problems)

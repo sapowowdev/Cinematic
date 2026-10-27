@@ -48,7 +48,7 @@ ns.CHAT_PEEK_TYPES = {
 	-- /who replies (shift-clicking a name in the guild list, too); see WHO_WINDOW below.
 	{ key = "who", label = L["/who results"], section = "game",
 		tip = L["Replies to a /who, shift-clicking a name in the guild list too."], events = {} },
-	{ key = "skill", label = L["Skill ups"], section = "game", events = { "CHAT_MSG_SKILL" } },
+	{ key = "skill", label = L["Skill ups"], section = "game", default = false, events = { "CHAT_MSG_SKILL" } },
 	{ key = "achievement", label = L["Achievements"], section = "game", default = false,
 		events = { "CHAT_MSG_ACHIEVEMENT", "CHAT_MSG_GUILD_ACHIEVEMENT" } },
 	{ key = "xp", label = L["Experience"], section = "game", default = false,
