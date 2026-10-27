@@ -125,7 +125,7 @@ local function Choose(index)
 	Close()
 	local camera = index and CAMERAS[index]
 	if camera then
-		Cinematic_StartCam(camera.key, true) -- (quietly: no chat messages)
+		Cinematic_StartCam(camera.key, true, "camera wheel") -- (quietly: no chat messages)
 	end
 end
 

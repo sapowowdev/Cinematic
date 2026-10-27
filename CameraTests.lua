@@ -34,9 +34,9 @@ for key, cam in pairs(STANDING) do
 	local camera, manual = cam[1], cam[2]
 	tests[key] = {
 		start = function()
-			Cinematic_StartCam(camera, true)
+			Cinematic_StartCam(camera, true, "Test button")
 			if ns.manualCam ~= manual then
-				Cinematic_StartCam(camera)
+				Cinematic_StartCam(camera, false, "Test button")
 				return false
 			end
 			if camera == "tele" then

@@ -2398,10 +2398,11 @@ end
 -- Key bindings for the standing-still cameras: each starts its camera now, as
 -- if its event had happened, and pressing it again stops it. Moving or jumping
 -- ends it, like an emote. "death" runs the death camera test (/cine deathtest).
--- quiet: no messages in chat (the camera wheel).
+-- quiet: no messages in chat (the camera wheel). via: what started it, for
+-- the camera mode log (a key binding if not given).
 local CAM_NAMES = { idle = "AFK camera", cozy = "cozy camera", vista = "vista camera", fish = "fish camera",
 	tele = "tele camera" }
-function Cinematic_StartCam(camera, quiet)
+function Cinematic_StartCam(camera, quiet, via)
 	if not ns.db then
 		return
 	end
@@ -2448,7 +2449,7 @@ function Cinematic_StartCam(camera, quiet)
 		Print(L["the AFK camera's rotation is off in Camera Settings"])
 		return
 	end
-	ns.manualCam = manual
+	ns.manualCam, ns.manualCamVia = manual, via or "key binding"
 	if camera == "tele" then
 		ns.PretendDepartCast(10) -- (the usual Hearthstone cast: the spin and zoom need one)
 	end

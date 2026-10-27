@@ -327,7 +327,12 @@ do
 			emoteEvent = depart
 			if ns.EndLogoutEvent then ns.EndLogoutEvent() end -- (casting calls a logout off)
 			castCamera, behindPending = ns.IsDepartEvent(), false
-			ns.lastEmote = { token = depart:upper(), via = "cast", at = GetTime() }
+			local okName, spellName = pcall(function()
+				return C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID) or (GetSpellInfo(spellID))
+			end)
+			ns.lastEmote = { token = depart:upper(), at = GetTime(),
+				via = "cast of " .. (okName and type(spellName) == "string"
+					and not (issecretvalue and issecretvalue(spellName)) and spellName or "spell") }
 			local ok, endMS = pcall(function() return select(5, UnitCastingInfo("player")) end)
 			if ok and type(endMS) == "number" and not (issecretvalue and issecretvalue(endMS)) then
 				castEndsAt = endMS / 1000
@@ -1086,12 +1091,13 @@ local function CheckIdleBuffs()
 		for name in ns.db.cozyBuffs:gmatch("[^,]+") do
 			name = name:match("^%s*(.-)%s*$")
 			if name ~= "" and HasBuffNamed(name) then
-				found = true
+				found = name
 				break
 			end
 		end
 	end
-	atCampfire = found
+	atCampfire = found and true or false
+	ns.campfireBuff = found or nil -- (the one found, for the camera mode log)
 end
 campfireWatcher:SetScript("OnEvent", ns.Profiled("UNIT_AURA (campfire)", CheckIdleBuffs))
 ns.CheckIdleBuffs = CheckIdleBuffs -- after the list changes
@@ -1232,8 +1238,9 @@ do
 	for _, event in ipairs({ "PLAYER_CAMPING", "PLAYER_QUITING", "LOGOUT_CANCEL", "PLAYER_ENTERING_WORLD" }) do
 		pcall(logoutWatcher.RegisterEvent, logoutWatcher, event)
 	end
-	logoutWatcher:SetScript("OnEvent", function(_, event)
+	logoutWatcher:SetScript("OnEvent", function(self, event)
 		logoutAt = (event == "PLAYER_CAMPING" or event == "PLAYER_QUITING") and GetTime() or nil
+		self.kind = event -- (for the camera mode log)
 	end)
 	local function LoggingOut()
 		if not logoutAt then
@@ -1326,6 +1333,35 @@ do
 		local stoodStill = ns.stillSince ~= nil and GetTime() - ns.stillSince >= ns.db.idleOrbitDelay
 		return FirstWithCamera(departing, LoggingOut() and "Logout", afk and "AFK", byFire and "Campfire",
 			emoteEvent, weapon and "Weapon", campfire and "Campfire", stoodStill and "Still")
+	end
+
+	-- For the camera mode log: what set off an event (the key from
+	-- CurrentEvent) and what was involved, in a few words.
+	local EMOTE_KEYS = { Sit = true, Sleep = true, Dance = true, Kneel = true, Stare = true, Chair = true,
+		SitButton = true, Fishing = true, Hearth = true, Teleport = true }
+	function ns.CameraEventDetail(key)
+		local now = GetTime()
+		if key == "Manual" then
+			return ("%s camera started from the %s"):format(tostring(ns.manualCam), ns.manualCamVia or "key binding")
+		elseif key == "Weapon" then
+			return "weapon drawn with the sheathe key" .. (ns.playerMoving and ", RP walking (hero walk)" or "")
+		elseif key == "Campfire" then
+			return ("buff %s%s"):format(tostring(ns.campfireBuff), ns.IsSitting() and ", sitting" or "")
+		elseif key == "AFK" then
+			return "flagged AFK"
+		elseif key == "Logout" then
+			return ("%s countdown, %.0f sec in"):format(logoutWatcher.kind == "PLAYER_QUITING" and "quit" or "logout",
+				logoutAt and now - logoutAt or 0)
+		elseif key == "Still" then
+			return ("stood still %.0f sec (wait %d)"):format(ns.stillSince and now - ns.stillSince or 0,
+				ns.db.idleOrbitDelay)
+		elseif EMOTE_KEYS[key] then
+			local e = ns.lastEmote
+			local detail = e and ("%s via %s, %.0f sec ago"):format(tostring(e.token), tostring(e.via), now - e.at)
+				or "no emote seen"
+			return key == "SitButton" and ("Campfire button, " .. detail) or detail
+		end
+		return "-"
 	end
 end
 
@@ -2777,15 +2813,37 @@ local function UpdateTurnFollow(now, elapsed, travel, T, cinematic, turning, tur
 end
 
 -- The "Print the camera mode to chat" option: one line each time the mode
--- changes (nil: none of them).
-local reportedMode = false -- (false: nothing printed yet)
+-- changes (nil: none of them), or the event behind it does, with what set it
+-- off: the event and its emote, buff, timer... or the NPC or speaker.
+local report = { mode = false } -- (false: nothing printed yet)
 local CAMERA_REPORT_NAMES = { walk = "RP walk", run = "auto-run", idle = "AFK", chatcam = "chat" }
-function ns.ReportCameraMode(mode)
-	if mode == reportedMode then
+function ns.ReportCameraMode(cam)
+	local mode = cam and (CAMERA_REPORT_NAMES[cam] or cam)
+	local eventCam = cam == "idle" or cam == "cozy" or cam == "vista" or cam == "fish" or cam == "tele"
+	local event = eventCam and ns.ActiveEvent() or nil
+	if mode == report.mode and event == report.event then
 		return
 	end
-	reportedMode = mode
-	local text = "camera mode: " .. (mode and (mode .. " camera") or "none")
+	report.mode, report.event = mode, event
+	local why
+	if event then
+		why = event .. ": " .. ns.CameraEventDetail(event)
+	elseif cam == "idle" then
+		why = ("stood still %.0f sec"):format(ns.stillSince and GetTime() - ns.stillSince or 0)
+	elseif cam == "quest" then
+		local ok, npc = pcall(UnitName, "npc")
+		why = ("%s, NPC %s"):format(ns.QuestCamEvent and ns.QuestCamEvent() or "Quest", ok and type(npc) == "string"
+			and not (issecretvalue and issecretvalue(npc)) and npc or "?")
+	elseif cam == "chatcam" then
+		why = "speaker " .. tostring(ns.ChatCamSpeaker and ns.ChatCamSpeaker() or "?")
+	elseif cam == "flight" then
+		why = "on a flight"
+	elseif cam == "death" then
+		why = "dead"
+	elseif cam == "walk" or cam == "run" then
+		why = cam == "walk" and "auto-walking" or "auto-running"
+	end
+	local text = "camera mode: " .. (mode and (mode .. " camera" .. (why and (" (" .. why .. ")") or "")) or "none")
 	if ns.db.debugCameraMode then
 		ns.Print(text) -- (which logs it too)
 	else
@@ -2795,7 +2853,7 @@ end
 
 -- Turning the option on prints the current mode straight away.
 function ns.ResetCameraModeReport()
-	reportedMode = false
+	report.mode = false
 end
 
 function ns.UpdateOrbit(cinematic, elapsed)
@@ -2917,7 +2975,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		or (ns.QuestCamActive and ns.QuestCamActive() and "quest")
 		or (ns.ChatCamActive and ns.ChatCamActive() and "chatcam") or nil -- (in or out of cinematic mode)
 	-- (logged always; printed with /cine debug modes)
-	ns.ReportCameraMode(ns.activeCam and (CAMERA_REPORT_NAMES[ns.activeCam] or ns.activeCam))
+	ns.ReportCameraMode(ns.activeCam)
 	if travel and cinematic then
 		walkHandoff = true
 	elseif onTaxi or (active and not travel and ns.playerMoving) then

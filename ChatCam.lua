@@ -1282,6 +1282,11 @@ function ns.ChatCamActive()
 	return convo ~= nil
 end
 
+-- Who's talking in the conversation now (for the camera mode log), or nil.
+function ns.ChatCamSpeaker()
+	return convo and convo.speaker and convo.speaker.name
+end
+
 -- /cine chatcam [flip|log|steady|debug|mark <note>].
 function ns.ChatCamCommand(arg)
 	local note = arg:match("^mark%s*(.*)$")

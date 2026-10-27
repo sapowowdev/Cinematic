@@ -646,7 +646,7 @@ local function HandleSlash(msg)
 		end
 		if ns.DaySweep(math.max(4, seconds), StopCam) then
 			if ns.manualCam ~= "afk" then
-				Cinematic_StartCam("idle")
+				Cinematic_StartCam("idle", false, "/cine tinttest")
 				startedCam = ns.manualCam == "afk"
 			end
 			ns.Print(("showing every time of day's tint, %d seconds each. /cine tinttest again stops it."):format(
@@ -700,7 +700,7 @@ local function HandleSlash(msg)
 			-- A tent seen here, then the cozy camera (already on: it just picks the tent up).
 			ns.TentTest(false, side)
 			if ns.manualCam ~= "cozy" then
-				Cinematic_StartCam("cozy")
+				Cinematic_StartCam("cozy", false, "/cine debug tent cozy")
 			end
 		elseif how then
 			ns.Print("/cine debug tent [seen|cozy [left|right]|clear]")
