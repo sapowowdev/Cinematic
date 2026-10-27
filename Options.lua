@@ -916,7 +916,7 @@ local function CreatePanel()
 
 	local fadeUI = Check(panel, "fadeUI", L["Start in CineMode (Fade UI, Queue Music, etc.)"],
 		L["Off: the UI stays as it is and the camera's left to you, with just the visual effects " ..
-		"over it (as the Visual Effects page says), as in the VFX Only profile. Events ticked in " ..
+		"over it (as the Visual Effects page says), as in the Subtle profile. Events ticked in " ..
 		"the Camera Triggers page's CineMode column still bring CineMode on while their camera " ..
 		"runs: standing still or going AFK, say, for a screensaver."])
 	fadeUI:SetPoint("TOPLEFT", enabled, "BOTTOMLEFT", 0, -2)
@@ -9621,7 +9621,7 @@ local function CreateProfilesPanel()
 	end)
 	note:SetPoint("LEFT", rename, "RIGHT", 8, 0)
 	local delete = Button(L["Delete"], 100, L["Delete the active profile (your own ones only), switching to %s."]:format(
-		ns.ProfileLabel(ns.BUILTIN_PROFILES[1].name)), function()
+		ns.ProfileLabel(ns.DEFAULT_PROFILE)), function()
 		local name = ns.ActiveProfile()
 		StaticPopup_Show("CINEMATIC_PROFILE_DELETE", name, nil, name)
 	end)

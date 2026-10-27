@@ -37,7 +37,7 @@ ns.PROFILE_TABLES = PROFILE_TABLES
 ns.IS_PROFILE_TABLE = {}
 for _, key in ipairs(PROFILE_TABLES) do ns.IS_PROFILE_TABLE[key] = true end
 
-local DEFAULT_PROFILE -- (this client's first built-in: set after the list)
+local DEFAULT_PROFILE -- (this client's default built-in: set after the list)
 
 -- The built-in profiles (ns.BUILTIN_PROFILES) are in ProfileChoices.lua.
 -- Each client's order, by name, where it isn't the list's (those not in it
@@ -46,7 +46,8 @@ local DEFAULT_PROFILE -- (this client's first built-in: set after the list)
 local BUILTIN_ORDER = {}
 
 -- Every client's (ALL_BUILTIN_PROFILES, for the dev build), and this one's
--- in its order (BUILTIN_PROFILES). The first is this client's default.
+-- in its order (BUILTIN_PROFILES). The default is the one marked so, else
+-- the first.
 ns.ALL_BUILTIN_PROFILES = ns.BUILTIN_PROFILES
 do
 	local order, list = {}, {}
@@ -62,6 +63,10 @@ do
 	for i, entry in ipairs(list) do ns.BUILTIN_PROFILES[i] = entry.profile end
 end
 DEFAULT_PROFILE = ns.BUILTIN_PROFILES[1].name
+for _, profile in ipairs(ns.BUILTIN_PROFILES) do
+	if profile.default then DEFAULT_PROFILE = profile.name end
+end
+ns.DEFAULT_PROFILE = DEFAULT_PROFILE
 ns.OnLanguage(function() ns.TranslateFields(ns.ALL_BUILTIN_PROFILES, "tip") end)
 local builtinByName, allBuiltinNames, allBuiltinByName = {}, {}, {}
 for _, profile in ipairs(ns.BUILTIN_PROFILES) do builtinByName[profile.name] = profile end
@@ -70,6 +75,21 @@ for _, profile in ipairs(ns.ALL_BUILTIN_PROFILES) do
 	allBuiltinByName[profile.name] = profile
 end
 ns.ALL_BUILTIN_BY_NAME = allBuiltinByName
+-- Retired built-ins (ns.RETIRED_PROFILES) and old names, this client's:
+-- what was saved under one is a change from its values until it's moved
+-- over at login (ns.InitProfiles).
+local retiredByName, retiredHere, oldNameOf, otherClientRetired = {}, {}, {}, {}
+for _, profile in ipairs(ns.RETIRED_PROFILES or {}) do
+	retiredByName[profile.name] = profile
+	if not profile.client or profile.client == ns.CLIENT then
+		retiredHere[#retiredHere + 1] = profile
+	else
+		otherClientRetired[profile.name] = true
+	end
+end
+for _, profile in ipairs(ns.BUILTIN_PROFILES) do
+	for _, old in ipairs(profile.oldNames or {}) do oldNameOf[old] = profile end
+end
 
 -- Just switched to a profile (Profiles page, welcome window): a built-in
 -- with a preview shows its mouseover group of that preset for a few
@@ -126,6 +146,20 @@ function ns.BuiltinModules(profile)
 	end)
 end
 
+-- A profile's built-in modules: a built-in's, or (until moved over at
+-- login) an old name's or a retired built-in's. nil: your own.
+local function ModulesFor(name)
+	local builtin = builtinByName[name]
+	if builtin then return ns.BuiltinModules(builtin) end
+	local db = ns.db or {}
+	builtin = oldNameOf[name]
+	if builtin and not (db.profiles and db.profiles[builtin.name]) then return ns.BuiltinModules(builtin) end
+	local retired = retiredByName[name]
+	if retired and not (db.retiredProfiles and db.retiredProfiles[name]) then
+		return ns.ResolveModules(retired, ns.CLIENT, retiredByName)
+	end
+end
+
 -- The values a profile starts from: the defaults, with a built-in's modules.
 local baseCache = {}
 function ns.ProfileBase(name)
@@ -133,8 +167,8 @@ function ns.ProfileBase(name)
 	if baseCache[name] then return baseCache[name] end
 	local base = {}
 	for k, v in pairs(ns.DEFAULTS) do base[k] = v end
-	local builtin = builtinByName[name]
-	if builtin then ns.ApplyModules(ns.BuiltinModules(builtin), base, ns.CLIENT) end
+	local modules = ModulesFor(name)
+	if modules then ns.ApplyModules(modules, base, ns.CLIENT) end
 	baseCache[name] = base
 	return base
 end
@@ -144,8 +178,8 @@ end
 function ns.RawProfileBase(name)
 	local base = {}
 	for k, v in pairs(ns.DEFAULTS) do base[k] = v end
-	local builtin = builtinByName[name]
-	if builtin then ns.ApplyModules(ns.BuiltinModules(builtin), base, ns.CLIENT, nil, true) end
+	local modules = ModulesFor(name)
+	if modules then ns.ApplyModules(modules, base, ns.CLIENT, nil, true) end
 	return base
 end
 
@@ -317,7 +351,9 @@ function ns.ProfileNames()
 	for name in pairs(ns.db.profiles) do
 		-- (Not one of the other built-ins: another client's, or hidden. Their
 		-- settings stay saved for when they're listed again.)
-		if not builtinByName[name] and not allBuiltinNames[name] then own[#own + 1] = name end
+		if not builtinByName[name] and not allBuiltinNames[name] and not otherClientRetired[name] then
+			own[#own + 1] = name
+		end
 	end
 	table.sort(own, function(a, b) return a:lower() < b:lower() end)
 	for _, name in ipairs(own) do names[#names + 1] = name end
@@ -578,12 +614,9 @@ function ns.ProfileChanged()
 	return false
 end
 
--- A profile's settings for sharing (Share.lua): what differs from the
--- defaults, and its lists. (Against the defaults, not a built-in's values,
--- so it comes out the same on a version whose built-ins have changed.)
-function ns.ProfileForSharing(name)
-	if name == ns.ActiveProfile() then ns.SaveProfile() end
-	local saved, base = ns.db.profiles[name] or {}, ns.ProfileBase(name)
+-- A profile's saved changes over its base, as changes from the defaults
+-- (as your own profiles are stored), and its lists.
+local function AgainstDefaults(saved, base)
 	local shared = {}
 	for k, default in pairs(ns.DEFAULTS) do
 		if IsProfileKey(k) then
@@ -597,6 +630,14 @@ function ns.ProfileForSharing(name)
 		if type(list) == "table" and next(list) ~= nil then shared[k] = CopyTable(list) end
 	end
 	return shared
+end
+
+-- A profile's settings for sharing (Share.lua): what differs from the
+-- defaults, and its lists. (Against the defaults, not a built-in's values,
+-- so it comes out the same on a version whose built-ins have changed.)
+function ns.ProfileForSharing(name)
+	if name == ns.ActiveProfile() then ns.SaveProfile() end
+	return AgainstDefaults(ns.db.profiles[name] or {}, ns.ProfileBase(name))
 end
 
 -- Whether a shared setting is one this version has: a list, or a setting
@@ -652,9 +693,14 @@ function ns.InitProfiles()
 	db.profileNotes = db.profileNotes or {}
 	db.profileIcons = db.profileIcons or {}
 	db.devRecipes, db.devModules = nil, nil -- (the Profile Builder's changes, from before the Module Editor)
-	-- Built-ins called something else before: their settings and picks move over.
+	-- Built-ins called something else before (retired ones' too): their
+	-- settings and picks move over.
 	local liveRenamed = false
-	for _, profile in ipairs(ns.BUILTIN_PROFILES) do
+	local renaming = {}
+	for _, list in ipairs({ ns.BUILTIN_PROFILES, retiredHere }) do
+		for _, profile in ipairs(list) do renaming[#renaming + 1] = profile end
+	end
+	for _, profile in ipairs(renaming) do
 		for _, old in ipairs(profile.oldNames or {}) do
 			if db.profiles[old] and not db.profiles[profile.name] then
 				db.profiles[profile.name], db.profiles[old] = db.profiles[old], nil
@@ -668,6 +714,39 @@ function ns.InitProfiles()
 			end
 		end
 	end
+	-- Built-ins no longer offered (ns.RETIRED_PROFILES): one you're on or
+	-- have saved becomes a profile of your own, named as it was shown, its
+	-- settings as they were. Characters with it as theirs follow when they
+	-- next log in (db.retiredProfiles: the old name, and what it's called now).
+	db.retiredProfiles = db.retiredProfiles or {}
+	for _, profile in ipairs(retiredHere) do
+		local old = profile.name
+		local inUse = db.profile == old or db.liveProfile == old or chardb.profile == old
+		if (db.profiles[old] or inUse) and not db.retiredProfiles[old] then
+			-- (The live one's settings as they are now; others' as saved.)
+			local saved = db.liveProfile == old and Snapshot(old) or db.profiles[old] or {}
+			local own = AgainstDefaults(saved, ns.ProfileBase(old))
+			db.profiles[old] = nil
+			local label = profile.label or old
+			local name, n = label, 1
+			while ns.ProfileExists(name) do
+				n = n + 1
+				name = label .. " " .. n
+			end
+			db.profiles[name] = own
+			db.profileIcons[name] = profile.icon
+			db.profileNotes[name] = L["Kept from the %s profile, which Cinematic no longer has."]:format(label)
+			db.retiredProfiles[old] = name
+		end
+		local moved = db.retiredProfiles[old]
+		if moved then
+			for _, holder in ipairs({ db, chardb }) do
+				if holder.profile == old then holder.profile = moved end
+			end
+			if db.liveProfile == old then db.liveProfile = moved end
+		end
+	end
+	wipe(baseCache) -- (worked out under the old names before)
 	-- Your own profiles made before they had icons get one each.
 	for _, name in ipairs(ns.ProfileNames()) do
 		if not builtinByName[name] and not db.profileIcons[name] then

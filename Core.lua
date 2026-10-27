@@ -2218,7 +2218,7 @@ local function OnUpdate(_, elapsed)
 		ns.Log("calm", ("%.1f sec after the calm timer ended, still up: %s"):format(now - calmTrace.endedAt,
 			ns.NotFadedList and Step(ns.NotFadedList) or "?"))
 	end
-	-- In CineMode; with Start in CineMode (fadeUI) off, over the normal UI (the VFX Only profile);
+	-- In CineMode; with Start in CineMode (fadeUI) off, over the normal UI (the Subtle profile);
 	-- and while just moving about takes you out of it, with Keep VFX on.
 	local effectsOn = cinematic or (not ns.db.fadeUI and ns.db.enabled and ns.ProfileChosen())
 		or (offForMoving and ns.db.movingKeepVFX) or false

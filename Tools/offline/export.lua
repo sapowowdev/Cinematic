@@ -129,7 +129,7 @@ local function Client(client)
 	out.levels = {}
 	for _, level in ipairs(ns.WELCOME_LEVELS) do
 		out.levels[#out.levels + 1] = { label = level.label, line = level.line, tip = level.tip,
-			profile = level.profile or ns.BUILTIN_PROFILES[1].name }
+			profile = level.profile or ns.DEFAULT_PROFILE }
 	end
 	local _, _, _, _, notes = ns.CheckModules(client, ns.ALL_BUILTIN_PROFILES)
 	out.notes = notes

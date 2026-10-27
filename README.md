@@ -65,7 +65,7 @@ Each situation has its own camera, and they hand over seamlessly:
 
 ## Easy to tweak
 
-* **Profiles** to switch the whole setup at once: Immersive (everything, as the developer plays), Immersive (CDM) for the Cooldown Manager, Lite (just a few cameras), VFX Only (the look without fading anything), Camera Only (the normal UI until a camera starts), Solo Explorer and Pure Cinema, or make and name your own. New players pick one the first time they log in.
+* **Profiles** to switch the whole setup at once: Subtle (the look without fading anything), Balanced (the UI fades, a few cameras) and Full (as little UI as possible, every camera). Customize swaps one part at a time (layout, interface, action bars, camera, look, sound and chat), or make and name your own. New players pick one the first time they log in.
 * **Share profiles:** export your setup as a string and import a friend's.
 * **A minimap button** with quick switches for tint strength, music and combat. It glows while a vision (Heal, Quest, Duel, Roll) is in use, and its menu links to those pages.
 * **Full settings** under Options › AddOns › Cinematic, with a search box to find any setting. The pages are Profiles, CineMode, Standard Frames, Gamepad (WoW Forever's gamepad mode), Advanced Frames, Mouseover, Minimap, Quest tracker, Swing timer, Cooldown Manager, Tooltips, Buffs/debuffs, Nameplates, Chat, Chat bubbles, Fishing, Quality of life, Visual Effects, Audio, Camera Modes, Camera Triggers, Camera Settings (one section per camera) and Keybinds. Each page, and each camera's section, has its own Reset button for just that part.

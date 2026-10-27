@@ -224,7 +224,7 @@ local function BuildLevels(page)
 	local byName = {}
 	for _, profile in ipairs(ns.BUILTIN_PROFILES) do byName[profile.name] = profile end
 	for i, level in ipairs(LEVELS) do
-		local profile = byName[level.profile or ns.BUILTIN_PROFILES[1].name]
+		local profile = byName[level.profile or ns.DEFAULT_PROFILE]
 		if profile then
 			local card = Card(page, profile, level)
 			card:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", (i - 1) * (CARD_W + GAP), -18)
@@ -321,9 +321,12 @@ local function BuildCustomize(page)
 		question:SetText(shown.question)
 		local choices = shown.slot and ns.SlotChoices(shown.slot) or {}
 		soon:SetShown(#choices == 0)
+		-- (rows closer together when there are more than five, to fit the panel)
+		local step = math.min(44, math.floor((PANEL_H - 56) / math.max(1, #choices)))
 		for j, choice in ipairs(choices) do
 			local option = options[j] or Option(j)
-			option:SetPoint("TOPLEFT", question, "BOTTOMLEFT", 0, -12 - (j - 1) * 44)
+			option:SetHeight(step - 4)
+			option:SetPoint("TOPLEFT", question, "BOTTOMLEFT", 0, -12 - (j - 1) * step)
 			option.choice = choice
 			-- (an icon when the choice has one, the text beside it)
 			option.icon:SetTexture(choice.icon)

@@ -693,14 +693,14 @@ function ns.TestLowHealth()
 	Wake()
 end
 
--- A quick look (the welcome window's Full level): the edges as at low
--- health for seconds, then back to yours, with nothing said in chat. (The
--- big-hit flash is left out: it starts there.)
-local GLIMPSE_SHARE = 0.2
+-- A quick look (the welcome window's Full level): the page's test, shorter,
+-- with nothing said in chat. Health falls in hits to low, so the theme's art
+-- soaks in with its flashes and effects, held for seconds, then back to yours.
+local GLIMPSE_FROM, GLIMPSE_TO, GLIMPSE_TIME = 0.7, 0.1, 1.4
 function ns.FlashVitals(seconds)
 	db = db or ns.GetDB()
-	test = { from = GLIMPSE_SHARE, to = GLIMPSE_SHARE, time = 0.1, start = GetTime(), hold = seconds or 2,
-		quiet = true }
+	test = { from = GLIMPSE_FROM, to = GLIMPSE_TO, time = GLIMPSE_TIME, start = GetTime(), hits = true,
+		hold = seconds or 2, quiet = true }
 	lastHealth = test.from
 	Wake()
 end
