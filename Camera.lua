@@ -1983,7 +1983,8 @@ end
 -- Optionally the max zoom distance is raised meanwhile; on the way back it's
 -- only restored once the camera is inside the old limit again, or the game
 -- would clamp the zoom with a visible snap.
-local ZOOM_MAX_CVARS = { values = { cameraDistanceMaxZoomFactor = "2.6" } }
+local ZOOM_MAX_CVARS = { values = { cameraDistanceMaxZoomFactor = "2.6" },
+	slack = 0.5 } -- (yards past where a zoom started that still counts as inside it)
 -- Raised only: a max already past it (Graphics+) is left as it is.
 local function RaiseZoomMax()
 	if not ZOOM_MAX_CVARS.active and (tonumber(GetCVar("cameraDistanceMaxZoomFactor")) or 0)
@@ -2338,18 +2339,26 @@ function ns.CancelDeathZoom()
 end
 
 local function FinishRestore()
+	local saved = idleZoom.saved
 	idleZoom.restoring = false
 	idleZoom.saved = nil
 	-- The camera's back inside the old limit. Putting the limit back can still
 	-- jolt the camera (a hair outside it gets pulled in at once), so on a
 	-- flight it waits until you land, where the dismount moves the camera
-	-- anyway (see UpdateTaxi).
+	-- anyway (see UpdateTaxi). Zoomed yourself while still past it (taking
+	-- over mid-zoom), the game pulled the camera in to the limit in one big
+	-- jump: it waits until you're back inside where the zoom started.
 	if not ns.OnTaxi() then
-		ns.ApplyCVarSet(ZOOM_MAX_CVARS, false)
+		if ZOOM_MAX_CVARS.active and saved and GetCameraZoom and GetCameraZoom() > saved + ZOOM_MAX_CVARS.slack then
+			idleZoom.limitHeldTo = saved
+		else
+			ns.ApplyCVarSet(ZOOM_MAX_CVARS, false)
+		end
 	end
 end
 
 local function StartIdleZoom()
+	idleZoom.limitHeldTo = nil -- (raised again anyway)
 	if idleZoom.restoring then
 		idleZoom.restoring = false -- still heading back: keep the original distance
 	else
@@ -2478,7 +2487,7 @@ function ns.TakeOverZoom()
 	idleZoom.active, idleZoom.restoring, idleZoom.saved = false, false, nil
 end
 function ns.RestoreZoomLimit()
-	if not idleZoom.active and not idleZoom.restoring then
+	if not idleZoom.active and not idleZoom.restoring and not idleZoom.limitHeldTo then
 		ns.ApplyCVarSet(ZOOM_MAX_CVARS, false)
 	end
 end
@@ -2493,7 +2502,7 @@ function ns.StopIdleZoomNow()
 			CallCameraFunction(diff > 0 and "CameraZoomIn" or "CameraZoomOut", math.abs(diff))
 		end
 	end
-	idleZoom.saved = nil
+	idleZoom.saved, idleZoom.limitHeldTo = nil, nil
 	ns.ApplyCVarSet(ZOOM_MAX_CVARS, false)
 end
 
@@ -2501,6 +2510,12 @@ end
 -- (until the camera settles before landing). Once per standing-still spell or
 -- flight; switching between the two starts afresh.
 local function UpdateIdleZoom(cinematic, onTaxi, travel, now, elapsed)
+	-- A raised max held after you took over (see FinishRestore): put back once inside.
+	if idleZoom.limitHeldTo and not idleZoom.active and not idleZoom.restoring
+		and GetCameraZoom() <= idleZoom.limitHeldTo + ZOOM_MAX_CVARS.slack then
+		idleZoom.limitHeldTo = nil
+		ns.ApplyCVarSet(ZOOM_MAX_CVARS, false)
+	end
 	local still = not onTaxi and ns.stillSince ~= nil and now - ns.stillSince >= ns.db.idleOrbitDelay
 	local context = onTaxi and "taxi" or travel or "idle"
 	local allowed
@@ -4170,7 +4185,7 @@ function ns.UpdateTaxi()
 			ns.ZoomBackTo(ns.db.takeoffZoom)
 		end
 		ns.db.takeoffZoom, ns.db.takeoffInCity = nil, nil
-		if not idleZoom.active and not idleZoom.restoring then
+		if not idleZoom.active and not idleZoom.restoring and not idleZoom.limitHeldTo then
 			ns.ApplyCVarSet(ZOOM_MAX_CVARS, false) -- (held back on the flight: see FinishRestore)
 		end
 	end

@@ -74,7 +74,7 @@ local function PrintDebugHelp()
 	print("  /cine debug frame <name> - how faded frames with <name> in their name or group stand")
 	print("  /cine debug minimap - the minimap's settings, where it's anchored, and whether it's shrunk and moved off the screen")
 	print("  /cine debug ping - print each minimap ping and whether it brings the minimap up (again to stop)")
-	print("  /cine debug chatcopy - Copy chat shows each line's codes as text, to see how its colours come (again to stop)")
+	print("  /cine debug chatcopy - Copy chat shows each line's codes as text, to see how its colors come (again to stop)")
 	print("  /cine debug minimapicons - the minimap's methods for its player arrow and icons on this client")
 	print("  /cine debug nodes [raw] [grow [update]|park|stay] [seconds] - sweep a pretend mouse over the minimap and list the names its tooltip gives (herbs, veins), faded or not; grow gives the faded minimap its size back for each sweep only; park keeps it full size off the screen while it watches (60 seconds), stay full size in its place; update has the game place its dots first; raw shows each name's line as the game wrote it; with seconds, once a second, then all of it in the copy window (again to stop early)")
 	print("  /cine debug pad - print each gamepad button press and whether it shows the bars (again to stop)")
@@ -87,7 +87,7 @@ local function PrintDebugHelp()
 	print("  /cine debug mode - which camera mode it thinks you're in")
 	print("  /cine debug cooldowns - what the Cooldown Manager's \"stay up while recharging\" check sees")
 	print("  /cine debug newplayer - back to no profile picked, as on a fresh install (the welcome window)")
-	print("  /cine debug welcomedemo - the demo of a simpler, three-step welcome window (picking a style there switches to it)")
+	print("  /cine debug welcomedemo - the demo of a simpler welcome window: Subtle, Balanced or Full (picking one switches to it)")
 	print("  /cine debug whatsnew - the chat line shown at login after an update, with its What's new link")
 	print("  /cine debug modes - print each camera mode change to chat (again to stop)")
 	print("  /cine debug emote - the last emote the game passed, and whether cozy or vista took it")
@@ -112,6 +112,7 @@ local function PrintDebugHelp()
 	print("  /cine debug iconwatch - log nameplate interact icons every frame for 30 seconds")
 	print("  /cine debug sounds - print each sound the game plays, by number and name, e.g. the talents window's (again to stop)")
 	print("  /cine debug talentart - log every part of the open talents window (sizes, textures, atlases) and its trees")
+	print("  /cine debug questart - log every part of the game's quest and gossip windows (talking to an NPC: they're open behind Quest talk's bubble)")
 	print("  /cine debug talentcalc - the talent calculator: your trees as read, their grids, the row rule, its button")
 	print("  /cine debug talents - the character window's Talents button and the talents window's Character button: made, shown, where")
 	print("  /cine debug panels - the game's open windows: where they're anchored and whether they can be dragged")
@@ -856,6 +857,20 @@ local function HandleSlash(msg)
 		ns.Print("print each sound the game plays: " .. OnOff(ns.ToggleSoundWatch()))
 	elseif cmd == "debug" and arg == "talentart" and ns.LogTalentArt then
 		ns.LogTalentArt()
+	elseif cmd == "debug" and arg == "questart" then
+		-- (Open while talking, even behind Quest talk's bubble: parked, not closed.)
+		local logged = 0
+		for _, name in ipairs({ "QuestFrame", "GossipFrame" }) do
+			local frame = _G[name]
+			if frame and ns.Flag(frame:IsShown()) then
+				logged = logged + ns.LogFrameParts(frame, name, "questart")
+			end
+		end
+		if logged == 0 then
+			ns.Print("questart: talk to an NPC first (a quest's text or its rewards), then run it again")
+		else
+			ns.Print(("questart: logged %d parts of the quest and gossip windows. /reload to write the log"):format(logged))
+		end
 	elseif cmd == "debug" and arg == "talentcalc" then
 		if ns.PrintTalentCalcDebug then ns.PrintTalentCalcDebug() else ns.Print("talent calculator not loaded (retail, or TalentCalc.lua missing)") end
 	elseif cmd == "debug" and arg:find("^talents?%p*$") then

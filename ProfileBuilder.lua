@@ -185,7 +185,7 @@ function ns.CreateProfileBuilder(kit)
 	intro:SetJustifyH("LEFT")
 
 	local function Button(parent, text, width, tip, onClick)
-		local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+		local button = ns.PanelButton(parent)
 		button:SetSize(width, ROW_H)
 		button:SetText(text)
 		if tip then kit.Tooltip(button, tip) end
@@ -331,7 +331,7 @@ function ns.CreateProfileBuilder(kit)
 			insets = { left = 3, right = 3, top = 3, bottom = 3 } })
 		box:SetBackdropColor(0, 0, 0, 0.8)
 	end
-	local scroll = CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate")
+	local scroll = ns.SkinScroll(CreateFrame("ScrollFrame", nil, box, "UIPanelScrollFrameTemplate"))
 	scroll:SetPoint("TOPLEFT", 8, -8)
 	scroll:SetPoint("BOTTOMRIGHT", -28, 8)
 	output = CreateFrame("EditBox", nil, scroll)

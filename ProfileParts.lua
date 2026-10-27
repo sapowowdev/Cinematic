@@ -230,6 +230,7 @@ ns.PROFILE_PARTS = {
 			-- players' and NPCs' hidden; no group members' or friendly targets'.
 			for _, key in ipairs({ "plateAlwaysGroupMinions", "plateGroupFriends", "plateGroupFriendlyMinions",
 				"plateAlwaysMyFriendlyNPCTarget", "plateAlwaysMyFriendlyPlayerTarget", "plateCinematicEnemies",
+				"plateInCitiesEnemies",
 				"plateCombatPvPEnemies", "plateCombatPvPEnemyMinions", "plateCombatPvPFriends", "plateInBGsEnemies",
 				"plateInBGsFriends", "plateInPvPEnemies", "plateAlwaysPartClassEnemy", "plateAlwaysPartRoleHealer",
 				"plateAlwaysPartRoleTank" }) do
@@ -237,6 +238,11 @@ ns.PROFILE_PARTS = {
 			end
 			set("plateCombatEnemies", true)
 			set("plateCombatEnemyMinions", true)
+			-- An arrow over your target's plate all through CineMode, with no
+			-- target frame to show what you've targeted.
+			for _, prefix in ipairs({ "plateCinematic", "plateCombat", "plateInPvP", "plateInBGs", "plateInInstances" }) do
+				set(prefix .. "PartTargetArrow", true)
+			end
 			set("plateInstanceFriends", "hide")
 			set("plateInstanceFriendlyNPCs", "hide")
 			-- No focus's target of target frame.
@@ -309,6 +315,11 @@ ns.PROFILE_PARTS = {
 		-- Just flights (and fly-bys), AFK, and your Hearthstone and teleports.
 		lite = { apply = function(set)
 			CamsOff(set, { "cozy", "vista", "fish", "walk", "run", "death", "quest" })
+		end },
+		-- No camera moves on its own (no built-in uses it: the welcome
+		-- window's Customise > Camera does).
+		off = { apply = function(set)
+			CamsOff(set, { "flight", "idle", "cozy", "tele", "vista", "fish", "walk", "run", "death", "quest" })
 		end },
 		-- Every camera brings CineMode on (Camera Triggers page's CineMode
 		-- column), standing still starts the AFK camera, every camera can
@@ -404,8 +415,10 @@ function ns.ProfilePart(parts, slot, client)
 end
 
 -- A built-in profile's settings on a client: its parts (profile.parts), in
--- slot order, on top of base. A list's rows from two parts go together.
-function ns.ApplyParts(parts, base, client)
+-- slot order, on top of base. A list's rows from two parts go together. The
+-- parts still set the old grids' settings (Turn off in and the like): they
+-- go over as they're applied (ns.ConvertOffGrids), unless keepOld.
+function ns.ApplyParts(parts, base, client, keepOld)
 	local written = {}
 	local function Set(key, value)
 		if type(value) == "table" then
@@ -421,6 +434,9 @@ function ns.ApplyParts(parts, base, client)
 	for _, slot in ipairs(ns.PROFILE_SLOTS) do
 		local part = ns.ProfilePart(parts, slot.key, client)
 		if part then part.apply(Set, client) end
+	end
+	if not keepOld and ns.ConvertOffGrids then
+		ns.ConvertOffGrids(base, ns.OldGridDefault, { all = true })
 	end
 	return base
 end

@@ -791,7 +791,7 @@ function ns.CreateVitalsVisionPanel(kit)
 		return slider
 	end
 	local function Button(parent, text, width, tip, onClick)
-		local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+		local button = ns.PanelButton(parent)
 		button:SetSize(width, 22)
 		button:SetText(text)
 		if tip then kit.Tooltip(button, tip) end
@@ -931,7 +931,7 @@ function ns.CreateVitalsVisionPanel(kit)
 		L["How much of the screen the dark edges cover at full."], Edges)
 	Slide("lowHealthDark", L["Darkness"], 0, 100, 5, "%d%%", 100, L["How dark the edges are at full."], Edges)
 	Slide("lowHealthRed", L["Shadow tint"], 0, 100, 5, "%d%%", 100,
-		L["0%: black, like the death screen. 100%: the theme's own colour (deep red for blood)."], Edges)
+		L["0%: black, like the death screen. 100%: the theme's own color (deep red for blood)."], Edges)
 
 	stack:Header(content, L["Theme art"])
 	Tick("lowHealthBlood", L["Show the theme's art"], L["The theme's art soaking in from the edges as they " ..
@@ -956,7 +956,7 @@ function ns.CreateVitalsVisionPanel(kit)
 
 	stack:Header(content, L["Big hits"])
 	Tick("lowHealthFlash", L["Flash on big hits"],
-		L["The edges flash in the theme's colour when a hit takes a lot at once."], Edges)
+		L["The edges flash in the theme's color when a hit takes a lot at once."], Edges)
 	Slide("lowHealthFlashHit", L["A big hit takes"], 2, 40, 1, "%d%%", 100,
 		L["The share of your health a hit has to take at once to count as big (and bring on its effects)."], Edges)
 

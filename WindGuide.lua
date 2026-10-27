@@ -578,7 +578,7 @@ function ns.CreateWindGuidePanel(kit)
 		return slider
 	end
 	local function Button(parent, text, width, tip, onClick)
-		local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+		local button = ns.PanelButton(parent)
 		button:SetSize(width, 22)
 		button:SetText(text)
 		if tip then kit.Tooltip(button, tip) end

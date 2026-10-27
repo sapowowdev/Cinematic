@@ -1,87 +1,245 @@
--- A demo of a simpler welcome window, in three steps: what Cinematic does,
--- pick a style (three big cards, the rest under More styles), and three
--- things to remember. Only /cine debug welcomedemo opens it; the real one is
--- still Welcome.lua. Picking a style here really switches to it, as there.
+-- A demo of a simpler welcome window: one page with three levels (Subtle,
+-- Balanced, Full), closed with the X to keep the one picked, and Customize
+-- for pages that change one part of it (their questions only, for now).
+-- Only /cine debug welcomedemo opens it; the real one is still Welcome.lua.
+-- Picking a level really switches to its profile, as there. Everything's
+-- drawn flat (its own buttons, X and descriptions, no Blizzard templates or
+-- tooltip), so the old and new styles don't mix.
 -- (English only while it's a demo. To scrap it: delete this file, its line in
 -- both .toc files and the welcomedemo lines in Slash.lua.)
 
-local _, ns = ...
+local ADDON_NAME, ns = ...
 
-local WIDTH, PAD, GAP = 540, 20, 16
+local WIDTH, PAD, GAP = 560, 22, 14
 local CARD_W = (WIDTH - 2 * PAD - 2 * GAP) / 3
-local GOLD = { 1, 0.82, 0 }
-local EDGE = { 0.3, 0.3, 0.32 }
+local MASK = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\RoundIcon" -- soft rounded corners
 
--- The three styles given a card (by name; Full is this client's default),
--- and the short line each shows (its full description is the tooltip).
-local FEATURED = { "Lite", "VFX Only" }
-local SHORT = {
-	["Lite"] = "The fading, fewer cameras",
-	["VFX Only"] = "Just the tint, UI stays",
+-- Colours: the window, an edge, a lit edge (hovered), gold (picked, the main
+-- button) and text greys.
+local BG = { 0.07, 0.07, 0.08 }
+local RAISED = { 0.11, 0.11, 0.12 }
+local EDGE = { 0.24, 0.24, 0.26 }
+local LIT = { 0.55, 0.55, 0.58 }
+local GOLD = { 1, 0.82, 0 }
+local BUTTON, BUTTON_LIT = { 0.5, 0.38, 0.05 }, { 0.62, 0.48, 0.08 }
+local WHITE, SOFT, DIM = { 1, 1, 1 }, { 0.78, 0.78, 0.78 }, { 0.5, 0.5, 0.52 }
+
+-- The three levels, and the profile each picks (Full: this client's default),
+-- with their own descriptions (simpler than the profiles', true on both clients).
+local LEVELS = {
+	{ label = "Subtle", profile = "VFX Only", line = "A softer look. Your UI stays put.",
+		tip = "A color tint, a vignette and weather over your normal UI. Nothing fades, " ..
+			"there's no letterbox, and the camera's left to you." },
+	{ label = "Balanced", profile = "Lite", line = "The UI fades between fights, a few cameras.",
+		tip = "Your UI fades between fights, with the letterbox and tint. The camera moves " ..
+			"on its own only on flights, when you go AFK, and for your Hearthstone and teleports." },
+	{ label = "Full", line = "Everything on: letterbox, tint, every camera.",
+		tip = "Your UI fades between fights, with the letterbox and tint, and the camera comes " ..
+			"alive on flights, by campfires, at vistas, fishing and more. Point at your main action " ..
+			"bars to bring them back." },
 }
 
-local window, pages, step, primary, dots, status
-local cards = {} -- profile name -> its card or chip
+-- Each profile slot (ProfileSlots.lua) as players see it: its name, the
+-- options page with its settings, a question, and a choice per part
+-- (ProfileParts.lua; client: only there). Shared with the Profiles demo
+-- page (ProfilesDemo.lua).
+ns.SLOT_CHOICES = {
+	layout = { label = "Layout", page = "Profiles", question = "Where should your bars and menus sit?", choices = {
+		{ part = "preset", client = "forever", label = "WoW Forever's", line = "The game's own layout" },
+		{ part = "retail", client = "forever", label = "Like retail",
+			line = "Action bars centered along the bottom, menus in the corner" },
+	} },
+	frames = { label = "Interface", page = "Standard Frames", question = "When does your UI fade?", choices = {
+		{ part = "immersive", label = "Between fights", line = "Fights and opening windows bring it back" },
+		{ part = "cdm", label = "Frames in fights", line = "Between fights; your frames and buffs show in fights" },
+		{ part = "solo", label = "Only when solo", line = "Out in the world on your own; normal in groups" },
+		{ part = "pure", label = "Almost always", line = "As little UI as possible, even in fights" },
+		{ part = "nofade", label = "Never", line = "Your UI stays as the game has it" },
+	} },
+	bars = { label = "Action bars", page = "Mouseover groups", question = "How do your action bars come back?", choices = {
+		{ part = "grouped", label = "All together", line = "Point at one and the bars, menus and XP bar come up" },
+		{ part = "split", label = "Each on its own", line = "Point at the bars, the menus or the XP bar" },
+		{ part = "cdm", label = "Cooldown Manager", line = "The Cooldown Manager shows in fights instead" },
+		{ part = "pure", label = "Not in fights", line = "No bars in fights or with an enemy targeted" },
+	} },
+	camera = { label = "Camera", page = "Camera Modes", question = "When does the camera move on its own?", choices = {
+		{ part = "immersive", label = "Often", icon = "Interface\\Icons\\INV_Misc_Spyglass_03",
+			line = "Flights, campfires, vistas, fishing, quests, going AFK and more" },
+		{ part = "lite", label = "Sometimes", icon = "Interface\\Icons\\INV_Misc_Spyglass_02",
+			line = "Flights, going AFK, and your Hearthstone and teleports" },
+		{ part = "off", label = "Never", icon = "Interface\\Icons\\Spell_Nature_Sleep",
+			line = "The camera is all yours" },
+	} },
+	vfx = { label = "Look", page = "Effects", question = "How should the world look?", choices = {
+		{ part = "standard", label = "Letterbox and tint", line = "Bars top and bottom, a color tint, vignette and weather" },
+		{ part = "noletterbox", label = "Tint only", line = "The tint, vignette and weather, no letterbox" },
+		{ part = "cameras", label = "During cameras", line = "The effects only while a camera mode runs" },
+		{ part = "pure", label = "Through fights", line = "Fights don't bring the letterbox down" },
+	} },
+	misc = { label = "Sound and chat", page = "Audio", question = "How much music and chatter?", choices = {
+		{ part = "standard", label = "As the game has it", line = "Music on cameras, NPC chat as usual" },
+		{ part = "immersive", label = "Quieter", line = "Less NPC chatter, music spaced out" },
+		{ part = "lite", label = "Quieter chat", line = "Less NPC chatter, chat only for General and Trade" },
+		{ part = "nomusic", label = "No music", line = "No music in CineMode" },
+	} },
+}
 
-local function Flat(frame, alpha)
-	frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-	frame:SetBackdropColor(0.08, 0.08, 0.09, alpha or 1)
-	frame:SetBackdropBorderColor(unpack(EDGE))
+-- A slot's choices on this client (parts it has), or nil with fewer than two.
+function ns.SlotChoices(slot)
+	local list = {}
+	for _, choice in ipairs(ns.SLOT_CHOICES[slot] and ns.SLOT_CHOICES[slot].choices or {}) do
+		if (not choice.client or choice.client == ns.CLIENT)
+			and (choice.part == "standard" or ns.PROFILE_PARTS[slot][choice.part]) then
+			list[#list + 1] = choice
+		end
+	end
+	return #list > 1 and list or nil
 end
 
-local function Text(parent, font, text, width)
+-- The Customize pages: a slot's (its question and choices), or just a question.
+local OWN_PROFILE = "My setup" -- (the profile of your own a change on a built-in starts)
+ns.OWN_PROFILE = OWN_PROFILE
+local SECTIONS = {}
+-- (A slot with no choices on this client isn't listed: Layout on retail.)
+for _, slot in ipairs({ "frames", "bars", "layout", "camera", "vfx", "visions", "misc" }) do
+	if slot == "visions" then
+		tinsert(SECTIONS, { label = "Visions", page = "Vision", question = "Which Visions do you want?" })
+	elseif ns.SlotChoices(slot) then
+		tinsert(SECTIONS, setmetatable({ slot = slot }, { __index = ns.SLOT_CHOICES[slot] }))
+	end
+end
+
+local window, pages, status, about
+local cards = {} -- profile name -> its card
+local levelOf = {} -- profile name -> its level
+
+-- (Forever keeps a FontString's text and vertex colour as one: set both.)
+local function Color(s, c)
+	s:SetTextColor(c[1], c[2], c[3])
+	s:SetVertexColor(c[1], c[2], c[3])
+end
+
+local function Flat(frame, bg, edge)
+	frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+	frame:SetBackdropColor(unpack(bg or RAISED))
+	frame:SetBackdropBorderColor(unpack(edge or EDGE))
+end
+
+local function Text(parent, font, text, color, width)
 	local s = parent:CreateFontString(nil, "OVERLAY", font)
 	s:SetJustifyH("LEFT")
+	s:SetJustifyV("TOP")
 	if width then s:SetWidth(width) end
 	s:SetText(text)
+	Color(s, color or WHITE)
 	return s
 end
 
--- A tile with an icon, a name and a short line under it.
-local function Tile(parent, icon, name, line)
-	local tile = CreateFrame("Button", nil, parent, BackdropTemplateMixin and "BackdropTemplate")
-	tile:SetSize(CARD_W, 118)
-	Flat(tile)
-	local tex = tile:CreateTexture(nil, "ARTWORK")
-	tex:SetSize(40, 40)
-	tex:SetPoint("TOP", 0, -16)
-	tex:SetTexture(icon)
-	tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-	local title = Text(tile, "GameFontHighlight", name)
-	title:SetPoint("TOP", tex, "BOTTOM", 0, -8)
-	local sub = Text(tile, "GameFontDisableSmall", line, CARD_W - 16)
-	sub:SetJustifyH("CENTER")
-	sub:SetPoint("TOP", title, "BOTTOM", 0, -4)
-	return tile
+local function Rounded(parent, texture)
+	if not parent.CreateMaskTexture then return end
+	local mask = parent:CreateMaskTexture()
+	mask:SetAllPoints(texture)
+	mask:SetTexture(MASK, "CLAMPTOBLACKADDITIONAL", "CLAMPTOBLACKADDITIONAL")
+	texture:AddMaskTexture(mask)
 end
 
-local function Tooltip(frame, profile)
-	frame:SetScript("OnEnter", function(self)
-		if not self.active then self:SetBackdropBorderColor(0.6, 0.6, 0.62) end
-		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-		GameTooltip:SetText(profile.label or profile.name, 1, 1, 1)
-		GameTooltip:AddLine(profile.tip, nil, nil, nil, true)
-		GameTooltip:Show()
-	end)
-	frame:SetScript("OnLeave", function(self)
-		if not self.active then self:SetBackdropBorderColor(unpack(EDGE)) end
-		GameTooltip:Hide()
-	end)
+-- A flat button: "main" gold, "box" outlined (the other buttons beside it),
+-- otherwise just text that lights up.
+local function FlatButton(parent, text, style, onClick)
+	local main = style == "main" or style == "box"
+	local b = CreateFrame("Button", nil, parent, BackdropTemplateMixin and "BackdropTemplate")
+	local s = Text(b, main and "GameFontHighlight" or "GameFontHighlightSmall", text,
+		style == "main" and WHITE or style == "box" and SOFT or DIM)
+	s:SetPoint("CENTER")
+	b.text = s
+	if style == "main" then
+		b:SetSize(120, 30)
+		Flat(b, BUTTON, BUTTON)
+		b:SetScript("OnEnter", function() b:SetBackdropColor(unpack(BUTTON_LIT)) end)
+		b:SetScript("OnLeave", function() b:SetBackdropColor(unpack(BUTTON)) end)
+	elseif style == "box" then
+		b:SetSize(120, 30)
+		Flat(b, RAISED, EDGE)
+		b:SetScript("OnEnter", function()
+			b:SetBackdropBorderColor(unpack(LIT))
+			Color(s, WHITE)
+		end)
+		b:SetScript("OnLeave", function()
+			b:SetBackdropBorderColor(unpack(EDGE))
+			Color(s, SOFT)
+		end)
+	else
+		b:SetSize(s:GetStringWidth() + 6, 20)
+		b:SetScript("OnEnter", function() Color(s, WHITE) end)
+		b:SetScript("OnLeave", function() Color(s, DIM) end)
+	end
+	b:SetScript("OnClick", onClick)
+	function b:SetLabel(label)
+		s:SetText(label)
+		if not main then b:SetWidth(s:GetStringWidth() + 6) end
+	end
+	return b
 end
 
--- Gold edge on the style being tried, and the line saying so.
+-- (The Profiles demo page draws with these too: ProfilesDemo.lua.)
+ns.DemoUI = { Flat = Flat, Text = Text, Color = Color, Rounded = Rounded, FlatButton = FlatButton,
+	BG = BG, RAISED = RAISED, EDGE = EDGE, LIT = LIT, GOLD = GOLD, WHITE = WHITE, SOFT = SOFT, DIM = DIM }
+
+-- The close X, two thin lines.
+local function CloseX(parent)
+	local b = CreateFrame("Button", nil, parent)
+	b:SetSize(28, 28)
+	local lines = {}
+	if b.CreateLine then
+		for i, ends in ipairs({ { 9, 9, 19, 19 }, { 9, 19, 19, 9 } }) do
+			local line = b:CreateLine(nil, "OVERLAY")
+			line:SetThickness(2)
+			line:SetStartPoint("BOTTOMLEFT", b, ends[1], ends[2])
+			line:SetEndPoint("BOTTOMLEFT", b, ends[3], ends[4])
+			line:SetColorTexture(unpack(DIM))
+			lines[i] = line
+		end
+	else
+		local s = Text(b, "GameFontHighlightLarge", "x", DIM)
+		s:SetPoint("CENTER")
+		b:SetScript("OnEnter", function() Color(s, WHITE) end)
+		b:SetScript("OnLeave", function() Color(s, DIM) end)
+	end
+	if lines[1] then
+		b:SetScript("OnEnter", function() for _, l in ipairs(lines) do l:SetColorTexture(unpack(WHITE)) end end)
+		b:SetScript("OnLeave", function() for _, l in ipairs(lines) do l:SetColorTexture(unpack(DIM)) end end)
+	end
+	b:SetScript("OnClick", function() parent:Hide() end)
+	return b
+end
+
+-- What the description box says: the hovered level's, else the picked one's.
+local function Describe(level)
+	if level then
+		about:SetText("|cffffd100" .. level.label .. "|r   " .. level.tip)
+	else
+		about:SetText("Pick a level to try it now. You can change it any time, here or on the Profiles page.")
+	end
+end
+
+local function Active()
+	return ns.ProfileChosen() and ns.db.enabled and ns.ActiveProfile()
+end
+
+-- Gold edge on the level being tried, and the lines saying so.
 local function UpdatePicked()
-	local active = ns.ProfileChosen() and ns.db.enabled and ns.ActiveProfile()
+	local active = Active()
 	for name, card in pairs(cards) do
 		card.active = name == active
 		card:SetBackdropBorderColor(unpack(card.active and GOLD or EDGE))
 	end
 	if active then
-		status:SetText("|TInterface\\RaidFrame\\ReadyCheck-Ready:14|t Trying |cffffd100" .. ns.ProfileLabel(active)
-			.. "|r. Click another to compare.")
+		status:SetText("|TInterface\\RaidFrame\\ReadyCheck-Ready:14|t Trying |cffffd100"
+			.. (levelOf[active] and levelOf[active].label or ns.ProfileLabel(active)) .. "|r. Close this window to keep it.")
 	else
-		status:SetText("Click one to try it now. You can switch any time.")
+		status:SetText("")
 	end
+	Describe(levelOf[active])
 end
 
 local function Pick(name)
@@ -92,164 +250,206 @@ local function Pick(name)
 	UpdatePicked()
 end
 
-local function Close()
-	window:Hide()
-	if not ns.ProfileChosen() then
-		ns.Print("off until you pick a profile. This window comes back next login, or now with /cine welcome.")
-	end
-end
-
-local ShowStep
-
--- Step 1: what it does.
-local function BuildIntro(page)
-	local title = Text(page, "GameFontNormalHuge", "Welcome to Cinematic")
-	title:SetPoint("TOPLEFT")
-	local sub = Text(page, "GameFontHighlight", "Immerse yourself in the world.")
-	sub:SetTextColor(0.75, 0.75, 0.75)
-	sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-	local tiles = {
-		{ "Interface\\Icons\\Spell_Nature_Invisibilty", "Calm UI", "Fades when you're not fighting" },
-		{ "Interface\\Icons\\Spell_Shadow_Charm", "Movie look", "Letterbox bars and a colour tint" },
-		{ "Interface\\Icons\\INV_Misc_Spyglass_03", "Living camera", "Flights, campfires, going AFK" },
-	}
-	for i, t in ipairs(tiles) do
-		local tile = Tile(page, t[1], t[2], t[3])
-		tile:EnableMouse(false)
-		tile:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", (i - 1) * (CARD_W + GAP), -18)
-	end
-	local note = Text(page, "GameFontHighlightSmall", "Fights, casting and opening windows bring everything back.")
-	note:SetTextColor(0.75, 0.75, 0.75)
-	note:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -18 - 118 - 14)
-	page.height = 200 + 118
-end
-
--- Step 2: pick a style.
-local function BuildStyles(page)
-	local title = Text(page, "GameFontNormalHuge", "How much do you want?")
-	title:SetPoint("TOPLEFT")
-	status = Text(page, "GameFontHighlight", "", WIDTH - 2 * PAD)
-	status:SetTextColor(0.75, 0.75, 0.75)
-	status:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-
-	-- Full (this client's default), Light, Just the look.
-	local featured = { ns.BUILTIN_PROFILES[1].name, FEATURED[1], FEATURED[2] }
-	local labels = { "Full", "Light", "Just the look" }
-	local isFeatured, byName = {}, {}
-	for _, profile in ipairs(ns.BUILTIN_PROFILES) do byName[profile.name] = profile end
-	for i, name in ipairs(featured) do
-		local profile = byName[name]
-		if profile then
-			isFeatured[name] = true
-			local line = SHORT[name] or "Everything on"
-			local card = Tile(page, profile.icon, labels[i], line)
-			card:SetPoint("TOPLEFT", status, "BOTTOMLEFT", (i - 1) * (CARD_W + GAP), -18)
-			card:SetScript("OnClick", function() Pick(name) end)
-			Tooltip(card, profile)
-			cards[name] = card
-		end
-	end
-
-	-- More styles: the rest, as small chips, three to a row.
-	local more = CreateFrame("Button", nil, page)
-	more:SetSize(120, 18)
-	more:SetPoint("TOPLEFT", status, "BOTTOMLEFT", 0, -18 - 118 - 12)
-	local moreText = Text(more, "GameFontNormalSmall", "More styles  +")
-	moreText:SetPoint("LEFT")
-	local list = CreateFrame("Frame", nil, page)
-	list:SetPoint("TOPLEFT", more, "BOTTOMLEFT", 0, -8)
-	list:SetSize(WIDTH - 2 * PAD, 1)
-	list:Hide()
-	local chipW, n = (WIDTH - 2 * PAD - 2 * 10) / 3, 0
-	for _, profile in ipairs(ns.BUILTIN_PROFILES) do
-		if not isFeatured[profile.name] then
-			local chip = CreateFrame("Button", nil, list, BackdropTemplateMixin and "BackdropTemplate")
-			chip:SetSize(chipW, 28)
-			chip:SetPoint("TOPLEFT", (n % 3) * (chipW + 10), -math.floor(n / 3) * 36)
-			Flat(chip)
-			local icon = chip:CreateTexture(nil, "ARTWORK")
-			icon:SetSize(20, 20)
-			icon:SetPoint("LEFT", 4, 0)
-			icon:SetTexture(profile.icon)
-			icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-			local label = Text(chip, "GameFontHighlightSmall", profile.label or profile.name)
-			label:SetPoint("LEFT", icon, "RIGHT", 6, 0)
-			local name = profile.name
-			chip:SetScript("OnClick", function() Pick(name) end)
-			Tooltip(chip, profile)
-			cards[name] = chip
-			n = n + 1
-		end
-	end
-	local listHeight = math.ceil(n / 3) * 36
-	local base = 200 + 118 + 26
-	page.height = base
-	more:SetScript("OnClick", function()
-		list:SetShown(not list:IsShown())
-		moreText:SetText(list:IsShown() and "More styles  -" or "More styles  +")
-		page.height = base + (list:IsShown() and listHeight + 8 or 0)
-		ShowStep(2)
+-- A level's card: its profile's icon, the level's name and a short line.
+local function Card(parent, profile, level)
+	local card = CreateFrame("Button", nil, parent, BackdropTemplateMixin and "BackdropTemplate")
+	card:SetSize(CARD_W, 124)
+	Flat(card)
+	local icon = card:CreateTexture(nil, "ARTWORK")
+	icon:SetSize(44, 44)
+	icon:SetPoint("TOP", 0, -16)
+	icon:SetTexture(profile.icon)
+	icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+	Rounded(card, icon)
+	local title = Text(card, "GameFontHighlightLarge", level.label)
+	title:SetPoint("TOP", icon, "BOTTOM", 0, -8)
+	local sub = Text(card, "GameFontHighlightSmall", level.line, SOFT, CARD_W - 20)
+	sub:SetJustifyH("CENTER")
+	sub:SetPoint("TOP", title, "BOTTOM", 0, -4)
+	card:SetScript("OnEnter", function(self)
+		if not self.active then self:SetBackdropBorderColor(unpack(LIT)) end
+		Describe(level)
 	end)
+	card:SetScript("OnLeave", function(self)
+		if not self.active then self:SetBackdropBorderColor(unpack(EDGE)) end
+		Describe(levelOf[Active()])
+	end)
+	card:SetScript("OnClick", function() Pick(profile.name) end)
+	return card
 end
 
--- Step 3: three things to remember.
-local function BuildTips(page)
-	local title = Text(page, "GameFontNormalHuge", "You're set")
+-- Page 1: the three levels.
+local function BuildLevels(page)
+	local title = Text(page, "GameFontNormalHuge", "Welcome to Cinematic", GOLD)
 	title:SetPoint("TOPLEFT")
-	local rows = {
-		{ "Interface\\Icons\\INV_Misc_Note_01", "|cffffd100/cine|r turns Cinematic on and off" },
-		{ "Interface\\CURSOR\\Point", "Point at a faded bar to show it" },
-		{ "Interface\\Icons\\INV_Misc_Gear_01", "Right-click the minimap button for settings" },
-	}
-	local last = title
-	for i, r in ipairs(rows) do
-		local icon = page:CreateTexture(nil, "ARTWORK")
-		icon:SetSize(28, 28)
-		icon:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, i == 1 and -18 or -12)
-		icon:SetTexture(r[1])
-		if i ~= 2 then icon:SetTexCoord(0.07, 0.93, 0.07, 0.93) end
-		local line = Text(page, "GameFontHighlight", r[2])
-		line:SetPoint("LEFT", icon, "RIGHT", 12, 0)
-		last = icon
+	local sub = Text(page, "GameFontHighlight", "Immerse yourself in the world. How much do you want?", SOFT)
+	sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+
+	local byName = {}
+	for _, profile in ipairs(ns.BUILTIN_PROFILES) do byName[profile.name] = profile end
+	for i, level in ipairs(LEVELS) do
+		local profile = byName[level.profile or ns.BUILTIN_PROFILES[1].name]
+		if profile then
+			local card = Card(page, profile, level)
+			card:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", (i - 1) * (CARD_W + GAP), -18)
+			cards[profile.name], levelOf[profile.name] = card, level
+		end
 	end
-	page.height = 250
+
+	-- The description box under the cards.
+	local box = CreateFrame("Frame", nil, page, BackdropTemplateMixin and "BackdropTemplate")
+	box:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -18 - 124 - 12)
+	box:SetSize(WIDTH - 2 * PAD, 56)
+	Flat(box, BG)
+	about = Text(box, "GameFontHighlightSmall", "", SOFT, WIDTH - 2 * PAD - 24)
+	about:SetPoint("TOPLEFT", 12, -10)
+	about:SetSpacing(2)
+
+	status = Text(page, "GameFontHighlightSmall", "", SOFT)
+	status:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -10)
+	page.height = 380
 end
 
--- The footer's main button, per step.
-local STEPS = {
-	{ label = "Choose a style  >", go = function() ShowStep(2) end },
-	{ label = "Next  >", go = function()
-		if ns.ProfileChosen() and ns.db.enabled then
-			ShowStep(3)
-		else
-			status:SetText("|cffff6060Pick a style first.|r")
-		end
-	end },
-	{ label = "Start playing", go = function() Close() end },
-}
+-- Page 2: Customize, a list of parts on the left and the one shown on the right.
+local function BuildCustomize(page)
+	local title = Text(page, "GameFontNormalHuge", "Customize", GOLD)
+	title:SetPoint("TOPLEFT")
+	local sub = Text(page, "GameFontHighlight", "Change one part of your level. Each change shows straight away.", SOFT)
+	sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
 
-function ShowStep(n)
-	step = n
-	for i, page in ipairs(pages) do page:SetShown(i == n) end
-	for i, dot in ipairs(dots) do
-		if i == n then dot:SetColorTexture(1, 1, 1) else dot:SetColorTexture(0.35, 0.35, 0.37) end
+	local NAV_W, PANEL_H = 140, 300
+	local rows, question, soon, saved, panel
+	local options = {} -- the choices shown, as rows
+	local panelW = WIDTH - 2 * PAD - NAV_W - GAP
+	local shown -- (the section shown)
+
+	-- Gold edge on the choice the live settings match (none: your own mix),
+	-- and which profile a change goes in.
+	local function UpdateChoices()
+		local any
+		for _, option in ipairs(options) do
+			-- (the first that matches: two parts can set a slot the same way)
+			option.active = not any and option:IsShown() and ns.SlotPartMatches(shown.slot, option.choice.part)
+			any = any or option.active
+			option:SetBackdropBorderColor(unpack(option.active and GOLD or EDGE))
+		end
+		local active = ns.ActiveProfile()
+		if not shown.slot then
+			saved:SetText("")
+		elseif ns.IsBuiltinProfile(active) then
+			saved:SetText("A change here starts a profile of your own, " .. OWN_PROFILE .. ".")
+		else
+			saved:SetText("Changes go in your profile |cffffd100" .. active .. "|r."
+				.. (any and "" or " This part is a mix of its own."))
+		end
 	end
-	primary:SetText(STEPS[n].label)
-	window.back:SetShown(n > 1)
-	window.later:SetShown(n == 1)
-	if n == 2 then UpdatePicked() end
+
+	-- A choice's row: an icon, its name and a line, gold when it's the live one.
+	local function Option(i)
+		local option = CreateFrame("Button", nil, panel, BackdropTemplateMixin and "BackdropTemplate")
+		option:SetSize(panelW - 28, 40)
+		Flat(option, BG)
+		option.icon = option:CreateTexture(nil, "ARTWORK")
+		option.icon:SetSize(28, 28)
+		option.icon:SetPoint("LEFT", 8, 0)
+		option.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		Rounded(option, option.icon)
+		option.name = Text(option, "GameFontHighlight", "")
+		option.name:SetPoint("TOPLEFT", 10, -6)
+		option.line = Text(option, "GameFontHighlightSmall", "", SOFT, panelW - 28 - 60)
+		option.line:SetPoint("TOPLEFT", option.name, "BOTTOMLEFT", 0, -3)
+		option.line:SetWordWrap(false)
+		option:SetScript("OnEnter", function(self)
+			if not self.active then self:SetBackdropBorderColor(unpack(LIT)) end
+		end)
+		option:SetScript("OnLeave", function(self)
+			if not self.active then self:SetBackdropBorderColor(unpack(EDGE)) end
+		end)
+		option:SetScript("OnClick", function(self)
+			if self.active then return end -- (already so: no profile of your own for nothing)
+			if not ns.db.enabled then ns.SetEnabled(true) end
+			ns.ApplyPart(shown.slot, self.choice.part, OWN_PROFILE)
+			UpdateChoices()
+		end)
+		options[i] = option
+		return option
+	end
+
+	local function Show(i)
+		for j, row in ipairs(rows) do
+			row.on = i == j
+			row:SetBackdropColor(unpack(row.on and RAISED or BG))
+			Color(row.text, row.on and WHITE or SOFT)
+		end
+		shown = SECTIONS[i]
+		question:SetText(shown.question)
+		local choices = shown.slot and ns.SlotChoices(shown.slot) or {}
+		soon:SetShown(#choices == 0)
+		for j, choice in ipairs(choices) do
+			local option = options[j] or Option(j)
+			option:SetPoint("TOPLEFT", question, "BOTTOMLEFT", 0, -12 - (j - 1) * 44)
+			option.choice = choice
+			-- (an icon when the choice has one, the text beside it)
+			option.icon:SetTexture(choice.icon)
+			option.icon:SetShown(choice.icon ~= nil)
+			option.name:SetPoint("TOPLEFT", choice.icon and 46 or 10, -6)
+			option.name:SetText(choice.label)
+			option.line:SetWidth(panelW - 28 - (choice.icon and 56 or 20))
+			option.line:SetText(choice.line)
+			option:Show()
+		end
+		for j = #choices + 1, #options do options[j]:Hide() end
+		UpdateChoices()
+	end
+	page.Refresh = function() if shown then Show(shown.index) end end
+	page.settingsPage = function() return shown and shown.page end
+	rows = {}
+	for i, section in ipairs(SECTIONS) do
+		section.index = i
+		local row = CreateFrame("Button", nil, page, BackdropTemplateMixin and "BackdropTemplate")
+		row:SetSize(NAV_W, 26)
+		row:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -18 - (i - 1) * 28)
+		Flat(row, BG, BG)
+		row.text = Text(row, "GameFontHighlight", section.label, SOFT)
+		row.text:SetPoint("LEFT", 10, 0)
+		row:SetScript("OnEnter", function() if not row.on then Color(row.text, WHITE) end end)
+		row:SetScript("OnLeave", function() if not row.on then Color(row.text, SOFT) end end)
+		row:SetScript("OnClick", function() Show(i) end)
+		rows[i] = row
+	end
+
+	panel = CreateFrame("Frame", nil, page, BackdropTemplateMixin and "BackdropTemplate")
+	panel:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", NAV_W + GAP, -18)
+	panel:SetSize(panelW, PANEL_H)
+	Flat(panel)
+	question = Text(panel, "GameFontHighlightLarge", "", WHITE, panelW - 28)
+	question:SetPoint("TOPLEFT", 14, -14)
+	soon = Text(panel, "GameFontHighlightSmall", "Its choices come next.", DIM)
+	soon:SetPoint("TOPLEFT", question, "BOTTOMLEFT", 0, -8)
+	saved = Text(panel, "GameFontHighlightSmall", "", DIM, panelW - 28)
+	saved:SetPoint("BOTTOMLEFT", 14, 12)
+	Show(1)
+	page.height = 476
+end
+
+local primary, customize, settings, off, back
+
+local function ShowPage(n)
+	for i, page in ipairs(pages) do page:SetShown(i == n) end
+	customize:SetShown(n == 1)
+	if n == 1 then UpdatePicked() elseif pages[n].Refresh then pages[n].Refresh() end
+	off:SetShown(n == 1)
+	settings:ClearAllPoints()
+	settings:SetPoint("RIGHT", n == 1 and customize or primary, "LEFT", -8, 0)
+	back:SetShown(n > 1)
+	window.page = n
 	window:SetHeight(pages[n].height)
 end
 
-local function Link(parent, text, onClick)
-	local b = CreateFrame("Button", nil, parent)
-	local s = Text(b, "GameFontDisableSmall", text)
-	s:SetPoint("LEFT")
-	b:SetSize(s:GetStringWidth() + 4, 18)
-	b:SetScript("OnEnter", function() s:SetTextColor(1, 1, 1) end)
-	b:SetScript("OnLeave", function() s:SetTextColor(0.5, 0.5, 0.5) end)
-	b:SetScript("OnClick", onClick)
-	return b
+local function OnHide()
+	if not ns.ProfileChosen() and ns.db.enabled then -- (Turn off says its own)
+		ns.Print("off until you pick a profile. This window comes back next login, or now with /cine welcome.")
+	end
 end
 
 local function CreateWindow()
@@ -263,11 +463,15 @@ local function CreateWindow()
 	window:RegisterForDrag("LeftButton")
 	window:SetScript("OnDragStart", window.StartMoving)
 	window:SetScript("OnDragStop", window.StopMovingOrSizing)
-	Flat(window, 0.96)
-	tinsert(UISpecialFrames, "CinematicWelcomeDemo")
+	window:SetScript("OnHide", OnHide)
+	Flat(window, { BG[1], BG[2], BG[3], 0.97 })
+	tinsert(UISpecialFrames, "CinematicWelcomeDemo") -- Escape closes it, as the X does
+
+	-- The X keeps the level picked (and with none, Cinematic stays off).
+	CloseX(window):SetPoint("TOPRIGHT", -8, -8)
 
 	pages = {}
-	for i, build in ipairs({ BuildIntro, BuildStyles, BuildTips }) do
+	for i, build in ipairs({ BuildLevels, BuildCustomize }) do
 		local page = CreateFrame("Frame", nil, window)
 		page:SetPoint("TOPLEFT", PAD, -PAD)
 		page:SetPoint("BOTTOMRIGHT", -PAD, PAD)
@@ -275,32 +479,30 @@ local function CreateWindow()
 		pages[i] = page
 	end
 
-	-- Footer: quiet links on the left, step dots, the main button on the right.
-	primary = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-	primary:SetSize(150, 26)
+	-- Footer: a quiet link on the left; on the right Done (keeps what's
+	-- picked, as the X does), Customize (on the first page) and Settings: the
+	-- options at the page for what's shown (the Profiles page, or the part's).
+	primary = FlatButton(window, "Done", "main", function() window:Hide() end)
 	primary:SetPoint("BOTTOMRIGHT", -PAD, PAD)
-	primary:SetScript("OnClick", function() STEPS[step].go() end)
-	window.later = Link(window, "Not now", Close)
-	window.later:SetPoint("BOTTOMLEFT", PAD, PAD + 4)
-	window.back = Link(window, "< Back", function() ShowStep(step - 1) end)
-	window.back:SetPoint("BOTTOMLEFT", PAD, PAD + 4)
-	local off = Link(window, "Turn off", function()
+	customize = FlatButton(window, "Customize", "box", function() ShowPage(2) end)
+	customize:SetPoint("RIGHT", primary, "LEFT", -8, 0)
+	settings = FlatButton(window, "Settings", "box", function()
+		local page = window.page == 2 and pages[2].settingsPage() or "Profiles"
+		window:Hide()
+		ns.OpenOptions(page)
+	end)
+	off = FlatButton(window, "Turn off", nil, function()
 		ns.SetEnabled(false)
 		window:Hide()
 		ns.Print("turned off. /cine brings the welcome window back to pick a profile.")
 	end)
-	off:SetPoint("LEFT", window.later, "RIGHT", 14, 0)
-	dots = {}
-	for i = 1, 3 do
-		local dot = window:CreateTexture(nil, "ARTWORK")
-		dot:SetSize(6, 6)
-		dot:SetPoint("BOTTOM", window, "BOTTOM", (i - 2) * 14, PAD + 10)
-		dots[i] = dot
-	end
+	off:SetPoint("BOTTOMLEFT", PAD - 3, PAD + 5)
+	back = FlatButton(window, "< Back", nil, function() ShowPage(1) end)
+	back:SetPoint("BOTTOMLEFT", PAD - 3, PAD + 5)
 end
 
 function ns.ShowWelcomeDemo()
 	if not window then CreateWindow() end
 	window:Show()
-	ShowStep(1)
+	ShowPage(1)
 end

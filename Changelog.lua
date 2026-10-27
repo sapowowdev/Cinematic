@@ -11,13 +11,27 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-26", page = "Personal Resources", title = "Personal Resources page",
+		text = "Your player frame, pet frame and resource display have a page of their own: kept up while you " ..
+		"recover or run low on mana, and held back at the start of a fight until your power changes." },
+	{ date = "2026-10-26", page = "Target Arrow", title = "Target Arrow",
+		text = "A mark on your target's nameplate for when no target frame shows who you've got: an arrow, " ..
+		"chevron, glow or brackets, colored by how they see you." },
+	{ date = "2026-10-26", page = "Quest Vision", title = "Quest talk",
+		text = "Talking to an NPC, their words show in a speech bubble over their head and your replies in a " ..
+		"list below, instead of the game's gossip and quest windows. Pick a reply with 1-9, and Space to read on." },
+	{ date = "2026-10-26", page = "Standard Frames", title = "New settings grids",
+		text = "Every grid now has the same row: Always, then Combat, Target and Location dropdowns, Roles and " ..
+		"Edit. Edit turns a row into a rule, for AND, NOT, Cities and more, with a dot showing whether it's on " ..
+		"right now. Chat bubbles, tooltips, effects, music and the cameras now say where they show instead of " ..
+		"where they hide." },
+	{ date = "2026-10-26", title = "Menu look",
+		text = "Pick HD or SD for Cinematic's settings and windows on the main page: flat and dark, or the " ..
+		"game's own look. Auto follows your client, and your Character Models setting on WoW Forever." },
 	{ date = "2026-10-26", page = "Your wheels", title = "Share wheels",
 		text = "Share a wheel of yours as a line of text and import one from a friend, reading every command " ..
 		"first. Icons now come from every icon the game has, like the macro window's, and you can add icons " ..
 		"of your own to the marker and vision wheels." },
-	{ date = "2026-10-26", page = "Your wheels", title = "Your own wheels",
-		text = "Make up to 8 wheels of your own on the Wheels page: each icon runs a command you type, like " ..
-		"/rw or /readycheck, in a fight too. Give each one a key or put it on the master wheel." },
 	{ date = "2026-10-26", page = "Master wheel", title = "Wheels page",
 		text = "A new Wheels page shows every wheel and its icons, with its keybind right there, and lets you " ..
 		"pick which wheels sit on the master wheel and in what order." },
@@ -43,7 +57,7 @@ ns.CHANGELOG_FEATURES = {
 		"tracker row." },
 	{ date = "2026-10-23", page = "Nameplates", title = "Names on faded nameplates",
 		text = "Names kept up over faded nameplates in CineMode now look like the game's own names over " ..
-		"heads: coloured by who they are, and smaller further off." },
+		"heads: colored by who they are, and smaller further off." },
 	{ date = "2026-10-23", page = "Keybinds", title = "Vision wheel",
 		text = "Hold a key to bring up a wheel of the visions and turn Heal, Quest, Duel or Roll Vision on or " ..
 		"off, even in a fight. It's on the master wheel too, and each vision has a toggle key of its own on " ..
@@ -103,7 +117,7 @@ ns.CHANGELOG_FEATURES = {
 		"ground clutter, view distance and more." },
 	{ date = "2026-10-16", page = "Nameplates", title = "Duel Vision",
 		text = "In CineMode the two players in a duel near you get their nameplates, each duel with its " ..
-		"own colour border and class icons." },
+		"own color border and class icons." },
 	{ date = "2026-10-16", page = "Chat", title = "Attacks on the screen",
 		text = "\"Dun Algaz is under attack!\" shows in red where the zone name appears, with your " ..
 		"faction's city bell." },

@@ -310,13 +310,14 @@ local function CreateWindow()
 		tile = true, tileSize = 16, edgeSize = 16,
 		insets = { left = 4, right = 4, top = 4, bottom = 4 },
 	})
+	ns.SkinWindow(window) -- (the menu look: Skin.lua)
 	tinsert(UISpecialFrames, "CinematicShareWindow") -- Escape closes it
 
 	local title = window:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	title:SetPoint("TOPLEFT", 16, -14)
 	window.title = title
 
-	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
+	local close = ns.SkinClose(CreateFrame("Button", nil, window, "UIPanelCloseButton"))
 	close:SetPoint("TOPRIGHT", -2, -2)
 
 	local hint = window:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -337,7 +338,8 @@ local function CreateWindow()
 		insets = { left = 3, right = 3, top = 3, bottom = 3 },
 	})
 	holder:SetBackdropColor(0, 0, 0, 0.6)
-	local scroll = CreateFrame("ScrollFrame", nil, holder, "UIPanelScrollFrameTemplate")
+	ns.SkinWindow(holder, true)
+	local scroll = ns.SkinScroll(CreateFrame("ScrollFrame", nil, holder, "UIPanelScrollFrameTemplate"))
 	scroll:SetPoint("TOPLEFT", 8, -6)
 	scroll:SetPoint("BOTTOMRIGHT", -28, 6)
 	local box = CreateFrame("EditBox", nil, scroll)
@@ -383,7 +385,7 @@ local function CreateWindow()
 	local nameLabel = nameRow:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	nameLabel:SetPoint("LEFT", 0, 0)
 	nameLabel:SetText(L["Save as:"])
-	local nameBox = CreateFrame("EditBox", nil, nameRow, "InputBoxTemplate")
+	local nameBox = ns.SkinEditBox(CreateFrame("EditBox", nil, nameRow, "InputBoxTemplate"))
 	nameBox:SetSize(220, 20)
 	nameBox:SetPoint("LEFT", nameLabel, "RIGHT", 12, 0)
 	nameBox:SetAutoFocus(false)
@@ -395,7 +397,7 @@ local function CreateWindow()
 	nameBox:SetScript("OnEscapePressed", function() window:Hide() end)
 	window.nameRow, window.nameBox = nameRow, nameBox
 
-	local accept = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+	local accept = ns.PanelButton(window)
 	accept:SetSize(110, 22)
 	accept:SetPoint("BOTTOMRIGHT", -16, 14)
 	accept:SetText(L["Import"])
@@ -404,7 +406,7 @@ local function CreateWindow()
 
 	-- Export's: addons can't put text on the clipboard (the game keeps that
 	-- for its own UI), so this selects it all, ready for Ctrl+C.
-	local selectAll = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+	local selectAll = ns.PanelButton(window)
 	selectAll:SetSize(110, 22)
 	selectAll:SetPoint("BOTTOMRIGHT", -16, 14)
 	selectAll:SetText(L["Select all"])
@@ -431,7 +433,7 @@ function ns.ShowExport(name)
 	window.hint:SetText(L["Press Ctrl+C to copy this, then paste it wherever your friends will see it. " ..
 		"They add it with Import on their Cinematic Profiles page (or /cine import)."])
 	window.status:SetText(L["Only Cinematic settings are in it: nothing about you or your character " ..
-		"but its name. Not in it, as with any profile: frames you added and your zone and time tint colours."])
+		"but its name. Not in it, as with any profile: frames you added and your zone and time tint colors."])
 	window.nameRow:Hide()
 	window.accept:Hide()
 	window.selectAll:Show()

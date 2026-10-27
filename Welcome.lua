@@ -63,20 +63,21 @@ local function CreateWindow()
 		tile = true, tileSize = 16, edgeSize = 16,
 		insets = { left = 4, right = 4, top = 4, bottom = 4 },
 	})
+	ns.SkinWindow(window) -- (the menu look: Skin.lua)
 	tinsert(UISpecialFrames, "CinematicWelcome") -- Escape closes it (decide later, or done)
 
 	local title = window:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	title:SetPoint("TOPLEFT", 18, -16)
 	title:SetText(L["Welcome to Cinematic"])
 
-	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
+	local close = ns.SkinClose(CreateFrame("Button", nil, window, "UIPanelCloseButton"))
 	close:SetPoint("TOPRIGHT", -2, -2)
 
 	local intro = window:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	intro:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
 	intro:SetWidth(596)
 	intro:SetJustifyH("LEFT")
-	intro:SetText(L["Between fights, Cinematic fades your UI away, adds letterbox bars and a colour " ..
+	intro:SetText(L["Between fights, Cinematic fades your UI away, adds letterbox bars and a color " ..
 		"tint, and brings the camera to life: on flights, standing still, sitting by a campfire. " ..
 		"Fights, casting and opening windows bring the UI back. Hovering a faded frame shows it.\n\n" ..
 		"How much of that do you want? Pick a profile to start from:"])
@@ -89,7 +90,7 @@ local function CreateWindow()
 		icon:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, last == intro and -16 or -10)
 		icon:SetTexture(profile.icon)
 		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-		local button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+		local button = ns.PanelButton(window)
 		button:SetSize(150, 26)
 		button:SetPoint("LEFT", icon, "RIGHT", 6, 0)
 		button:SetText(profile.label or profile.name)
@@ -125,7 +126,7 @@ local function CreateWindow()
 		"/cine toggles Cinematic on and off."])
 
 	-- Decide later, or Done once one's picked (keeping it).
-	later = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+	later = ns.PanelButton(window)
 	later:SetSize(120, 22)
 	later:SetPoint("BOTTOMRIGHT", -14, 14)
 	later:SetText(L["Decide later"]) -- (Update changes it to Done)
@@ -139,7 +140,7 @@ local function CreateWindow()
 		end
 	end)
 	-- Not for them: switched off, and not asked again (/cine brings this back).
-	local off = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+	local off = ns.PanelButton(window)
 	off:SetSize(150, 22)
 	off:SetPoint("RIGHT", later, "LEFT", -8, 0)
 	off:SetText(L["Turn Cinematic off"])
@@ -149,7 +150,7 @@ local function CreateWindow()
 		ns.Print(L["turned off. /cine brings this window back to pick a profile."])
 	end)
 	-- The settings, at the Profiles page (this window would sit over them).
-	local settings = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+	local settings = ns.PanelButton(window)
 	settings:SetSize(110, 22)
 	settings:SetPoint("RIGHT", off, "LEFT", -8, 0)
 	settings:SetText(L["Settings"])

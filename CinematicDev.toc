@@ -23,6 +23,8 @@ Diagnostics.lua
 Profiler.lua
 Graphics.lua
 Core.lua
+Skin.lua
+GridRows.lua
 HideUI.lua
 AddonSupport.lua
 Support\Details.lua
@@ -69,11 +71,13 @@ PlateParts.lua
 PlateGuild.lua
 Camera.lua
 QuestCam.lua
+QuestTalk.lua
 CameraTests.lua
 Tint.lua
 LowHealthArt.lua
 LowHealthThemes.lua
 LowHealth.lua
+PersonalResources.lua
 WindGuideStyles.lua
 WindGuide.lua
 Focus.lua
@@ -88,6 +92,7 @@ Welcome.lua
 WelcomeDemo.lua
 Layouts.lua
 ProfileBuilder.lua
+ProfilesDemo.lua
 GridDemo.lua
 Options.lua
 Changelog.lua

@@ -10,7 +10,8 @@
 -- the gain, below), at most MAX_TURN from where the camera started, and no
 -- faster than chatCamSwingSpeed. If one swing leaves them well off, one more follows.
 -- It's measured while the camera's still or only drifting (mid-swing, the
--- bubble's place is already out of date), and not while zooming in. More
+-- bubble's place is already out of date); a swing alongside the zoom in goes
+-- SIDE_TURN at most, and how far it moved them isn't learnt from. More
 -- lines from the one the
 -- camera's on don't move it: the drift keeps the shot alive. A speaker with
 -- no bubble on screen leaves the camera on whoever it was on.
@@ -43,18 +44,35 @@ local EVENTS = { "CHAT_MSG_MONSTER_SAY", "CHAT_MSG_MONSTER_YELL", "CHAT_MSG_MONS
 local GAIN_START = 0.35 -- degrees the speaker moves on screen per degree turned, until a swing's measured
 local GAIN_MIN, GAIN_MAX = 0.15, 1
 local CORRECT = 6      -- degrees still off past the framing (chatCamFrame) after a swing: one more swing
-local MAX_TURN = 45    -- degrees from where the camera started, at most
-local MAX_SWING = 45   -- degrees one swing goes, at most (the test's first layout swung 84 and 98:
+local MAX_TURN = 30    -- degrees from where the camera started, at most (45 swung the view
+                       -- right off Liadrin and Zul'jarra, standing side by side)
+local MAX_SWING = 30   -- degrees one swing goes, at most (the test's first layout swung 84 and 98:
                        -- the view whipped right round)
 local MIN_TURN = 2     -- degrees: a smaller swing isn't worth a move
--- Up close, the game draws NPCs' bubbles squeezed toward the top middle of
--- the screen, not over their heads (tested: Liadrin a third of the screen
--- left, Zul'jarra as far right, their bubbles at x -0.09 and +0.04), so both
--- read as "already in view" and the camera never turned. Their order still
--- holds, though. So once a second speaker's been placed, a swing goes at
--- least this far from where the camera started, toward the side of the one
--- talking (left or right of the other).
-local SIDE_TURN = 20
+-- Up close, the game moves a bubble's box off its speaker's head (its middle
+-- once read x -0.38 for Zul'jarra standing at -0.05, and each swing went 45
+-- degrees for two speakers 8 apart). Its tail says where they are (tested,
+-- /cine chatcam debug's log of Liadrin and Zul'jarra and three screenshots):
+-- it's only ever in one of two places. At the box's bottom middle (8 units
+-- off), right over their head (within 26 units of where Liadrin stood),
+-- whether the box touches the screen's top or not. Or pinned to one end of
+-- a box moved beside their head (theirs reaching the screen's top: 16 to 72
+-- units below it), the end toward them, and they stand past it, by how much
+-- isn't fixed: the box goes either side of them (at the same turn, once to
+-- their right, once to their left, the two tails 160 apart with her
+-- between). Zul'jarra stood 85, 92, 120 and 125 past it (a video matched to
+-- the log, and screenshots). Only one bubble ever showed at a time.
+local TAIL_MIDDLE = 40     -- units (WorldFrame's: the screen's 768 high) off the box's middle: over their head
+local PINNED_BEYOND = 100  -- ...and about how far past a pinned tail they stand
+-- A tail over their head, the only bubble showing, is aimed by. A pinned
+-- one's guess, or a bubble with no tail to read, places them only well
+-- enough for their order: each speaker has a spot by it, left to right,
+-- spread evenly from this far left of where the camera started to this far
+-- right (two: either end; three: the ends and the middle), placed by their
+-- first good bubble if there's been one (placed again from guesses, the
+-- order once flipped and a line got no swing).
+local SIDE_TURN = 12
+local TOP_EDGE = 0.85  -- with no tail to read: a bubble's middle this high (-1 to 1) is on the top edge
 local LOG_MAX = 20000  -- frames kept by /cine chatcam log (a few minutes)
 local SWING_MIN_TIME = 1.5 -- seconds: the shortest swing
 -- Swings and the turn back go as the fly-by's turns do (Camera.lua): one
@@ -169,6 +187,28 @@ local function Note(text)
 	end
 end
 
+-- The debug log (/cine chatcam debug to switch it off): as much as can be
+-- read about every bubble, the nameplates and the camera through each
+-- conversation, saved (ns.db.chatCamDebug) for reading after a /reload, so
+-- one run answers as much as it can (setting up a scene to test takes a
+-- while). Whether bubbles are pushed to the screen's edges, where their
+-- tails are, whether two showing at once push each other apart, whether the
+-- frame GetAllChatBubbles gives sits where the drawn bubble does. Started
+-- afresh at the first line after each login or /reload; each line's GetTime,
+-- with the clock time once a second, to match a video.
+local DEBUG_MAX = 40000
+local DEBUG_EVERY = 0.25 -- seconds between readings of the bubbles and camera
+local DEBUG_PLATES_EVERY = 1 -- ...and of the nameplates
+local DEBUG_FULL_EVERY = 2 -- seconds between full dumps of a bubble still showing
+local debugLog = { started = false, ids = setmetatable({}, { __mode = "k" }), nextId = 0, fullAt = {},
+	nextAt = 0, platesAt = 0 }
+local function DebugAdd(text)
+	local lines = ns.db and ns.db.chatCamDebug
+	if debugLog.started and lines and #lines < DEBUG_MAX then
+		lines[#lines + 1] = ("%.2f %s"):format(GetTime(), text)
+	end
+end
+
 -- What it does, to chat (and so the log), with the seconds since the
 -- conversation started: the frame log's own time, which also notes it.
 local function Say(text)
@@ -176,6 +216,7 @@ local function Say(text)
 		text = ("[%.1fs] %s"):format(GetTime() - convo.startedAt, text)
 	end
 	Note(text)
+	DebugAdd("SAY " .. text)
 	ns.Print("Chat Cam: " .. text)
 end
 
@@ -368,7 +409,8 @@ local function Leave(now)
 end
 
 -- The angle (degrees, positive right) off the view's middle of a bubble on
--- screen saying `text`, and its x (-1 to 1); nil if there's none.
+-- screen saying `text`, its x and y (-1 to 1), and how many other bubbles
+-- are showing; nil if there's none.
 -- The Test button (CameraTests.lua): a made-up conversation between two
 -- speakers either side of you, a few lines each, with pretend bubbles that
 -- move across the screen as the camera turns (by FAKE_GAIN, as measured with
@@ -381,36 +423,379 @@ local FAKE_GAIN = 0.45
 local FAKE_BUBBLE = 10 -- seconds a pretend bubble shows (as long as a swing, so its result's measured)
 local fake -- { amountAt (turn.amount as it began), shown = { [text] = { angle, untilAt } } }
 
+-- Something's middle on screen, in WorldFrame units; nil if it can't be read.
+local function Place(object)
+	local ok, x, y = pcall(object.GetCenter, object)
+	if not ok or type(x) ~= "number" or type(y) ~= "number" or Secret(x) or Secret(y) then
+		return nil
+	end
+	local okScale, scale = pcall(object.GetEffectiveScale, object)
+	if not okScale or type(scale) ~= "number" or Secret(scale) then
+		return nil
+	end
+	scale = scale / WorldFrame:GetEffectiveScale()
+	return x * scale, y * scale
+end
+
 local function BubbleAngle(text)
 	if fake then
 		local bubble = fake.shown[text]
 		if not bubble or GetTime() >= bubble.untilAt then
 			return nil
 		end
+		local now, others = GetTime(), 0
+		for shownText, shown in pairs(fake.shown) do
+			if shownText ~= text and now < shown.untilAt then
+				others = others + 1
+			end
+		end
 		local angle = bubble.angle - FAKE_GAIN * (turn.amount - fake.amountAt)
-		return angle, math.tan(math.rad(angle)) -- (x on screen, at a 90-degree field of view)
+		return angle, math.tan(math.rad(angle)), 0, others, "tail" -- (x on screen, at a 90-degree field of view)
 	end
 	if not (C_ChatBubbles and C_ChatBubbles.GetAllChatBubbles and ns.BubbleSays) then
 		return nil
 	end
 	local width, height = WorldFrame:GetWidth(), WorldFrame:GetHeight()
+	local angle, sx, sy, how
+	local shown = 0
 	for _, bubble in ipairs(C_ChatBubbles.GetAllChatBubbles(false)) do
-		if not (bubble.IsForbidden and bubble:IsForbidden()) and ns.Flag(bubble:IsVisible())
-			and ns.BubbleSays(bubble, text) then
-			local ok, x, y = pcall(bubble.GetCenter, bubble)
-			if ok and type(x) == "number" and type(y) == "number" and not Secret(x) and not Secret(y) then
-				local scale = bubble:GetEffectiveScale() / WorldFrame:GetEffectiveScale()
-				local sx = (x * scale - width / 2) / (width / 2)
-				local sy = (y * scale - height / 2) / (height / 2)
-				if sx >= -1 and sx <= 1 and sy >= -1 and sy <= 1 then
+		if not (bubble.IsForbidden and bubble:IsForbidden()) and ns.Flag(bubble:IsVisible()) then
+			shown = shown + 1
+			if not angle and ns.BubbleSays(bubble, text) then
+				local x, y = Place(bubble)
+				if x and x >= 0 and x <= width and y >= 0 and y <= height then
+					-- (Where the tail says they are, if there's one to read: see TAIL_MIDDLE.)
+					how = "box"
+					local okInner, inner = pcall(bubble.GetChildren, bubble)
+					local tail = okInner and type(inner) == "table" and inner.Tail
+					local okShown, tailShown = false, nil
+					if tail then
+						okShown, tailShown = pcall(tail.IsShown, tail)
+					end
+					local tailX = okShown and ns.Flag(tailShown) and Place(tail)
+					if tailX then
+						local offset = tailX - x
+						if math.abs(offset) <= TAIL_MIDDLE then
+							x, how = tailX, "tail"
+						else
+							x = tailX + (offset > 0 and PINNED_BEYOND or -PINNED_BEYOND)
+							how = offset > 0 and "pinned right" or "pinned left"
+						end
+					end
+					local bx = (x - width / 2) / (width / 2)
 					local okFov, fov = pcall(GetCVar, "cameraFov")
 					fov = okFov and tonumber(fov) or 90
-					return math.deg(math.atan(sx * math.tan(math.rad(fov) / 2))), sx
+					angle, sx, sy = math.deg(math.atan(bx * math.tan(math.rad(fov) / 2))), bx,
+						(y - height / 2) / (height / 2)
 				end
 			end
 		end
 	end
+	if angle then
+		return angle, sx, sy, shown - 1, how
+	end
 	return nil
+end
+
+-- How a bubble reads, for the log: good (its tail over their head, and
+-- alone) or why not.
+local function BubbleReading(sy, others, how)
+	if how == "pinned left" or how == "pinned right" then
+		return false, ("box moved aside, tail %s: about %d past it"):format(how, PINNED_BEYOND)
+	elseif how == "box" and sy >= TOP_EDGE then
+		return false, "no tail, on the top edge"
+	elseif others > 0 then
+		return false, ("%d other bubble%s showing"):format(others, others == 1 and "" or "s")
+	end
+	return true, how == "tail" and "tail over their head, alone" or "no tail, over their head, alone"
+end
+
+-- The debug log's readings (see DEBUG_MAX). Everything's read through pcall
+-- and checked for secret values: a part that can't be read says why.
+local function Readable(...)
+	for i = 1, select("#", ...) do
+		local value = select(i, ...)
+		if value == nil or Secret(value) then
+			return false
+		end
+	end
+	return true
+end
+local function Show(value, form)
+	if Secret(value) then
+		return "secret"
+	elseif form and type(value) == "number" then
+		return form:format(value)
+	end
+	return tostring(value)
+end
+
+-- Where something's drawn, in WorldFrame units (the screen: 0,0 bottom left):
+-- its middle, size, and how far each edge is from the screen's (top, bottom,
+-- left, right), "-" past it.
+local function Rect(object)
+	local ok, left, bottom, width, height = pcall(object.GetRect, object)
+	if not ok then
+		return "can't measure"
+	elseif left == nil then
+		return "no place"
+	elseif not Readable(left, bottom, width, height) then
+		return "secret place"
+	end
+	local okScale, scale = pcall(object.GetEffectiveScale, object)
+	scale = (okScale and Readable(scale) and scale or 1) / WorldFrame:GetEffectiveScale()
+	left, bottom, width, height = left * scale, bottom * scale, width * scale, height * scale
+	local screenW, screenH = WorldFrame:GetWidth(), WorldFrame:GetHeight()
+	return ("mid %.0f,%.0f size %.0fx%.0f gaps T%.0f B%.0f L%.0f R%.0f"):format(left + width / 2,
+		bottom + height / 2, width, height, screenH - bottom - height, bottom, left, screenW - left - width)
+end
+
+-- Its key in its parent (Tail, String...), else its debug name.
+local function Key(object)
+	local okParent, parent = pcall(object.GetParent, object)
+	if okParent and type(parent) == "table" then
+		for key, value in pairs(parent) do
+			if value == object and type(key) == "string" then
+				return key
+			end
+		end
+	end
+	local okName, name = pcall(object.GetDebugName, object)
+	return okName and type(name) == "string" and not Secret(name) and name or "-"
+end
+
+local function Anchors(object)
+	local okCount, count = pcall(object.GetNumPoints, object)
+	if not okCount or not Readable(count) then
+		return "?"
+	end
+	local out = {}
+	for i = 1, count do
+		local ok, point, relativeTo, relativePoint, x, y = pcall(object.GetPoint, object, i)
+		if ok then
+			out[#out + 1] = ("%s>%s.%s %s,%s"):format(Show(point), relativeTo and Key(relativeTo) or "nil",
+				Show(relativePoint), Show(x, "%.1f"), Show(y, "%.1f"))
+		else
+			out[#out + 1] = "can't read"
+		end
+	end
+	return table.concat(out, " ")
+end
+
+-- One frame, texture or text: kind, key, shown, place, alpha, anchors, and a
+-- texture's atlas, file and corners (a tail flipped or slid would show
+-- there), or a text's words.
+local function Describe(object, depth)
+	local okKind, kind = pcall(object.GetObjectType, object)
+	kind = okKind and Show(kind) or "?"
+	local okShown, shown = pcall(object.IsShown, object)
+	local okAlpha, alpha = pcall(object.GetAlpha, object)
+	local extra = ""
+	if kind == "Texture" then
+		local okAtlas, atlas = pcall(object.GetAtlas, object)
+		local okFile, file = pcall(object.GetTexture, object)
+		local okCoord, ulx, uly, llx, lly, urx, ury, lrx, lry = pcall(object.GetTexCoord, object)
+		extra = (" atlas %s file %s coords %s"):format(okAtlas and Show(atlas) or "?", okFile and Show(file) or "?",
+			okCoord and Readable(ulx, uly, llx, lly, urx, ury, lrx, lry)
+				and ("%.2f,%.2f %.2f,%.2f %.2f,%.2f %.2f,%.2f"):format(ulx, uly, llx, lly, urx, ury, lrx, lry) or "?")
+	elseif kind == "FontString" then
+		local okText, text = pcall(object.GetText, object)
+		extra = " text " .. (okText and (Secret(text) and "secret" or ("%q"):format(tostring(text):sub(1, 40))) or "?")
+	end
+	return ("%s%s %s %s %s a%s at[%s]%s"):format(("  "):rep(depth), kind, Key(object),
+		okShown and (Secret(shown) and "shown?" or (shown and "shown" or "hidden")) or "?", Rect(object),
+		okAlpha and Show(alpha, "%.2f") or "?", Anchors(object), extra)
+end
+
+local function DumpTree(frame, depth, out)
+	out[#out + 1] = Describe(frame, depth)
+	if depth >= 5 then
+		return
+	end
+	local okRegions, regions = pcall(function() return { frame:GetRegions() } end)
+	for _, region in ipairs(okRegions and regions or {}) do
+		out[#out + 1] = Describe(region, depth + 1)
+	end
+	local okChildren, children = pcall(function() return { frame:GetChildren() } end)
+	for _, child in ipairs(okChildren and children or {}) do
+		if not (child.IsForbidden and child:IsForbidden()) then
+			DumpTree(child, depth + 1, out)
+		end
+	end
+end
+
+-- The first part under `frame` that `match` picks (depth first).
+local function FindPart(frame, match, depth)
+	depth = depth or 0
+	local okRegions, regions = pcall(function() return { frame:GetRegions() } end)
+	for _, region in ipairs(okRegions and regions or {}) do
+		if match(region) then
+			return region
+		end
+	end
+	if depth < 5 then
+		local okChildren, children = pcall(function() return { frame:GetChildren() } end)
+		for _, child in ipairs(okChildren and children or {}) do
+			if not (child.IsForbidden and child:IsForbidden()) then
+				if match(child) then
+					return child
+				end
+				local found = FindPart(child, match, depth + 1)
+				if found then
+					return found
+				end
+			end
+		end
+	end
+end
+local function IsTail(object)
+	if Key(object):lower():find("tail") then
+		return true
+	end
+	local okAtlas, atlas = pcall(object.GetAtlas, object)
+	if okAtlas and type(atlas) == "string" and not Secret(atlas) and atlas:lower():find("tail") then
+		return true
+	end
+	local okFile, file = pcall(object.GetTexture, object)
+	return okFile and type(file) == "string" and not Secret(file) and file:lower():find("tail") ~= nil
+end
+local function IsText(object)
+	local ok, kind = pcall(object.GetObjectType, object)
+	return ok and kind == "FontString"
+end
+
+-- Every bubble showing: a short line each reading (the bubble frame, its
+-- first child, the tail, the text's place), the whole tree when first seen
+-- and every DEBUG_FULL_EVERY seconds after.
+local function DebugBubbles(now)
+	if not (C_ChatBubbles and C_ChatBubbles.GetAllChatBubbles) then
+		DebugAdd("bubbles: no API")
+		return
+	end
+	local all = C_ChatBubbles.GetAllChatBubbles(true)
+	local readable = C_ChatBubbles.GetAllChatBubbles(false)
+	DebugAdd(("bubbles: %d in all, %d readable"):format(#all, #readable))
+	for _, bubble in ipairs(readable) do
+		if not (bubble.IsForbidden and bubble:IsForbidden()) then
+			local id = debugLog.ids[bubble]
+			if not id then
+				debugLog.nextId = debugLog.nextId + 1
+				id = debugLog.nextId
+				debugLog.ids[bubble] = id
+			end
+			local okVisible, visible = pcall(bubble.IsVisible, bubble)
+			local text = FindPart(bubble, IsText)
+			local words = "?"
+			if text then
+				local okText, said = pcall(text.GetText, text)
+				words = okText and (Secret(said) and "secret" or ("%q"):format(tostring(said):sub(1, 30))) or "?"
+			end
+			local okChildren, children = pcall(function() return { bubble:GetChildren() } end)
+			local inner = okChildren and children[1]
+			local tail = FindPart(bubble, IsTail)
+			local okTailShown, tailShown = false, nil
+			if tail then
+				okTailShown, tailShown = pcall(tail.IsShown, tail)
+			end
+			DebugAdd(("bubble #%d %s %s | frame %s | inner %s | tail %s%s | text %s"):format(id,
+				okVisible and (Secret(visible) and "visible?" or (visible and "visible" or "not visible")) or "?",
+				words, Rect(bubble), inner and Rect(inner) or "none", tail and Rect(tail) or "none",
+				tail and (okTailShown and (Secret(tailShown) and " shown?" or (tailShown and " shown" or " hidden")) or " ?")
+					or "", text and Rect(text) or "none"))
+			if okVisible and ns.Flag(visible) and now - (debugLog.fullAt[id] or -math.huge) >= DEBUG_FULL_EVERY then
+				debugLog.fullAt[id] = now
+				local out = {}
+				DumpTree(bubble, 1, out)
+				DebugAdd(("bubble #%d tree (%d parts):"):format(id, #out))
+				for _, line in ipairs(out) do
+					DebugAdd(line)
+				end
+			end
+		end
+	end
+end
+
+-- The nameplates (by unit: name, whether it's the one talking, 28 yards,
+-- its place in the world and on screen), your target's, and yours.
+local function DebugUnit(unit, speaker)
+	local okName, name = pcall(UnitName, unit)
+	local okGuid, guid = pcall(UnitGUID, unit)
+	local okRange, near = pcall(CheckInteractDistance, unit, 4)
+	local okPos, y, x = pcall(UnitPosition, unit)
+	name = okName and name
+	return ("%s %s%s guid %s 28y %s world %s"):format(unit, Show(name),
+		speaker and Readable(name) and name == speaker and " (TALKING)" or "",
+		okGuid and Show(guid) or "?", okRange and Show(near) or "can't",
+		okPos and (Readable(x, y) and ("%.1f,%.1f"):format(x, y) or Show(x) .. "," .. Show(y)) or "can't")
+end
+local function DebugPlates()
+	local speaker = convo and convo.speaker and convo.speaker.name
+	local okFacing, facing = pcall(GetPlayerFacing)
+	DebugAdd(("clock %s | %s facing %s"):format(date("%H:%M:%S"), DebugUnit("player"),
+		okFacing and Show(facing, "%.3f") or "can't"))
+	if UnitExists("target") then
+		DebugAdd("target: " .. DebugUnit("target", speaker))
+	end
+	if not (C_NamePlate and C_NamePlate.GetNamePlates) then
+		return
+	end
+	local okPlates, plates = pcall(C_NamePlate.GetNamePlates)
+	plates = okPlates and plates or {}
+	local okFriendly, friendly = pcall(GetCVar, "nameplateShowFriendlyNPCs")
+	DebugAdd(("plates: %d (friendly NPC plates %s)"):format(#plates, okFriendly and Show(friendly) or "?"))
+	for _, plate in ipairs(plates) do
+		if not (plate.IsForbidden and plate:IsForbidden()) then
+			local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+			DebugAdd(("plate %s | %s"):format(unit and DebugUnit(unit, speaker) or "no unit", Rect(plate)))
+		end
+	end
+end
+
+-- Each frame while it's at work: the bubbles and camera every DEBUG_EVERY,
+-- the plates every DEBUG_PLATES_EVERY.
+local function DebugTick(now)
+	if not debugLog.started or ns.db.chatCamDebugOff then
+		return
+	end
+	if now >= debugLog.nextAt then
+		debugLog.nextAt = now + DEBUG_EVERY
+		DebugAdd(("camera: zoom %s turned %+.2f%s %s sent %s quest-cam zooming %s"):format(
+			GetCameraZoom and Show(GetCameraZoom(), "%.2f") or "?", turn.amount, turn.moving and " moving" or "",
+			turn.kind or "-", turn.sent and ("%.2f"):format(turn.sent) or "-",
+			tostring(ns.QuestCamZooming and ns.QuestCamZooming() or false)))
+		DebugBubbles(now)
+	end
+	if now >= debugLog.platesAt then
+		debugLog.platesAt = now + DEBUG_PLATES_EVERY
+		DebugPlates()
+	end
+end
+
+-- A line heard (whether Chat Cam takes it or not, and why not): starts the
+-- log, once after each login or /reload.
+local function DebugLine(event, text, name, guid, ignored)
+	if ns.db.chatCamDebugOff then
+		return
+	end
+	if not debugLog.started then
+		debugLog.started = true
+		ns.db.chatCamDebug = {}
+		local cvars = {}
+		for _, cvar in ipairs({ "cameraFov", "chatBubbles", "chatBubblesParty", "nameplateShowFriendlyNPCs",
+			"test_cameraOverShoulder", "CameraKeepCharacterCentered", "cameraYawMoveSpeed", "cameraZoomSpeed",
+			"uiScale", "useUiScale" }) do
+			local ok, value = pcall(GetCVar, cvar)
+			cvars[#cvars + 1] = cvar .. "=" .. (ok and Show(value) or "?")
+		end
+		local okMap, map = pcall(C_Map.GetBestMapForUnit, "player")
+		DebugAdd(("START %s (GetTime %.2f) %s | screen %.0fx%.0f, WorldFrame scale %.3f, UIParent scale %.3f | %s | %s / %s map %s"):format(
+			date("%Y-%m-%d %H:%M:%S"), GetTime(), ns.isRetail and "retail" or "classic", WorldFrame:GetWidth(),
+			WorldFrame:GetHeight(), WorldFrame:GetEffectiveScale(), UIParent:GetEffectiveScale(), table.concat(cvars, " "),
+			Show(GetRealZoneText()), Show(GetSubZoneText()), okMap and Show(map) or "?"))
+	end
+	DebugAdd(("LINE %s %s guid %s%s: %s"):format((tostring(event):gsub("^CHAT_MSG_", "")), Show(name), Show(guid),
+		ignored and (" (not taken: " .. ignored .. ")") or "", Secret(text) and "secret" or tostring(text)))
+	debugLog.nextAt, debugLog.platesAt = 0, 0 -- (a reading straight away)
 end
 
 -- Another camera has the view, or it's switched off: hands over.
@@ -452,7 +837,8 @@ end
 -- first (Aim again after).
 local function Aim(now, drifting)
 	local speaker = convo.speaker
-	local angle, sx = BubbleAngle(speaker.text)
+	local zooming = ns.QuestCamZooming and ns.QuestCamZooming()
+	local angle, sx, sy, others, how = BubbleAngle(speaker.text)
 	if not angle then
 		if not speaker.missing and now - speaker.at > BUBBLE_WAIT then
 			speaker.missing = true
@@ -460,30 +846,49 @@ local function Aim(now, drifting)
 		end
 		return
 	end
-	-- (To chatCamFrame degrees off the middle on their side, through the gain.)
-	local frame = ns.db.chatCamFrame
-	local off = math.abs(angle) <= frame and 0 or (angle - (angle > 0 and frame or -frame))
-	local wanted = turn.amount + off / convo.gain
+	local good, reading = BubbleReading(sy, others, how)
 	-- (Where they'd be on screen with the camera where it started, to compare
-	-- with the others who've talked.)
-	local here = angle + convo.gain * turn.amount
+	-- with the others who've talked: as first placed, or first placed by a
+	-- good bubble.)
 	convo.placed = convo.placed or {}
-	convo.placed[speaker.name] = here
-	local other
-	for name, place in pairs(convo.placed) do
-		if name ~= speaker.name then
-			other = place
-		end
+	local placed = convo.placed[speaker.name]
+	if not placed or (good and not placed.good) then
+		convo.placed[speaker.name] = { at = angle + convo.gain * turn.amount, good = good }
 	end
-	local sided
-	if other and here ~= other then
-		local side = here < other and -1 or 1
-		if wanted * side < SIDE_TURN then
-			wanted, sided = side * SIDE_TURN, side < 0 and "left" or "right"
+	local frame = ns.db.chatCamFrame
+	local wanted, spot
+	if good then
+		-- (A good bubble: to chatCamFrame degrees off the middle on their side,
+		-- through the gain.)
+		local off = math.abs(angle) <= frame and 0 or (angle - (angle > 0 and frame or -frame))
+		wanted = turn.amount + off / convo.gain
+	else
+		-- (Otherwise each speaker has a spot by their order, left to right, spread
+		-- evenly from SIDE_TURN left to SIDE_TURN right; the only one so far:
+		-- SIDE_TURN their way, unless they're in view.)
+		local names = {}
+		for name in pairs(convo.placed) do
+			names[#names + 1] = name
+		end
+		if #names == 1 then
+			wanted = math.abs(angle) <= frame and turn.amount or (angle > 0 and SIDE_TURN or -SIDE_TURN)
+		else
+			local placedAt = convo.placed
+			table.sort(names, function(a, b)
+				return placedAt[a].at < placedAt[b].at or (placedAt[a].at == placedAt[b].at and a < b)
+			end)
+			for i, name in ipairs(names) do
+				if name == speaker.name then
+					wanted = -SIDE_TURN + 2 * SIDE_TURN * (i - 1) / (#names - 1)
+					spot = ("spot %d of %d from the left"):format(i, #names)
+				end
+			end
 		end
 	end
 	local target = math.max(turn.amount - MAX_SWING, math.min(turn.amount + MAX_SWING, wanted))
-	target = math.max(-MAX_TURN, math.min(MAX_TURN, target))
+	-- (Mid zoom in, the gain's the close-up one, not yet true: SIDE_TURN at most.)
+	local most = zooming and SIDE_TURN or MAX_TURN
+	target = math.max(-most, math.min(most, target))
 	local step = target - turn.amount
 	local carry = drifting and turn.sent and math.abs(step) >= MIN_TURN and (step > 0) == turn.right
 	if drifting and not carry then
@@ -494,13 +899,15 @@ local function Aim(now, drifting)
 	convo.on = speaker.name
 	convo.center, convo.driftOut = target, nil
 	if math.abs(step) < MIN_TURN then
-		Say(("on %s: %+.1f deg off the middle (bubble x %+.2f), already in view"):format(speaker.name, angle, sx))
+		Say(("on %s: %+.1f deg off the middle (bubble x %+.2f y %+.2f, %s)%s, already in view"):format(
+			speaker.name, angle, sx, sy, reading, spot and (", " .. spot) or ""))
 		return
 	end
 	local T = SwingTime(math.abs(step), Ease(SWING_EASE), SWING_MIN_TIME)
-	Say(("swinging to %s%s: %+.1f deg off the middle (bubble x %+.2f), gain %.2f, %+.1f to %+.1f over %.1fs%s"):format(
-		speaker.correcting and "(again) " or "", speaker.name, angle, sx, convo.gain, step, target, T,
-		(target ~= wanted and " (as far as it goes)" or "") .. (sided and (", to their side (%s of the other)"):format(sided) or "")))
+	Say(("swinging to %s%s: %+.1f deg off the middle (bubble x %+.2f y %+.2f, %s), gain %.2f, %+.1f to %+.1f over %.1fs%s"):format(
+		speaker.correcting and "(again) " or "", speaker.name, angle, sx, sy, reading,
+		convo.gain, step, target, T,
+		(target ~= wanted and " (as far as it goes)" or "") .. (spot and (", " .. spot) or "")))
 	Note("swing to " .. speaker.name)
 	convo.turnedAt = convo.turnedAt or now
 	if carry then
@@ -508,7 +915,7 @@ local function Aim(now, drifting)
 	end
 	MoveTo(target, T, Ease(SWING_EASE), "swing", carry and (turn.smooth or turn.sent) or nil)
 	-- (Looked at again once it's done: how far it really moved them.)
-	convo.check = { speaker = speaker, angle = angle, step = step }
+	convo.check = { speaker = speaker, angle = angle, step = step, good = good, zooming = zooming }
 end
 
 -- Settled on someone: a slow drift to and fro about them (the quest cam's
@@ -556,9 +963,21 @@ local function OnUpdate(_, elapsed)
 			if check and not turn.moving then
 				convo.check = nil
 				local speaker = check.speaker
-				local after = BubbleAngle(speaker.text)
+				local after, _, afterY, afterOthers, afterHow = BubbleAngle(speaker.text)
+				local afterGood, afterReading
+				if after then
+					afterGood, afterReading = BubbleReading(afterY, afterOthers, afterHow)
+				end
 				if not after then
 					Say(("after the swing, %s's bubble is gone"):format(speaker.name))
+				elseif check.zooming or zooming then
+					-- (The zoom moved them too: no telling the turn's share.)
+					Say(("after the swing, %s is %+.1f deg off the middle: zoomed meanwhile, not measured"):format(
+						speaker.name, after))
+				elseif not (check.good and afterGood) then
+					-- (A box moved aside, or a bubble not alone, measures nothing: see TAIL_MIDDLE.)
+					Say(("after the swing, %s is %+.1f deg off the middle (%s): not measured"):format(
+						speaker.name, after, check.good and afterReading or "not a good bubble before"))
 				else
 					-- How far they moved on screen per degree turned (the gain).
 					local moved = check.angle - after
@@ -577,10 +996,10 @@ local function OnUpdate(_, elapsed)
 				end
 			end
 			local speaker = convo.speaker
-			if zooming then
-				-- (The swing waits for the zoom in: a turn alongside it can't be
-				-- measured, and the two together moved in jolts.)
-			elseif speaker and not speaker.aimed and not speaker.missing and speaker.name ~= convo.on then
+			-- (Swings go alongside the zoom in, as the quest cam's turn to the side
+			-- does: waiting for it, a line 8 seconds into the zoom got its swing as
+			-- it ended. Earlier, the two together moved in jolts: watch for it.)
+			if speaker and not speaker.aimed and not speaker.missing and speaker.name ~= convo.on then
 				-- (Someone new: mid move (a drift leg, a swing to the last speaker, the
 				-- turn back), it's turned into the new swing, or eased out first if it's
 				-- going the other way; not waited out. Otherwise a moment after the last
@@ -600,6 +1019,7 @@ local function OnUpdate(_, elapsed)
 	elseif leaving then
 		Leave(now)
 	end
+	DebugTick(now)
 	local lines = frameLog.lines
 	if lines and #lines < LOG_MAX then
 		lines[#lines + 1] = ("%.3f +%.3f %s %+.2f%s sent %s cvar %s zoom %.2f%s%s%s"):format(
@@ -668,17 +1088,34 @@ local function Heard(text, name)
 	watcher:SetScript("OnUpdate", OnUpdate)
 end
 
-watcher:SetScript("OnEvent", function(_, _, text, name)
+-- Why a line isn't taken, or nil.
+local function NotTaken(text)
+	if type(text) ~= "string" or Secret(text) then
+		return "text can't be read"
+	elseif not On() then
+		return "Chat Cam off"
+	elseif ns.IsSuspended() then
+		return "suspended"
+	elseif ns.playerMoving then
+		return "you're moving"
+	elseif fake then
+		return "Test running"
+	-- (Turned off here, or the Calm Timer still running after a fight: Camera Modes page.)
+	elseif not convo and ns.IsCameraOffHere("chatcam") then
+		return "turned off here"
+	elseif not convo and not ns.CombatWaitOver("chatcam", GetTime()) then
+		return "Calm Timer"
+	end
+end
+
+watcher:SetScript("OnEvent", function(_, event, text, name, ...)
 	name = type(name) == "string" and not Secret(name) and name or "?"
 	SetTargetName(name) -- (any line, the camera on or not: the key targets whoever spoke last)
-	if type(text) ~= "string" or Secret(text) or not On() or ns.IsSuspended() or ns.playerMoving or fake then
-		return
+	local why = NotTaken(text)
+	DebugLine(event, text, name, (select(10, ...)), why)
+	if not why then
+		Heard(text, name)
 	end
-	-- (Turned off here, or the Calm Timer still running after a fight: Camera Modes page.)
-	if not convo and (ns.IsCameraOffHere("chatcam") or not ns.CombatWaitOver("chatcam", GetTime())) then
-		return
-	end
-	Heard(text, name)
 end)
 
 ns.CAMERA_TESTS = ns.CAMERA_TESTS or {}
@@ -754,9 +1191,24 @@ function ns.ChatCamHidesWorld()
 	return ns.db.chatCamHideWorld and (convo ~= nil or leaving ~= nil) or false
 end
 
--- /cine chatcam [flip|log|steady].
+-- /cine chatcam [flip|log|steady|debug|mark <note>].
 function ns.ChatCamCommand(arg)
-	if arg == "flip" then
+	local note = arg:match("^mark%s*(.*)$")
+	if note then
+		-- (A note in the debug log, typed mid-run: "liadrin's on the left", say.)
+		if debugLog.started then
+			DebugAdd("MARK " .. note)
+			ns.Print("Chat Cam: noted in the debug log at " .. date("%H:%M:%S"))
+		else
+			ns.Print("Chat Cam: the debug log starts with the first line someone says")
+		end
+		return
+	elseif arg == "debug" then
+		ns.db.chatCamDebugOff = not ns.db.chatCamDebugOff or nil
+		Say("debug log of bubbles, plates and the camera: " .. (ns.db.chatCamDebugOff and "off" or "on")
+			.. " (/reload afterwards to save it)")
+		return
+	elseif arg == "flip" then
 		ns.db.chatCamSwap = not ns.db.chatCamSwap
 		Say("turn directions " .. (ns.db.chatCamSwap and "swapped" or "as tested"))
 		return

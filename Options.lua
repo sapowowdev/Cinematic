@@ -177,7 +177,7 @@ local function Stack(anchor, kind)
 end
 
 local function Check(parent, key, label, tip, onChange)
-	local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+	local cb = ns.SkinCheck(CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate"))
 	cb:SetSize(26, 26)
 	local text = cb.Text or cb.text
 	if not text then
@@ -229,6 +229,7 @@ local function Slider(parent, key, label, minV, maxV, step, fmt, scale, onChange
 		local fs = slider[suffix] or _G[name .. suffix]
 		if fs then fs:Hide() end
 	end
+	ns.SkinSlider(slider) -- (the menu look: Skin.lua)
 
 	local title = Label(slider, "GameFontHighlight")
 	title:SetPoint("BOTTOMLEFT", slider, "TOPLEFT", 0, 4)
@@ -299,9 +300,18 @@ local function SwitchOf(control)
 	return control.pageSwitch
 end
 
+-- (Dev copy: how long each control's refresh took, the slowest kept for
+-- PageShown's timing line. ns.pageTiming: { count, slowest = { {ms, name} } }.)
+local function ControlName(control)
+	return control.debugName or control.searchLabel
+		or (control.GetObjectType and control:GetObjectType()) or "?"
+end
 local function Refresh()
 	if not ns.GetDB() then return end
+	local timing = ns.isDev and { count = #controls, slowest = {} }
+	ns.pageTiming = timing
 	for _, control in ipairs(controls) do
+		local started = timing and debugprofilestop()
 		local switch = control.SetEnabled and SwitchOf(control)
 		if switch and switch.check ~= control then
 			-- (Enabled first, so its own greying decides; then off with the switch.)
@@ -320,6 +330,15 @@ local function Refresh()
 		else
 			control:Refresh()
 		end
+		if timing then
+			local ms = debugprofilestop() - started
+			if ms > 1 then
+				local slowest = timing.slowest
+				slowest[#slowest + 1] = { ms, ControlName(control) }
+				table.sort(slowest, function(a, b) return a[1] > b[1] end)
+				slowest[6] = nil
+			end
+		end
 	end
 end
 
@@ -337,11 +356,6 @@ local function PageSwitch(content, key, label, tip, anchor, onChange)
 	RegisterPageSwitch(content, key, check)
 	return check
 end
--- Whether a page's switch is on (for lists a page builds on its own).
-local function SwitchOn(key)
-	return ns.GetDB()[key] ~= false
-end
-
 -- A checkbox that acts as one choice in a group sharing a db key.
 local function Choice(parent, key, value, label, tip)
 	local cb = Check(parent, key, label, tip, function()
@@ -356,7 +370,7 @@ end
 -- a function giving them each time the menu opens.
 -- Returns nil on clients without the modern dropdown template.
 local function Dropdown(parent, key, choices, width, onChange)
-	local ok, dropdown = pcall(CreateFrame, "DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+	local ok, dropdown = ns.MenuDropdown(parent)
 	if not ok or not dropdown or not dropdown.SetupMenu then
 		return nil
 	end
@@ -439,7 +453,7 @@ StaticPopupDialogs.CINEMATIC_RESET_PAGE = {
 -- noReset: no "Reset page" button (the main page has its own reset for everything).
 local function CreateScrollPage(noReset)
 	local canvas = CreateFrame("Frame")
-	local scroll = CreateFrame("ScrollFrame", nil, canvas, "UIPanelScrollFrameTemplate")
+	local scroll = ns.SkinScroll(CreateFrame("ScrollFrame", nil, canvas, "UIPanelScrollFrameTemplate"))
 	scroll:SetPoint("TOPLEFT", 0, -4)
 	scroll:SetPoint("BOTTOMRIGHT", -SCROLLBAR_WIDTH, 4)
 	local content = CreateFrame("Frame", nil, scroll)
@@ -452,7 +466,7 @@ local function CreateScrollPage(noReset)
 	-- Every page gets a "Reset page" button, top right; it scrolls away with
 	-- the top of the page (left in place, the settings scrolled under it), and
 	-- goes on a page with no settings of its own.
-	local reset = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+	local reset = ns.PanelButton(content)
 	reset:SetSize(100, 22)
 	reset:SetPoint("TOPRIGHT", content, "TOPRIGHT", -8, -8)
 	reset:SetText(L["Reset page"])
@@ -510,8 +524,24 @@ end
 -- once text and anchors have settled).
 local function PageShown(refresh, content)
 	return function()
+		local started = debugprofilestop()
+		ns.ApplyMenuSkin() -- (the Menu look, as it is now: Forever's Character Models may have changed)
+		local looked = debugprofilestop()
+		ns.pageTiming = nil
 		refresh()
+		local refreshed = debugprofilestop()
 		FitContentHeight(content)
+		local fitted = debugprofilestop()
+		-- (Dev copy: a line in chat when a page is slow to open, to find why.)
+		if ns.isDev and fitted - started > 30 then
+			local timing, slow = ns.pageTiming, {}
+			for _, each in ipairs(timing and timing.slowest or {}) do
+				slow[#slow + 1] = ("%s %.0f"):format(each[2], each[1])
+			end
+			ns.Print(("page open %.0f ms: look %.0f, refresh %.0f (%s controls; slowest: %s), fit %.0f"):format(
+				fitted - started, looked - started, refreshed - looked, timing and timing.count or "?",
+				#slow > 0 and table.concat(slow, ", ") or "-", fitted - refreshed))
+		end
 		C_Timer.After(0, function() FitContentHeight(content) end)
 	end
 end
@@ -703,7 +733,7 @@ local function CreateSearch(canvas, parent, pages)
 	local named = not pages or #pages ~= 1 -- (matches show their page's name; a hub's list grows)
 	local ok, box = pcall(CreateFrame, "EditBox", nil, parent, "SearchBoxTemplate")
 	if not ok or not box then
-		box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+		box = ns.SkinEditBox(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
 	end
 	box:SetSize(page and 180 or 260, 20)
 	box:SetAutoFocus(false)
@@ -897,7 +927,7 @@ local function CreatePanel()
 		StaticPopup_Show("CINEMATIC_LANGUAGE_RELOAD")
 	end
 	local language
-	local ok, dropdown = pcall(CreateFrame, "DropdownButton", nil, panel, "WowStyle1DropdownTemplate")
+	local ok, dropdown = ns.MenuDropdown(panel)
 	if ok and dropdown and dropdown.SetupMenu then
 		language = dropdown
 		language:SetWidth(180)
@@ -910,7 +940,7 @@ local function CreatePanel()
 		language.Refresh = function(self) self:GenerateMenu() end
 	else
 		-- (No modern dropdown on this client: a button that steps through them.)
-		language = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+		language = ns.PanelButton(panel)
 		language:SetSize(180, 22)
 		language:SetScript("OnClick", function()
 			for i, choice in ipairs(LANGUAGES) do
@@ -932,6 +962,63 @@ local function CreatePanel()
 	Tooltip(language, L["The language Cinematic's text is in, for all your characters. Game language " ..
 		"follows the game's (English where Cinematic has no translation yet). A change needs a reload."])
 	controls[#controls + 1] = language
+
+	-- The settings pages' and windows' look, for the account like the
+	-- language (ns.MenuSkin, Skin.lua).
+	do
+		local skinLabel = Label(panel, "GameFontHighlight", L["Menu look"])
+		skinLabel:SetPoint("TOPLEFT", language, "BOTTOMLEFT", 4, -14)
+		local SKINS = { { value = "auto" }, { value = "HD", text = L["HD (flat)"] },
+			{ value = "SD", text = L["SD (the game's look)"] } }
+		local function CurrentSkin()
+			return (CinematicDB and CinematicDB.menuSkin) or "auto"
+		end
+		-- (Auto says which it comes to here.)
+		local function SkinText(choice)
+			return choice.text or (L["Auto (%s)"]):format(ns.AutoMenuSkin())
+		end
+		local function ChooseSkin(value)
+			if CinematicDB then CinematicDB.menuSkin = value ~= "auto" and value or nil end
+			ns.ApplyMenuSkin()
+		end
+		local skinMenu
+		local made, skinDropdown = ns.MenuDropdown(panel)
+		if made and skinDropdown and skinDropdown.SetupMenu then
+			skinMenu = skinDropdown
+			skinMenu:SetWidth(180)
+			skinMenu:SetupMenu(function(_, root)
+				for _, choice in ipairs(SKINS) do
+					root:CreateRadio(SkinText(choice), function() return CurrentSkin() == choice.value end,
+						function() ChooseSkin(choice.value) end)
+				end
+			end)
+			skinMenu.Refresh = function(self) self:GenerateMenu() end
+		else
+			-- (No modern dropdown on this client: a button that steps through them.)
+			skinMenu = ns.PanelButton(panel)
+			skinMenu:SetSize(180, 22)
+			skinMenu.Refresh = function(self)
+				for _, choice in ipairs(SKINS) do
+					if choice.value == CurrentSkin() then self:SetText(SkinText(choice)) end
+				end
+			end
+			skinMenu:SetScript("OnClick", function(self)
+				for i, choice in ipairs(SKINS) do
+					if choice.value == CurrentSkin() then
+						ChooseSkin(SKINS[i % #SKINS + 1].value)
+						break
+					end
+				end
+				self:Refresh()
+			end)
+		end
+		skinMenu.searchSkip = true -- (it shows the current choice, not a label)
+		skinMenu:SetPoint("TOPLEFT", skinLabel, "BOTTOMLEFT", -4, -6)
+		Tooltip(skinMenu, L["The look of Cinematic's settings pages and windows, for all your characters. HD: " ..
+			"flat and dark, with thin edges. SD: the game's own buttons and windows. Auto: HD on retail, SD on " ..
+			"classic, and on WoW Forever as your Character Models setting is (Standard: SD)."])
+		controls[#controls + 1] = skinMenu
+	end
 
 	-- Right column: places
 	local placesHeader = Label(panel, "GameFontNormal", L["Turn off in"])
@@ -1000,7 +1087,7 @@ local function CreatePanel()
 		"this long without stopping (a long walk or ride)."])
 	GreyUnless(movingBack, function(db) return db.offWhileMoving end)
 
-	local defaults = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+	local defaults = ns.PanelButton(panel)
 	defaults:SetSize(140, 22)
 	defaults:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -16, -12)
 	defaults:SetText(L["Reset addon"])
@@ -1057,6 +1144,7 @@ do
 			{ "Advanced Frames", "Interface\\Icons\\INV_Misc_Gear_01" },
 			{ "Nameplates", "Interface\\Icons\\Ability_Hunter_SniperShot" },
 			{ "Unit Frames", "Interface\\Icons\\INV_Misc_Head_Dwarf_01" },
+			{ "Personal Resources", "Interface\\Icons\\Ability_Racial_BloodRage" }, -- (Bloodrage: health into power)
 			{ "Mouseover groups", "Interface\\Icons\\Spell_Holy_MindVision" },
 			{ "Minimap", "Interface\\Icons\\INV_Misc_Map_01" },
 			{ "Quest tracker", "Interface\\Icons\\INV_Misc_Note_01" },
@@ -1078,6 +1166,11 @@ do
 			{ "Effects", "Interface\\Icons\\Spell_Holy_Restoration", label = "General" },
 			{ "Tint", "Interface\\Icons\\INV_Misc_Gem_Variety_02" },
 			{ "Graphics+", "Interface\\Icons\\INV_Misc_Gem_Pearl_04" },
+		} },
+		-- (The Names page: the dev copy's only.)
+		{ name = "Style", pages = {
+			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names" },
+			{ "Target Arrow", "Interface\\Icons\\Ability_Marksmanship" },
 		} },
 		{ name = "Visions", pages = {
 			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl", label = "General" },
@@ -1164,7 +1257,7 @@ do
 		hub.host:SetPoint("TOPLEFT", 0, -EDGE)
 		hub.host:SetPoint("BOTTOMRIGHT")
 		-- Reset page (the page shown), and left of it a search box for all its pages.
-		local reset = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+		local reset = ns.PanelButton(frame)
 		reset:SetSize(100, 22)
 		reset:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -8)
 		reset:SetText(L["Reset page"])
@@ -1621,7 +1714,7 @@ local function CreateBuffsPanel()
 			row.icon:SetPoint("LEFT", 0, 0)
 			row.text = Label(row, "GameFontHighlight")
 			row.text:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
-			row.remove = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+			row.remove = ns.PanelButton(row)
 			row.remove:SetSize(70, 20)
 			row.remove:SetPoint("RIGHT", 0, 0)
 			row.remove:SetText(L["Remove"])
@@ -1635,10 +1728,10 @@ local function CreateBuffsPanel()
 		return row
 	end
 
-	local addBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+	local addBox = ns.SkinEditBox(CreateFrame("EditBox", nil, content, "InputBoxTemplate"))
 	addBox:SetSize(200, 20)
 	addBox:SetAutoFocus(false)
-	local addButton = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+	local addButton = ns.PanelButton(content)
 	addButton:SetSize(70, 20)
 	addButton:SetPoint("LEFT", addBox, "RIGHT", 8, 0)
 	addButton:SetText(L["Add"])
@@ -1770,87 +1863,39 @@ local function CreateCameraPanel()
 		L["In the camera modes, the minimap and quest tracker hover holds and the buff and chat " ..
 		"peeks use their short default times, so they clear the view quickly."])
 
-	-- Turn off in: a grid of each camera (rows) by place or group (columns).
+	-- Runs in: a row per camera (below).
 	local switch = CameraModesSwitch(cameraPanel, subtitle)
-	local offHeader = Header(cameraPanel, L["Turn off in"], switch, -18)
+	local offHeader = Header(cameraPanel, L["Runs in"], switch, -18)
 	offHeader:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -18)
 	local offNote = PageIntro(cameraPanel, offHeader,
-		L["Ticked, that camera doesn't start there (and stops if it's running): the UI stays " ..
-		"faded, with the camera left to you. With the Death Cam off, dying brings the UI back " ..
-		"as usual. To keep the normal UI somewhere instead, use Turn off in on the main page. " ..
-		"For flights, Cities means taking off from one, " ..
-		"and Open World taking off anywhere else. " ..
-		"Calm Timer, on the right: ticked, that camera waits until the Calm Timer (CineMode page) " ..
-		"has run out after a fight before it starts."])
-	local GRID_NAME_WIDTH, GRID_COLUMN, GRID_GAP = 90, 72, 10
-	local GRID_PLACES = GRID_NAME_WIDTH
-	local WHERE = {
-		Cities = { L["Cities"], L["in capital cities"] },
-		Instances = { L["Instances"], L["in dungeons, scenarios and raids"] },
-		BGs = { L["BGs & Arenas"], L["in battlegrounds and arenas"] },
-		World = { L["Open World"], L["out in the world (not in a capital city or an instance), inns included"] },
-	}
-	-- Calm Timer last, set apart too: it isn't a place.
-	local GRID_CALM = GRID_PLACES + GRID_COLUMN * #ns.CAMERA_OFF_WHERE + GRID_GAP
-	local gridTop = CreateFrame("Frame", nil, cameraPanel)
-	gridTop:SetSize(GRID_CALM + GRID_COLUMN, 16)
-	gridTop:SetPoint("TOPLEFT", offNote, "BOTTOMLEFT", 0, -10)
-	local function ColumnHeader(x, label, tip)
-		local cell = CreateFrame("Frame", nil, gridTop)
-		cell:SetSize(GRID_COLUMN, 16)
-		cell:SetPoint("LEFT", gridTop, "LEFT", x, 0)
-		local text = Label(cell, "GameFontNormalSmall", label)
-		text:SetPoint("CENTER")
-		text:SetJustifyH("CENTER")
-		Tooltip(cell, tip)
-	end
-	for i, where in ipairs(ns.CAMERA_OFF_WHERE) do
-		ColumnHeader(GRID_PLACES + GRID_COLUMN * (i - 1), WHERE[where][1],
-			L["Tick a camera here to turn it off %s."]:format(WHERE[where][2]))
-	end
-	ColumnHeader(GRID_CALM, L["Calm Timer"], L["Tick a camera here to have it wait until the Calm " ..
-		"Timer (CineMode page) has run out after a fight before it starts."])
-	local lastRow = gridTop
+		L["Where each camera can start. Anywhere else it doesn't (and stops if it's running): the UI stays " ..
+		"faded, with the camera left to you. With the Death Cam off, dying brings the UI back as usual. " ..
+		"To keep the normal UI somewhere instead, use Turn off in on the main page. For flights, Cities " ..
+		"means taking off from one, and Open World taking off anywhere else. Combat's Wait for the Calm " ..
+		"Timer: that camera waits until the Calm Timer (CineMode page) has run out after a fight."])
+	-- A row per camera, as the Standard Frames page's (GridRows.lua): where
+	-- it runs (a flight: where it takes off), and, in Combat, whether it waits
+	-- for the Calm Timer. Flights never start in instances; the Death Cam
+	-- can't wait (you die in a fight).
+	local camRows = { opts = { anyFight = true } }
 	for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
-		local row = CreateFrame("Frame", nil, cameraPanel)
-		row:SetSize(gridTop:GetWidth(), 24)
-		row:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 0, -2)
-		local name = Label(row, "GameFontHighlight", cam[2])
-		name:SetPoint("LEFT", row, "LEFT", 0, 0)
-		for i, where in ipairs(ns.CAMERA_OFF_WHERE) do
-			local x = GRID_PLACES + GRID_COLUMN * (i - 0.5)
-			if (ns.CAMERA_OFF_NEVER[cam[1]] or {})[where] then
-				-- No flights from here: a greyed-out cross in place of the box.
-				local cell = CreateFrame("Frame", nil, row)
-				cell:SetSize(26, 26)
-				cell:SetPoint("CENTER", row, "LEFT", x, 0)
-				local cross = Label(cell, "GameFontDisable", "x")
-				cross:SetPoint("CENTER")
-				Tooltip(cell, L["Flights don't start %s."]:format(WHERE[where][2]))
-			else
-				local tip = (cam[1] == "flight" and where == "Cities")
-					and L["No Flight Cam on flights taking off from a capital city."]
-					or (cam[1] == "flight" and where == "World")
-					and L["No Flight Cam on flights taking off anywhere but a capital city."]
-					or L["No %s Cam %s."]:format(cam[2], WHERE[where][2])
-				local cb = Check(row, cam[1] .. "OffIn" .. where, "", tip)
-				cb:SetPoint("CENTER", row, "LEFT", x, 0)
-			end
+		local alwaysKey, calmKey = "camAlways" .. cam[1], cam[1] .. "CalmWait"
+		local omit = { combatShow = true, enemyShow = true, friendlyShow = true }
+		for where in pairs(ns.CAMERA_OFF_NEVER[cam[1]] or {}) do
+			omit[where == "BGs" and "bgShow" or "instanceShow"] = true
 		end
-		local calmX = GRID_CALM + GRID_COLUMN * 0.5
-		if ns.CALM_WAIT_NEVER[cam[1]] then
-			local cell = CreateFrame("Frame", nil, row)
-			cell:SetSize(26, 26)
-			cell:SetPoint("CENTER", row, "LEFT", calmX, 0)
-			local cross = Label(cell, "GameFontDisable", "x")
-			cross:SetPoint("CENTER")
-			Tooltip(cell, L["You die in a fight: the Death Cam can't wait for one to be over."])
-		else
-			local calm = Check(row, cam[1] .. "CalmWait", "", L["The %s Cam waits until the Calm Timer has run out after a fight."]:format(cam[2]))
-			calm:SetPoint("CENTER", row, "LEFT", calmX, 0)
-		end
-		lastRow = row
+		local calmItem = not ns.CALM_WAIT_NEVER[cam[1]] and { L["Wait for the Calm Timer"],
+			function() return ns.GetDB()[calmKey] and true or false end,
+			function() ns.GetDB()[calmKey] = not ns.GetDB()[calmKey] end, nil,
+			L["The %s Cam waits until the Calm Timer has run out after a fight."]:format(cam[2]) } or nil
+		camRows[#camRows + 1] = { key = "cam:" .. cam[1], label = cam[2], alwaysKey = alwaysKey,
+			recordKeys = calmItem and { calmKey } or nil,
+			alwaysOn = function() return ns.GetDB()[alwaysKey] end,
+			setAlways = function(value) ns.GetDB()[alwaysKey] = value end,
+			alwaysTip = L["Runs wherever you are."],
+			opts = { omit = omit, calmItem = calmItem } }
 	end
+	local lastRow = ns.ShowTable(cameraPanel, offNote, camRows, L["Camera Modes"])
 
 	-- Indoors: hidden for now (true brings it back); the settings keep working
 	-- at their values.
@@ -2114,7 +2159,7 @@ local function CameraSection(name, key)
 		RelayoutCameraSections()
 	end)
 
-	local reset = CreateFrame("Button", nil, header, "UIPanelButtonTemplate")
+	local reset = ns.PanelButton(header)
 	reset:SetSize(90, 20)
 	reset:SetPoint("RIGHT", header, "RIGHT", -6, 0)
 	reset:SetText(L["Reset"])
@@ -2278,7 +2323,7 @@ end
 -- A comma-separated list setting in an edit box (saved as you leave it).
 local function ListBox(parent, key, width, tip, onSave)
 	RecordKey(parent, key)
-	local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+	local box = ns.SkinEditBox(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
 	box:SetSize(width, 20)
 	box:SetAutoFocus(false)
 	local function Save(self)
@@ -2343,7 +2388,7 @@ local EVENT_TIPS = {
 	Sleep = L["Doing the emote. Moving, jumping or another emote ends it."],
 	Dance = L["Doing the emote. Moving, jumping or another emote ends it."],
 	Kneel = L["Doing the emote. Moving, jumping or another emote ends it."],
-	Chair = L["Right-clicking a seat to sit on it; standing up ends it. Seats are recognised by name, " ..
+	Chair = L["Right-clicking a seat to sit on it; standing up ends it. Seats are recognized by name, " ..
 		"using the words below."],
 	Weapon = L["Unsheathing your weapon with your Sheathe/Unsheathe key out of combat, for a \"hero shot\" " ..
 		"(not when it comes out from attacking or casting). Putting it away, running or " ..
@@ -2421,7 +2466,7 @@ local function CreateEventsPanel()
 		if camera then
 			return camera
 		end
-		camera = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+		camera = ns.PanelButton(content)
 		camera:SetSize(150, 22)
 		camera:SetScript("OnClick", function()
 			local db = ns.GetDB()
@@ -2758,7 +2803,7 @@ local function CreateWalkPanel()
 		name = L["RP Walk Cam"],
 		description = L["While you're auto-walking (auto-run in walk mode). Walking by hand cancels " ..
 			"the camera, as all moving by hand does. Stop and stand, and the AFK camera takes over. " ..
-			"Walking is recognised from your speed; /cine walk shows what the addon thinks."],
+			"Walking is recognized from your speed; /cine walk shows what the addon thinks."],
 		instantKey = "walkInstant", instantWhen = L["walk"],
 		inputPauseKey = "walkInputPause",
 		inputPauseTip = L["Keep it short, so it's back in time if you need to steer."],
@@ -2823,7 +2868,7 @@ local function CreateDeathPanel()
 
 	rightStack:Header(content, L["Screen"])
 	local screen = rightStack:Add(Check(content, "deathScreen", L["Darken the screen"],
-		L["The world dims and goes cold and grey-blue, with a heavy vignette closing in from the " ..
+		L["The world dims and goes cold and gray-blue, with a heavy vignette closing in from the " ..
 		"edges. It clears when you release or come back."]), "check")
 	screen:HookScript("OnClick", Refresh) -- grey out / enable the strength below
 	GreyUnless(screen, IfOn)
@@ -2856,7 +2901,7 @@ local function CreateDeathPanel()
 		"release or come back."]), "check")
 	song:HookScript("OnClick", Refresh) -- grey out / enable the file box below
 	GreyUnless(song, IfOn)
-	local songBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+	local songBox = ns.SkinEditBox(CreateFrame("EditBox", nil, content, "InputBoxTemplate"))
 	songBox:SetSize(260, 20)
 	songBox:SetAutoFocus(false)
 	rightStack:Add(songBox, "box")
@@ -3116,7 +3161,7 @@ local function CreateTelePanel()
 	GreyUnless(level, IfOn)
 
 
-	stack:Header(content, L["Cancelling and arriving"])
+	stack:Header(content, L["Canceling and arriving"])
 	local back = stack:Add(Check(content, "teleReturn", L["Turn back if you cancel"],
 		L["Moving, jumping or Esc cancels the cast: the spin slows to a stop and turns back to where " ..
 		"the camera was before you started. Off: it stops where it is."]), "check")
@@ -3141,7 +3186,7 @@ local function CreateTelePanel()
 	GreyUnless(close, IfZoom)
 	local zoomBack = right:Add(Slider(content, "teleZoomBackTime", L["If you cancel, zoom back out in"],
 		0.5, 3, 0.25, L["%.2f sec"]), "slider")
-	Tooltip(zoomBack, L["Cancelling the cast, the camera zooms back out to your own distance this quickly."])
+	Tooltip(zoomBack, L["Canceling the cast, the camera zooms back out to your own distance this quickly."])
 	GreyUnless(zoomBack, IfZoom)
 end
 
@@ -3267,97 +3312,36 @@ local function CreateEffectsPanel()
 
 	local subtitle = PageIntro(content, title,
 		L["How the game world looks in CineMode (or over the normal UI, with Start in CineMode off on the " ..
-		"main page): letterbox bars, vignette, inn glow, weather and depth of field. The colour grading is " ..
+		"main page): letterbox bars, vignette, inn glow, weather and depth of field. The color grading is " ..
 		"on the Tint tab. The UI isn't tinted. Names and nameplates are on the Nameplates page."])
 
 	local master = VisualEffectsSwitch(content, subtitle)
 
-	-- Turn off in: a grid of the letterbox, tint, vignette and weather (rows) by place, fights
-	-- and camera modes (columns), like the Camera Modes page's.
-	local gridHeader = Header(content, L["Turn off in"], master, -18)
+	-- Show in: a row each for the letterbox, tint, vignette and weather, as
+	-- the Standard Frames page's (GridRows.lua): where and when each shows.
+	-- A row off everywhere switches its effect off (its own switch follows).
+	local gridHeader = Header(content, L["Show in"], master, -18)
 	gridHeader:SetPoint("TOPLEFT", master, "BOTTOMLEFT", 2, -18)
 	local gridNote = PageIntro(content, gridHeader,
-		L["Ticked, that effect doesn't show there. Always: not at all. Combat: it goes for fights, and comes back once the " ..
-		"Calm Timer (CineMode page) has run out after. Outside camera modes: it only shows while a " ..
-		"camera mode runs (flights, AFK, cozy and the rest)."])
-	local EFFECT_ROWS = { letterbox = L["Letterbox"], tint = L["Tint"], vignette = L["Vignette"], weather = L["Weather"] }
-	-- What the tooltips call them, mid-sentence (lower case in English; each
-	-- language has its own, since some capitalise nouns).
-	local EFFECT_TIP_NAMES = { letterbox = L["letterbox"], tint = L["tint"], vignette = L["vignette"],
-		weather = L["weather tint"] }
-	-- The Always column: an effect's own on/off switch, ticked when off (the
-	-- tint's is tintOffAlways). A row's other boxes grey while it's ticked.
-	local EFFECT_SWITCHES = { letterbox = "letterbox", vignette = "vignette", weather = "weatherTint" }
-	local function EffectOff(db, effect)
-		local switch = EFFECT_SWITCHES[effect]
-		if switch then
-			return not db[switch]
-		end
-		return db[effect .. "OffAlways"]
-	end
-	local PLACE_NAMES = {
-		Cities = { L["Cities"], L["in capital cities"] },
-		Instances = { L["Instances"], L["in dungeons, scenarios and raids"] },
-		BGs = { L["BGs & Arenas"], L["in battlegrounds and arenas"] },
-		World = { L["Open World"], L["out in the world (not in a capital city or an instance), inns included"] },
-	}
-	local EFFECT_COLUMNS = { { key = "OffAlways", heading = L["Always"],
-		tip = function(name) return (L["No %s at all."]):format(name) end } }
-	for _, where in ipairs(ns.EFFECT_OFF_WHERE) do
-		EFFECT_COLUMNS[#EFFECT_COLUMNS + 1] = { key = "OffIn" .. where, heading = PLACE_NAMES[where][1],
-			tip = function(name) return (L["No %s %s."]):format(name, PLACE_NAMES[where][2]) end }
-	end
-	-- (Fights and camera modes set apart: they aren't places.)
-	local firstApart = #EFFECT_COLUMNS + 1
-	EFFECT_COLUMNS[#EFFECT_COLUMNS + 1] = { key = "OffInCombat", heading = L["Combat"],
-		tip = function(name) return (L["The %s goes for fights, and comes back once the Calm Timer " ..
-			"(CineMode page) has run out after one."]):format(name) end }
-	EFFECT_COLUMNS[#EFFECT_COLUMNS + 1] = { key = "OnlyInCameras", heading = L["Outside camera modes"],
-		tip = function(name) return (L["The %s only shows while a camera mode runs: flights, AFK, cozy and " ..
-			"the rest."]):format(name) end }
-	local NAME_WIDTH, COLUMN_WIDTH, GAP, HEADING_HEIGHT = 90, 66, 10, 26
-	local function ColumnX(c)
-		-- (Always set apart from the places too.)
-		return NAME_WIDTH + COLUMN_WIDTH * (c - 1) + (c >= 2 and GAP or 0) + (c >= firstApart and GAP or 0)
-	end
-	local gridTop = CreateFrame("Frame", nil, content)
-	gridTop:SetSize(ColumnX(#EFFECT_COLUMNS) + COLUMN_WIDTH, HEADING_HEIGHT)
-	gridTop:SetPoint("TOPLEFT", gridNote, "BOTTOMLEFT", 0, -10)
-	for c, column in ipairs(EFFECT_COLUMNS) do
-		local heading = Label(gridTop, "GameFontNormalSmall", column.heading)
-		heading:SetWidth(COLUMN_WIDTH)
-		heading:SetJustifyH("CENTER")
-		heading:SetPoint("BOTTOMLEFT", gridTop, "BOTTOMLEFT", ColumnX(c), 0)
-	end
-	local lastGridRow = gridTop
+		L["Where and when each effect shows in CineMode. Always: everywhere. Combat: In combat, Calm Timer (after a " ..
+		"fight, till it's run out), Out of combat (the rest of the time), In a camera mode (flights, AFK, cozy and the " ..
+		"rest). Location: the places. Nothing ticked: it's off."])
+	local EFFECT_LABELS = { letterbox = L["Letterbox"], tint = L["Tint"], vignette = L["Vignette"], weather = L["Weather"] }
+	local effectRows = { opts = { quiet = true, cam = true, anyFight = true } }
 	for _, effect in ipairs(ns.EFFECT_GRID) do
-		local row = CreateFrame("Frame", nil, content)
-		row:SetSize(gridTop:GetWidth(), 24)
-		row:SetPoint("TOPLEFT", lastGridRow, "BOTTOMLEFT", 0, -2)
-		Label(row, "GameFontHighlight", EFFECT_ROWS[effect]):SetPoint("LEFT", row, "LEFT", 0, 0)
-		for c, column in ipairs(EFFECT_COLUMNS) do
-			local key = effect .. column.key
-			local tipName = EFFECT_TIP_NAMES[effect]
-			local switch = column.key == "OffAlways" and EFFECT_SWITCHES[effect]
-			local check = Check(content, switch or key, "", column.tip(tipName), function(value)
-				if switch then
-					ns.GetDB()[switch] = not value
-				else
-					ns.GetDB()[key] = value
-				end
+		local key, alwaysKey = "effect:" .. effect, effect .. "Always"
+		effectRows[#effectRows + 1] = { key = key, label = EFFECT_LABELS[effect], alwaysKey = alwaysKey,
+			alwaysOn = function() return ns.GetDB()[alwaysKey] end,
+			setAlways = function(value) ns.GetDB()[alwaysKey] = value end,
+			alwaysTip = L["Shows all through CineMode. (The other columns then have nothing to add.)"],
+			apply = function()
+				local switch = ns.EFFECT_SWITCHES[effect]
+				if switch then ns.GetDB()[switch] = ns.RowOnAnywhere(key, ns.GetDB()[alwaysKey]) end
 				ns.letterboxDirty = true
 				if ns.RefreshTint then ns.RefreshTint() end
-				Refresh() -- grey out / enable the row and its settings below
-			end)
-			check:SetPoint("CENTER", row, "LEFT", ColumnX(c) + COLUMN_WIDTH / 2, 0)
-			if switch then
-				check.Refresh = function(self) self:SetChecked(not ns.GetDB()[switch]) end
-			elseif column.key ~= "OffAlways" then
-				GreyUnless(check, function(db) return not EffectOff(db, effect) end)
-			end
-		end
-		lastGridRow = row
+			end }
 	end
+	local lastGridRow = ns.ShowTable(content, gridNote, effectRows, L["Visual Effects"])
 
 	-- Letterbox
 	local letterboxHeader = Header(content, L["Letterbox"], lastGridRow, -20)
@@ -3389,7 +3373,7 @@ local function CreateEffectsPanel()
 
 	local innGlow = Check(content, "innGlow", L["Light up inns"],
 		L["Indoors in an inn, the outdoor tint (a gloomy marsh, a moonlit night) partly lifts and a " ..
-		"soft firelit glow fades in, coloured by the zone: cooler in the snow, greener in a swamp. " ..
+		"soft firelit glow fades in, colored by the zone: cooler in the snow, greener in a swamp. " ..
 		"Blends over a few seconds as you go through the door."],
 		function(value)
 			ns.GetDB().innGlow = value
@@ -3411,7 +3395,7 @@ local function CreateEffectsPanel()
 	local weatherTintStrength = Slider(content, "weatherTintStrength", L["Weather strength"], 10, 100, 5, "%d%%", 100,
 		ns.RefreshTint)
 	weatherTintStrength:SetPoint("TOPLEFT", weatherHeader, "BOTTOMLEFT", 2, -26)
-	Tooltip(weatherTintStrength, L["Rain greys and cools the scene, snow turns it pale blue and a sandstorm " ..
+	Tooltip(weatherTintStrength, L["Rain grays and cools the scene, snow turns it pale blue and a sandstorm " ..
 		"gives it a dusty orange haze, more strongly the heavier the weather. Works with any tint (None " ..
 		"included), lifts under a roof and blends in as a storm builds. Needs a game version that " ..
 		"reports the weather."])
@@ -3443,7 +3427,7 @@ local function CreateTintPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = PageIntro(content, title,
-		L["The colour grading over the game world: a preset, the time of day and each zone's mood. The " ..
+		L["The color grading over the game world: a preset, the time of day and each zone's mood. The " ..
 		"Enable page switch (the General tab's too) turns it off with the rest, and the General tab's " ..
 		"Turn off in grid says where it doesn't show. The UI isn't tinted."])
 	local master = VisualEffectsSwitch(content, subtitle)
@@ -3548,9 +3532,9 @@ local function CreateTintPanel()
 	local swatchColor = swatch:CreateTexture(nil, "ARTWORK")
 	swatchColor:SetPoint("TOPLEFT", 2, -2)
 	swatchColor:SetPoint("BOTTOMRIGHT", -2, 2)
-	local swatchLabel = Label(content, "GameFontHighlight", L["Custom colour"])
+	local swatchLabel = Label(content, "GameFontHighlight", L["Custom color"])
 	swatchLabel:SetPoint("LEFT", swatch, "RIGHT", 8, 0)
-	Tooltip(swatch, L["Click to choose the colour used by the Custom preset."])
+	Tooltip(swatch, L["Click to choose the color used by the Custom preset."])
 	swatch.Refresh = function()
 		local db = ns.GetDB()
 		swatchColor:SetColorTexture(db.tintCustomR, db.tintCustomG, db.tintCustomB, 1)
@@ -3622,10 +3606,10 @@ local function CreateTintPanel()
 	local timeStrength = Slider(content, "timeTintStrength", L["Time of day strength"], 0, 100, 5, "%d%%", 100,
 		ns.RefreshTint)
 	timeStrength:SetPoint("TOPLEFT", clockControl, "BOTTOMLEFT", 4, -30)
-	Tooltip(timeStrength, L["How strongly the time-of-day colour applies, in Time of day and " ..
+	Tooltip(timeStrength, L["How strongly the time-of-day color applies, in Time of day and " ..
 		"Zone + time of day. Lower it for softer nights; 0 leaves just the zone mood."])
 
-	local phaseLabel = Label(content, "GameFontHighlight", L["Phases (click a colour to change it)"])
+	local phaseLabel = Label(content, "GameFontHighlight", L["Phases (click a color to change it)"])
 	phaseLabel:SetPoint("TOPLEFT", timeStrength, "BOTTOMLEFT", -4, -24)
 	local previousPhase = phaseLabel
 	for i, phase in ipairs(ns.GetTimePhases()) do
@@ -3659,12 +3643,12 @@ local function CreateTintPanel()
 		end)
 		strength:SetWidth(150)
 		strength:SetPoint("LEFT", text, "RIGHT", 4, 0)
-		local reset = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+		local reset = ns.PanelButton(row)
 		reset:SetSize(60, 20)
 		reset:SetPoint("LEFT", strength, "RIGHT", 16, 0)
 		reset:SetText(L["Reset"])
-		Tooltip(reset, L["Back to the built-in colour and strength."])
-		Tooltip(swatch, L["Choose your own colour for %s."]:format(L[name]))
+		Tooltip(reset, L["Back to the built-in color and strength."])
+		Tooltip(swatch, L["Choose your own color for %s."]:format(L[name]))
 		swatch:SetScript("OnClick", function()
 			local color
 			for _, p in ipairs(ns.GetTimePhases()) do
@@ -3697,7 +3681,7 @@ local function CreateTintPanel()
 	local zoneHelp = PageIntro(content, zoneHeader,
 		L["Give the zone you're standing in, or just the area within it (a town, a port), a " ..
 		"preset of its own: it replaces your main preset there. With a Zone preset you can also " ..
-		"choose its colour, which replaces the built-in mood. An area's choices win over its zone's."])
+		"choose its color, which replaces the built-in mood. An area's choices win over its zone's."])
 
 	local zoneText = Label(content, "GameFontHighlight")
 	zoneText:SetPoint("TOPLEFT", zoneHelp, "BOTTOMLEFT", 0, -10)
@@ -3745,8 +3729,9 @@ local function CreateTintPanel()
 	local targetButtons = {}
 	local function TargetButton(value, x)
 		local ok, button = pcall(CreateFrame, "CheckButton", nil, content, "UIRadioButtonTemplate")
+		if ok and button then ns.SkinCheck(button, true) end
 		if not ok or not button then
-			button = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+			button = ns.SkinCheck(CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate"))
 			button:SetSize(22, 22)
 		end
 		button:SetPoint("LEFT", targetLabel, "RIGHT", x, 0)
@@ -3784,7 +3769,7 @@ local function CreateTintPanel()
 
 	-- Menu of presets for this zone or area (left out on clients without the dropdown).
 	local presetMenu
-	local ok, dropdown = pcall(CreateFrame, "DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+	local ok, dropdown = ns.MenuDropdown(content)
 	if ok and dropdown and dropdown.SetupMenu then
 		presetMenu = dropdown
 		presetMenu:SetWidth(200)
@@ -3817,7 +3802,7 @@ local function CreateTintPanel()
 
 	-- Menu of tints for this zone (left out on clients without the dropdown).
 	local zoneMenu
-	ok, dropdown = pcall(CreateFrame, "DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+	ok, dropdown = ns.MenuDropdown(content)
 	if ok and dropdown and dropdown.SetupMenu then
 		zoneMenu = dropdown
 		zoneMenu:SetWidth(200)
@@ -3835,7 +3820,7 @@ local function CreateTintPanel()
 				root:CreateRadio(hex .. mood.label .. "|r", function() return current() == mood.key end,
 					function() SetHere(mood.key) end)
 			end
-			root:CreateRadio(L["Custom colour"], function() return type(current()) == "table" end,
+			root:CreateRadio(L["Custom color"], function() return type(current()) == "table" end,
 				function()
 					local color = TargetColor()
 					SetHere({ color[1], color[2], color[3] })
@@ -3846,15 +3831,15 @@ local function CreateTintPanel()
 		zoneMenu:SetPoint("TOPLEFT", presetMenu or targetLabel, "BOTTOMLEFT", 0, -10)
 	end
 
-	local pickColor = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+	local pickColor = ns.PanelButton(content)
 	pickColor:SetSize(140, 22)
-	pickColor:SetText(L["Pick a colour..."])
+	pickColor:SetText(L["Pick a color..."])
 	if zoneMenu then
 		pickColor:SetPoint("LEFT", zoneMenu, "RIGHT", 12, 0)
 	else
 		pickColor:SetPoint("TOPLEFT", targetLabel, "BOTTOMLEFT", 0, -10)
 	end
-	Tooltip(pickColor, L["Choose your own colour for the zone or area chosen above (for the Zone presets)."])
+	Tooltip(pickColor, L["Choose your own color for the zone or area chosen above (for the Zone presets)."])
 	pickColor:SetScript("OnClick", function()
 		local name = TargetName()
 		if name == "" then
@@ -3877,7 +3862,7 @@ local function CreateTintPanel()
 		local row = CreateFrame("Frame", nil, content)
 		row:SetSize(420, 22)
 		row:SetPoint("TOPLEFT", overridesLabel, "BOTTOMLEFT", 0, -6 - (i - 1) * 24)
-		row.button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+		row.button = ns.PanelButton(row)
 		row.button:SetSize(70, 20)
 		row.button:SetPoint("LEFT")
 		row.button:SetText(L["Reset"])
@@ -4179,15 +4164,9 @@ local function CreateAudioPanel()
 		"counted from when it started. The first camera after a login or /reload always can. " ..
 		"Music coming back after a mute doesn't count. 0 turns this off."])
 
-	-- Right column: muting, all in one list ("In combat", "In cities"...)
+	-- Right column: stopping as you leave the camera modes.
 	local muteHeader = Label(content, "GameFontNormal", L["Stop Music"])
 	muteHeader:SetPoint("TOPLEFT", musicHeader, "TOPLEFT", 320, 0)
-
-	local combatMusic = Check(content, "musicOffInCombat", L["In combat"],
-		L["Music fades out over about a second when a fight starts, and a fresh track fades back " ..
-		"in once the Calm Timer (on the CineMode page) has passed with no new fight. Works on " ..
-		"your own game music too; your volume is put back afterwards."])
-	combatMusic:SetPoint("TOPLEFT", muteHeader, "BOTTOMLEFT", -2, -6)
 
 	local movingMusic = Check(content, "musicPauseWhenMoving", L["Leaving a camera mode"],
 		L["Music fades out once you leave the camera modes and move on: walking off from the cozy " ..
@@ -4195,16 +4174,22 @@ local function CreateAudioPanel()
 		"as does standing still. A fresh track fades in when the next camera starts (standing " ..
 		"still counts once the AFK camera starts, with Go AFK's music on, Camera Triggers page). " ..
 		"Fades at the music fade time."])
-	movingMusic:SetPoint("TOPLEFT", combatMusic, "BOTTOMLEFT", 0, -2)
+	movingMusic:SetPoint("TOPLEFT", muteHeader, "BOTTOMLEFT", -2, -6)
 
-	local muteStack = Stack(movingMusic, "check")
-	-- (Each its own text: languages differ in how they'd join "In" and the place.)
-	local MUTE_LABELS = { Cities = L["In cities"], Dungeons = L["In dungeons"], Raids = L["In raids"], PvP = L["In PvP"] }
-	for _, place in ipairs(PLACES) do
-		muteStack:Add(Check(content, "musicOffIn" .. place[1], MUTE_LABELS[place[1]],
-			(place[1] == "PvP" and (PVP_TIP .. " ") or "") ..
-			L["Music fades out here (your own game music too) and back in when you leave."]), "check")
-	end
+	-- Below both: where and when music plays, a row as the Standard Frames
+	-- page's (GridRows.lua). Off: it fades out (your own game music too), back after.
+	local playsHeader = Header(content, L["Music plays in"], fatigue, -24)
+	playsHeader:SetPoint("TOPLEFT", fatigue, "BOTTOMLEFT", -4, -28)
+	local playsNote = PageIntro(content, playsHeader,
+		L["Where and when music can play in CineMode; anywhere else it fades out (your own game music too) " ..
+		"and back in after. Always: everywhere. Out of combat: back once the Calm Timer has run out after a " ..
+		"fight (with Calm Timer too: as soon as the fight ends)."])
+	ns.ShowTable(content, playsNote, { opts = { quiet = true, cam = true, anyFight = true }, {
+		key = "music", label = L["Music"], alwaysKey = "musicAlways",
+		alwaysOn = function() return ns.GetDB().musicAlways end,
+		setAlways = function(value) ns.GetDB().musicAlways = value end,
+		alwaysTip = L["Music can play all through CineMode. (The other columns then have nothing to add.)"],
+	} }, L["Audio"])
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -4319,6 +4304,11 @@ do
 	end
 end
 
+-- The page helpers the dropdown grids share (GridRows.lua's ns.GridRow).
+ns.GRID_KIT = { controls = controls, rolesMenu = ROLES_MENU, Label = Label, Tooltip = Tooltip,
+	FrameHeading = FrameHeading, RuleTarget = RuleTarget, RecordKey = RecordKey, RecordRow = RecordRow,
+	Refresh = Refresh, headingHeight = FRAME_HEADING_HEIGHT }
+
 -- The Standard Frames table under anchor: a row per frame (COMBAT_SHOW
 -- items), a column per situation. Used by the Gamepad and Chat pages too.
 -- ...: where the rows are, for the Rules section's menu. The Chat page's rows
@@ -4333,6 +4323,11 @@ local function ShowTable(content, anchor, rows, ...)
 	local columnTop = CreateFrame("Frame", nil, content)
 	columnTop:SetSize(1, 1)
 	columnTop:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
+	-- (The rows as dropdowns where the client has menus: GridRows.lua.)
+	if ns.GRID_MENUS then
+		return ns.GridTable(content, columnTop, rows, setmetatable(
+			{ labelWidth = LABEL_WIDTH, rowHeight = ROW_HEIGHT, columns = COLUMNS }, { __index = ns.GRID_KIT }), ...)
+	end
 	for c, column in ipairs(rows.noHeadings and {} or COLUMNS) do
 		FrameHeading(content, column[1]):SetPoint("TOPLEFT", columnTop, "TOPLEFT",
 			LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
@@ -4412,6 +4407,21 @@ local function ShowTable(content, anchor, rows, ...)
 	end
 	return lastLabel -- (the last row's label, to place what comes below)
 end
+-- (For the pages made before it in this file: built once it's all loaded.)
+ns.ShowTable = ShowTable
+
+-- Whether a Show in row (GridRows.lua) is on anywhere at all: Always, any
+-- tick of the Standard Frames page's columns, Out of combat, In a camera mode,
+-- or a rule (a Visual Effects row's effect switch follows it).
+function ns.RowOnAnywhere(key, always)
+	if always then return true end
+	for c = 2, #FRAME_COLUMNS do
+		if FRAME_COLUMNS[c][2](key) then return true end
+	end
+	if ns.IsQuietShowOn(key) or ns.IsCamShowOn(key) then return true end
+	local rules = ns.GetDB().frameRules
+	return type(rules) == "table" and type(rules[key]) == "string" and rules[key]:find("%S") ~= nil
+end
 
 -- A section's name row on the Unit Frames and Standard Frames pages: a band
 -- across the top of frame (BAND_HEIGHT high), clicked to open or close the
@@ -4459,8 +4469,14 @@ local function CreateCombatPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Standard Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local subtitle = PageIntro(content, title,
-		L["Everything here is hidden in CineMode unless ticked. Tick a column to show that frame: " ..
+	-- (The rows are dropdowns where the client has menus, else a column each: GridRows.lua.)
+	local subtitle = PageIntro(content, title, ns.GRID_MENUS
+		and L["Everything here is hidden in CineMode unless ticked. Always shows a frame the whole time; " ..
+		"its Fights dropdown, only while you fight or have something targeted; its Places dropdown, the " ..
+		"whole time while you're there (Grouped: in a party or raid). Edit turns a row into a rule, for AND, " ..
+		"NOT and more places. Frames fade in and out at the fade times on the CineMode page. Other addons' " ..
+		"frames are on the Advanced Frames page."]
+		or L["Everything here is hidden in CineMode unless ticked. Tick a column to show that frame: " ..
 		"Always shows it the whole time, the next three only while you fight or have something " ..
 		"targeted, and the places the whole time while you're there (Grouped: in a party or raid). " ..
 		"Frames fade in and out at the fade times on the CineMode page. Other addons' " ..
@@ -4475,41 +4491,27 @@ local function CreateCombatPanel()
 		"switches only count while this is on)."], subtitle, function()
 		if ns.ApplyUnitFrameParts then ns.ApplyUnitFrameParts() end
 	end)
-	local calm = Check(content, "combatShowCalm", L["In combat rows stay for the Calm Timer"],
-		L["Frames ticked In combat (here and on the Advanced Frames page) stay up after a fight " ..
-		"until the Calm Timer (CineMode page) has run out, then fade. Off: they fade as soon as the fight ends."])
-	calm:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -2)
-	GreyUnless(calm, function(db) return db.stayInCombat end)
+	-- (With the rows as dropdowns, each row's Combat dropdown has a Calm Timer
+	-- of its own instead, GridRows.lua; this stays what rows without one go by.)
+	local calm
+	if not ns.GRID_MENUS then
+		calm = Check(content, "combatShowCalm", L["In combat rows stay for the Calm Timer"],
+			L["Frames ticked In combat (here and on the Advanced Frames page) stay up after a fight " ..
+			"until the Calm Timer (CineMode page) has run out, then fade. Off: they fade as soon as the fight ends."])
+		calm:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -2)
+		GreyUnless(calm, function(db) return db.stayInCombat end)
+	end
 	local hostileCast = Check(content, "fadeInOnHostileCast", L["Cast fade into combat"],
 		L["Out of combat, casting a spell at an enemy brings up the frames ticked In combat, as if the fight " ..
 		"had started: they fade in over the cast and are fully up as it lands. Instant spells bring them up " ..
 		"at the Combat fade in time."])
-	hostileCast:SetPoint("TOPLEFT", calm, "BOTTOMLEFT", 0, -2)
+	hostileCast:SetPoint("TOPLEFT", calm or switch, "BOTTOMLEFT", 0, -2)
 	GreyUnless(hostileCast, function(db) return db.stayInCombat end)
 
-	-- Your player frame kept up while you recover, and the personal resource
-	-- display (its own tick, on clients that have one).
+	-- (Your player frame kept up while you recover: the Personal Resources page.)
 	local INDENT = 16
-	local portrait = Check(content, "portraitWhenNotFull", L["Show your player frame until health and power are full"],
-		L["Keeps your player frame up after a fight, a fall or resurrecting, until your health and " ..
-		"power are full. Rage and runic power don't count."])
-	portrait:SetPoint("TOPLEFT", hostileCast, "BOTTOMLEFT", 0, -2)
 	-- The lowest option so far, and how far in from the column edge it sits.
-	local lastCheck, lastIndent = portrait, 0
-	if _G.CinematicPersonalPower then
-		local prd = Check(content, "prdWhenNotFull",
-			L["Show your personal resource display until health and power are full"],
-			L["The same for your personal resource display."])
-		prd:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", 0, -2)
-		lastCheck = prd
-	end
-	-- The game's circle on the ground under your target (not a frame: a setting).
-	local targetCircle = Check(content, "hideTargetCircle", L["Hide the circle under your target out of combat"],
-		L["No selection circle on the ground under your target in CineMode while you're out of combat, so " ..
-		"you can keep someone targeted without seeing it. It comes back the moment a fight starts and stays " ..
-		"for the Calm Timer after it, and your setting is put back when the UI returns."])
-	targetCircle:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", 0, -2)
-	lastCheck = targetCircle
+	local lastCheck, lastIndent = hostileCast, 0
 	-- The focus's target of target frame shown at all, CineMode or not (its
 	-- parts: the Unit Frames page).
 	if _G.FocusFrame and _G.FocusFrameToT then
@@ -4732,9 +4734,10 @@ local function CreatePortraitsPanel()
 		"focus frames. Hit text is the damage and healing numbers on your and your pet's portraits. " ..
 		"Threat is the threat percentage and aggro glow on the target and focus frames, for NPCs you " ..
 		"can fight."] .. " " .. L["Cast bar is the bar under the target and focus frames as they cast."] ..
-		" " .. L["Keeping a frame up, always, in fights or while you recover, is on the Standard Frames page."]
-		or L["Which parts of the player, target, focus and pet frames show. Keeping a frame up, always, " ..
-		"in fights or while you recover, is on the Standard Frames page."])
+		" " .. L["Keeping a frame up, always or in fights, is on the Standard Frames page; your own while you " ..
+		"recover, on the Personal Resources page."]
+		or L["Which parts of the player, target, focus and pet frames show. Keeping a frame up, always or " ..
+		"in fights, is on the Standard Frames page; your own while you recover, on the Personal Resources page."])
 
 	-- The Unit frame parts grids (frames laid out as retail's: see
 	-- ns.ApplyUnitFrameParts), a section per frame that opens and closes with
@@ -4968,63 +4971,24 @@ local function CreateBubblesPanel()
 	local switch = PageSwitch(content, "handleBubbles", L["Enable page"],
 		L["On: chat bubbles show where this page says, and look as it says. Off: the game's own " ..
 		"chat bubble settings, as you had them."], subtitle, Changed)
-	-- Hide in: a grid of the kinds of bubble (rows) by place (columns), like
-	-- the Visual Effects page's. Always greys the rest of its row.
+	-- Show in: a row per kind of bubble, as the Standard Frames page's
+	-- (GridRows.lua): where and when each shows.
 	local stack = Stack(switch, "check")
-	stack:Header(content, L["Hide in"])
-	stack:Help(content, L["Ticked, those bubbles don't show there. Always: not at all."])
-	local BUBBLE_ROWS = {
-		{ kind = "Say", label = L["Say & yell"], tipName = L["say, yell and NPC speech bubbles"] },
-		{ kind = "Party", label = L["Party"], tipName = L["party chat bubbles"] },
-	}
-	local PLACE_NAMES = {
-		Cities = { L["Cities"], L["in capital cities"] },
-		Instances = { L["Instances"], L["in dungeons, scenarios and raids"] },
-		BGs = { L["BGs & Arenas"], L["in battlegrounds and arenas"] },
-		World = { L["Open World"], L["out in the world (not in a capital city or an instance), inns included"] },
-	}
-	local BUBBLE_COLUMNS = { { key = "OffAlways", heading = L["Always"],
-		tip = function(name) return (L["No %s at all."]):format(name) end } }
-	for _, where in ipairs(ns.EFFECT_OFF_WHERE) do
-		BUBBLE_COLUMNS[#BUBBLE_COLUMNS + 1] = { key = "OffIn" .. where, heading = PLACE_NAMES[where][1],
-			tip = function(name) return (L["No %s %s."]):format(name, PLACE_NAMES[where][2]) end }
+	stack:Header(content, L["Show in"])
+	stack:Help(content, L["Where and when each kind of bubble shows. Always: everywhere. Nothing ticked: never."])
+	local bubbleTop = CreateFrame("Frame", nil, content)
+	bubbleTop:SetSize(1, 1)
+	stack:Add(bubbleTop, "label")
+	local bubbleRows = { opts = { quiet = true, cam = true, anyFight = true } }
+	for _, bubble in ipairs({ { "Say", L["Say & yell"] }, { "Party", L["Party"] } }) do
+		local alwaysKey = "bubbles" .. bubble[1] .. "Always"
+		bubbleRows[#bubbleRows + 1] = { key = "bubble:" .. bubble[1], label = bubble[2], alwaysKey = alwaysKey,
+			alwaysOn = function() return ns.GetDB()[alwaysKey] end,
+			setAlways = function(value) ns.GetDB()[alwaysKey] = value end,
+			alwaysTip = L["These bubbles show everywhere, in fights and out. (The other columns then have nothing to add.)"],
+			apply = Changed }
 	end
-	local NAME_WIDTH, COLUMN_WIDTH, GAP, HEADING_HEIGHT = 90, 66, 10, 26
-	local function ColumnX(c)
-		-- (Always set apart from the places.)
-		return NAME_WIDTH + COLUMN_WIDTH * (c - 1) + (c >= 2 and GAP or 0)
-	end
-	local gridTop = CreateFrame("Frame", nil, content)
-	gridTop:SetSize(ColumnX(#BUBBLE_COLUMNS) + COLUMN_WIDTH, HEADING_HEIGHT)
-	stack:Add(gridTop, "label")
-	for c, column in ipairs(BUBBLE_COLUMNS) do
-		local heading = Label(gridTop, "GameFontNormalSmall", column.heading)
-		heading:SetWidth(COLUMN_WIDTH)
-		heading:SetJustifyH("CENTER")
-		heading:SetPoint("BOTTOMLEFT", gridTop, "BOTTOMLEFT", ColumnX(c), 0)
-	end
-	local lastGridRow = gridTop
-	for _, bubbleRow in ipairs(BUBBLE_ROWS) do
-		local row = CreateFrame("Frame", nil, content)
-		row:SetSize(gridTop:GetWidth(), 24)
-		row:SetPoint("TOPLEFT", lastGridRow, "BOTTOMLEFT", 0, -2)
-		Label(row, "GameFontHighlight", bubbleRow.label):SetPoint("LEFT", row, "LEFT", 0, 0)
-		local always = "bubbles" .. bubbleRow.kind .. "OffAlways"
-		for c, column in ipairs(BUBBLE_COLUMNS) do
-			local key = "bubbles" .. bubbleRow.kind .. column.key
-			local check = Check(content, key, "", column.tip(bubbleRow.tipName), function(value)
-				ns.GetDB()[key] = value
-				Changed()
-				Refresh() -- grey out / enable the row
-			end)
-			check:SetPoint("CENTER", row, "LEFT", ColumnX(c) + COLUMN_WIDTH / 2, 0)
-			if column.key ~= "OffAlways" then
-				GreyUnless(check, function(db) return not db[always] end)
-			end
-		end
-		lastGridRow = row
-	end
-	stack:Continue(lastGridRow, "label")
+	stack:Continue(ShowTable(content, bubbleTop, bubbleRows, L["Chat bubbles"]), "label")
 
 	stack:Header(content, L["Look"])
 	local textOnly = stack:Add(BubbleCheck("bubblesTextOnly", L["Text only (no background or border)"],
@@ -5169,7 +5133,7 @@ local function CreateQualityPanel()
 		L["Drag the game's windows (quest log, group finder, character, spellbook and the like) to move them. " ..
 		"A window opens where you last dropped it from then on, in this profile. Some windows can't be " ..
 		"moved in a fight."]), "check")
-	local putBack = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+	local putBack = ns.PanelButton(content)
 	putBack:SetSize(160, 22)
 	putBack:SetText(L["Put windows back"])
 	Tooltip(putBack, L["Forget where you've dragged the windows to: each opens in its usual place again."])
@@ -5461,43 +5425,50 @@ local function CreatePlatesPanel()
 	handleCheck:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -12)
 	RegisterPageSwitch(content, "handlePlates", handleCheck)
 
-	-- Nameplates and names each get a table: a row per kind of unit, a column
-	-- per situation. A narrower table can set its first column apart (gap).
-	-- roles: a Role column after the last, for the rows' roles buttons (rolesX).
-	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 220, 120, 24
-	local function TableTop(anchor, headings, labelWidth, columnWidth, gap, roles)
+	-- Nameplates and names each get a table: a row per kind of unit, as the
+	-- Standard Frames page's (GridRows.lua): Always, the Combat, Target and
+	-- Location dropdowns, the roles and Edit.
+	local ROW_HEIGHT = 24
+	local GRID_LABEL = 150
+	local PLATE_LAYOUT = { roles = true, edit = true }
+	local NAME_LAYOUT = PLATE_LAYOUT
+	local function TableTop(anchor, layout)
 		local top = CreateFrame("Frame", nil, content)
 		top:SetSize(1, 1)
 		top:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10)
-		top.width, top.xs = columnWidth or COLUMN_WIDTH, {}
-		for c, heading in ipairs(headings) do
-			top.xs[c] = (labelWidth or LABEL_WIDTH) + (c - 1) * top.width + (c > 1 and gap or 0)
-			local text = Label(content, "GameFontNormalSmall", heading)
-			text:SetWidth(top.width)
-			text:SetJustifyH("CENTER")
-			text:SetPoint("TOPLEFT", top, "TOPLEFT", top.xs[c], 0)
-		end
-		if roles and ROLES_MENU then
-			top.rolesX = top.xs[#top.xs] + top.width
-			local text = Label(content, "GameFontNormalSmall", L["Role"])
-			text:SetWidth(top.width)
-			text:SetJustifyH("CENTER")
-			text:SetPoint("TOPLEFT", top, "TOPLEFT", top.rolesX, 0)
-		end
+		top.layout = layout
+		ns.GridHeadings(ns.GRID_KIT, content, top, GRID_LABEL, layout)
 		return top
 	end
-	-- indent: a row that sits under the one before (Minions), as in the game's options.
-	local function PlaceRow(top, r, label, indent, ...)
-		local y = -16 - (r - 1) * ROW_HEIGHT
+	-- A row's label and its grid row (spec: ns.GridRow's). indent: a row that
+	-- sits under the one before (Minions), as in the game's options.
+	local function PlaceRow(top, r, label, indent, spec)
+		local y = -FRAME_HEADING_HEIGHT - 4 - (r - 1) * ROW_HEIGHT
 		local rowLabel = Label(content, indent and "GameFontHighlightSmall" or "GameFontHighlight", label)
 		rowLabel.indentX = indent and 18 or 0 -- (what goes below lines up with the grid, not the indent)
 		rowLabel:SetPoint("TOPLEFT", top, "TOPLEFT", rowLabel.indentX, y - 5)
-		for c, check in ipairs({ ... }) do
-			if top.xs[c] then -- (a grid without the last columns leaves them out)
-				check:SetPoint("TOPLEFT", top, "TOPLEFT", top.xs[c] + (top.width - 26) / 2, y)
-			end
-		end
+		rowLabel:SetWidth(GRID_LABEL - 4 - ns.GRID_DOT_ROOM - rowLabel.indentX)
+		rowLabel:SetJustifyH("LEFT")
+		rowLabel:SetWordWrap(false)
+		spec.band = r
+		local row = ns.GridRow(ns.GRID_KIT, content, GRID_LABEL, top.layout, spec)
+		row.debugName = label -- (for the dev copy's page timing)
+		row:SetPoint("TOPLEFT", top, "TOPLEFT", GRID_LABEL, y)
+		top.rows = top.rows or {}
+		top.rows[#top.rows + 1] = row
 		return rowLabel
+	end
+	-- A row's ticks (db keys: Always, the combat ones, the places) as a rule,
+	-- for its dot. (Close to what they do, not the same: names and plates
+	-- have rules of their own on fights.)
+	local PLACE_WORDS = { PvP = "(flagged and not bg)", BGs = "bg", [""] = "world", Cities = "city", Instances = "instance" }
+	local function TicksRule(always, keys)
+		local db, words = ns.GetDB(), {}
+		if db[always] then return "always" end
+		for _, each in ipairs(keys) do
+			if db[each[1]] then words[#words + 1] = each[2] end
+		end
+		return #words > 0 and table.concat(words, " or ") or "never"
 	end
 	-- Both grids' column tooltips (each box adds its row's note). Always keeps
 	-- its row up everywhere, and Grouped in a party or raid, in fights and out,
@@ -5507,7 +5478,8 @@ local function CreatePlatesPanel()
 	local COMBAT_TIP = L["Show in fights, and for the Calm Timer after."]
 	local PVP_COMBAT_TIP = L["Show in fights while you're PvP flagged, and for the Calm Timer after."]
 	local GROUP_TIP = L["Always show while you're in a party or raid."]
-	local GRID_LABEL, GRID_COLUMN, GRID_GAP = 150, 56, 10
+	local TARGET_ENEMY_TIP = L["Show out of fights while you have a living enemy targeted."]
+	local TARGET_FRIEND_TIP = L["Show out of fights while you have anything else targeted: friends, NPCs, dead enemies."]
 
 	-- Each grid a band that opens and closes with a click, as on the Standard
 	-- Frames page (all open to start with). What a section adds between
@@ -5541,8 +5513,7 @@ local function CreatePlatesPanel()
 		for _, object in ipairs({ content:GetRegions() }) do set[object] = true end
 		return set
 	end
-	-- (Eight columns and the Role one.)
-	local SECTION_WIDTH = GRID_LABEL + 9 * GRID_COLUMN + GRID_GAP
+	local SECTION_WIDTH = GRID_LABEL + ns.GridWidth(PLATE_LAYOUT)
 	local function Section(heading, key)
 		local section = { open = true, id = "Nameplates/" .. key }
 		section.frame = CreateFrame("Frame", nil, content)
@@ -5594,25 +5565,13 @@ local function CreatePlatesPanel()
 		{ pvpCombat = true },
 		{ "PvP", L["PvP"], L["Show while PvP flagged, outside battlegrounds and arenas."] },
 		{ "BGs", L["BGs & Arenas"], L["Show in battlegrounds and arenas."] },
-		{ "", L["Open World"], L["Show everywhere else, cities and inns included."] },
+		{ "", L["Open World"], L["Show out in the world, inns included (capital cities are Cities)."] },
+		{ "Cities", L["Cities"], L["Show in capital cities."] },
 		{ group = true },
 		{ "Instances", L["Instances"], L["Show in dungeons, scenarios and raids."] },
 	}
-	local headings = {}
-	for _, place in ipairs(PLACE_COLUMNS) do
-		headings[#headings + 1] = (place.always and L["Always"]) or (place.combat and L["In Combat"]) or (place.pvpCombat and L["In PvP Combat"])
-			or (place.group and L["Grouped"]) or place[2]
-	end
-	-- (The friendly grid has no Instances column: Friendly Plates in Dungeons
-	-- and Raids, below it, stands in for it.)
-	local friendlyHeadings = {}
-	for c, heading in ipairs(headings) do
-		if PLACE_COLUMNS[c][1] ~= "Instances" then
-			friendlyHeadings[#friendlyHeadings + 1] = heading
-		end
-	end
 	BeginSection(friendlySection)
-	local columnTop = TableTop(friendlySection.frame, friendlyHeadings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
+	local columnTop = TableTop(friendlySection.frame, PLATE_LAYOUT)
 
 	-- Two grids: friendly units, then enemy and neutral ones (below Friendly
 	-- Plates in Dungeons and Raids). Rows for particular units (your pet first,
@@ -5668,73 +5627,84 @@ local function CreatePlatesPanel()
 	}
 	local lastLabel
 	local function AddPlateRow(top, r, kind)
-		local function Ticked(key)
-			return function(value)
-				ns.GetDB()[key] = value
-				if value then
-					ns.EnablePlateRow(kind[1])
-				end
-				ns.WarnPlatesInCombat()
-				Refresh()
+		-- A setting changed: ticked, its nameplates on in the game's options.
+		local function Set(key, value)
+			ns.GetDB()[key] = value
+			if value then
+				ns.EnablePlateRow(kind[1])
 			end
+			ns.WarnPlatesInCombat()
 		end
-		local combatKey = "plateCombat" .. kind[1]
-		local checks = {}
-		local pvpCheck
+		local function Item(name, key, itemTip)
+			RecordKey(content, key) -- (for the page's Reset)
+			return { name, function() return ns.GetDB()[key] and true or false end,
+				function() Set(key, not ns.GetDB()[key]) end, nil, itemTip }
+		end
 		local alwaysKey = "plateAlways" .. kind[1]
 		local rowTip = UNIT_ROW_TIPS[kind[1]]
 		local part = kind[1]:find("^Part") -- (Plate Parts rows: no game settings of their own)
 		local tip = rowTip and (part or kind[1]:find("Target$")) and rowTip or (rowTip or "") .. tip
-		local emptyColumns = {} -- (cells with no box: they'd never do anything)
+		RecordKey(content, alwaysKey)
+		local combat = { Item(L["In Combat"], "plateCombat" .. kind[1], COMBAT_TIP .. tip),
+			Item(L["In PvP Combat"], "plateCombatPvP" .. kind[1], PVP_COMBAT_TIP .. tip) }
+		local targets = { Item(L["Enemy targeted"], "plateTargetEnemy" .. kind[1], TARGET_ENEMY_TIP .. tip),
+			Item(L["Friend targeted"], "plateTargetFriendly" .. kind[1], TARGET_FRIEND_TIP .. tip) }
+		local places, ticks = {}, { { "plateCombat" .. kind[1], "combat" },
+			{ "plateCombatPvP" .. kind[1], "(combat and flagged)" },
+			{ "plateTargetEnemy" .. kind[1], "(enemy and not combat)" },
+			{ "plateTargetFriendly" .. kind[1], "(friendly and not combat)" } }
 		for _, place in ipairs(PLACE_COLUMNS) do
-			if place.always then
-				checks[#checks + 1] = Check(content, alwaysKey, "", ALWAYS_TIP .. tip, Ticked(alwaysKey))
-			elseif place.combat then
-				checks[#checks + 1] = Check(content, combatKey, "", COMBAT_TIP .. tip, Ticked(combatKey))
-			elseif place.pvpCombat then
-				pvpCheck = Check(content, "plateCombatPvP" .. kind[1], "", PVP_COMBAT_TIP .. tip,
-					Ticked("plateCombatPvP" .. kind[1]))
-				checks[#checks + 1] = pvpCheck
-			elseif place.group and kind[4] then
-				-- (Group members' rows only apply grouped: no Grouped box, an empty cell.)
-				checks[#checks + 1] = CreateFrame("Frame", nil, content)
-				emptyColumns[#checks] = true
-			elseif place.group then
-				local groupKey = "plateGroup" .. kind[1]
-				checks[#checks + 1] = Check(content, groupKey, "", GROUP_TIP .. tip, Ticked(groupKey))
-			else
-				-- The open world keeps the original "keep up in CineMode" key.
+			if place.group then
+				-- (Group members' rows only apply grouped: no Grouped.)
+				if not kind[4] then
+					local groupKey = "plateGroup" .. kind[1]
+					places[#places + 1] = Item(L["Grouped"], groupKey, GROUP_TIP .. tip)
+					ticks[#ticks + 1] = { groupKey, "group" }
+				end
+			elseif place[1] then
+				-- The open world keeps the original "keep up in CineMode" key; the
+				-- friendly rows have no Instances (Friendly Plates in Dungeons and Raids).
 				local key = place[1] == "" and ("plateCinematic" .. kind[1]) or ("plateIn" .. place[1] .. kind[1])
-				if place[1] == "Instances" and INSTANCE_LOCKED[kind[1]] then
-					-- (An empty cell, holding the column's place.)
-					checks[#checks + 1] = CreateFrame("Frame", nil, content)
-					emptyColumns[#checks] = true
-				else
-					checks[#checks + 1] = Check(content, key, "", place[3] .. tip, Ticked(key))
+				if not (place[1] == "Instances" and INSTANCE_LOCKED[kind[1]]) then
+					places[#places + 1] = Item(place[2], key, place[3] .. tip)
+					ticks[#ticks + 1] = { key, PLACE_WORDS[place[1]] }
 				end
 			end
 		end
 		-- Greyed out where this client has no such setting.
-		-- (The rest also while Always is ticked.)
 		local function Available()
 			return part or ns.HasPlateSettings(kind[1])
 		end
-		-- (And while a rule decides the row: Rules section, Advanced Frames page.)
+		-- (Its rule, in place of its ticks: edited on the row where the grid
+		-- has an Edit, else in the Rules section, Advanced Frames page.)
 		local ruleKey = "plate:" .. kind[1]
 		RuleTarget(ruleKey, kind[2], "Nameplates",
 			kind.rulePath or part and "Plate parts" or kind[1]:find("Target$") and "Your target" or "Plates")
-		for c, check in ipairs(checks) do
-			if not emptyColumns[c] then
-				GreyUnless(check, function(db)
-					return Available() and not ns.RuleTest(ruleKey) and (c == 1 or not db[alwaysKey])
-				end)
+		local layout = top.layout
+		if layout.edit then ns.GRID_RULE_KEYS[ruleKey] = true end
+		local function RuleKey() return ruleKey end
+		if layout.roles then
+			for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
+				RecordKey(content, list)
+				RecordRow(content, list, ruleKey)
 			end
 		end
-		lastLabel = PlaceRow(top, r, kind[2], kind[3], unpack(checks))
-		local roles = top.rolesX and RolesButton(content, content, ruleKey)
-		if roles then
-			roles:SetPoint("LEFT", lastLabel, "LEFT", top.rolesX + (top.width - 52) / 2 - lastLabel.indentX, 0)
-		end
+		lastLabel = PlaceRow(top, r, kind[2], kind[3], {
+			dot = true,
+			always = { isOn = function() return ns.GetDB()[alwaysKey] end,
+				set = function(value) Set(alwaysKey, value) end, tip = ALWAYS_TIP .. tip },
+			menus = { [ns.GRID_COMBAT] = combat, [ns.GRID_TARGET] = targets, [ns.GRID_LOCATION] = places },
+			help = { [ns.GRID_COMBAT] = L["Shown in fights: any of them, or only while you're PvP flagged."] },
+			-- (Without an Edit here, a rule from the Rules section greys its ticks.)
+			enabled = function() return Available() and (layout.edit or not ns.RuleTest(ruleKey)) end,
+			roles = layout.roles and { key = RuleKey } or nil,
+			rule = layout.edit and { key = RuleKey, label = function() return kind[2] end,
+				changed = function()
+					local text = ns.GetDB().frameRules[ruleKey]
+					if text and text:find("%S") then ns.EnablePlateRow(kind[1]) end
+				end } or nil,
+			liveRule = function() return TicksRule(alwaysKey, ticks) end,
+		})
 	end
 	for r, kind in ipairs(FRIENDLY_KINDS) do
 		AddPlateRow(columnTop, r, kind)
@@ -5766,7 +5736,7 @@ local function CreatePlatesPanel()
 			choices[3] = { value = "target", text = L["With a friendly target"] }
 		end
 		local rowLabel = Label(content, "GameFontHighlight", row[2])
-		rowLabel:SetPoint("TOPLEFT", lastInstanceRow, "BOTTOMLEFT", 0, i == 1 and -18 or -14)
+		rowLabel:SetPoint("TOPLEFT", lastInstanceRow, "BOTTOMLEFT", 0, i == 1 and -18 or -20) -- (room between the dropdowns: flat ones fill their frames)
 		local dropdown = Dropdown(content, key, choices, 200, function(value)
 			if value ~= "hide" then
 				ns.EnablePlateRow(row[1])
@@ -5783,7 +5753,7 @@ local function CreatePlatesPanel()
 	-- Enemy and neutral units, laid out the same way.
 	local enemySection = Section(L["Enemy Nameplates"], "Enemy")
 	BeginSection(enemySection)
-	local enemyTop = TableTop(enemySection.frame, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
+	local enemyTop = TableTop(enemySection.frame, PLATE_LAYOUT)
 	for r, kind in ipairs(ENEMY_KINDS) do
 		AddPlateRow(enemyTop, r, kind)
 	end
@@ -5792,7 +5762,7 @@ local function CreatePlatesPanel()
 	-- Your target's plate, laid out the same way.
 	local targetSection = Section(L["Target Nameplate"], "Target")
 	BeginSection(targetSection)
-	local targetTop = TableTop(targetSection.frame, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
+	local targetTop = TableTop(targetSection.frame, PLATE_LAYOUT)
 	for r, kind in ipairs(TARGET_KINDS) do
 		AddPlateRow(targetTop, r, kind)
 	end
@@ -5822,13 +5792,15 @@ local function CreatePlatesPanel()
 		{ "RoleHealer", L["Role Icon (Healer)"], L[" A role icon beside your group's healers' health bars."], icon = true },
 		{ "RoleDamager", L["Role Icon (Damage)"], L[" A role icon beside your group's damage dealers' health bars."],
 			icon = true },
+		{ "TargetArrow", L["Target Arrow"], L[" An arrow over your target's nameplate, shown even while the rest of " ..
+			"the plate is faded or shows just its name."], icon = true },
 	}
 	-- (The class and role icons are the addon's own: off unless ticked, and outside
 	-- CineMode shown only with Always ticked.)
 	local iconTip = L[" Off unless ticked. In CineMode, on the nameplates that are up; outside it, only with Always ticked."]
 	local partsSection = Section(L["Plate Parts"], "Parts")
 	BeginSection(partsSection)
-	local partsTop = TableTop(partsSection.frame, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP, true)
+	local partsTop = TableTop(partsSection.frame, PLATE_LAYOUT)
 	local r = 0
 	for _, part in ipairs(PARTS) do
 		if not (part[1] == "Level" and ns.isRetail) then
@@ -5853,58 +5825,73 @@ local function CreatePlatesPanel()
 	namesNoteIcon:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")
 	local namesNoteText = L["In CineMode, away from dungeons and raids, nameplates stay on (just faded), and the game takes its " ..
 		"own names away from over the heads of units with a plate. So where a name is kept up over a faded " ..
-		"plate, Cinematic draws it on the plate itself, made to look like the game's names: coloured, and " ..
+		"plate, Cinematic draws it on the plate itself, made to look like the game's names: colored, and " ..
 		"smaller further off. Beyond nameplate range the game's own names show, so a name can " ..
 		"change a little in size or place as its unit crosses that range."]
 	Tooltip(namesNote, namesNoteText)
 	namesNote.searchNote = namesNoteText
 	namesNote.searchEdges = { top = namesHeader, bottom = namesHeader, left = namesHeader, right = namesNote }
 	BeginSection(namesSection)
-	local namesTop = TableTop(namesSection.frame, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	local namesTop = TableTop(namesSection.frame, NAME_LAYOUT)
 	local nameTip = L[" Ticking any box turns these names on in the game's options. Ticking none turns them off."]
 	-- (Units with plates show a kept name on theirs in CineMode: see Effects.)
 	local plateNameTip = L[" In CineMode, away from dungeons and raids, the name shows on the unit's nameplate instead, with the rest of the plate hidden."]
 	-- A row of boxes (keys name<column><key>) for a names group: the Target
 	-- group's are the Target Names grid's rows, below.
 	local function AddNameRow(top, r, group, key, label, indent, tip)
-		local function Ticked(setting)
-			return function(value)
-				ns.GetDB()[setting] = value
-				ns.SyncNameRow(group)
-				ns.WarnPlatesInCombat()
-				Refresh()
-			end
+		local function Set(setting, value)
+			ns.GetDB()[setting] = value
+			ns.SyncNameRow(group)
+			ns.WarnPlatesInCombat()
 		end
-		local combatKey = "nameCombat" .. key
-		local checks = {}
+		local function Item(name, setting, itemTip)
+			RecordKey(content, setting) -- (for the page's Reset)
+			return { name, function() return ns.GetDB()[setting] and true or false end,
+				function() Set(setting, not ns.GetDB()[setting]) end, nil, itemTip }
+		end
 		local alwaysKey = "nameAlways" .. key
+		RecordKey(content, alwaysKey)
+		-- (Names can't change mid-fight: In PvP Combat goes by how the fight started.)
+		local combat = { Item(L["In Combat"], "nameCombat" .. key, COMBAT_TIP .. tip),
+			Item(L["In PvP Combat"], "nameCombatPvP" .. key,
+				PVP_COMBAT_TIP .. L[" The game only allows this to be set as the fight starts."] .. tip) }
+		local targets = { Item(L["Enemy targeted"], "nameTargetEnemy" .. key, TARGET_ENEMY_TIP .. tip),
+			Item(L["Friend targeted"], "nameTargetFriendly" .. key, TARGET_FRIEND_TIP .. tip) }
+		local places, ticks = {}, { { "nameCombat" .. key, "combat" }, { "nameCombatPvP" .. key, "(combat and flagged)" },
+			{ "nameTargetEnemy" .. key, "(enemy and not combat)" },
+			{ "nameTargetFriendly" .. key, "(friendly and not combat)" } }
 		for _, place in ipairs(PLACE_COLUMNS) do
-			if place.always then
-				checks[#checks + 1] = Check(content, alwaysKey, "", ALWAYS_TIP .. tip, Ticked(alwaysKey))
-			elseif place.combat then
-				checks[#checks + 1] = Check(content, combatKey, "", COMBAT_TIP .. tip, Ticked(combatKey))
-			elseif place.pvpCombat then
-				-- Names can't change mid-fight: they go by how the fight started.
-				checks[#checks + 1] = Check(content, "nameCombatPvP" .. key, "",
-					PVP_COMBAT_TIP .. L[" The game only allows this to be set as the fight starts."] .. tip,
-					Ticked("nameCombatPvP" .. key))
-			elseif place.group then
-				local groupKey = "nameGroup" .. key
-				checks[#checks + 1] = Check(content, groupKey, "", GROUP_TIP .. tip, Ticked(groupKey))
-			else
+			if place.group then
+				places[#places + 1] = Item(L["Grouped"], "nameGroup" .. key, GROUP_TIP .. tip)
+				ticks[#ticks + 1] = { "nameGroup" .. key, "group" }
+			elseif place[1] then
 				-- The open world keeps the original Keep column's key.
 				local placeKey = place[1] == "" and ("nameKeep" .. key) or ("nameIn" .. place[1] .. key)
-				checks[#checks + 1] = Check(content, placeKey, "", place[3] .. tip, Ticked(placeKey))
+				places[#places + 1] = Item(place[2], placeKey, place[3] .. tip)
+				ticks[#ticks + 1] = { placeKey, PLACE_WORDS[place[1]] }
 			end
 		end
-		-- Greyed out where this client has no such setting.
-		-- (The rest also while Always is ticked.)
-		for c, check in ipairs(checks) do
-			GreyUnless(check, function(db)
-				return ns.HasNameSettings(group) and (c == 1 or not db[alwaysKey])
-			end)
+		-- Its roles and rule (name:<row>), on the row.
+		local ruleKey = ns.NameRuleKey(key)
+		RuleTarget(ruleKey, label, "Nameplates", "Names")
+		ns.GRID_RULE_KEYS[ruleKey] = true
+		for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
+			RecordKey(content, list)
+			RecordRow(content, list, ruleKey)
 		end
-		lastLabel = PlaceRow(top, r, label, indent, unpack(checks))
+		local function RuleKey() return ruleKey end
+		lastLabel = PlaceRow(top, r, label, indent, {
+			dot = true,
+			always = { isOn = function() return ns.GetDB()[alwaysKey] end,
+				set = function(value) Set(alwaysKey, value) end, tip = ALWAYS_TIP .. tip },
+			menus = { [ns.GRID_COMBAT] = combat, [ns.GRID_TARGET] = targets, [ns.GRID_LOCATION] = places },
+			roles = { key = RuleKey, changed = function() ns.SyncNameRow(group) end },
+			rule = { key = RuleKey, label = function() return label end, changed = function() ns.SyncNameRow(group) end },
+			help = { [ns.GRID_COMBAT] = L["Shown in fights: any of them, or only while you're PvP flagged."] },
+			-- Greyed out where this client has no such setting.
+			enabled = function() return ns.HasNameSettings(group) end,
+			liveRule = function() return TicksRule(alwaysKey, ticks) end,
+		})
 	end
 	local targetGroup
 	r = 0
@@ -5930,7 +5917,7 @@ local function CreatePlatesPanel()
 	-- laid out the same way: the Names grid's Target row, split.
 	local targetNamesSection = Section(L["Target Names"], "TargetNames")
 	BeginSection(targetNamesSection)
-	local targetNamesTop = TableTop(targetNamesSection.frame, headings, GRID_LABEL, GRID_COLUMN, GRID_GAP)
+	local targetNamesTop = TableTop(targetNamesSection.frame, NAME_LAYOUT)
 	local targetNameTip = L[" Your target's name while it's this kind, even with its kind's names off in the Names grid. " ..
 		"On a nameplate showing just the name in CineMode, your target's kind decides; beyond nameplate range, and " ..
 		"in dungeons and raids, the game has one setting for your target's name: it follows your target's kind out " ..
@@ -5940,6 +5927,10 @@ local function CreatePlatesPanel()
 			targetNameTip)
 	end
 	EndSection(targetNamesSection, lastLabel)
+
+	for _, top in ipairs({ columnTop, enemyTop, targetTop, partsTop, namesTop, targetNamesTop }) do
+		ns.GridDots(content, top.rows or {})
+	end
 
 	-- Laid out top to bottom: the master switch, then the sections (friendly
 	-- nameplates, friendly plates in dungeons and raids, enemy nameplates,
@@ -5961,7 +5952,7 @@ end
 local function CreateNameStylePanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", "|cffff4040DEV ONLY|r Name Style")
+	local title = Label(content, "GameFontNormalLarge", "|cffff4040DEV ONLY|r Names")
 	title:SetPoint("TOPLEFT", 16, -16)
 	local subtitle = PageIntro(content, title,
 		L["How names look on nameplates showing just the name: in CineMode, away from dungeons and raids, " ..
@@ -5985,7 +5976,7 @@ local function CreateNameStylePanel()
 
 	local stack = Stack(subtitle, "label")
 	stack:Add(StyleCheck("plateNameStyle", L["Style names like the game's"],
-		L["Ticked, these names look as this page says. Unticked, as the nameplate draws them: white or grey " ..
+		L["Ticked, these names look as this page says. Unticked, as the nameplate draws them: white or gray " ..
 		"for every unit, with a heavy black outline, growing and shrinking with distance (the preview shows " ..
 		"that too)."]), "check")
 
@@ -6080,10 +6071,10 @@ local function CreateNameStylePanel()
 
 	-- Presets: a few looks to start from.
 	local PRESETS = {
-		{ L["Like the game's names"], L["Coloured, no outline or shadow (the defaults)."], {} },
-		{ L["Bold"], L["Coloured, with a thin black outline, a little bigger."],
+		{ L["Like the game's names"], L["Colored, no outline or shadow (the defaults)."], {} },
+		{ L["Bold"], L["Colored, with a thin black outline, a little bigger."],
 			{ plateNameOutline = 1, plateNameShadow = false, plateNameSize = 1.1 } },
-		{ L["Subtle"], L["Coloured, a little smaller and see-through."],
+		{ L["Subtle"], L["Colored, a little smaller and see-through."],
 			{ plateNameSize = 0.9, plateNameAlpha = 0.75 } },
 	}
 	local PRESET_KEYS = { "plateNameColour", "plateNameFriends", "plateNameOutline", "plateNameSize",
@@ -6095,7 +6086,7 @@ local function CreateNameStylePanel()
 	stack:Add(presetRow, "label")
 	local lastButton
 	for _, preset in ipairs(PRESETS) do
-		local button = CreateFrame("Button", nil, presetRow, "UIPanelButtonTemplate")
+		local button = ns.PanelButton(presetRow)
 		button:SetText(preset[1])
 		button:SetSize(math.max(110, button:GetFontString():GetStringWidth() + 24), 22)
 		if lastButton then
@@ -6128,15 +6119,15 @@ local function CreateNameStylePanel()
 		return slider
 	end
 
-	stack:Header(content, L["Colour"])
-	local colour = stack:Add(StyleCheck("plateNameColour", L["Colour by how the unit sees you"],
+	stack:Header(content, L["Color"])
+	local colour = stack:Add(StyleCheck("plateNameColour", L["Color by how the unit sees you"],
 		L["Red for hostile units, yellow for neutral ones and green for friendly ones, as over their heads. " ..
-		"Unticked: the plate's own colour, white or grey."]), "check")
+		"Unticked: the plate's own color, white or gray."]), "check")
 	GreyUnless(colour, On)
 	local friendsLabel = stack:Add(Label(content, "GameFontHighlight", L["Friendly players:"]), "label", 28)
 	local FRIENDS = {
 		{ "blue", L["Blue"], L["Blue, as the game's names over their heads (green while they're PvP flagged, as there too)."] },
-		{ "class", L["Class colours"], L["Their class's colour, as the plates draw them."] },
+		{ "class", L["Class colors"], L["Their class's color, as the plates draw them."] },
 		{ "white", L["White"], nil },
 	}
 	local lastChoice
@@ -6212,6 +6203,140 @@ local function CreateNameStylePanel()
 	RegisterSubpage(canvas, "Name Style", "Name Style")
 end
 
+-- The Style hub's Target Arrow page: how the Nameplates page's Target Arrow
+-- row looks (PlateParts draws it), with a preview of it on a plate at the top.
+-- (In a block: the main chunk's locals are near Lua's cap.)
+local CreateTargetArrowPanel
+do
+	function CreateTargetArrowPanel()
+		local canvas, content = CreateScrollPage()
+
+		local title = Label(content, "GameFontNormalLarge", L["Target Arrow"])
+		title:SetPoint("TOPLEFT", 16, -16)
+		local subtitle = PageIntro(content, title,
+			L["How the Target Arrow looks: the mark on your target's nameplate, for when no target frame shows " ..
+			"what you've targeted. When it shows is the Target Arrow row's, on the Nameplates page's Plate Parts " ..
+			"grid. Changes show at once, here and on your target."])
+
+		local preview -- (below: drawn again as each setting changes)
+		local function Changed()
+			if ns.RefreshTargetArrows then ns.RefreshTargetArrows() end
+			if preview then preview:Refresh() end
+		end
+		local stack = Stack(subtitle, "label")
+
+		-- The preview: a plate's health bar and name on a dark ground, with the arrow.
+		local PREVIEW_W, PREVIEW_H = 520, 140
+		preview = CreateFrame("Frame", nil, content)
+		preview:SetSize(PREVIEW_W, PREVIEW_H)
+		stack:Add(preview, "label")
+		local ground = preview:CreateTexture(nil, "BACKGROUND")
+		ground:SetAllPoints()
+		ground:SetColorTexture(0.11, 0.14, 0.18, 0.95)
+		local caption = Label(preview, "GameFontDisableSmall", L["Preview"])
+		caption:SetPoint("TOPLEFT", 6, -5)
+		caption.searchSkip = true
+		local bar = CreateFrame("Frame", nil, preview)
+		bar:SetSize(110, 9)
+		bar:SetPoint("CENTER", preview, "CENTER", 0, -40)
+		bar:SetFrameLevel(preview:GetFrameLevel() + 2)
+		local fill = bar:CreateTexture(nil, "ARTWORK")
+		fill:SetAllPoints()
+		fill:SetColorTexture(0.75, 0.1, 0.1, 1)
+		local barEdge = bar:CreateTexture(nil, "BORDER")
+		barEdge:SetPoint("TOPLEFT", -1, 1)
+		barEdge:SetPoint("BOTTOMRIGHT", 1, -1)
+		barEdge:SetColorTexture(0, 0, 0, 1)
+		local name = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+		name:SetPoint("BOTTOM", bar, "TOP", 0, 3)
+		name:SetTextColor(1, 0.2, 0.2)
+		name:SetText(L["Hostile"])
+		name.searchSkip = true
+		local arrow
+		function preview:Refresh()
+			if not ns.MakeTargetArrow then return end
+			arrow = arrow or ns.MakeTargetArrow(preview, bar)
+			ns.StyleTargetArrow(arrow)
+		end
+		controls[#controls + 1] = preview
+
+		-- A row of choices for a setting, after its label.
+		local function Choices(key, label, list, test)
+			local rowLabel = stack:Add(Label(content, "GameFontHighlight", label), "label", 28)
+			local last
+			for _, info in ipairs(list) do
+				local choice = Choice(content, key, info[1], info[2], info[3])
+				choice:HookScript("OnClick", Changed)
+				if last then
+					choice:SetPoint("LEFT", last.Text or last.text, "RIGHT", 16, 0)
+				else
+					choice:SetPoint("LEFT", rowLabel, "RIGHT", 10, 0)
+				end
+				if test then GreyUnless(choice, test) end
+				last = choice
+			end
+			return rowLabel, last
+		end
+
+		stack:Header(content, L["Look"])
+		Choices("targetArrowStyle", L["Style:"], {
+			{ "arrow", L["Arrow"], L["An arrow pointing down at the plate, over its name."] },
+			{ "chevron", L["Chevron"], L["Two chevrons pointing down at the plate, over its name."] },
+			{ "glow", L["Glow"], L["A soft glow behind the plate's health bar."] },
+			{ "brackets", L["Brackets"], L["Brackets either side of the plate's health bar."] },
+		})
+
+		stack:Header(content, L["Color"])
+		local _, lastColor = Choices("targetArrowColor", L["Color:"], {
+			{ "gold", L["Gold"], nil },
+			{ "reaction", L["By reaction"], L["Red for hostile units, yellow for neutral ones and green for friendly ones."] },
+			{ "class", L["Class colors"], L["Players in their class's color; everyone else by reaction."] },
+			{ "custom", L["Custom"], L["The color of the swatch beside it."] },
+		})
+		-- The custom colour's swatch, after its choice.
+		local swatch = CreateFrame("Button", nil, content)
+		swatch:SetSize(20, 20)
+		swatch:SetPoint("LEFT", lastColor.Text or lastColor.text, "RIGHT", 8, 0)
+		local swatchBorder = swatch:CreateTexture(nil, "BACKGROUND")
+		swatchBorder:SetAllPoints()
+		swatchBorder:SetColorTexture(0.6, 0.6, 0.6, 1)
+		local swatchColor = swatch:CreateTexture(nil, "ARTWORK")
+		swatchColor:SetPoint("TOPLEFT", 2, -2)
+		swatchColor:SetPoint("BOTTOMRIGHT", -2, 2)
+		Tooltip(swatch, L["Click to choose the arrow's custom color."])
+		swatch.Refresh = function()
+			local db = ns.GetDB()
+			swatchColor:SetColorTexture(db.targetArrowR, db.targetArrowG, db.targetArrowB, 1)
+		end
+		controls[#controls + 1] = swatch
+		for _, key in ipairs({ "targetArrowR", "targetArrowG", "targetArrowB" }) do RecordKey(content, key) end
+		swatch:SetScript("OnClick", function()
+			local db = ns.GetDB()
+			OpenColorPicker(db.targetArrowR, db.targetArrowG, db.targetArrowB, function(r, g, b)
+				db.targetArrowR, db.targetArrowG, db.targetArrowB, db.targetArrowColor = r, g, b, "custom"
+				Refresh()
+				Changed()
+			end)
+		end)
+
+		stack:Header(content, L["Size and movement"])
+		stack:Add(Slider(content, "targetArrowSize", L["Size"], 50, 200, 5, "%d%%", 100, Changed), "slider")
+		local height = stack:Add(Slider(content, "targetArrowY", L["Height"], -10, 40, 1, "%d", 1, Changed), "slider")
+		Tooltip(height, L["Moves the arrow or chevron up (or down, below 0) from just over the name."])
+		GreyUnless(height, function(db) return db.targetArrowStyle == "arrow" or db.targetArrowStyle == "chevron" end)
+		stack:Add(Check(content, "targetArrowBob", L["Moving"],
+			L["The arrow and chevron bob up and down, the brackets close in and out, the glow pulses. " ..
+			"Unticked, it holds still."], function(value)
+				ns.GetDB().targetArrowBob = value
+				Changed()
+			end), "check")
+
+		canvas:SetScript("OnShow", PageShown(Refresh, content))
+		canvas:Hide()
+		RegisterSubpage(canvas, "Target Arrow")
+	end
+end
+
 -- Sub-page for everything chat: fading, new-message peeks (by message type and
 -- by channel) and when chat stays up. Its options on top, then sections that
 -- open and close (as on the Standard Frames page), each a Standard Frames
@@ -6231,7 +6356,8 @@ do
 		enemyShow = L["Its messages show chat out of combat with a living enemy targeted."],
 		friendlyShow = L["Its messages show chat out of combat with anything else targeted (friends, NPCs, dead enemies)."],
 		bgShow = L["Its messages show chat in battlegrounds and arenas."],
-		worldShow = L["Its messages show chat everywhere else, cities and inns included."],
+		worldShow = L["Its messages show chat out in the world, inns included (capital cities are Cities)."],
+		cityShow = L["Its messages show chat in capital cities."],
 		groupShow = L["Its messages show chat while you're in a party or raid, wherever you are."],
 		instanceShow = L["Its messages show chat in dungeons, scenarios and raids."],
 	}
@@ -6242,8 +6368,8 @@ do
 	-- A message table's rows: these, its settings.
 	local function MessageRows()
 		return { labelWidth = CHAT_LABEL_WIDTH, columnTips = MESSAGE_COLUMN_TIPS,
-			rolesTip = L["The roles it shows chat for: untick one and its messages don't show chat while you're " ..
-			"that role (your specialization's, or the one picked in the group finder), whatever its ticks or rule say."] }
+			rolesTip = L["Tick roles to have its messages show chat only while you're one of them (your " ..
+			"specialization's, or the one picked in the group finder), whatever its ticks or rule say. None ticked (-): every role."] }
 	end
 
 	-- The settings a table recorded on its own frame are the page's (its Reset),
@@ -6358,7 +6484,7 @@ do
 			"It uses the Chat bubbles page's outline and text size."])
 		speechBehind:SetPoint("TOPLEFT", hideBubbled, "BOTTOMLEFT", 16, -2)
 		GreyUnless(speechBehind, function(db) return db.chatPeek and db.chatHideBubbled end)
-		local moveSpeech = CreateFrame("Button", nil, chatPanel, "UIPanelButtonTemplate")
+		local moveSpeech = ns.PanelButton(chatPanel)
 		moveSpeech:SetSize(70, 20)
 		moveSpeech:SetPoint("LEFT", speechBehind.Text or speechBehind.text, "RIGHT", 10, 0)
 		moveSpeech:SetText(L["Move"])
@@ -6378,8 +6504,8 @@ do
 		GreyUnless(speechName, IfSpeechBehind)
 
 		-- (On the same line as Show who said it.)
-		local speechClass = Check(chatPanel, "speechBehindClassColor", L["In class colour"],
-			L["Players' names show in their class colour, as in the chat window. NPCs' don't have one."])
+		local speechClass = Check(chatPanel, "speechBehindClassColor", L["In class color"],
+			L["Players' names show in their class color, as in the chat window. NPCs' don't have one."])
 		speechClass:SetPoint("LEFT", speechName.Text or speechName.text, "RIGHT", 16, 0)
 		GreyUnless(speechClass, function(db)
 			return db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind and db.speechBehindName
@@ -6517,8 +6643,9 @@ do
 		local typingRows = MessageRows()
 		typingRows.noHeadings = true
 		typingRows.columnTips = nil
-		typingRows.rolesTip = L["The roles it shows chat for: untick one and typing brings up just the input box " ..
-			"while you're that role (your specialization's, or the one picked in the group finder), whatever its ticks or rule say."]
+		typingRows.rolesTip = L["Tick roles to have typing bring up the chat window only while you're one of them " ..
+			"(your specialization's, or the one picked in the group finder), and just the input box otherwise, whatever " ..
+			"its ticks or rule say. None ticked (-): every role."]
 		typingRows[1] = { key = "chat:typing", label = L["Typing"],
 			tip = L["Pressing Enter to type brings up the chat window with the input box where it's ticked. " ..
 			"Elsewhere just the input box comes up, so you can type without the chat window (or Mouseover " ..
@@ -6575,41 +6702,39 @@ do
 	end
 end
 
--- Rules (a test): a boolean expression in place of a row's ticks, one at
--- most for each row on the frames pages, the Nameplates page and the Unit
--- frame parts grids (db.frameRules: row key -> text; see ns.CompileRule).
--- At the bottom of the Advanced Frames page, under anchor. The buttons build
--- the selected rule, so it needn't be typed. Returns a function that lays
--- the rules out again.
+-- Rules: a boolean expression in place of a row's ticks (db.frameRules: row
+-- key -> text; see ns.CompileRule), for the rows without an Edit of their
+-- own: the Nameplates page's, the Unit frame parts grids', supported addons'
+-- and custom frames (the frames tables' rows are edited on them, GridRows.lua).
+-- At the bottom of the Advanced Frames page, under anchor: a rule each line,
+-- its words in their colours, opened in the rule editor (GridRows.lua) with a
+-- click. Returns a function that lays the rules out again.
 local function RulesSection(content, anchor)
 	local ROW_WIDTH = FRAME_LABEL_WIDTH + 8 * FRAME_COLUMN_WIDTH
-	local rulesHeader = Header(content, "Custom Visibility Rules", anchor, -28)
+	local rulesHeader = Header(content, L["Custom Visibility Rules"], anchor, -28)
 	-- (Its intro behind a "?" beside the header.)
 	local intro = PageIntro(content, rulesHeader,
-		"Pick a frame, nameplate row or unit frame part to give it a rule instead of its ticks, like " ..
-		"\"In combat AND (Open World OR BGs & Arenas)\". Click a rule to select it, then the buttons below " ..
-		"to build it (a green dot means it's true where you are). An unfinished rule leaves the ticks to decide.")
+		L["A rule in place of a row's ticks, for the Unit Frames page's parts (every other grid has an Edit on its " ..
+		"rows). Like \"combat and (world or bg)\". Pick one to add it, or click a rule to open it in the editor."])
 	RecordKey(content, "frameRules") -- (the page's Reset empties them)
 
-	-- What a rule can be for: the rows the pages registered, and the custom
-	-- frames as they are now.
+	-- What a rule here can be for: the rows the pages registered that have
+	-- no Edit of their own (the custom frames have theirs).
 	local function Targets()
 		local targets = {}
-		for _, target in ipairs(ruleTargets) do targets[#targets + 1] = target end
-		local db = ns.GetDB()
-		local names = {}
-		for name in pairs(db and db.extraFrames or {}) do names[#names + 1] = name end
-		table.sort(names)
-		for _, name in ipairs(names) do
-			targets[#targets + 1] = { key = "extra:" .. name, label = name, path = { "Custom frames" } }
+		for _, target in ipairs(ruleTargets) do
+			if not ns.GRID_RULE_KEYS[target.key] then targets[#targets + 1] = target end
 		end
 		return targets
 	end
 
-	local selected -- (the key whose rule the buttons build)
 	local ruleRows = {} -- (made as needed, reused)
 	local RebuildRules
-	local function Rules() return ns.GetDB().frameRules end
+	local function Rules()
+		local db = ns.GetDB()
+		db.frameRules = db.frameRules or {}
+		return db.frameRules
+	end
 	-- What else a rule changing needs: a nameplate row its game settings on,
 	-- unit frame parts applied again.
 	local function Changed(key)
@@ -6625,29 +6750,31 @@ local function RulesSection(content, anchor)
 		Rules()[key] = text
 		Changed(key)
 		RebuildRules()
-		Refresh() -- (greys the row's ticks, or brings them back)
+		Refresh()
 	end
-	-- The rule's box focused, its cursor at the end (for the next piece, or typing).
-	local function FocusEnd(key)
-		for _, row in ipairs(ruleRows) do
-			if row:IsShown() and row.key == key then
-				local text = Rules()[key] or ""
-				row.box:SetText(text)
-				row.box:SetFocus()
-				row.box:SetCursorPosition(#text)
-			end
-		end
+	-- The rule editor on a rule (or a new one): kept as typed, gone if it's
+	-- left empty.
+	local function Open(key, label)
+		ns.OpenRuleEditor({ label = label,
+			Text = function() return Rules()[key] or "" end,
+			SetText = function(text)
+				Rules()[key] = text
+				RebuildRules()
+			end,
+			Close = function(text) SetRule(key, text:find("%S") and text or nil) end,
+			ResetToGrid = function() SetRule(key, nil) end,
+		})
 	end
 
 	-- The menu that adds a rule: what has none yet, in submenus by page
 	-- (and grid, and row).
 	local addMenu
-	local ok, made = pcall(CreateFrame, "DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+	local ok, made = ns.MenuDropdown(content)
 	if ok and made and made.SetupMenu then
 		addMenu = made
 		addMenu:SetWidth(220)
 		addMenu:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 0, -8)
-		addMenu:SetDefaultText("Add a rule for...")
+		addMenu:SetDefaultText(L["Add a rule for..."])
 		addMenu:SetupMenu(function(_, root)
 			local db = ns.GetDB()
 			if not db then return end
@@ -6661,11 +6788,7 @@ local function RulesSection(content, anchor)
 						menus[path] = menus[path] or menu:CreateButton(step)
 						menu = menus[path]
 					end
-					menu:CreateButton(target.label, function()
-						selected = key
-						SetRule(key, "")
-						FocusEnd(key)
-					end)
+					menu:CreateButton(target.label, function() Open(key, target.label) end)
 				end
 			end
 		end)
@@ -6673,216 +6796,100 @@ local function RulesSection(content, anchor)
 	local rowsTop = CreateFrame("Frame", nil, content)
 	rowsTop:SetSize(1, 1)
 	rowsTop:SetPoint("TOPLEFT", addMenu or intro, "BOTTOMLEFT", 0, -8)
+	local none = Label(content, "GameFontDisableSmall", L["None yet."])
+	none:SetPoint("TOPLEFT", rowsTop, "TOPLEFT", 4, -2)
 
-	-- A rule row: what it's for, its rule and a remove button, and a line
-	-- saying whether it reads and what it gives right now.
+	-- A rule row: what it's for, its rule (a click opens it) and a remove
+	-- button, and a line saying whether it reads and what it gives right now.
 	local function RuleRow(index)
 		local row = ruleRows[index]
 		if row then return row end
-		row = CreateFrame("Button", nil, content)
-		row:SetSize(ROW_WIDTH, 58)
-		row.highlight = row:CreateTexture(nil, "BACKGROUND")
-		row.highlight:SetAllPoints()
-		row.highlight:SetColorTexture(1, 0.82, 0, 0.12)
+		row = CreateFrame("Frame", nil, content)
+		row:SetSize(ROW_WIDTH, 56)
 		row.label = Label(row, "GameFontHighlight", "")
 		row.label:SetPoint("TOPLEFT", 4, -4)
 		row.label:SetWidth(ROW_WIDTH - 8)
 		row.label:SetJustifyH("LEFT")
 		row.label:SetWordWrap(false)
-		row.box = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
-		row.box:SetSize(ROW_WIDTH - 40, 20)
-		row.box:SetAutoFocus(false)
-		row.box:SetPoint("TOPLEFT", 10, -20)
+		row.rule = ns.PanelButton(row)
+		row.rule:SetSize(ROW_WIDTH - 40, 20)
+		row.rule:SetPoint("TOPLEFT", 6, -20)
+		local text = row.rule:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		text:SetWordWrap(false)
+		row.rule:SetFontString(text)
+		text:ClearAllPoints()
+		text:SetPoint("LEFT", 6, 0)
+		text:SetPoint("RIGHT", -6, 0)
+		text:SetJustifyH("LEFT")
+		row.rule:SetScript("OnClick", function() Open(row.key, row.name) end)
+		Tooltip(row.rule, L["Click to open the editor."])
 		row.status = Label(row, "GameFontNormalSmall", "")
-		row.status:SetPoint("TOPLEFT", 4, -44)
+		row.status:SetPoint("TOPLEFT", 6, -44)
 		row.status:SetWidth(ROW_WIDTH - 8)
 		row.status:SetJustifyH("LEFT")
-		row.remove = CreateFrame("Button", nil, row, "UIPanelCloseButton")
+		row.remove = ns.SkinClose(CreateFrame("Button", nil, row, "UIPanelCloseButton"))
 		row.remove:SetSize(24, 24)
-		row.remove:SetPoint("LEFT", row.box, "RIGHT", 4, 0)
-		Tooltip(row.remove, "Removes this rule: its ticks decide again.")
-		local function Select()
-			selected = row.key
-			RebuildRules()
-		end
-		row:SetScript("OnClick", Select)
-		row.box:SetScript("OnEditFocusGained", Select)
-		row.box:SetScript("OnTextChanged", function(self, userInput)
-			if userInput then Rules()[row.key] = self:GetText() end
-		end)
-		row.box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-		row.box:SetScript("OnEditFocusLost", function()
-			Changed(row.key)
-			Refresh()
-		end)
-		row.box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-		row.remove:SetScript("OnClick", function()
-			local key = row.key
-			Rules()[key] = nil
-			Changed(key)
-			if selected == key then selected = nil end
-			RebuildRules()
-			Refresh()
-		end)
+		row.remove:SetPoint("LEFT", row.rule, "RIGHT", 4, 0)
+		row.remove:SetScript("OnClick", function() SetRule(row.key, nil) end)
+		Tooltip(row.remove, L["Removes this rule: its ticks decide again."])
 		ruleRows[index] = row
 		return row
 	end
 
-	-- The building buttons, a line for each kind of piece, each its colour:
-	-- the joining words (and Undo, Clear), then the situations. A situation
-	-- that's true where you are has a green dot, in room kept for it at the
-	-- button's right (on the text, it looked odd).
-	local palette = CreateFrame("Frame", nil, content)
-	palette:SetSize(ROW_WIDTH, 1)
-	local GROUP_WIDTH = 70
-	local PIECE_GROUPS = {
-		{ "Logic", { 1, 1, 1 }, { { "and", "AND" }, { "or", "OR" }, { "not", "NOT" }, { "(", "(" }, { ")", ")" } } },
-		{ "Combat", { 1, 0.45, 0.4 }, { { "combat", L["In combat"] } } },
-		{ "Target", { 1, 0.65, 0.25 }, { { "enemy", L["Tar Enemy"] }, { "friendly", L["Tar Friendly"] },
-			{ "target", "Any target" } } },
-		{ "Location", { 0.45, 0.75, 1 }, { { "world", L["Open World"] }, { "city", "City" }, { "inn", "Inn" },
-			{ "bg", L["BGs & Arenas"] }, { "instance", L["Instances"] }, { "dungeon", "Dungeon" }, { "raid", "Raid" } } },
-		{ "You", { 0.8, 0.6, 1 }, { { "mounted", "Mounted" }, { "flagged", "PvP flagged" }, { "group", L["Grouped"] } } },
-		{ "Role", { 0.4, 0.85, 0.5 }, { { "tank", "Tank" }, { "healer", "Healer" }, { "damage", "Damage" } } },
-	}
-	local pieceButtons, wordButtons = {}, {}
-	local x, y = GROUP_WIDTH, 0
-	local DOT_ROOM = 12
-	local function PieceButton(text, onClick, color, dotted)
-		local button = CreateFrame("Button", nil, palette, "UIPanelButtonTemplate")
-		button:SetText(text)
-		button:SetSize(button:GetTextWidth() + 20 + (dotted and DOT_ROOM or 0), 22)
-		if dotted then
-			button.dot = button:CreateTexture(nil, "OVERLAY")
-			button.dot:SetSize(10, 10)
-			button.dot:SetPoint("RIGHT", -7, 0)
-			button.dot:SetTexture("Interface\\COMMON\\Indicator-Green")
-			button.dot:Hide()
-			local label = button:GetFontString()
-			label:ClearAllPoints()
-			label:SetPoint("CENTER", -DOT_ROOM / 2, 0)
-		end
-		button:SetScript("OnClick", onClick)
-		if x > GROUP_WIDTH and x + button:GetWidth() > ROW_WIDTH then
-			x, y = GROUP_WIDTH, y - 24
-		end
-		button:SetPoint("TOPLEFT", palette, "TOPLEFT", x, y)
-		x = x + button:GetWidth() + 4
-		button.color = color or { 1, 0.82, 0 }
-		pieceButtons[#pieceButtons + 1] = button
-		return button
-	end
-	local function Edit(change)
-		if selected then
-			SetRule(selected, change((Rules()[selected] or ""):gsub("%s+$", "")))
-			FocusEnd(selected)
-		end
-	end
-	for g, group in ipairs(PIECE_GROUPS) do
-		if g > 1 then
-			x, y = GROUP_WIDTH, y - 26
-		end
-		local name, color = group[1], group[2]
-		local heading = Label(palette, "GameFontNormalSmall", name)
-		heading:SetTextColor(color[1], color[2], color[3])
-		heading:SetPoint("TOPLEFT", palette, "TOPLEFT", 0, y - 6)
-		for _, piece in ipairs(group[3]) do
-			local word = piece[1]
-			local button = PieceButton(piece[2], function()
-				Edit(function(text)
-					local glue = (text == "" or text:sub(-1) == "(" or word == ")") and "" or " "
-					return text .. glue .. word
-				end)
-			end, color, ns.RULE_WORDS[word] ~= nil)
-			if ns.RULE_WORDS[word] then
-				wordButtons[word] = button
-				Tooltip(button, ("Adds \"%s\". A green dot: true where you are now."):format(word))
-			end
-		end
-		if g == 1 then
-			-- (Undo and Clear at the end of the Logic line, a little apart.)
-			x = x + 16
-			local undo = PieceButton("Undo", function()
-				Edit(function(text)
-					-- (The last word, or the last bracket or sign.)
-					local shorter = text:gsub("[%w_]+$", "")
-					if shorter == text then shorter = text:sub(1, -2) end
-					return (shorter:gsub("%s+$", ""))
-				end)
-			end)
-			Tooltip(undo, "Takes the last piece off the selected rule.")
-			local clear = PieceButton("Clear", function() Edit(function() return "" end) end)
-			Tooltip(clear, "Empties the selected rule (it stays, for building again).")
-		end
-	end
-	palette:SetHeight(-y + 22)
-
-	-- Whether each rule reads and what it gives now, and which words are true.
+	-- Whether each rule reads and what it gives now.
 	local function UpdateStatus()
 		local facts = ns.RuleFactsNow()
-		for _, button in ipairs(pieceButtons) do
-			local color = button.color
-			if button:IsEnabled() then
-				button:GetFontString():SetTextColor(color[1], color[2], color[3])
-			else
-				button:GetFontString():SetTextColor(0.5, 0.5, 0.5)
-			end
-		end
-		for word, button in pairs(wordButtons) do
-			button.dot:SetShown(facts[ns.RULE_WORDS[word]] and button:IsEnabled() and true or false)
-		end
 		for _, row in ipairs(ruleRows) do
 			if row:IsShown() then
 				local text = Rules()[row.key] or ""
 				local test, err = ns.CompileRule(text)
-				if not text:find("%S") then
-					row.status:SetText("|cff999999Empty: the ticks decide.|r")
-				elseif not test then
-					row.status:SetText("|cffff6060Not finished: " .. err .. ". The ticks decide until it is.|r")
+				if not test then
+					row.status:SetText("|cffff6060" .. (L["Not finished: %s. Its ticks decide until it is."]):format(err) .. "|r")
 				else
-					row.status:SetText(test(facts) and "|cff60ff60Right now: shown|r"
-						or "|cffffd100Right now: hidden|r")
+					row.status:SetText(test(facts) and "|cff60ff60" .. L["Right now: shown"] .. "|r"
+						or "|cffffd100" .. L["Right now: hidden"] .. "|r")
 				end
+				row.rule:SetSkinTint(not test and 1 or nil, 0.45, 0.45)
 			end
 		end
 	end
-	-- The rules in the pages' order, the selected one lit.
+	-- The rules in the pages' order (those on the frames tables left out).
 	function RebuildRules()
 		local db = ns.GetDB()
 		local rules = db and db.frameRules or {}
-		if selected and not rules[selected] then selected = nil end
 		local index, last = 0, nil
 		local listed = {}
 		local function Add(key, label, path)
 			index = index + 1
 			listed[key] = true
-			selected = selected or key
 			local row = RuleRow(index)
-			row.key = key
+			row.key, row.name = key, label
 			row.label:SetText((#path > 0 and "|cff999999" .. table.concat(path, " > ") .. " >|r " or "") .. label)
-			if not row.box:HasFocus() then row.box:SetText(rules[key]) end
-			row.highlight:SetShown(key == selected)
+			row.rule:SetText(ns.ColoredRule(rules[key]))
 			row:ClearAllPoints()
 			row:SetPoint("TOPLEFT", last or rowsTop, last and "BOTTOMLEFT" or "TOPLEFT", 0, last and -4 or 0)
 			row:Show()
 			last = row
 		end
 		for _, target in ipairs(Targets()) do
-			if rules[target.key] then Add(target.key, target.label, target.path) end
+			if type(rules[target.key]) == "string" and rules[target.key]:find("%S") then
+				Add(target.key, target.label, target.path)
+			end
 		end
 		-- (Rules for rows this client doesn't have: kept, listed by their keys.)
-		for key in pairs(rules) do
-			if not listed[key] then Add(key, key, {}) end
+		for key, text in pairs(rules) do
+			if not listed[key] and not ns.GRID_RULE_KEYS[key] and type(text) == "string" and text:find("%S") then
+				Add(key, key, {})
+			end
 		end
 		for i = index + 1, #ruleRows do ruleRows[i]:Hide() end
-		palette:ClearAllPoints()
-		palette:SetPoint("TOPLEFT", last or rowsTop, last and "BOTTOMLEFT" or "TOPLEFT", 0, -8)
-		for _, button in ipairs(pieceButtons) do button:SetEnabled(selected ~= nil) end
+		none:SetShown(index == 0)
 		UpdateStatus()
 		FitContentHeight(content)
 	end
+	local ticker = CreateFrame("Frame", nil, content)
 	local since = 0
-	palette:SetScript("OnUpdate", function(_, elapsed)
+	ticker:SetScript("OnUpdate", function(_, elapsed)
 		since = since + elapsed
 		if since > 0.5 then since = 0 UpdateStatus() end
 	end)
@@ -6900,14 +6907,13 @@ local RefreshExtras
 -- The Advanced Frames page's columns, for the supported addons and the
 -- custom frames alike: the name, then Always and the Standard Frames
 -- page's columns ({ heading, isOn, list, needs "stay cinematic in combat" }).
-local THIRD_PARTY_LABEL_WIDTH, THIRD_PARTY_COLUMN_WIDTH = FRAME_LABEL_WIDTH, FRAME_COLUMN_WIDTH
+local THIRD_PARTY_LABEL_WIDTH = FRAME_LABEL_WIDTH
 local THIRD_PARTY_COLUMNS = { { L["Always"] } } -- (its own setting: the frames left alone)
 for c = 2, #FRAME_COLUMNS do
 	THIRD_PARTY_COLUMNS[c] = FRAME_COLUMNS[c]
 end
-local function ThirdPartyColumnX(c)
-	return THIRD_PARTY_LABEL_WIDTH + (c - 1) * THIRD_PARTY_COLUMN_WIDTH + (THIRD_PARTY_COLUMN_WIDTH - 26) / 2
-end
+-- Their rows as the Standard Frames page's: Always, the dropdowns, the roles and Edit (GridRows.lua).
+local THIRD_PARTY_LAYOUT = { roles = true, edit = true }
 
 -- The custom frames' column headings, above their rows.
 local function GetExtraHeadings()
@@ -6915,17 +6921,9 @@ local function GetExtraHeadings()
 		return extrasPanel.headings
 	end
 	local headings = CreateFrame("Frame", nil, extrasPanel)
-	headings:SetSize(THIRD_PARTY_LABEL_WIDTH + #THIRD_PARTY_COLUMNS * THIRD_PARTY_COLUMN_WIDTH,
-		FRAME_HEADING_HEIGHT)
+	headings:SetSize(THIRD_PARTY_LABEL_WIDTH + ns.GridWidth(THIRD_PARTY_LAYOUT), FRAME_HEADING_HEIGHT)
 	headings:SetPoint("TOPLEFT", extrasPanel.addMode, "BOTTOMLEFT", 0, -10)
-	for c, column in ipairs(THIRD_PARTY_COLUMNS) do
-		FrameHeading(headings, column[1]):SetPoint("TOPLEFT",
-			THIRD_PARTY_LABEL_WIDTH + (c - 1) * THIRD_PARTY_COLUMN_WIDTH, 0)
-	end
-	if ROLES_MENU then -- (over the rows' roles buttons)
-		FrameHeading(headings, L["Role"]):SetPoint("TOPLEFT",
-			THIRD_PARTY_LABEL_WIDTH + #THIRD_PARTY_COLUMNS * THIRD_PARTY_COLUMN_WIDTH - 6, 0)
-	end
+	ns.GridHeadings(ns.GRID_KIT, headings, headings, THIRD_PARTY_LABEL_WIDTH, THIRD_PARTY_LAYOUT)
 	extrasPanel.headings = headings
 	return headings
 end
@@ -6938,10 +6936,10 @@ local function GetExtraRow(index)
 		return row
 	end
 	row = CreateFrame("Frame", nil, extrasPanel)
-	row:SetSize(THIRD_PARTY_LABEL_WIDTH + #THIRD_PARTY_COLUMNS * THIRD_PARTY_COLUMN_WIDTH, 26)
+	row:SetSize(THIRD_PARTY_LABEL_WIDTH + ns.GridWidth(THIRD_PARTY_LAYOUT), 26)
 	row:SetPoint("TOPLEFT", GetExtraHeadings(), "BOTTOMLEFT", 0, -2 - (index - 1) * 24)
 
-	row.delete = CreateFrame("Button", nil, row, "UIPanelCloseButton")
+	row.delete = ns.SkinClose(CreateFrame("Button", nil, row, "UIPanelCloseButton"))
 	row.delete:SetSize(22, 22)
 	row.delete:SetPoint("LEFT", -4, 0)
 	Tooltip(row.delete, L["Takes this frame off the list. A frame you added stops fading; " ..
@@ -6957,41 +6955,32 @@ local function GetExtraRow(index)
 
 	row.text = Label(row, "GameFontHighlight")
 	row.text:SetPoint("LEFT", 20, 0)
-	row.text:SetWidth(THIRD_PARTY_LABEL_WIDTH - 24)
+	row.text:SetWidth(THIRD_PARTY_LABEL_WIDTH - 24 - ns.GRID_DOT_ROOM)
 	row.text:SetWordWrap(false)
 
-	row.checks = {}
-	for c, column in ipairs(THIRD_PARTY_COLUMNS) do
-		local check
-		if c == 1 then
-			check = Check(row, nil, "", L["Show this frame the whole time in CineMode (Cinematic leaves it " ..
-				"alone). Unticked, it's hidden, except as the other columns say."], function(value)
-				ns.SetFrameKept(row.item.name, value)
-				RefreshExtras()
-			end)
-			check.Refresh = function(self)
-				if row.item then self:SetChecked(row.item.kept) end
-				self:SetEnabled(SwitchOn("handleAddonFrames"))
-			end
-		else
-			local isOn, list, needsStay = column[2], column[3], column[4]
-			check = Check(row, nil, "", column[5], function(value)
-				ns.GetDB()[list]["extra:" .. row.item.name] = value
-			end)
-			check.Refresh = function(self)
-				if not row.item then return end
-				self:SetChecked(isOn("extra:" .. row.item.name))
-				self:SetEnabled(SwitchOn("handleAddonFrames") and not row.item.kept
-					and not ns.RuleTest("extra:" .. row.item.name) and (not needsStay or ns.GetDB().stayInCombat))
-			end
-		end
-		check:SetPoint("LEFT", ThirdPartyColumnX(c), 0)
-		row.checks[c] = check
-	end
-	row.roles = RolesButton(row, extrasPanel, function() return row.item and "extra:" .. row.item.name end)
-	if row.roles then
-		row.roles:SetPoint("LEFT", THIRD_PARTY_LABEL_WIDTH + #THIRD_PARTY_COLUMNS * THIRD_PARTY_COLUMN_WIDTH - 6, 0)
-	end
+	-- Its settings: Always (left alone), the Standard Frames page's lists,
+	-- its roles and rule, all by its key (the row's reused for other frames).
+	-- A picked frame has none yet; one kept up from the built-in list, just Always.
+	local function Key() return row.item and "extra:" .. row.item.name end
+	local function SetKept(value) ns.SetFrameKept(row.item.name, value) end
+	local parts = ns.ListRowParts(Key, THIRD_PARTY_COLUMNS, nil, SetKept)
+	row.grid = ns.GridRow(ns.GRID_KIT, row, THIRD_PARTY_LABEL_WIDTH, THIRD_PARTY_LAYOUT, {
+		band = index, dot = true,
+		always = { isOn = function() return row.item and row.item.kept end, set = SetKept,
+			tip = L["Show this frame the whole time in CineMode (Cinematic leaves it " ..
+			"alone). Unticked, it's hidden, except as the other columns say."] },
+		menus = parts.menus,
+		roles = { key = Key },
+		rule = { key = Key, label = function() return row.item and row.item.name or "" end, grid = parts.grid,
+			words = parts.words, apply = parts.apply },
+		cells = function()
+			local item = row.item
+			if not item or item.picked then return "none" end
+			return item.added and "full" or "always"
+		end,
+		changed = function() RefreshExtras() end,
+	})
+	row.grid:SetPoint("LEFT", row, "LEFT", THIRD_PARTY_LABEL_WIDTH, 0)
 	extraRows[index] = row
 	return row
 end
@@ -7011,29 +7000,21 @@ RefreshExtras = function()
 	for i, item in ipairs(items) do
 		local row = GetExtraRow(i)
 		row.item = item
-		for c, check in ipairs(row.checks) do
-			-- (A built-in frame kept up has its rows on the Standard Frames page.)
-			check:SetShown(not item.picked and (c == 1 or item.added))
-			if not item.picked then
-				local list = THIRD_PARTY_COLUMNS[c][3]
-				if list then
-					-- (For the page's Reset: just these rows of the shared lists.)
-					RecordKey(extrasPanel, list)
-					RecordRow(extrasPanel, list, "extra:" .. item.name)
-				end
-				check:Refresh()
+		-- (A built-in frame kept up has its rows on the Standard Frames page.)
+		if not item.picked and item.added then
+			local key = "extra:" .. item.name
+			ns.GRID_RULE_KEYS[key] = true -- (its rule's edited on its row: not in the Rules section)
+			-- (For the page's Reset: just these rows of the shared lists.)
+			for c = 2, #THIRD_PARTY_COLUMNS do
+				RecordKey(extrasPanel, THIRD_PARTY_COLUMNS[c][3])
+				RecordRow(extrasPanel, THIRD_PARTY_COLUMNS[c][3], key)
+			end
+			for _, list in ipairs({ "calmShow", "tankHide", "healerHide", "damageHide" }) do
+				RecordKey(extrasPanel, list)
+				RecordRow(extrasPanel, list, key)
 			end
 		end
-		if row.roles then
-			row.roles:SetShown(not item.picked and item.added)
-			if not item.picked and item.added then
-				for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
-					RecordKey(extrasPanel, list)
-					RecordRow(extrasPanel, list, "extra:" .. item.name)
-				end
-				row.roles:Refresh()
-			end
-		end
+		row.grid:Refresh()
 		if item.picked then
 			row.text:SetText("|cffffd100" .. item.name .. "|r |cff808080(" .. L["picked"] .. ")|r")
 		else
@@ -7566,7 +7547,7 @@ local function CreateCooldownPanel()
 			access.SetMode(row.key, mode)
 			Refresh() -- (a group's change shows on its spells' rows too)
 		end
-		local ok, dropdown = pcall(CreateFrame, "DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+		local ok, dropdown = ns.MenuDropdown(content)
 		if ok and dropdown and dropdown.SetupMenu then
 			dropdown:SetWidth(150)
 			dropdown.searchSkip = true
@@ -7579,7 +7560,7 @@ local function CreateCooldownPanel()
 			end)
 			row.mode = dropdown
 		else
-			local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+			local button = ns.PanelButton(content)
 			button:SetSize(150, 22)
 			button:SetScript("OnClick", function()
 				local now = row.key ~= nil and access.Mode(row.key)
@@ -7610,7 +7591,7 @@ local function CreateCooldownPanel()
 		-- Seconds before it's ready that it comes back: empty for the default,
 		-- 0 for once it's ready. (Stored as before: Show Early on or off, and
 		-- its seconds.)
-		local early = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+		local early = ns.SkinEditBox(CreateFrame("EditBox", nil, content, "InputBoxTemplate"))
 		early:SetSize(36, 20)
 		early:SetAutoFocus(false)
 		early:SetNumeric(true)
@@ -7797,13 +7778,13 @@ local function CreateVisionPanel()
 	local stack = Stack(switch, "check")
 	stack:Add(Check(content, "minimapVisions", L["Vision Helper"],
 		L["While a vision is doing something (Heal Vision fading frames, a duel being watched, the roll " ..
-		"window up...), the minimap button glows in its colour, and its menu and tooltip list it with a " ..
+		"window up...), the minimap button glows in its color, and its menu and tooltip list it with a " ..
 		"link to its page."]), "check")
 	stack:Header(content, L["Duel Vision"])
 	local duelCheck = stack:Add(Check(content, "duelPlates", L["Enable"],
 		L["In CineMode, the nameplates of two players dueling near you show, so you can watch their health. " ..
 		"Only in the open world, out of fights. Turns on friendly player nameplates while it watches, " ..
-		"kept invisible and click-through bar the duelists'. Each duel has its own colour, and the winner " ..
+		"kept invisible and click-through bar the duelists'. Each duel has its own color, and the winner " ..
 		"and loser show when it ends. Needs the Nameplates page enabled."]), "check")
 	GreyUnless(duelCheck, function(db) return db.handlePlates end)
 
@@ -7890,6 +7871,197 @@ local function CreateVisionPanel()
 			if ns.UpdateQuestGlow then ns.UpdateQuestGlow() end
 		end)
 	questStack:Add(questGlow, "check")
+	-- Talking to NPCs in speech bubbles (QuestTalk.lua).
+	do
+		local function ApplyTalk()
+			if ns.RefreshQuestTalk then ns.RefreshQuestTalk() end
+		end
+		local function TalkOn(db) return db.questTalk end
+		questStack:Header(content, L["Talking to NPCs"])
+		questStack:Add(Check(content, "questTalk", L["Custom dialogue frames"],
+			L["Talking to an NPC, what they say shows in a speech bubble over their head, and what you can say " ..
+			"back in a list near the bottom of the screen, instead of the game's gossip and quest windows. " ..
+			"The list has everything the window would: quests to turn in, pick up or still in progress, " ..
+			"and every other option (vendor, trainer, inn, flight master...). A quest offered or turned in " ..
+			"shows its objective and rewards on a card, with its buttons; click a reward to choose it. " ..
+			"\"Show the game's window\" on the card brings the game's window back for that conversation. " ..
+			"The game's popups (a cost to confirm, a party member's escort quest) come up as usual."],
+			function(value)
+				ns.GetDB().questTalk = value
+				ApplyTalk()
+				Refresh()
+			end), "check")
+		local portrait = questStack:Add(Check(content, "questTalkPortrait", L["The NPC's portrait"],
+			L["Their portrait, round, on the bubble's top left corner, as on the game's quest window. Not " ..
+			"for a quest from an item, with nobody to show."], function(value)
+				ns.GetDB().questTalkPortrait = value
+				ApplyTalk()
+			end), "check", 24)
+		GreyUnless(portrait, TalkOn)
+		local gameButton = questStack:Add(Check(content, "questTalkGameButton", L["\"Show the game's window\" link"],
+			L["A small link at the bottom of the quest card that brings back the game's own quest window for the " ..
+			"rest of that conversation (for a long quest text, or to read it the usual way)."], function(value)
+				ns.GetDB().questTalkGameButton = value
+				ApplyTalk()
+			end), "check", 24)
+		GreyUnless(gameButton, TalkOn)
+		local keys = questStack:Add(Check(content, "questTalkKeys", L["Number keys and Space"],
+			L["1 to 9 and 0 pick from the list, as numbered. Space shows the next paragraph, and on the last " ..
+			"one does the card's first button (Accept, Continue, Complete Quest). Only keys that do something " ..
+			"there are held back from your action bars, and none in a fight."]), "check", 24)
+		GreyUnless(keys, TalkOn)
+		-- How they look.
+		questStack:Add(Label(content, "GameFontNormal", L["Look"]), "header", 24)
+		local STYLES = {
+			{ value = "parchment", text = L["Parchment"] },
+			{ value = "bubble", text = L["Chat bubble"] },
+		}
+		local STYLE_TIP = L["How the bubble looks: parchment like the quest window's, or the game's own chat bubble."]
+		questStack:Add(Label(content, "GameFontHighlight", L["Bubble look"]), "label", 24)
+		local style = Dropdown(content, "questTalkStyle", STYLES, 200, ApplyTalk)
+		if style then
+			questStack:Add(style, "dropdown", 24)
+			Tooltip(style, STYLE_TIP)
+			GreyUnless(style, TalkOn)
+		else
+			for _, choice in ipairs(STYLES) do
+				local check = questStack:Add(Choice(content, "questTalkStyle", choice.value, choice.text, STYLE_TIP),
+					"check", 24)
+				GreyUnless(check, TalkOn)
+			end
+		end
+		local same = questStack:Add(Check(content, "questTalkCardSame", L["Quest card on the bubble's background"],
+			L["The quest card has the bubble's look (parchment, or the chat bubble) instead of its own dark " ..
+			"one, its words in colors that suit it."], function(value)
+				ns.GetDB().questTalkCardSame = value
+				ApplyTalk()
+			end), "check", 24)
+		GreyUnless(same, TalkOn)
+		local lines = questStack:Add(Slider(content, "questTalkLines", L["Bubble height"], 3, 15, 1,
+			L["%d lines"], nil, ApplyTalk), "slider", 24)
+		Tooltip(lines, L["How many lines of their words the bubble holds. It's always this tall, however " ..
+			"little is on the page; more words go on the next page."])
+		GreyUnless(lines, TalkOn)
+		local size = questStack:Add(Slider(content, "questTalkScale", L["Size"], 70, 150, 5, "%d%%", 100,
+			ApplyTalk), "slider", 24)
+		Tooltip(size, L["The size of the bubble and the list."])
+		GreyUnless(size, TalkOn)
+		-- Where they go.
+		questStack:Add(Label(content, "GameFontNormal", L["Where they go"]), "header", 24)
+		local PLACES = {
+			{ value = "head", text = L["Over the head"] },
+			{ value = "fixed", text = L["Fixed"] },
+			{ value = "opposite", text = L["Opposite Clicked"] },
+		}
+		local PLACE_TIP = L["Where the bubble goes. Over the head: over the NPC's nameplate, following them on " ..
+			"the screen. Fixed: above the middle of the screen, or wherever you drag it. Opposite Clicked: " ..
+			"wherever you drag it, but when you clicked the NPC on that half of the screen, at the same spot on " ..
+			"the other half (they stand where you clicked, so that half is clearer), the quest card beside it. " ..
+			"With nobody to stand over or no click (a quest from an item, or the interact key), it goes where " ..
+			"Fixed would."]
+		local placeLabel = questStack:Add(Label(content, "GameFontHighlight", L["Bubble position"]), "label", 24)
+		local place = Dropdown(content, "questTalkPlace", PLACES, 200, ApplyTalk)
+		if place then
+			questStack:Add(place, "dropdown", 24)
+			Tooltip(place, PLACE_TIP)
+			GreyUnless(place, TalkOn)
+		else
+			for _, choice in ipairs(PLACES) do
+				local check = questStack:Add(Choice(content, "questTalkPlace", choice.value, choice.text, PLACE_TIP),
+					"check", 24)
+				GreyUnless(check, TalkOn)
+			end
+		end
+		-- The bubble position's own settings, in a column to its right: only
+		-- those for the position picked show (Fixed has none).
+		local column = CreateFrame("Frame", nil, content)
+		column:SetSize(1, 1)
+		column:SetPoint("TOPLEFT", placeLabel, "TOPLEFT", 260, 0)
+		local byPlace = { head = {}, opposite = {} }
+		local function Own(mode, control)
+			byPlace[mode][#byPlace[mode] + 1] = control
+			return control
+		end
+		-- Opposite Clicked.
+		local oppositeStack = Stack(column, "label")
+		local middle = Own("opposite", oppositeStack:Add(Slider(content, "questTalkMiddle", L["Middle of the screen"], 0, 50, 1,
+			"%d%%", 100, ApplyTalk), "slider"))
+		Tooltip(middle, L["Opposite Clicked: a click on an NPC within this band round the middle of the screen " ..
+			"(a share of its width, half either side) counts as the middle, and the bubble stays where you put " ..
+			"it. Only a click further out on its half moves it to the other half."])
+		GreyUnless(middle, TalkOn)
+		-- Over the head.
+		local headStack = Stack(column, "label")
+		local topGap = Own("head", headStack:Add(Slider(content, "questTalkTopGap", L["Space above the bubble"], 0, 30, 1,
+			"%d%%", 100, ApplyTalk), "slider"))
+		Tooltip(topGap, L["Over the NPC's head, the bubble always stays at least this far down from the top of " ..
+			"the screen (and below the letterbox), so it never sits right against the edge."])
+		GreyUnless(topGap, TalkOn)
+		local still = Own("head", headStack:Add(Check(content, "questTalkStill", L["Hold the camera still"],
+			L["With the bubble over the head, the quest camera turns in as usual but doesn't drift to and fro " ..
+			"while you talk: following the NPC on the screen, the bubble and card would jiggle as it moved."],
+			function(value)
+				ns.GetDB().questTalkStill = value
+			end), "check"))
+		GreyUnless(still, TalkOn)
+		-- (Shown as the position is: refreshed with the page, so picking
+		-- another in the dropdown swaps them.)
+		controls[#controls + 1] = {
+			debugName = "bubble position's settings",
+			Refresh = function()
+				local mode = ns.GetDB().questTalkPlace
+				for each, list in pairs(byPlace) do
+					for _, control in ipairs(list) do
+						control:SetShown(each == mode)
+					end
+				end
+			end,
+		}
+		local SIDES = {
+			{ value = "below", text = L["Below"] },
+			{ value = "side", text = L["Side"] },
+			{ value = "right", text = L["Right"] },
+			{ value = "left", text = L["Left"] },
+		}
+		local SIDE_TIP = L["Where the quest card (the objective, rewards and buttons, or the list of replies) " ..
+			"goes beside the bubble. Below: as wide as the bubble, which moves up to make room for it. Side: " ..
+			"with Opposite Clicked, on the bubble's outer side (away from the middle of the screen), else on " ..
+			"the right. Right or Left: always that side. Beside it, it's as tall as the bubble."]
+		local function SideOn(db) return db.questTalk and db.questTalkPlace ~= "fixed" end
+		questStack:Add(Label(content, "GameFontHighlight", L["Quest card beside the bubble"]), "label", 24)
+		local side = Dropdown(content, "questTalkCardSide", SIDES, 200, ApplyTalk)
+		if side then
+			questStack:Add(side, "dropdown", 24)
+			Tooltip(side, SIDE_TIP)
+			GreyUnless(side, SideOn)
+		else
+			for _, choice in ipairs(SIDES) do
+				local check = questStack:Add(Choice(content, "questTalkCardSide", choice.value, choice.text, SIDE_TIP),
+					"check", 24)
+				GreyUnless(check, SideOn)
+			end
+		end
+		local listY = questStack:Add(Slider(content, "questTalkListY", L["List height on the screen"], 20, 80, 1,
+			"%d%%", 100, function()
+				ns.GetDB().questTalkSpot = nil -- (the slider decides again)
+				ApplyTalk()
+			end), "slider", 24)
+		Tooltip(listY, L["How far up the screen the list of replies starts: its top edge, from the bottom of " ..
+			"the screen. Moving this also forgets where you dragged the list to."])
+		GreyUnless(listY, TalkOn)
+		-- (Drag the list to move it; this forgets where.)
+		local putBack = ns.PanelButton(content)
+		putBack:SetSize(160, 22)
+		putBack:SetText(L["Put them back"])
+		Tooltip(putBack, L["Drag the list of replies to move it, and the bubble while it isn't over an NPC. " ..
+			"This forgets where you dropped them: each opens in its usual place again."])
+		putBack:SetScript("OnClick", function()
+			ns.GetDB().questTalkSpot = nil
+			ns.GetDB().questTalkBubbleSpot = nil
+			ApplyTalk()
+		end)
+		questStack:Add(putBack, "label", 24)
+	end
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, "Quest Vision")
@@ -7931,7 +8103,7 @@ local function CreateVisionPanel()
 			end
 		end
 		local usable = stack:Add(Check(content, "rollUsableOnly", L["Only items you can use"],
-			L["Items you can't use (armour or weapons you can't wear, another class's, or a level you're not " ..
+			L["Items you can't use (armor or weapons you can't wear, another class's, or a level you're not " ..
 			"yet: anything in red on its tooltip) don't get a panel. Their rolls are only in chat."]), "check")
 		GreyUnless(usable, RollsOn)
 		local panels = stack:Add(Slider(content, "rollMaxPanels", L["Items shown at once"], 1, 8, 1, "%d"),
@@ -8006,75 +8178,93 @@ local function CreateVisionPanel()
 			"Ticked in the grid, it's on there. Always: everywhere. Party and Raid: while you're in one, wherever you are. " ..
 			"Members with debuffs can't be shown: the game doesn't let addons see your group's debuffs in fights."])
 
-		-- Show in: by place, then group (columns), like the Visual Effects
-		-- page's grid but ticked where it's on. Always greys the rest.
+		-- Show in: Always, then the places and groups (a Location dropdown).
+		-- Always greys the rest.
 		local PLACES = {
-			World = { L["Open World"], L["out in the world, capital cities and inns included"] },
+			World = { L["Open World"], L["out in the world, inns included (capital cities are Cities)"] },
+			Cities = { L["Cities"], L["in capital cities"] },
 			Dungeons = { L["Dungeons"], L["in dungeons and scenarios"] },
 			Raids = { L["Raids"], L["in raids"] },
 			BGs = { L["BGs & Arenas"], L["in battlegrounds and arenas"] },
 		}
-		-- (The groups and their places set apart at the end: Party, Raid,
-		-- Dungeons, Raids.)
 		local COLUMNS = { { key = "", heading = L["Always"] } }
 		local function Place(where)
 			COLUMNS[#COLUMNS + 1] = { key = "In" .. where, heading = PLACES[where][1], where = where }
 		end
 		Place("World")
+		Place("Cities")
 		Place("BGs")
-		local firstGroup = #COLUMNS + 1
 		COLUMNS[#COLUMNS + 1] = { key = "InParty", heading = L["Party"] }
 		COLUMNS[#COLUMNS + 1] = { key = "InRaid", heading = L["Raid"] }
 		Place("Dungeons")
 		Place("Raids")
-		local NAME_WIDTH, COLUMN_WIDTH, GAP = 90, 66, 10
-		local function ColumnX(c)
-			return NAME_WIDTH + COLUMN_WIDTH * (c - 1) + (c >= 2 and GAP or 0) + (c >= firstGroup and GAP or 0)
-		end
 		local healSwitch = PageSwitch(content, "handleHealVision", L["Enable page"],
 			L["On: Heal Vision works as ticked below. Off: it doesn't, and each keeps its tick for " ..
 			"when you turn this back on."], healIntro, ApplyFrames)
 
+		-- The row as the Standard Frames page's (GridRows.lua): Always, a
+		-- Location dropdown of the places and groups, and the roles.
+		local NAME_WIDTH = 90
+		local LAYOUT = { roles = true, edit = true }
 		local gridTop = CreateFrame("Frame", nil, content)
-		gridTop:SetSize(ColumnX(#COLUMNS) + COLUMN_WIDTH, 26)
+		gridTop:SetSize(NAME_WIDTH + ns.GridWidth(LAYOUT), FRAME_HEADING_HEIGHT)
 		gridTop:SetPoint("TOPLEFT", healSwitch, "BOTTOMLEFT", 2, -10)
-		for c, column in ipairs(COLUMNS) do
-			local heading = Label(gridTop, "GameFontNormalSmall", column.heading)
-			heading:SetWidth(COLUMN_WIDTH)
-			heading:SetJustifyH("CENTER")
-			heading:SetPoint("BOTTOMLEFT", gridTop, "BOTTOMLEFT", ColumnX(c), 0)
-		end
+		ns.GridHeadings(ns.GRID_KIT, content, gridTop, NAME_WIDTH, LAYOUT)
 		local row = CreateFrame("Frame", nil, content)
 		row:SetSize(gridTop:GetWidth(), 24)
-		row:SetPoint("TOPLEFT", gridTop, "BOTTOMLEFT", 0, -2)
+		row:SetPoint("TOPLEFT", gridTop, "TOPLEFT", 0, -FRAME_HEADING_HEIGHT - 4)
 		Label(row, "GameFontHighlight", L["Show in"]):SetPoint("LEFT", row, "LEFT", 0, 0)
-		for c, column in ipairs(COLUMNS) do
+		local function Set(key, value)
+			ns.GetDB()[key] = value
+			Apply()
+		end
+		local places = {}
+		for c = 2, #COLUMNS do
+			local column = COLUMNS[c]
 			local key = "healVision" .. column.key
-			local tip = (c == 1 and L["Heal Vision everywhere. The rest of the row keeps its ticks for when you untick this."])
-				or (column.where and L["Heal Vision %s."]:format(PLACES[column.where][2]))
+			RecordKey(content, key) -- (for the page's Reset)
+			local tip = (column.where and L["Heal Vision %s."]:format(PLACES[column.where][2]))
 				or (column.key == "InParty" and L["Heal Vision while you're in a party (not a raid), wherever you are."])
 				or L["Heal Vision while you're in a raid, wherever you are."]
-			local check = Check(content, key, "", tip, function(value)
-				ns.GetDB()[key] = value
-				Apply()
-			end)
-			check:SetPoint("CENTER", row, "LEFT", ColumnX(c) + COLUMN_WIDTH / 2, 0)
-			if c > 1 then
-				GreyUnless(check, function(db) return not db.healVision end)
-			end
+			places[#places + 1] = { column.heading, function() return ns.GetDB()[key] and true or false end,
+				function() Set(key, not ns.GetDB()[key]) end, nil, tip }
 		end
-		-- The roles it's on for, in a column after the last.
-		local roles = RolesButton(content, content, "healVision",
-			L["The roles Heal Vision is on for: untick one to keep it off while you're that role (your " ..
-			"specialization's, or the one picked in the group finder), whatever the row says."], Apply)
-		if roles then
-			local rolesX = ColumnX(#COLUMNS) + COLUMN_WIDTH
-			local heading = Label(gridTop, "GameFontNormalSmall", L["Role"])
-			heading:SetWidth(COLUMN_WIDTH)
-			heading:SetJustifyH("CENTER")
-			heading:SetPoint("BOTTOMLEFT", gridTop, "BOTTOMLEFT", rolesX, 0)
-			roles:SetPoint("CENTER", row, "LEFT", rolesX + COLUMN_WIDTH / 2, 0)
+		RecordKey(content, "healVision")
+		local function Item(name, key, itemTip, usable)
+			RecordKey(content, key)
+			return { name, function() return ns.GetDB()[key] and true or false end,
+				function() Set(key, not ns.GetDB()[key]) end, usable, itemTip }
 		end
+		local combat = { Item(L["In combat"], "healVisionInCombat", L["Heal Vision in fights."]),
+			{ L["Calm Timer"], function() return ns.GetDB().healVisionCalm and true or false end,
+				function() Set("healVisionCalm", not ns.GetDB().healVisionCalm) end, nil,
+				L["Heal Vision after a fight, until the Calm Timer (CineMode page) has run out."] } }
+		RecordKey(content, "healVisionCalm")
+		local targets = { Item(L["Enemy targeted"], "healVisionTargetEnemy",
+				L["Heal Vision out of fights while you have a living enemy targeted."]),
+			Item(L["Friend targeted"], "healVisionTargetFriendly",
+				L["Heal Vision out of fights while you have anything else targeted: friends, NPCs, dead enemies."]) }
+		RuleTarget("healVision", L["Heal Vision"], "Heal Vision")
+		ns.GRID_RULE_KEYS.healVision = true
+		for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
+			RecordKey(content, list)
+			RecordRow(content, list, "healVision")
+		end
+		ns.GridRow(ns.GRID_KIT, row, NAME_WIDTH, LAYOUT, {
+			band = 1,
+			always = { isOn = function() return ns.GetDB().healVision end,
+				set = function(value) Set("healVision", value) end,
+				tip = L["Heal Vision everywhere. The rest of the row keeps its ticks for when you untick this."] },
+			menus = { [ns.GRID_COMBAT] = combat, [ns.GRID_TARGET] = targets, [ns.GRID_LOCATION] = places },
+			help = { [ns.GRID_COMBAT] = L["On in fights, and with the Calm Timer, after them till it's run out."],
+				[ns.GRID_TARGET] = L["On while you have one of these targeted, out of fights."],
+				[ns.GRID_LOCATION] = L["On while you're in any of these (Party and Raid: in one, wherever you are)."] },
+			rule = { key = function() return "healVision" end, label = function() return L["Heal Vision"] end,
+				changed = Apply },
+			roles = { key = function() return "healVision" end, changed = Apply,
+				tip = L["Tick roles to have Heal Vision on only while you're one of them (your specialization's, " ..
+				"or the one picked in the group finder), whatever the row says. None ticked (-): every role."] },
+		}):SetPoint("LEFT", row, "LEFT", NAME_WIDTH, 0)
 
 		local previous = row
 		local function Option(key, label, tip, enabled)
@@ -8311,31 +8501,32 @@ local function CreateTooltipPanel()
 		return last, headings
 	end
 
-	-- Hide tooltips, by kind: Always (in and out of fights) or In combat
-	-- (greyed while Always is ticked).
-	local hideHeader = Section(L["Hide tooltips"])
+	-- Show tooltips: a row per kind, as the Standard Frames page's
+	-- (GridRows.lua): where and when each shows in CineMode.
+	local hideHeader = Section(L["Show tooltips"])
 	local hideNote = PageIntro(content, hideHeader,
-		L["In CineMode. Ticked, those tooltips hide. Always: in and out of fights. In combat: just in fights. " ..
-		"Something that's more than one kind (a quest mob is an enemy too) hides only with each of its kinds ticked."])
-	local HIDE_TIPS = { Always = L["Hidden all the time."], Combat = L["Hidden in fights only."] }
-	local function HideRow(kind, label, tip)
-		return { label, tip, keys = { Always = "tooltipHide" .. kind, Combat = "tooltipHideCombat" .. kind },
-			tips = HIDE_TIPS }
-	end
-	Grid(hideNote, {
-		HideRow("Enemy", L["Enemies"],
-			L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems."]),
-		HideRow("Friendly", L["Friendlies"], L["Players and NPCs you can't attack, and their pets, minions and totems."]),
-		HideRow("Gather", L["Gatherables (herbs, ore, skinnable)"], L["Herbs, ore and creatures you can skin."]),
-		HideRow("Quest", L["Quest objectives"],
-			L["Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\")."]),
-		HideRow("Else", L["Everything else"],
+		L["In CineMode, where and when each kind of tooltip shows; the rest of the time it's hidden. Something " ..
+		"that's more than one kind (a quest mob is an enemy too) shows while any of its kinds does."])
+	local tooltipRows = { opts = { quiet = true, cam = true, anyFight = true } }
+	for _, kind in ipairs({
+		{ "Enemy", L["Enemies"], L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems."] },
+		{ "Friendly", L["Friendlies"], L["Players and NPCs you can't attack, and their pets, minions and totems."] },
+		{ "Gather", L["Gatherables (herbs, ore, skinnable)"], L["Herbs, ore and creatures you can skin."] },
+		{ "Quest", L["Quest objectives"],
+			L["Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\")."] },
+		{ "Else", L["Everything else"],
 			L["Objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, " ..
-			"menus and the rest."]),
-	}, {
-		{ key = "Always", heading = L["Always"] },
-		{ key = "Combat", heading = L["In combat"], enabled = function(db, row) return not db[row.keys.Always] end },
-	})
+			"menus and the rest."] },
+	}) do
+		local alwaysKey = "tooltipAlways" .. kind[1]
+		tooltipRows[#tooltipRows + 1] = { key = "tooltip:" .. kind[1], label = kind[2], tip = kind[3],
+			alwaysKey = alwaysKey,
+			alwaysOn = function() return ns.GetDB()[alwaysKey] end,
+			setAlways = function(value) ns.GetDB()[alwaysKey] = value end,
+			alwaysTip = L["These tooltips show all through CineMode. (The other columns then have nothing to add.)"] }
+	end
+	previous = ShowTable(content, hideNote, tooltipRows, L["Tooltips"])
+	previous.sectionX = 0
 
 	-- Tooltip look: where tooltips show (tooltipCursorMode, with the page
 	-- switched off too), how long until the After column, then a grid of
@@ -8490,20 +8681,19 @@ local function CreateExtrasPanel()
 	box:SetSize(640, 1)
 	stack:Add(box, "label")
 
-	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT, INDENT = THIRD_PARTY_LABEL_WIDTH, THIRD_PARTY_COLUMN_WIDTH, 24, 18
+	local LABEL_WIDTH, ROW_HEIGHT, INDENT = THIRD_PARTY_LABEL_WIDTH, 24, 18
 	local COLUMNS = THIRD_PARTY_COLUMNS
-	local headings = {}
-	for c, column in ipairs(COLUMNS) do
-		headings[c] = FrameHeading(box, column[1])
-	end
-	local rolesHeading = ROLES_MENU and FrameHeading(box, L["Role"]) -- (over the rows' roles buttons)
+	-- The columns' headings, placed by Layout over the first open section's rows.
+	local headings = CreateFrame("Frame", nil, box)
+	headings:SetSize(LABEL_WIDTH + ns.GridWidth(THIRD_PARTY_LAYOUT), FRAME_HEADING_HEIGHT)
+	ns.GridHeadings(ns.GRID_KIT, headings, headings, LABEL_WIDTH, THIRD_PARTY_LAYOUT)
 
 	-- A row per installed addon: CineMode (ticked: left alone, so shown), then
 	-- the Standard Frames page's columns. Made once, placed by Layout. (The
 	-- ticks belong to the page itself, for its Reset.)
 	local rows = {}
 	local function MakeRow(known)
-		local row = { known = known, checks = {} }
+		local row = { known = known }
 		row.label = Label(box, "GameFontHighlight", known.short or known.label)
 		row.label:SetWidth(LABEL_WIDTH - INDENT)
 		row.label:SetJustifyH("LEFT")
@@ -8514,33 +8704,31 @@ local function CreateExtrasPanel()
 		end
 		local item = "addon:" .. known.key
 		RuleTarget(item, known.label, "Supported addons")
-		for c, column in ipairs(COLUMNS) do
-			local check
-			if c == 1 then
-				check = Check(content, nil, "", (L["Show %s the whole time in CineMode (Cinematic leaves them " ..
-					"alone). Unticked, they're hidden, except as the other columns say.%s"]):format(known.about,
-					known.note and " " .. known.note or ""), function(value)
-					ns.SetAddonFramesOn(known.key, not value)
-					Refresh() -- (greys the other columns)
-				end)
-				check.Refresh = function(self)
-					self:SetChecked(not ns.IsAddonFramesOn(known.key))
-				end
-			else
-				local isOn, tableKey, needsStay = column[2], column[3], column[4]
-				check = Check(content, tableKey, "", column[5], function(value)
-					ns.GetDB()[tableKey][item] = value
-				end)
-				RecordRow(content, tableKey, item)
-				check.Refresh = function(self)
-					self:SetChecked(isOn(item))
-					self:SetEnabled(ns.IsAddonFramesOn(known.key) and not ns.RuleTest(item)
-						and (not needsStay or ns.GetDB().stayInCombat))
-				end
-			end
-			row.checks[c] = check
+		ns.GRID_RULE_KEYS[item] = true -- (its rule's edited on its row: not in the Rules section)
+		-- (For the page's Reset: just its rows of the shared lists.)
+		for c = 2, #COLUMNS do
+			RecordKey(content, COLUMNS[c][3])
+			RecordRow(content, COLUMNS[c][3], item)
 		end
-		row.roles = RolesButton(box, content, item)
+		for _, list in ipairs({ "calmShow", "tankHide", "healerHide", "damageHide" }) do
+			RecordKey(content, list)
+			RecordRow(content, list, item)
+		end
+		-- Always: the addon's frames left alone (its switch off), greying the rest.
+		local function Key() return item end
+		local function SetAlways(value) ns.SetAddonFramesOn(known.key, not value) end
+		local parts = ns.ListRowParts(Key, COLUMNS, nil, SetAlways)
+		row.grid = ns.GridRow(ns.GRID_KIT, box, LABEL_WIDTH, THIRD_PARTY_LAYOUT, {
+			band = 1, dot = true,
+			always = { isOn = function() return not ns.IsAddonFramesOn(known.key) end, set = SetAlways,
+				tip = (L["Show %s the whole time in CineMode (Cinematic leaves them " ..
+				"alone). Unticked, they're hidden, except as the other columns say.%s"]):format(known.about,
+				known.note and " " .. known.note or "") },
+			menus = parts.menus,
+			roles = { key = Key },
+			rule = { key = Key, label = function() return known.label end, grid = parts.grid,
+				words = parts.words, apply = parts.apply },
+		})
 		return row
 	end
 	for _, known in ipairs(ns.ADDON_FRAMES) do
@@ -8556,7 +8744,7 @@ local function CreateExtrasPanel()
 		if ns.AddOnInstalled(note.addon) then
 			local row = { note = note }
 			row.frame = CreateFrame("Frame", nil, box)
-			row.frame:SetSize(LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH, ROW_HEIGHT)
+			row.frame:SetSize(LABEL_WIDTH + ns.GridWidth(THIRD_PARTY_LAYOUT), ROW_HEIGHT)
 			row.label = Label(row.frame, "GameFontHighlight", "")
 			row.label:SetPoint("TOPLEFT", 0, -5)
 			row.label:SetWidth(LABEL_WIDTH - INDENT)
@@ -8636,13 +8824,12 @@ local function CreateExtrasPanel()
 		end
 		for _, holder in pairs(sectionBands) do holder:Hide() end
 		for _, header in pairs(suiteHeaders) do header:Hide() end
-		for _, heading in ipairs(headings) do heading:Hide() end
-		if rolesHeading then rolesHeading:Hide() end
+		headings:Hide()
 		for _, row in ipairs(rows) do
 			row.label:Hide()
-			for _, check in ipairs(row.checks) do check:Hide() end
-			if row.roles then row.roles:Hide() end
+			row.grid:Hide()
 		end
+		local band = 0
 		for _, row in ipairs(notes) do row.frame:Hide() end
 
 		local function PlaceRow(row, indent)
@@ -8650,17 +8837,11 @@ local function CreateExtrasPanel()
 			row.label:ClearAllPoints()
 			row.label:SetPoint("TOPLEFT", box, "TOPLEFT", indent, -y - 5)
 			row.label:Show()
-			for c, check in ipairs(row.checks) do
-				check:ClearAllPoints()
-				check:SetPoint("TOPLEFT", box, "TOPLEFT",
-					LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, -y)
-				check:Show()
-			end
-			if row.roles then
-				row.roles:ClearAllPoints()
-				row.roles:SetPoint("TOPLEFT", box, "TOPLEFT", LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH - 6, -y - 2)
-				row.roles:Show()
-			end
+			band = band + 1
+			row.grid:SetBand(band)
+			row.grid:ClearAllPoints()
+			row.grid:SetPoint("TOPLEFT", box, "TOPLEFT", LABEL_WIDTH, -y)
+			row.grid:Show()
 			y = y + ROW_HEIGHT
 		end
 
@@ -8693,11 +8874,7 @@ local function CreateExtrasPanel()
 			end
 			if #list > 0 and not headingsPlaced then
 				headingsPlaced = true
-				for c, heading in ipairs(headings) do
-					Place(heading, LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, 0)
-				end
-				if rolesHeading then Place(rolesHeading, LABEL_WIDTH + #COLUMNS * COLUMN_WIDTH - 6, 0) end
-				y = y + FRAME_HEADING_HEIGHT + 4
+				Place(headings, 0, FRAME_HEADING_HEIGHT + 4)
 			end
 			-- (Texts read now: they're translated once the language is known.)
 			for _, row in ipairs(noteList) do
@@ -8768,7 +8945,7 @@ local function CreateExtrasPanel()
 		"The columns work as for the supported addons above; the X takes a frame off the list."])
 
 	-- Add mode (/cine add mode): pick up frames by hovering, then fade them all.
-	local addMode = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+	local addMode = ns.PanelButton(content)
 	addMode:SetSize(180, 22)
 	addMode:SetPoint("TOPLEFT", content.help, "BOTTOMLEFT", 0, -10)
 	Tooltip(addMode, L["Hover over the frames you want to fade (move this window out of the way, " ..
@@ -8787,19 +8964,13 @@ local function CreateExtrasPanel()
 	turn:SetDuration(1)
 	spin:SetLooping("REPEAT")
 
-	-- Tinted green while it's on. (The button's art is three pieces on some
-	-- clients, one texture on others.)
+	-- Tinted green while it's on, in either menu look.
 	local function ShowAddMode()
 		local on = ns.IsAddModeOn()
 		spinner:SetShown(on)
 		if on then spin:Play() else spin:Stop() end
 		addMode:SetText(on and L["Stop"] or L["Pick frames by hovering"])
-		local r, g, b = 1, 1, 1
-		if on then r, g, b = 0.3, 1, 0.3 end
-		for _, art in ipairs({ addMode.Left or false, addMode.Middle or false, addMode.Right or false,
-			addMode:GetNormalTexture() or false, addMode:GetPushedTexture() or false }) do
-			if art and art.SetVertexColor then art:SetVertexColor(r, g, b) end
-		end
+		if on then addMode:SetSkinTint(0.3, 1, 0.3) else addMode:SetSkinTint(nil) end
 	end
 	content.addMode = addMode
 	ShowAddMode()
@@ -8860,7 +9031,7 @@ local KEYBINDS = {
 			"and the wheel stays up for you to click one."] },
 	{ action = "CLICK CinematicWorldMarkerWheelButton:LeftButton", label = L["Ground marker wheel"],
 		show = function() return ns.hasWorldMarkerWheel end,
-		tip = L["Hold to bring up a wheel of the ground markers (the coloured lights you drop on the floor): " ..
+		tip = L["Hold to bring up a wheel of the ground markers (the colored lights you drop on the floor): " ..
 			"point at one and let go, and it drops under the cursor. Picking one that's down moves it; Clear " ..
 			"all takes them all up. Tap it instead and the wheel stays up for you to click one. Only in a group."] },
 	{ action = "CLICK CinematicVisionWheelButton:LeftButton", label = L["Vision wheel"],
@@ -8988,7 +9159,7 @@ local function WithModifiers(key)
 end
 
 local function CreateKeybindButton(parent, action, slot)
-	local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+	local button = ns.PanelButton(parent)
 	button:SetSize(140, 22)
 	button.action, button.slot = action, slot
 	button:RegisterForClicks("AnyUp")
@@ -9302,7 +9473,7 @@ local function CreateProfilesPanel()
 		"active profile and stay with it. The built-in ones keep your changes too, until you reset them. " ..
 		"New profile starts one of your own from the settings you have now. Every character uses " ..
 		"the same profile unless you tick the box below for one. Not part of a profile: the minimap button, frames you added or stopped fading, " ..
-		"and the zone and time tint colours you picked."])
+		"and the zone and time tint colors you picked."])
 
 	-- Ticked, this character keeps the one it's on as its own.
 	local perChar = Check(content, nil, L["Use a profile just for this character"],
@@ -9392,7 +9563,7 @@ local function CreateProfilesPanel()
 	local buttons = CreateFrame("Frame", nil, content)
 	buttons:SetSize(540, 22)
 	local function Button(text, width, tip, onClick)
-		local button = CreateFrame("Button", nil, buttons, "UIPanelButtonTemplate")
+		local button = ns.PanelButton(buttons)
 		button:SetSize(width, 22)
 		button:SetText(text)
 		Tooltip(button, tip)
@@ -9462,7 +9633,7 @@ local function CreateProfilesPanel()
 				"each time you log in, on any character using it. Pick another layout in Edit Mode itself and " ..
 				"the profile takes that one. Your own: Cinematic leaves the layout to you."])
 			-- (Cinematic's own layouts only: they're made from the addon's code.)
-			local regenerate = CreateFrame("Button", nil, layoutRow, "UIPanelButtonTemplate")
+			local regenerate = ns.PanelButton(layoutRow)
 			regenerate:SetSize(110, 22)
 			regenerate:SetText(L["Regenerate"])
 			regenerate:SetPoint("LEFT", layoutMenu, "RIGHT", 8, 0)
@@ -9821,7 +9992,7 @@ local function CreateMouseoverPanel()
 		return SectionState.Saved(GroupSection(group).id, false)
 	end
 
-	local newGroup = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+	local newGroup = ns.PanelButton(content)
 	newGroup:SetSize(120, 22)
 	newGroup:SetText(L["New group"])
 	newGroup:SetScript("OnClick", function()
@@ -9889,7 +10060,7 @@ local function CreateMouseoverPanel()
 	local function MemberRow()
 		local frame = CreateFrame("Frame", nil, content)
 		frame:SetSize(WIDTH - 10, ROW)
-		frame.remove = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+		frame.remove = ns.SkinClose(CreateFrame("Button", nil, frame, "UIPanelCloseButton"))
 		frame.remove:SetSize(22, 22)
 		frame.remove:SetPoint("LEFT", 0, 0)
 		Tooltip(frame.remove, L["Take it out of this group."])
@@ -9904,7 +10075,7 @@ local function CreateMouseoverPanel()
 	-- events set, the events that bring the group up.
 	local function AddBox(kind, hint, index, events)
 		local add = Take(kind, function()
-			local box = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+			local box = ns.SkinEditBox(CreateFrame("EditBox", nil, content, "InputBoxTemplate"))
 			box:SetSize(260, 20)
 			box:SetAutoFocus(false)
 			box.hint = Label(box, "GameFontDisable", hint)
@@ -10039,7 +10210,7 @@ local function CreateMouseoverPanel()
 			icon:SetScript("OnClick", function(self) ShowPicker(self, index) end)
 
 			local nameBox = Take("name", function()
-				local box = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+				local box = ns.SkinEditBox(CreateFrame("EditBox", nil, content, "InputBoxTemplate"))
 				box:SetSize(170, 20)
 				box:SetAutoFocus(false)
 				box:SetFontObject("GameFontNormal")
@@ -10065,7 +10236,7 @@ local function CreateMouseoverPanel()
 			-- When it works: any time, or only out of fights or in them (click
 			-- for the next). (when: nil, "calm" or "combat".)
 			local when = Take("when", function()
-				local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+				local button = ns.PanelButton(content)
 				button:SetSize(140, 22)
 				Tooltip(button, L["When this group works: any time, only out of combat or only in combat. " ..
 					"Click to change. The rest of the time its frames come up on their own (or with their other " ..
@@ -10084,7 +10255,7 @@ local function CreateMouseoverPanel()
 
 			-- On or off: an off group is kept, but does nothing. (off: nil or true.)
 			local onOff = Take("onOff", function()
-				local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+				local button = ns.PanelButton(content)
 				button:SetSize(80, 22)
 				Tooltip(button, L["Turns this group on or off. While it's off it's kept as it is, but its frames " ..
 					"come up on their own (or with their other groups), and its events don't bring it up."])
@@ -10102,7 +10273,7 @@ local function CreateMouseoverPanel()
 			icon.icon:SetDesaturated(group.off and true or false)
 
 			local delete = Take("delete", function()
-				local button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+				local button = ns.PanelButton(content)
 				button:SetSize(100, 22)
 				button:SetText(L["Delete group"])
 				Tooltip(button, L["Its frames come up on their own again (or with their other groups)."])
@@ -10300,6 +10471,9 @@ ns.OnLanguage(function()
 	if ns.HasUnitFrameParts and ns.HasUnitFrameParts() then -- (nothing else on it)
 		CreatePortraitsPanel()
 	end
+	if ns.CreatePersonalResourcesPanel then -- (PersonalResources.lua)
+		ns.CreatePersonalResourcesPanel(ns.lowHealthKit)
+	end
 	-- WoW Forever's gamepad mode (retail's has no frames of its own).
 	if C_GamePad and not ns.isRetail then
 		CreateGamepadPanel()
@@ -10337,6 +10511,8 @@ ns.OnLanguage(function()
 	CreateEffectsPanel()
 	CreateTintPanel()
 	CreateGraphicsPanel()
+	-- (its hub, Style, listed after Visual Effects)
+	CreateTargetArrowPanel()
 	CreateAudioPanel()
 	CreateCameraPanel()
 	CreateEventsPanel()
@@ -10349,7 +10525,7 @@ ns.OnLanguage(function()
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
 	end
 	-- The dev build's own pages, at the very end (ProfileBuilder.lua, Layouts.lua,
-	-- and the Name Style page here).
+	-- and the Style hub's Names page here).
 	if ns.isDev then
 		CreateNameStylePanel()
 	end
@@ -10357,13 +10533,13 @@ ns.OnLanguage(function()
 		ns.CreateProfileBuilder({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
 	end
+	if ns.isDev and ns.CreateProfilesDemo then
+		ns.CreateProfilesDemo({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
+			RegisterSubpage = RegisterSubpage })
+	end
 	if ns.isDev and ns.CreateGridDemo then
 		ns.CreateGridDemo({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
-	end
-	if ns.isDev and ns.CreateLayoutPanel and C_EditMode and C_EditMode.GetLayouts then
-		ns.CreateLayoutPanel({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
-			RegisterSubpage = RegisterSubpage })
 	end
 	GuardGamepadClose()
 end)

@@ -47,7 +47,6 @@ local DEFAULTS = {
 	tooltipHideInDeath = true,  -- the death camera
 	tooltipHideInQuest = false, -- the quest camera
 	hideCombatText = false,   -- no floating combat text (heals, regen) in cinematic mode out of combat (after the Calm Timer)
-	hideTargetCircle = false, -- no circle on the ground under your target in cinematic mode out of combat (after the Calm Timer)
 	hideErrorsInCombat = false,    -- no red error text ("Target not in line of sight") in fights (and the Calm Timer after)
 	hideErrorsOutOfCombat = false, -- nor out of them (CineMode or not, either)
 	hideWorldText = false,    -- no floating world text at all (XP gained, damage and healing numbers): a blank font, from the next game start
@@ -137,7 +136,7 @@ local DEFAULTS = {
 	trackingOffInRaids = true,
 	trackingOffInPvP = true,
 	stayInCombat = true,  -- stay cinematic in combat and when targeting enemies
-	combatShowCalm = false, -- Standard Frames' In combat rows stay up until the Calm Timer runs out after a fight
+	combatShowCalm = false, -- Standard Frames' In combat rows stay up until the Calm Timer runs out after a fight (a row's own calmShow tick wins)
 	fadeInOnHostileCast = true, -- ...and fade in over a cast at an enemy, out of combat (the pull)
 	revealOnCast = false,   -- casting or channeling brings the UI back
 	revealAtNPCs = false,     -- vendor/bank/mail/trainer/trade/auction windows bring the UI back
@@ -632,8 +631,15 @@ DEFAULTS.plateInstanceFriendlyMinions = "hide"
 DEFAULTS.plateInstanceFriendlyNPCs = "target"
 -- And your target's plate, shown everywhere whatever its own row says.
 DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the game's own options decide)
+-- The Target Arrow row's look (the Style hub's Target Arrow page; see PlateParts).
+DEFAULTS.targetArrowStyle = "arrow" -- "arrow", "chevron" (over the plate), "glow" (behind its bar) or "brackets"
+DEFAULTS.targetArrowColor = "gold" -- "gold", "reaction" (red, yellow, green), "class" (players; else reaction) or "custom"
+DEFAULTS.targetArrowR, DEFAULTS.targetArrowG, DEFAULTS.targetArrowB = 1, 0.82, 0 -- the custom color
+DEFAULTS.targetArrowSize = 1 -- times its own
+DEFAULTS.targetArrowY = 0 -- the arrow and chevron: up from just over the name
+DEFAULTS.targetArrowBob = true -- the arrow and chevron bob, the brackets close in, the glow pulses
 -- Names on plates showing just their name (CineMode), drawn like the game's
--- names over heads (Nameplates page's tick, the Name Style page; see PlateParts).
+-- names over heads (Nameplates page's tick, the Style hub's Names page; see PlateParts).
 DEFAULTS.plateNameStyle = true
 DEFAULTS.plateNameColour = true -- red hostile, yellow neutral, green friendly
 DEFAULTS.plateNameFriends = "blue" -- friendly players: "blue" (as over their heads), "class" (as their plates' bars) or "white"
@@ -662,6 +668,24 @@ DEFAULTS.targetQuestIcon = true -- a quest icon on the target frame while your t
 -- The nearest tracked quest's item to use on a big button at the extra ability button's spot (see QuestItemButton)
 DEFAULTS.questItemButton = true
 DEFAULTS.questObjectGlow = true -- the quest object soft targeting picks glows (see QuestGlow; changes interact settings)
+-- Talking to an NPC: their words in a bubble over them, the replies in a list,
+-- instead of the game's gossip and quest windows (see QuestTalk).
+DEFAULTS.questTalk = true
+DEFAULTS.questTalkStyle = "parchment" -- or "bubble" (the game's chat bubble)
+-- Where the bubble goes: "head" (over their nameplate), "fixed" (where you
+-- drag it) or "opposite" (across the screen from where you clicked them).
+DEFAULTS.questTalkPlace = "head"
+DEFAULTS.questTalkGameButton = true -- "Show the game's window" on the card
+DEFAULTS.questTalkMiddle = 0.1         -- Opposite Clicked: clicks this share of the screen's width round its middle count as the middle
+DEFAULTS.questTalkStill = true -- Over the head: the quest camera holds still (no drift) while it's up
+DEFAULTS.questTalkKeys = true         -- 1-0 pick, Space turns the page / first button
+DEFAULTS.questTalkScale = 1
+DEFAULTS.questTalkTopGap = 0.03       -- the bubble kept this share of the screen down from its top (and the bar)
+DEFAULTS.questTalkLines = 7          -- the bubble's height, in lines of its words
+DEFAULTS.questTalkCardSide = "side" -- the quest card beside the bubble: "below", "side" (Opposite Clicked: its outer side, else the right), "right" or "left"
+DEFAULTS.questTalkCardSame = false   -- the card on the bubble's background
+DEFAULTS.questTalkPortrait = true -- the NPC's portrait on the bubble's corner
+DEFAULTS.questTalkListY = 0.46 -- the list's top edge up the screen, till it's dragged
 DEFAULTS.duelPlates = true -- in CineMode, the nameplates of two players dueling near you show (see Effects)
 DEFAULTS.minimapVisions = true -- the minimap button glows and lists the visions in use (see MinimapButton)
 DEFAULTS.handleCooldowns = true -- the Cooldown Manager page's master switch (off: left alone)
@@ -699,14 +723,38 @@ DEFAULTS.handleSwing = true -- Swing timer
 -- The development copy (the CinematicDev folder), for features not ready to
 -- ship: they show only there.
 ns.isDev = ADDON_NAME == "CinematicDev"
+-- Whether Forever's Character Models setting is on Standard Definition (its
+-- Settings proxy is true then; not a CVar). nil on clients without it.
+function ns.StandardModels()
+	local ok, value = pcall(function()
+		local setting = Settings.GetSetting("PROXY_CHARACTER_MODELS_TOGGLE")
+		return setting and setting:GetValue()
+	end)
+	if ok and type(value) == "boolean" then return value end
+end
+-- The look of Cinematic's settings pages, "HD" (flat) or "SD" (the game's
+-- own buttons and windows): CinematicDB.menuSkin, for the account, or Auto
+-- (ns.AutoMenuSkin): HD on retail, as the Character Models setting is on
+-- Forever, and SD on classic (Skin.lua).
+function ns.AutoMenuSkin()
+	if ns.isRetail then return "HD" end
+	local standard = ns.StandardModels()
+	if standard ~= nil then return standard and "SD" or "HD" end
+	return "SD"
+end
+function ns.MenuSkin()
+	local chosen = CinematicDB and CinematicDB.menuSkin
+	if chosen == "HD" or chosen == "SD" then return chosen end
+	return ns.AutoMenuSkin()
+end
 -- Heal Vision (CineMode page, HealVisionFrames.lua): the game's party and raid
 -- frames show the tanks always, and everyone else only while hurt. Its row of
 -- the Vision grid: healVision is Always, healVisionIn<where> (ns.VISION_WHERE:
 -- the open world, capital cities included, dungeons and scenarios, raids, and
 -- battlegrounds and arenas), healVisionInParty and healVisionInRaid (in one,
 -- wherever you are; not healVisionInRaids, the place). All off to start with.
-ns.VISION_WHERE = { "World", "Dungeons", "Raids", "BGs" }
-local VISION_PLACE = { dungeon = "Dungeons", raid = "Raids", pvp = "BGs" }
+ns.VISION_WHERE = { "World", "Cities", "Dungeons", "Raids", "BGs" }
+local VISION_PLACE = { city = "Cities", dungeon = "Dungeons", raid = "Raids", pvp = "BGs" }
 DEFAULTS.healVision = false
 -- (Damage and the rest, tanks, healers and pets: each kind has its health and opacity.)
 DEFAULTS.healVisionMinAlpha = 0.05 -- how much of the members it hides still shows (0-1)
@@ -725,9 +773,16 @@ DEFAULTS.healVisionDispel = true -- so do members with a debuff you can dispel
 DEFAULTS.healVisionAnyDebuff = false -- or with any debuff
 do
 	local HEAL_VISION_KEYS = { "healVision" }
-	for _, column in ipairs({ "World", "Dungeons", "Raids", "BGs", "Party", "Raid" }) do
+	for _, column in ipairs({ "World", "Cities", "Dungeons", "Raids", "BGs", "Party", "Raid" }) do
 		DEFAULTS["healVisionIn" .. column] = false
 		HEAL_VISION_KEYS[#HEAL_VISION_KEYS + 1] = "healVisionIn" .. column
+	end
+	-- Its Combat and Target dropdowns, as the Standard Frames page's: on in
+	-- fights (and, with healVisionCalm, for the Calm Timer after), and while
+	-- you have an enemy targeted, or anything else.
+	for _, key in ipairs({ "healVisionInCombat", "healVisionCalm", "healVisionTargetEnemy", "healVisionTargetFriendly" }) do
+		DEFAULTS[key] = false
+		HEAL_VISION_KEYS[#HEAL_VISION_KEYS + 1] = key
 	end
 
 	-- Your role ("TANK", "HEALER" or "DAMAGER"): your specialization's, or
@@ -767,7 +822,19 @@ do
 			or role == "DAMAGER" and "damageHide"
 		if list and ns.RoleHidden(db, list, "healVision") then return false end
 		if db.handleHealVision == false then return false end -- (its page's switch)
+		-- (Its rule, edited on its row, decides instead of its ticks.)
+		local facts = ns.RuleFactsNow and ns.RuleFactsNow()
+		local rule = facts and ns.RuleShows("healVision", facts)
+		if rule ~= nil then return rule end
 		if db.healVision or db["healVisionIn" .. (VISION_PLACE[ns.GetPlaceType()] or "World")] then return true end
+		if facts then
+			local fighting = facts.combat
+			if (db.healVisionInCombat and fighting) or (db.healVisionCalm and facts.calm) then return true end
+			if not fighting and ((db.healVisionTargetEnemy and facts.enemy)
+				or (db.healVisionTargetFriendly and facts.friendly)) then
+				return true
+			end
+		end
 		if IsInRaid() then return db.healVisionInRaid end
 		return IsInGroup() and db.healVisionInParty
 	end
@@ -915,12 +982,13 @@ DEFAULTS.unitPartsFocusToT = true -- the focus's target of target frame shows at
 DEFAULTS.raidStylePartySame = true
 -- And rows of our own: a class icon by friendly and by enemy players' health
 -- bars (as Duel Vision shows), and a role icon by group members' (tank,
--- healer, damage), and a quest icon by quest mobs' (see QuestMobs). Off
--- everywhere to start with, except enemy class icons, tank and healer role
--- icons and quest icons: shown always.
+-- healer, damage), and a quest icon by quest mobs' (see QuestMobs), and an
+-- arrow over your target's. Off everywhere to start with, except enemy class
+-- icons, tank and healer role icons and quest icons: shown always.
 ns.PLATE_CLASS_PARTS = { "ClassFriendly", "ClassEnemy" }
 ns.PLATE_ROLE_PARTS = { "RoleTank", "RoleHealer", "RoleDamager" }
-ns.PLATE_ICON_PARTS = { "ClassFriendly", "ClassEnemy", "RoleTank", "RoleHealer", "RoleDamager", "QuestIcon" }
+ns.PLATE_ICON_PARTS = { "ClassFriendly", "ClassEnemy", "RoleTank", "RoleHealer", "RoleDamager", "QuestIcon",
+	"TargetArrow" }
 ns.PLATE_ICONS_ALWAYS = { "ClassEnemy", "RoleTank", "RoleHealer", "QuestIcon" }
 for _, part in ipairs(ns.PLATE_ICON_PARTS) do
 	for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup" }) do
@@ -964,6 +1032,246 @@ for _, key in ipairs({ "Self", "HostileNPCs", "NeutralNPCs", "FriendlyNPCs", "Cr
 	"Enemies", "EnemyMinions", "Guild" }) do
 	DEFAULTS["nameGroup" .. key] = false
 	DEFAULTS["nameAlways" .. key] = false
+end
+-- Both grids' Target dropdown: the row stays up out of fights while you have
+-- an enemy targeted (plateTargetEnemy<row>, nameTargetEnemy<row>), or anything
+-- else (...Friendly), as the Standard Frames page's Target columns. Off for
+-- every row (each has a plateAlways or nameAlways by now).
+do
+	local rows = {}
+	for key in pairs(DEFAULTS) do
+		local plate, name = key:match("^plateAlways(.+)"), key:match("^nameAlways(.+)")
+		if plate then rows[#rows + 1] = "plateTarget%s" .. plate end
+		if name then rows[#rows + 1] = "nameTarget%s" .. name end
+	end
+	for _, row in ipairs(rows) do
+		DEFAULTS[row:format("Enemy")], DEFAULTS[row:format("Friendly")] = false, false
+	end
+end
+-- Both grids' Cities (capital cities, apart from the open world now:
+-- plateInCities<row>, nameInCities<row>): as the row's open world to start with.
+do
+	local cities = {}
+	for key, value in pairs(DEFAULTS) do
+		local plate, name = key:match("^plateCinematic(.+)"), key:match("^nameKeep(.+)")
+		if plate then cities["plateInCities" .. plate] = value end
+		if name then cities["nameInCities" .. name] = value end
+	end
+	for key, value in pairs(cities) do DEFAULTS[key] = value end
+end
+-- The grids that turned things off (Chat bubbles' Hide in, Tooltips' Hide
+-- tooltips, Visual Effects' and Camera Modes' Turn off in, Audio's Stop
+-- Music) are Show in rows now, as the frames tables' (GridRows.lua): each a
+-- key in the frames tables' lists, on where ns.RowOnNow says, with an Always
+-- of its own. Their old settings (offAlways, the places, in combat, outside
+-- camera modes) go over by ns.ConvertOffGrids: as ticks where they can be,
+-- else a rule; and their defaults are worked out the same way from the old
+-- defaults (kept in OLD_GRID_DEFAULTS: they're settings no more).
+-- calm: off in combat meant till the Calm Timer had run out too (Out of
+-- combat alone; without, Out of combat and Calm Timer). music: its places
+-- were its own (Cities, Dungeons, Raids, PvP).
+ns.LIST_DEFAULTS = {}
+for _, list in ipairs({ "combatShow", "calmShow", "quietShow", "camShow", "worldShow", "cityShow", "bgShow",
+	"instanceShow", "groupShow", "enemyShow", "friendlyShow" }) do
+	ns.LIST_DEFAULTS[list] = {}
+end
+do
+	local OFF_GRID_ROWS, OLD_GRID_DEFAULTS = {}, {}
+
+	-- (An old setting's default; for an effect's switch, still a setting, its own.)
+	local SetUp
+	function ns.OldGridDefault(key)
+		SetUp()
+		local value = OLD_GRID_DEFAULTS[key]
+		if value == nil then value = DEFAULTS[key] end
+		return value
+	end
+
+	-- Each place's list and rule word.
+	local PLACE_LIST = { World = "worldShow", Cities = "cityShow", Instances = "instanceShow", BGs = "bgShow" }
+	local PLACE_WORD = { World = "world", Cities = "city", Instances = "instance", BGs = "bg" }
+	local ROW_LISTS = { "worldShow", "cityShow", "instanceShow", "bgShow", "quietShow", "camShow" }
+
+	-- A row's old settings (Old(key): true or false) as its new ones: always,
+	-- lists (list -> true or false) and a rule, when ticks can't say it.
+	local function ConvertRow(row, Old)
+		local result = { lists = {} }
+		for _, list in ipairs(ROW_LISTS) do result.lists[list] = false end
+		result.lists.calmShow = false
+		if (row.offAlways and Old(row.offAlways)) or (row.switch and not Old(row.switch)) then
+			result.always = false
+			return result
+		end
+		-- Where it shows: the places not off, as words; ticks unless a word isn't one.
+		local words, anyOff, needsRule = {}, false, false
+		if row.music then
+			local off = {}
+			for _, where in ipairs({ "Cities", "Dungeons", "Raids", "PvP" }) do off[where] = Old("musicOffIn" .. where) end
+			anyOff = off.Cities or off.Dungeons or off.Raids or off.PvP
+			-- (PvP: flagged anywhere but dungeons and raids, and battlegrounds and arenas.)
+			words[#words + 1] = { "World", off.PvP and "(world and not flagged)" or "world" }
+			if not off.Cities then words[#words + 1] = { "Cities", off.PvP and "(city and not flagged)" or "city" } end
+			if not off.PvP then words[#words + 1] = { "BGs", "bg" } end
+			if off.Dungeons == off.Raids then
+				if not off.Dungeons then words[#words + 1] = { "Instances", "instance" } end
+			else
+				words[#words + 1] = { nil, off.Dungeons and "raid" or "dungeon" }
+				needsRule = true
+			end
+			needsRule = needsRule or off.PvP
+		elseif row.places then
+			for _, where in ipairs(ns.CAMERA_OFF_WHERE) do
+				if Old(row.places[where]) then
+					anyOff = true
+				else
+					words[#words + 1] = { where, PLACE_WORD[where] }
+				end
+			end
+		end
+		local combat = row.offCombat and Old(row.offCombat)
+		local cams = row.onlyCams and Old(row.onlyCams)
+		if not anyOff and not combat and not cams then
+			result.always = true
+			return result
+		end
+		result.always = false
+		-- The ticks (all of them, under a rule too: what Reset to grid leaves).
+		if anyOff then
+			for _, word in ipairs(words) do
+				if word[1] then result.lists[PLACE_LIST[word[1]]] = true end
+			end
+		end
+		result.lists.quietShow = combat or false
+		-- (Off just for the fight, back as it ends: the Calm Timer as well.)
+		result.lists.calmShow = combat and not row.calm or false
+		result.lists.camShow = cams or false
+		-- One of them, in words the dropdowns hold: just the ticks. More: a rule.
+		local parts = (anyOff and 1 or 0) + (combat and 1 or 0) + (cams and 1 or 0)
+		if parts > 1 or needsRule then
+			local terms = {}
+			if anyOff then
+				local list = {}
+				for _, word in ipairs(words) do list[#list + 1] = word[2] end
+				terms[#terms + 1] = #list == 0 and "never" or #list == 1 and list[1] or "(" .. table.concat(list, " or ") .. ")"
+			end
+			if combat then terms[#terms + 1] = row.calm and "nocombat" or "(nocombat or calm)" end
+			if cams then terms[#terms + 1] = "camera" end
+			result.rule = table.concat(terms, " and ")
+		end
+		return result
+	end
+
+	-- Made the first time they're needed (as the settings load): by then every
+	-- file's added its own (the Chat camera, ChatCam.lua).
+	local setUp
+	function SetUp()
+		if setUp then return end
+		setUp = true
+		do
+			local function Places(prefix)
+				local places = {}
+				for _, where in ipairs(ns.CAMERA_OFF_WHERE) do places[where] = prefix .. where end
+				return places
+			end
+			for _, kind in ipairs({ "Say", "Party" }) do
+				OFF_GRID_ROWS[#OFF_GRID_ROWS + 1] = { key = "bubble:" .. kind, always = "bubbles" .. kind .. "Always",
+					offAlways = "bubbles" .. kind .. "OffAlways", places = Places("bubbles" .. kind .. "OffIn") }
+			end
+			for _, kind in ipairs({ "Enemy", "Friendly", "Gather", "Quest", "Else" }) do
+				OFF_GRID_ROWS[#OFF_GRID_ROWS + 1] = { key = "tooltip:" .. kind, always = "tooltipAlways" .. kind,
+					offAlways = "tooltipHide" .. kind, offCombat = "tooltipHideCombat" .. kind }
+			end
+			-- (The letterbox, vignette and weather: off altogether by their own
+			-- switches, which stay, kept on while their rows show anywhere.)
+			local SWITCHES = { letterbox = "letterbox", vignette = "vignette", weather = "weatherTint" }
+			for _, effect in ipairs(ns.EFFECT_GRID) do
+				OFF_GRID_ROWS[#OFF_GRID_ROWS + 1] = { key = "effect:" .. effect, always = effect .. "Always",
+					offAlways = effect .. "OffAlways", switch = SWITCHES[effect], places = Places(effect .. "OffIn"),
+					offCombat = effect .. "OffInCombat", onlyCams = effect .. "OnlyInCameras", calm = true }
+			end
+			ns.EFFECT_SWITCHES = SWITCHES
+			OFF_GRID_ROWS[#OFF_GRID_ROWS + 1] = { key = "music", always = "musicAlways", music = true,
+				offCombat = "musicOffInCombat", calm = true }
+			for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
+				OFF_GRID_ROWS[#OFF_GRID_ROWS + 1] = { key = "cam:" .. cam[1], always = "camAlways" .. cam[1],
+					places = Places(cam[1] .. "OffIn") }
+			end
+			for _, row in ipairs(OFF_GRID_ROWS) do
+				row.old = {}
+				for _, field in ipairs({ "offAlways", "offCombat", "onlyCams" }) do
+					if row[field] then row.old[#row.old + 1] = row[field] end
+				end
+				for _, key in pairs(row.places or {}) do row.old[#row.old + 1] = key end
+				if row.music then
+					for _, where in ipairs({ "Cities", "Dungeons", "Raids", "PvP" }) do row.old[#row.old + 1] = "musicOffIn" .. where end
+				end
+			end
+		end
+		ns.OFF_GRID_ROWS = OFF_GRID_ROWS
+		-- The old settings' defaults, out of DEFAULTS (not settings now).
+		for _, row in ipairs(OFF_GRID_ROWS) do
+			for _, key in ipairs(row.old) do
+				OLD_GRID_DEFAULTS[key] = DEFAULTS[key]
+				DEFAULTS[key] = nil
+			end
+		end
+		-- The defaults: the old defaults, gone over.
+		for _, row in ipairs(OFF_GRID_ROWS) do
+			local result = ConvertRow(row, function(key) return ns.OldGridDefault(key) and true or false end)
+			DEFAULTS[row.always] = result.always
+			for list, value in pairs(result.lists) do ns.LIST_DEFAULTS[list][row.key] = value end
+			if result.rule then
+				-- (No default needs a rule: if one did, its ticks would stand in for it.)
+				geterrorhandler()("Cinematic: " .. row.key .. "'s default would need a rule: " .. result.rule)
+			end
+		end
+
+	end
+	ns.SetUpOffGrids = SetUp
+
+	-- Goes over t's old grid settings (each row that has one, or every row with
+	-- opts.all), writing its new ones into t and taking the old out. fallback(key):
+	-- an old setting t hasn't (a built-in's, or the default). opts.listBase: the
+	-- lists a list t hasn't yet starts from (a saved profile's: its built-in's);
+	-- opts.compare: new settings the same as these aren't written (they're the
+	-- profile's own already); opts.switches: an effect switched off counts as an
+	-- old setting too (a saved profile's: the live ones keep their switches).
+	function ns.ConvertOffGrids(t, fallback, opts)
+		SetUp()
+		opts = opts or {}
+		local function List(name)
+			local list = t[name]
+			if type(list) ~= "table" or rawequal(list, DEFAULTS[name]) then
+				local from = type(list) == "table" and list or (opts.listBase and opts.listBase[name])
+				list = {}
+				for key, value in pairs(type(from) == "table" and from or {}) do list[key] = value end
+				t[name] = list
+			end
+			return list
+		end
+		for _, row in ipairs(OFF_GRID_ROWS) do
+			local present = opts.all or (opts.switches and row.switch and t[row.switch] == false)
+			for _, key in ipairs(row.old) do
+				if t[key] ~= nil then present = true end
+			end
+			if present then
+				local result = ConvertRow(row, function(key)
+					local value = t[key]
+					if value == nil then value = fallback(key) end
+					return value and true or false
+				end)
+				t[row.always] = result.always
+				if opts.compare and opts.compare[row.always] == result.always then t[row.always] = nil end
+				for list, value in pairs(result.lists) do List(list)[row.key] = value end
+				if result.rule then
+					List("frameRules")[row.key] = result.rule
+				elseif type(t.frameRules) == "table" then
+					t.frameRules[row.key] = nil
+				end
+			end
+			for _, key in ipairs(row.old) do t[key] = nil end
+		end
+	end
 end
 -- Slow zoom settings likewise: idleZoom* for standing still, taxiZoom* for
 -- flights, with the flight defaults copying the standing-still ones.
@@ -1351,17 +1659,14 @@ function ns.PlaceSuffix()
 	return place and PLACE_SUFFIX[place]
 end
 
--- The same for the Nameplates page, whose columns are its own: cities go with
--- the open world, dungeons and raids are one ("Instances"), and battlegrounds
--- and arenas ("BGs") are apart from being flagged elsewhere ("PvP").
+-- The same for the Nameplates page, whose columns are its own: capital
+-- cities ("Cities"), dungeons and raids as one ("Instances"), and
+-- battlegrounds and arenas ("BGs") apart from being flagged elsewhere ("PvP").
 function ns.PlateSuffix()
 	if ns.GetPlaceType() == "pvp" then
 		return "BGs"
 	end
 	local place = ns.GetOptionPlace()
-	if place == "city" then
-		return nil
-	end
 	if place == "dungeon" or place == "raid" then
 		return "Instances"
 	end
@@ -1380,6 +1685,7 @@ function ns.EffectPlace()
 	return CAMERA_OFF_PLACE[ns.GetPlaceType()] or "World"
 end
 local SWITCHED_CAMS = { walk = "walkCamera", run = "runCamera" }
+local CAM_ROWS = {} -- (their Show in rows' keys, made once)
 -- When this auto-walk and auto-run started, for their cameras' delays: noted
 -- every frame by the orbit (ns.NoteTravel), and on first asking.
 ns.travelSince = {}
@@ -1410,20 +1716,17 @@ function ns.IsCameraOffHere(cam)
 			return true
 		end
 	end
-	local place
-	if cam == "flight" and ns.OnTaxi() then
-		place = db.takeoffInCity and "Cities" or "World"
-	else
-		place = CAMERA_OFF_PLACE[ns.GetPlaceType()] or "World"
+	-- Its Show in row (cam:<cam>, Camera Modes page). A flight: where it
+	-- took off, a capital city or the open world, its rule aside.
+	local key = CAM_ROWS[cam] or ("cam:" .. cam)
+	CAM_ROWS[cam] = key
+	if cam == "flight" and ns.OnTaxi() and not ns.RuleTest(key) then
+		if db["camAlways" .. cam] then return false end
+		return not ns.IsPlaceShowOn(db.takeoffInCity and "cityShow" or "worldShow", key)
 	end
-	return db[cam .. "OffIn" .. place] or false
+	return not ns.RowOnNow(key, db["camAlways" .. cam], true)
 end
 ns.IsCameraOffHere = ns.Profiled("IsCameraOffHere", ns.IsCameraOffHere)
-
-function ns.IsMusicBlocked()
-	local place = ns.PlaceSuffix()
-	return place ~= nil and ns.db["musicOffIn" .. place] or false
-end
 
 -- Tracking doesn't keep the minimap up here (Minimap page, "Except in").
 -- Going by where you are, not your PvP flag: PvP here means battlegrounds and
@@ -1796,6 +2099,8 @@ local snapRound = 0
 -- fights (and until the Calm Timer, db.calmTime, has run out after one), or
 -- only while a camera mode runs.
 local GRID_EFFECTS = { "letterbox", "tint", "vignette", "weather" }
+local EFFECT_ROWS = {} -- (their Show in rows' keys, made once)
+for _, key in ipairs(GRID_EFFECTS) do EFFECT_ROWS[key] = "effect:" .. key end
 local effectWanted = {}
 local lastFightAt = -math.huge
 ns.OnCalmEnd(function(cut) lastFightAt = math.min(lastFightAt, cut) end)
@@ -1913,17 +2218,14 @@ local function OnUpdate(_, elapsed)
 		ns.Log("calm", ("%.1f sec after the calm timer ended, still up: %s"):format(now - calmTrace.endedAt,
 			ns.NotFadedList and Step(ns.NotFadedList) or "?"))
 	end
-	local fighting = inCombat or now - lastFightAt < ns.db.calmTime
-	local place = ns.EffectPlace()
 	-- In CineMode; with Start in CineMode (fadeUI) off, over the normal UI (the VFX Only profile);
 	-- and while just moving about takes you out of it, with Keep VFX on.
 	local effectsOn = cinematic or (not ns.db.fadeUI and ns.db.enabled and ns.ProfileChosen())
 		or (offForMoving and ns.db.movingKeepVFX) or false
+	-- (Each on while its Show in row, effect:<effect>, is: Visual Effects page.)
 	for _, key in ipairs(GRID_EFFECTS) do
-		effectWanted[key] = effectsOn and ns.db.visualEffects and not ns.db[key .. "OffIn" .. place]
-			and not (ns.db[key .. "OffInCombat"] and fighting)
-			and not (ns.db[key .. "OnlyInCameras"] and not ns.activeCam)
-			and not ns.db[key .. "OffAlways"] or false
+		effectWanted[key] = effectsOn and ns.db.visualEffects
+			and ns.RowOnNow(EFFECT_ROWS[key], ns.db[key .. "Always"], true) or false
 	end
 	Step(ns.UpdateLetterbox, effectWanted.letterbox, elapsed)
 	-- (The vignette and weather share the tint's overlay, each fading on its own.)
@@ -2171,6 +2473,14 @@ function ns.EnsureTables()
 	ns.db.timePhaseColors = ns.db.timePhaseColors or {} -- "Night", "Dawn"... -> { r, g, b } of your own
 	ns.db.timePhaseStrength = ns.db.timePhaseStrength or {} -- "Night", "Dawn"... -> strength (0-1) of your own
 	ns.db.combatShow = ns.db.combatShow or {}
+	-- Standard Frames' rows whose In combat tick stays for the Calm Timer (the
+	-- Combat dropdown's Calm Timer): row -> true/false; not set, as
+	-- combatShowCalm says (the page's one switch for all the rows, before).
+	ns.db.calmShow = ns.db.calmShow or {}
+	-- The Combat dropdown's Out of combat and In a camera mode, for the grids
+	-- that offer them (Visual Effects, music, tooltips...): row -> true/false.
+	ns.db.quietShow = ns.db.quietShow or {}
+	ns.db.camShow = ns.db.camShow or {}
 	ns.db.cooldownReadyOnly = ns.db.cooldownReadyOnly or {} -- Cooldown Manager page: spell ID -> true
 	ns.db.cooldownReadyEarly = ns.db.cooldownReadyEarly or {} -- ...spell ID -> seconds early it comes back
 	ns.db.cooldownEarlyOn = ns.db.cooldownEarlyOn or {} -- ...spell ID -> true: Show Early ticked
@@ -3434,6 +3744,17 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.weatherStrengthV1 = true
 		end
+		-- Pure Cinema shows the new target arrow on plates in CineMode (it has
+		-- no target frame): into the live settings while it's the profile in
+		-- use, once. (Saved copies follow their base.)
+		if not ns.db.targetArrowV1 then
+			if (ns.db.liveProfile or ns.db.profile) == "Pure Cinema" then
+				for _, prefix in ipairs({ "plateCinematic", "plateCombat", "plateInPvP", "plateInBGs", "plateInInstances" }) do
+					ns.db[prefix .. "PartTargetArrow"] = true
+				end
+			end
+			ns.db.targetArrowV1 = true
+		end
 		-- The Buffs/debuffs page's peeks as their defaults in every profile
 		-- (debuffs now held until gone, long auras skipped). Once. (Not the
 		-- ignore list: that's the player's own. Saved profiles drop theirs, to
@@ -3778,6 +4099,119 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.chatSkillOffV1 = true
 		end
+		-- The grids' Open World no longer covers capital cities (they're Cities,
+		-- their own list): every row ticked Open World gets Cities ticked, and
+		-- rules' world (the same, now) is world or city. Once, in every profile.
+		if not ns.db.citiesApartV1 then
+			local function CitiesApart(t)
+				if type(t.worldShow) == "table" then
+					t.cityShow = type(t.cityShow) == "table" and t.cityShow or {}
+					for key, value in pairs(t.worldShow) do
+						if t.cityShow[key] == nil then t.cityShow[key] = value end
+					end
+				end
+				if type(t.frameRules) == "table" then
+					for key, text in pairs(t.frameRules) do
+						if type(text) == "string" then
+							t.frameRules[key] = (text:gsub("%f[%w_][Ww][Oo][Rr][Ll][Dd]%f[^%w_]", "(world or city)"))
+						end
+					end
+				end
+			end
+			CitiesApart(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then CitiesApart(saved) end
+			end
+			ns.db.citiesApartV1 = true
+		end
+		-- And the Nameplates page's and Heal Vision's: their own Cities as their
+		-- open world was (set: copied; not: the default, the open world's too).
+		-- Once, in every profile.
+		if not ns.db.citiesApartPlatesV1 then
+			local function CitiesApart(t)
+				local copies = {}
+				for key, value in pairs(t) do
+					local plate, name = key:match("^plateCinematic(.+)"), key:match("^nameKeep(.+)")
+					if plate then copies["plateInCities" .. plate] = value end
+					if name then copies["nameInCities" .. name] = value end
+				end
+				if t.healVisionInWorld ~= nil then copies.healVisionInCities = t.healVisionInWorld end
+				for key, value in pairs(copies) do
+					if t[key] == nil then t[key] = value end
+				end
+			end
+			CitiesApart(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then CitiesApart(saved) end
+			end
+			ns.db.citiesApartPlatesV1 = true
+		end
+		-- The grids that turned things off are Show in rows now (see
+		-- ns.ConvertOffGrids): the live settings' old ones go over whenever
+		-- they're there; and once, every saved profile's, from its built-in's,
+		-- each list it keeps whole given the new rows as its built-in has them.
+		-- (Converted before the Calm Timer was a time of its own, when Out of
+		-- combat waited for it with it ticked: the effects' and music's had both,
+		-- now just Out of combat; the tooltips' just Out of combat, now with the
+		-- Calm Timer, back as a fight ends as they were. Once, every profile.)
+		if ns.db.offGridsV1 and not ns.db.offGridsCalmV2 then
+			local function CalmApart(t)
+				if type(t.quietShow) ~= "table" then return end
+				t.calmShow = type(t.calmShow) == "table" and t.calmShow or {}
+				for key, quiet in pairs(t.quietShow) do
+					if quiet and (key:find("^effect:") or key == "music") then
+						t.calmShow[key] = false
+					elseif quiet and key:find("^tooltip:") then
+						t.calmShow[key] = true
+					end
+				end
+			end
+			CalmApart(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then CalmApart(saved) end
+			end
+		end
+		ns.db.offGridsCalmV2 = true
+		ns.ConvertOffGrids(ns.db, ns.OldGridDefault)
+		if not ns.db.offGridsV1 then
+			for name, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then
+					local raw = ns.RawProfileBase(name)
+					local base = ns.ProfileBase(name)
+					ns.ConvertOffGrids(saved, function(key)
+						if raw[key] ~= nil then return raw[key] end
+						return ns.OldGridDefault(key)
+					end, { listBase = base, compare = base, switches = true })
+					for _, list in ipairs({ "worldShow", "cityShow", "instanceShow", "bgShow", "quietShow", "camShow",
+						"calmShow" }) do
+						if type(saved[list]) == "table" and type(base[list]) == "table" then
+							for _, row in ipairs(ns.OFF_GRID_ROWS) do
+								if saved[list][row.key] == nil then saved[list][row.key] = base[list][row.key] end
+							end
+						end
+					end
+				end
+			end
+			ns.db.offGridsV1 = true
+		end
+		-- Rules' "arena" is arenas only now (bg: battlegrounds and arenas both;
+		-- battleground: battlegrounds only), so a rule written before says bg,
+		-- meaning both as it did. Once, in every profile.
+		if not ns.db.ruleArenaV1 then
+			local function ArenaToBG(t)
+				if type(t.frameRules) ~= "table" then return end
+				for key, text in pairs(t.frameRules) do
+					if type(text) == "string" then
+						t.frameRules[key] = (text:gsub("%f[%w_][Aa][Rr][Ee][Nn][Aa]%f[^%w_]", "bg"))
+					end
+				end
+			end
+			ArenaToBG(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then ArenaToBG(saved) end
+			end
+			ns.db.ruleArenaV1 = true
+		end
 		-- The quest timer box shows while one is running in every profile (Pure
 		-- Cinema had it off). Once, in every profile.
 		if not ns.db.questTimerOnV1 then
@@ -3929,6 +4363,25 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then UtilityToo(saved.hoverGroups) end
 			end
 			ns.db.cooldownsUtilityV1 = true
+		end
+		-- "Hide the circle under your target out of combat" (hideTargetCircle)
+		-- is now the Standard Frames page's Target circle row: ticked, it
+		-- was up in fights and for the Calm Timer after them.
+		local function CircleRow(t)
+			if type(t) ~= "table" then
+				return
+			end
+			if t.hideTargetCircle then
+				for _, list in ipairs({ "cineShow", "combatShow", "calmShow" }) do
+					if type(t[list]) ~= "table" then t[list] = {} end
+					t[list].targetcircle = list ~= "cineShow"
+				end
+			end
+			t.hideTargetCircle = nil
+		end
+		CircleRow(ns.db)
+		for _, profile in pairs(ns.db.profiles or {}) do
+			CircleRow(profile)
 		end
 		-- "Keep raid markers up as nameplates fade" (keepRaidMarkers) is now the
 		-- Raid Markers grid: unticked, neither side's markers are kept.

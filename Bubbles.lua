@@ -8,9 +8,11 @@ local _, ns = ...
 -- Your own values are put back when the page's switch goes off.
 local CVARS = { Say = "chatBubbles", Party = "chatBubblesParty" }
 
--- Whether the page's grid hides that kind of bubble where you are.
-local function OffHere(db, kind, where)
-	return db["bubbles" .. kind .. "OffAlways"] or db["bubbles" .. kind .. "OffIn" .. where]
+-- Whether that kind of bubble is off here and now: its Show in row
+-- (bubble:<kind>, the page's grid) off.
+local BUBBLE_ROWS = { Say = "bubble:Say", Party = "bubble:Party" }
+local function OffHere(db, kind)
+	return not ns.RowOnNow(BUBBLE_ROWS[kind], db["bubbles" .. kind .. "Always"], true)
 end
 
 local function ApplyCVars(db)
@@ -18,7 +20,7 @@ local function ApplyCVars(db)
 	for kind, cvar in pairs(CVARS) do
 		if GetCVar(cvar) ~= nil then
 			ns.SaveCVar(cvar)
-			local want = OffHere(db, kind, where) and "0" or "1"
+			local want = OffHere(db, kind) and "0" or "1"
 			if GetCVar(cvar) ~= want then
 				ns.LogDetail("cvar", ("%s -> %s (chat bubbles, %s)"):format(cvar, want, where))
 				SetCVar(cvar, want)
@@ -194,6 +196,17 @@ local function OnUpdate(self, elapsed)
 	end
 end
 
+-- And once a second while the page is on: the Calm Timer running out, a
+-- camera mode starting, a rule's other words.
+local ticker = CreateFrame("Frame")
+local sinceCheck = 0
+ticker:SetScript("OnUpdate", function(_, elapsed)
+	sinceCheck = sinceCheck + elapsed
+	if sinceCheck < 1 then return end
+	sinceCheck = 0
+	if ns.db and ns.db.handleBubbles then ApplyCVars(ns.db) end
+end)
+
 local wasOn = false
 -- The settings changing (on the page, a profile, a reset) or a new place.
 function ns.ApplyBubbles()
@@ -210,11 +223,15 @@ end
 
 watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
 watcher:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+-- (The grid's rows can follow fights, your target and your group, too.)
+local SITUATION_EVENTS = { PLAYER_REGEN_DISABLED = true, PLAYER_REGEN_ENABLED = true, PLAYER_TARGET_CHANGED = true,
+	GROUP_ROSTER_UPDATE = true }
+for event in pairs(SITUATION_EVENTS) do watcher:RegisterEvent(event) end
 for _, event in ipairs(BUBBLE_EVENTS) do
 	pcall(watcher.RegisterEvent, watcher, event) -- (not every client has every event)
 end
 watcher:SetScript("OnEvent", ns.Profiled("chat bubbles event", function(self, event)
-	if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+	if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" or SITUATION_EVENTS[event] then
 		ns.ApplyBubbles()
 	-- (Also while any bubble is still styled from before: the game hides
 	-- bubbles and reuses them, and those only come back as they show again.)

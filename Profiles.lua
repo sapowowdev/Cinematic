@@ -26,8 +26,8 @@ local GLOBAL_KEYS = {
 -- Lists kept as tables that belong to a profile (their defaults are in code;
 -- see EnsureTables in Core.lua). Missing from a profile: emptied, which means defaults.
 local PROFILE_TABLES = {
-	"chatPeekTypes", "chatPeekChannelList", "combatShow", "cineShow", "targetShow", "enemyShow",
-	"friendlyShow", "bgShow", "worldShow", "groupShow", "instanceShow", "addonFrames", "gamepadPressButtons",
+	"chatPeekTypes", "chatPeekChannelList", "combatShow", "calmShow", "quietShow", "camShow", "cineShow", "targetShow", "enemyShow",
+	"friendlyShow", "bgShow", "worldShow", "cityShow", "groupShow", "instanceShow", "addonFrames", "gamepadPressButtons",
 	"hoverGroups", "cooldownReadyOnly", "cooldownReadyEarly", "cooldownEarlyOn", "cooldownRechargeOnly", "cooldownNeedsPower",
 	"cooldownGroupDefaults", "cooldownProcOnly", "cooldownAlwaysShow",
 	"frameRules", -- (none in any built-in profile: each starts with no Custom Visibility Rules)
@@ -78,7 +78,7 @@ ns.BUILTIN_PROFILES = {
 		label = "Retail",
 		client = "forever",
 		icon = "Interface\\Icons\\INV_Misc_Wrench_01",
-		tip = L["Default, looking like retail: Cinematic's own Edit Mode layout (the action bars centred along " ..
+		tip = L["Default, looking like retail: Cinematic's own Edit Mode layout (the action bars centered along " ..
 			"the bottom, the micro menu and bags in the corner, the XP bar under them), with action bars 1 to 3, " ..
 			"the micro menu and bags, and the XP bar each coming up on its own when you point at it. Picking it " ..
 			"adds the layout to Edit Mode if you haven't got it; the other profiles go back to the game's own layout " ..
@@ -93,8 +93,8 @@ ns.BUILTIN_PROFILES = {
 		client = "retail",
 		oldNames = { "Immersive" },
 		icon = "Interface\\Icons\\Spell_Holy_PowerInfusion",
-		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode, with action bars " ..
-			"1 to 3, the micro menu and bags, and the XP bar each coming up on its own when you point at it. " ..
+		tip = L["Everything on: the UI fades, the letterbox and tint, and every camera mode, with your main " ..
+			"action bars, the micro menu and bags, and the XP bar each coming up on its own when you point at it. " ..
 			"Retail's default."],
 		parts = { frames = "immersive", bars = "split", camera = "immersive", misc = "immersive" },
 		preview = "bars",
@@ -137,7 +137,7 @@ ns.BUILTIN_PROFILES = {
 	{
 		name = "Lite",
 		icon = "Interface\\Icons\\Spell_Holy_HolyBolt",
-		tip = L["The UI fades and the look stays, with just a few cameras: flights (and fly-bys), AFK, " ..
+		tip = L["The UI fades and the look stays, with just a few cameras: flights, AFK, " ..
 			"and your Hearthstone and teleports. No cozy, vista, fish, RP walk, auto-run, death or quest cameras."],
 		parts = { layout = { forever = "preset" }, camera = "lite", misc = "lite" },
 	},
@@ -258,6 +258,16 @@ function ns.ProfileBase(name)
 	local builtin = builtinByName[name]
 	if builtin then ns.ApplyParts(ns.BuiltinParts(builtin), base, ns.CLIENT) end
 	baseCache[name] = base
+	return base
+end
+
+-- The same before the old grids' settings go over (ns.ConvertOffGrids, Core.lua):
+-- what a profile saved before they did was a change from. Not kept.
+function ns.RawProfileBase(name)
+	local base = {}
+	for k, v in pairs(ns.DEFAULTS) do base[k] = v end
+	local builtin = builtinByName[name]
+	if builtin then ns.ApplyParts(ns.BuiltinParts(builtin), base, ns.CLIENT, true) end
 	return base
 end
 
@@ -459,6 +469,77 @@ function ns.SetProfile(name)
 	ns.Log("state", "profile: " .. name)
 end
 
+-- One part on its own over the live settings (the welcome window's Customise
+-- pages): just its slot's settings (and its rows of shared lists) are set
+-- as the part has them, the rest left as they are.
+do
+	-- The settings with that part: the defaults, with it on top.
+	local function PartValues(slot, part)
+		local values = {}
+		for k, v in pairs(ns.DEFAULTS) do values[k] = v end
+		return ns.ApplyParts({ [slot] = part }, values, ns.CLIENT)
+	end
+	-- fn(key, row, value) for each of the slot's settings and list rows.
+	local function EachInSlot(slot, values, fn)
+		for k in pairs(ns.DEFAULTS) do
+			if IsProfileKey(k) and type(values[k]) ~= "table" and ns.SettingSlot(k) == slot then
+				fn(k, nil, values[k])
+			end
+		end
+		for _, k in ipairs(PROFILE_TABLES) do
+			local want, live, seen = values[k], ns.db[k], {}
+			for _, list in ipairs({ type(want) == "table" and want or {}, type(live) == "table" and live or {} }) do
+				for row in pairs(list) do
+					if not seen[row] and ns.SettingSlot(k, row) == slot then
+						seen[row] = true
+						fn(k, row, type(want) == "table" and want[row] or nil)
+					end
+				end
+			end
+		end
+	end
+
+	-- The live settings are that part's, in its slot. (A list row holding a
+	-- table isn't compared.)
+	function ns.SlotPartMatches(slot, part)
+		local same = true
+		EachInSlot(slot, PartValues(slot, part), function(k, row, value)
+			local live = ns.db[k]
+			if row ~= nil then live = type(live) == "table" and live[row] or nil end
+			if type(value) ~= "table" and live ~= value then same = false end
+		end)
+		return same
+	end
+
+	-- On a built-in, a profile of your own (named ownName, numbered if
+	-- taken) from it, switched to, so a change leaves the built-in as it is.
+	function ns.EnsureOwnProfile(ownName)
+		if builtinByName[ns.ActiveProfile()] and ownName then
+			local name, n = ownName, 1
+			while ns.ProfileExists(name) do
+				n = n + 1
+				name = ownName .. " " .. n
+			end
+			ns.NewProfile(name)
+		end
+	end
+
+	function ns.ApplyPart(slot, part, ownName)
+		ns.EnsureOwnProfile(ownName)
+		EachInSlot(slot, PartValues(slot, part), function(k, row, value)
+			if row == nil then
+				ns.db[k] = value
+			else
+				if type(ns.db[k]) ~= "table" then ns.db[k] = {} end
+				ns.db[k][row] = CopyTable(value)
+			end
+		end)
+		ns.SaveProfile()
+		SettingsChanged()
+		ns.Log("state", ("part: %s %s on %s"):format(slot, part, ns.ActiveProfile()))
+	end
+end
+
 -- A profile of your own's description (db.profileNotes: kept apart from its
 -- settings, which are written over each time it's saved).
 function ns.ProfileNote(name)
@@ -603,6 +684,8 @@ function ns.KnownProfileSetting(key, value)
 		if k == key then return type(value) == "table" end
 	end
 	local default = ns.DEFAULTS[key]
+	-- (An old grid's setting, from before they went over: kept, to go over as it's added.)
+	if default == nil then default = ns.OldGridDefault(key) end
 	return default ~= nil and IsProfileKey(key) and type(value) == type(default)
 end
 
@@ -610,6 +693,8 @@ end
 -- defaults, as your own are), switched to.
 function ns.AddSharedProfile(name, settings, note, icon)
 	if ns.ProfileExists(name) then return false end
+	-- (One shared from before the old grids went over: theirs go over now.)
+	ns.ConvertOffGrids(settings, ns.OldGridDefault, { switches = true })
 	ns.db.profileIcons[name] = icon or ns.UnusedProfileIcon()
 	ns.db.profiles[name] = settings
 	ns.db.profileNotes[name] = note

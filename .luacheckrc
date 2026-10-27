@@ -194,6 +194,7 @@ read_globals = {
 	"GroupLootContainer",
 	"MenuUtil",
 	"MenuResponse",
+	"PixelUtil",
 	"Minimap",
 	"MoveViewDownStart",
 	"MoveViewDownStop",
@@ -340,4 +341,12 @@ read_globals = {
 	"issecurevariable",
 	"seterrorhandler",
 	"tinsert",
+	-- QuestTalk.lua
+	"AcceptQuest", "DeclineQuest", "CloseQuest", "CompleteQuest", "GetQuestReward", "GetQuestID",
+	"GetTitleText", "GetQuestText", "GetObjectiveText", "GetProgressText", "GetRewardText", "GetGreetingText",
+	"GetNumQuestChoices", "GetNumQuestItems", "GetNumQuestRewards", "GetQuestItemInfo", "GetQuestMoneyToGet",
+	"GetRewardMoney", "GetRewardXP", "IsQuestCompletable", "GetNumActiveQuests", "GetNumAvailableQuests",
+	"GetActiveTitle", "GetAvailableTitle", "GetAvailableQuestInfo", "SelectActiveQuest", "SelectAvailableQuest",
+	"C_CampaignInfo", "C_MajorFactions", "C_QuestInfoSystem", "C_QuestOffer", "BreakUpLargeNumbers",
+	"GameFontHighlight", "IsModifierKeyDown", "IsModifiedClick", "GetQuestItemLink",
 }

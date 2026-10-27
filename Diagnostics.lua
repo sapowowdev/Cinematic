@@ -305,6 +305,8 @@ local function CreateWindow()
 		tile = true, tileSize = 16, edgeSize = 16,
 		insets = { left = 4, right = 4, top = 4, bottom = 4 },
 	})
+	-- (The menu look, Skin.lua, when it's loaded: this window's for when things break.)
+	if ns.SkinWindow then ns.SkinWindow(window) end
 	tinsert(UISpecialFrames, "CinematicLogWindow") -- Escape closes it
 
 	local title = window:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -312,11 +314,13 @@ local function CreateWindow()
 	window.title = title
 
 	local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
+	if ns.SkinClose then ns.SkinClose(close) end
 	close:SetPoint("TOPRIGHT", -2, -2)
 	-- The template's click goes through HideUIPanel, which does nothing in combat.
 	close:SetScript("OnClick", function() window:Hide() end)
 
 	local scroll = CreateFrame("ScrollFrame", nil, window, "UIPanelScrollFrameTemplate")
+	if ns.SkinScroll then ns.SkinScroll(scroll) end
 	scroll:SetPoint("TOPLEFT", 12, -34)
 	scroll:SetPoint("BOTTOMRIGHT", -32, 12)
 
@@ -655,7 +659,7 @@ do
 			curve:AddPoint(at, 0)
 			alphaCurve = curve
 		end)
-		Try("colour curve", function()
+		Try("color curve", function()
 			local curve = C_CurveUtil.CreateColorCurve()
 			curve:AddPoint(0, CreateColor(1, 0.2, 0.2, 1))
 			curve:AddPoint(at - 0.0001, CreateColor(1, 0.2, 0.2, 1))
@@ -711,7 +715,7 @@ do
 			Try("frame alpha", function() row.alpha:SetAlpha(UnitHealthPercent(unit, true, alphaCurve)) end)
 		end
 		if colorCurve then
-			Try("texture colour", function()
+			Try("texture color", function()
 				row.color:SetVertexColor(UnitHealthPercent(unit, true, colorCurve):GetRGBA())
 			end)
 		end
@@ -755,7 +759,7 @@ do
 		Head("name", 0)
 		Head("health", 84)
 		Head("alpha", 208)
-		Head("colour", 252)
+		Head("color", 252)
 		local elapsed = 0
 		window:SetScript("OnUpdate", function(_, delta)
 			elapsed = elapsed + delta
@@ -779,7 +783,7 @@ do
 		window.title:SetText(("Health fade test: shown below %d%%"):format(percent))
 		window:Show()
 		UpdateFade()
-		ns.Print(("healthfade: the blue (frame alpha) and red (colour) blocks should be gone at full"
+		ns.Print(("healthfade: the blue (frame alpha) and red (color) blocks should be gone at full"
 			.. " health and show below %d%%. Take some damage and watch. Drag to move, run again to close")
 			:format(percent))
 	end
@@ -1157,7 +1161,7 @@ do
 			local kind = ns.NodeKind(name)
 			-- (raw: the game's line with its codes showing, and its colour.)
 			local rawText = showRaw and entry.raw and (", raw \"" .. entry.raw:gsub("|", "||"):gsub("\n", "\\n")
-				.. "\" colour " .. tostring(entry.color)) or ""
+				.. "\" color " .. tostring(entry.color)) or ""
 			names[#names + 1] = ("%s (%d%s%s%s)"):format(name, entry.points, entry.gray and ", gray" or "",
 				kind and (", " .. kind) or "", rawText)
 		end
@@ -1607,5 +1611,121 @@ do
 		ns.Log("combatlog", (on and "watching " or "stopped, ") .. tostring(frame:GetName()) .. ". " .. Summary())
 		ns.Print(on and "combatlog: watching the Combat Log tab, after reloads too, until you run it again"
 			or ("combatlog: stopped. " .. Summary()))
+	end
+end
+
+-- /cine debug talentart, questart: every part of one of the game's windows
+-- to the log (under a category), with its size, place, texture or atlas and
+-- colours, to draw ours with the same art.
+do
+	local MAX_LINES = 4000
+	local MANY = 4 -- nameless children logged per frame (a pool of buttons): the first few only
+	local logged
+	local category -- the log's category for this walk
+
+	local function Safe(fn, ...)
+		local ok, a, b, c, d, e, f, g, h = pcall(fn, ...)
+		if ok then
+			return a, b, c, d, e, f, g, h
+		end
+	end
+
+	local function Str(value)
+		if issecretvalue and issecretvalue(value) then
+			return "secret"
+		end
+		if type(value) == "number" then
+			return value == math.floor(value) and tostring(value) or ("%.3f"):format(value)
+		end
+		return tostring(value)
+	end
+
+	local function Log(depth, text)
+		logged = logged + 1
+		if logged <= MAX_LINES then
+			ns.Log(category, ("  "):rep(depth) .. text)
+		end
+	end
+
+	local function Describe(object, key)
+		local kind = Safe(object.GetObjectType, object) or "?"
+		local w, h = Safe(object.GetSize, object)
+		local parts = { ("%s %s %sx%s"):format(kind, Str(key or Safe(object.GetDebugName, object)), Str(w), Str(h)) }
+		parts[#parts + 1] = "shown " .. Str(Safe(object.IsShown, object))
+		local point, relativeTo, relativePoint, x, y = Safe(object.GetPoint, object, 1)
+		if point then
+			parts[#parts + 1] = ("at %s %s %s %s,%s"):format(Str(point),
+				Str(relativeTo and Safe(relativeTo.GetDebugName, relativeTo)), Str(relativePoint), Str(x), Str(y))
+		end
+		if kind == "Texture" or kind == "MaskTexture" then
+			parts[#parts + 1] = "atlas " .. Str(Safe(object.GetAtlas, object))
+			parts[#parts + 1] = "file " .. Str(Safe(object.GetTexture, object))
+			local ulx, uly, _, lly, urx = Safe(object.GetTexCoord, object)
+			if ulx then
+				parts[#parts + 1] = ("coords %s %s %s %s"):format(Str(ulx), Str(urx), Str(uly), Str(lly))
+			end
+			local r, g, b, a = Safe(object.GetVertexColor, object)
+			parts[#parts + 1] = ("color %s %s %s %s"):format(Str(r), Str(g), Str(b), Str(a))
+			parts[#parts + 1] = ("layer %s %s, blend %s, gray %s"):format(Str(Safe(object.GetDrawLayer, object)),
+				Str(select(2, Safe(object.GetDrawLayer, object))), Str(Safe(object.GetBlendMode, object)),
+				Str(Safe(object.IsDesaturated, object)))
+		elseif kind == "FontString" then
+			local font = Safe(object.GetFontObject, object)
+			parts[#parts + 1] = ("text %q, font %s, size %s"):format(Str(Safe(object.GetText, object)),
+				Str(font and Safe(font.GetName, font)), Str(select(2, Safe(object.GetFont, object))))
+			local r, g, b = Safe(object.GetTextColor, object)
+			parts[#parts + 1] = ("color %s %s %s"):format(Str(r), Str(g), Str(b))
+		else
+			parts[#parts + 1] = "level " .. Str(Safe(object.GetFrameLevel, object))
+		end
+		return table.concat(parts, ", ")
+	end
+
+	local function Walk(object, key, depth)
+		Log(depth, Describe(object, key))
+		if depth >= 8 or Safe(object.IsForbidden, object) then
+			return
+		end
+		-- Its parts by the names its table gives them.
+		local keys = {}
+		for k, v in pairs(object) do
+			if type(v) == "table" and type(k) == "string" and v.GetObjectType then
+				keys[v] = k
+			end
+		end
+		for _, region in ipairs({ Safe(function() return { object:GetRegions() } end) or {} }) do
+			for _, part in ipairs(region) do
+				Log(depth + 1, Describe(part, keys[part]))
+			end
+		end
+		-- Every part with a name; of a run of nameless ones (a pool of
+		-- buttons), the first few.
+		local children = Safe(function() return { object:GetChildren() } end) or {}
+		local nameless, skipped = 0, 0
+		for _, child in ipairs(children) do
+			if keys[child] or Safe(child.GetName, child) then
+				Walk(child, keys[child], depth + 1)
+			else
+				nameless = nameless + 1
+				if nameless <= MANY then
+					Walk(child, nil, depth + 1)
+				else
+					skipped = skipped + 1
+				end
+			end
+		end
+		if skipped > 0 then
+			Log(depth + 1, ("... and %d more nameless children"):format(skipped))
+		end
+	end
+
+	-- Readable for the log, whatever it is (a secret value says so).
+	ns.LogValue = Str
+
+	-- Logs the frame and every part of it under category; how many lines.
+	function ns.LogFrameParts(frame, name, logCategory)
+		logged, category = 0, logCategory
+		Walk(frame, name, 0)
+		return math.min(logged, MAX_LINES)
 	end
 end

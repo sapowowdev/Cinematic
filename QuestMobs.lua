@@ -459,14 +459,11 @@ end)
 -- proxy setting is true then) or where a client lacks that atlas. Marks follow
 -- the setting as it changes.
 ns.QUEST_MOB_TEXTURE = "Interface\\GossipFrame\\AvailableQuestIcon"
-local MODELS_SETTING = "PROXY_CHARACTER_MODELS_TOGGLE"
+local MODELS_SETTING = "PROXY_CHARACTER_MODELS_TOGGLE" -- (to follow it as it changes)
 local marks = setmetatable({}, { __mode = "k" })
 
 local function StandardModels()
-	local ok, value = pcall(function()
-		return Settings.GetSetting(MODELS_SETTING):GetValue()
-	end)
-	return ok and value == true
+	return ns.StandardModels() == true
 end
 
 local function HasAtlas(name)
