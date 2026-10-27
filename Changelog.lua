@@ -14,7 +14,7 @@ ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-26", page = "Personal Resources", title = "Personal Resources page",
 		text = "Your player frame, pet frame and resource display have a page of their own: kept up while you " ..
 		"recover or run low on mana, and held back at the start of a fight until your power changes." },
-	{ date = "2026-10-26", page = "Target Arrow", title = "Target Arrow",
+	{ date = "2026-10-26", page = "Target Indicator", title = "Target Arrow",
 		text = "A mark on your target's nameplate for when no target frame shows who you've got: an arrow, " ..
 		"chevron, glow or brackets, colored by how they see you." },
 	{ date = "2026-10-26", page = "Quest Vision", title = "Quest talk",

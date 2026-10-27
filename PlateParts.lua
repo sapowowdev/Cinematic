@@ -161,6 +161,18 @@ local texts = {}
 -- while the text fades in at the new one (see swaps).
 local ghosts = {}
 
+-- Your target's colors (the Target Indicator page's Name, Health bar and
+-- Border ticks: see TintTarget, below): its unit frame (frame), the color
+-- (r, g, b), how far it's in (level, the row's), and which parts (name,
+-- bar, border).
+local targetTint = {}
+
+-- A color blended into the target's, as far as it's in.
+local function Blend(r, g, b, tint)
+	local level = tint.level
+	return r + (tint.r - r) * level, g + (tint.g - g) * level, b + (tint.b - b) * level
+end
+
 local function Known(value)
 	return not (issecretvalue and issecretvalue(value))
 end
@@ -423,6 +435,14 @@ local function DrawName(text, name, unit)
 				local r, g, b = name:GetTextColor()
 				text:SetTextColor(r, g, b)
 			end)
+		end
+	end
+	-- (Kept, for your target's color going in and out over it: see TintTarget.)
+	local okColour, r, g, b = pcall(text.GetTextColor, text)
+	if okColour and type(r) == "number" and Known(r) and Known(g) and Known(b) then
+		text.baseR, text.baseG, text.baseB = r, g, b
+		if targetTint.name and targetTint.frame == text:GetParent() then
+			text:SetTextColor(Blend(r, g, b, targetTint))
 		end
 	end
 	text:SetAlpha(alpha)
@@ -946,7 +966,7 @@ end
 -- frame shows what you've targeted (Pure Cinema). Shown like the class
 -- icons, but not faded with the plate: one faded right out, or showing just
 -- its name, still has it. It hides with the plate. Its look is the Style
--- hub's Target Arrow page's: an arrow or chevron over the plate (clear of
+-- hub's Target Indicator page's: an arrow or chevron over the plate (clear of
 -- the name), a glow behind its health bar, or brackets either side of it;
 -- colored, sized, raised and moving as that page says.
 -- (Media/make_target_arrow.py and make_target_marks.py)
@@ -955,7 +975,7 @@ local ARROW_OVER = { arrow = "TargetArrow", chevron = "TargetChevron" }
 local GOLD = { 1, 0.82, 0 }
 local arrows = {} -- [plate] = arrow frame
 
--- An arrow setting (the Target Arrow page's, see Core's DEFAULTS).
+-- An arrow setting (the Target Indicator page's, see Core's DEFAULTS).
 local function ArrowSetting(key)
 	return Style("targetArrow" .. key)
 end
@@ -993,19 +1013,24 @@ local function ArrowColour(unit)
 	return unpack(GOLD)
 end
 
--- A looping move (or, no x or y, a pulse) on one of an arrow's pieces.
-local function Bob(piece, x, y)
-	local group = piece:CreateAnimationGroup()
-	group:SetLooping("BOUNCE")
-	local anim = group:CreateAnimation(x and "Translation" or "Alpha")
-	if not x then
-		anim:SetFromAlpha(1)
-		anim:SetToAlpha(0.55)
-	end
-	anim:SetDuration(0.6)
-	anim:SetSmoothing("IN_OUT")
-	group.anim, group.x, group.y = anim, x, y
-	return group
+-- Moving (the Target Indicator page's Moving tick): the arrow and chevron
+-- bob, the brackets close in, the glow pulses, out and back every BOB_TIME
+-- seconds. Worked out each frame: an animation group's BOUNCE looping
+-- jumped a few pixels for a frame as it turned, at the top of each bob
+-- (seen frame by frame in a capture).
+local BOB_TIME = 1.2
+
+-- An arrow's pieces where they go, out (t) from 0 (at rest) to 1.
+local function PlaceArrow(arrow, t)
+	local size = arrow.size
+	arrow.over:SetPoint("BOTTOM", arrow, "TOP", 0, arrow.overY + 4 * size * t)
+	arrow.left:SetPoint("RIGHT", arrow, "LEFT", -3 + 3 * size * t, 0)
+	arrow.right:SetPoint("LEFT", arrow, "RIGHT", 3 - 3 * size * t, 0)
+	arrow.glow:SetAlpha(1 - 0.45 * t)
+end
+
+local function ArrowMoves(arrow)
+	PlaceArrow(arrow, (1 - math.cos(GetTime() * 2 * math.pi / BOB_TIME)) / 2)
 end
 
 -- Makes a target arrow on a frame, over bar (a plate's health bar, or the
@@ -1027,11 +1052,10 @@ local function MakeArrow(parent, bar)
 		side:SetTexture(ARROW_ART .. "TargetBracket")
 	end
 	arrow.right:SetTexCoord(1, 0, 0, 1)
-	arrow.bobs = { Bob(arrow.over, 0, 1), Bob(arrow.glow), Bob(arrow.left, 1, 0), Bob(arrow.right, -1, 0) }
 	return arrow
 end
 
--- Gives an arrow its look for a unit, as the Target Arrow page says.
+-- Gives an arrow its look for a unit, as the Target Indicator page says.
 local function StyleArrow(arrow, unit)
 	local style, size = ArrowSetting("Style"), ArrowSetting("Size")
 	local r, g, b = ArrowColour(unit)
@@ -1040,8 +1064,6 @@ local function StyleArrow(arrow, unit)
 	if over then
 		arrow.over:SetTexture(ARROW_ART .. over)
 		arrow.over:SetSize(20 * size, 20 * size)
-		arrow.over:ClearAllPoints()
-		arrow.over:SetPoint("BOTTOM", arrow, "TOP", 0, 18 + ArrowSetting("Y"))
 	end
 	arrow.glow:SetShown(style == "glow")
 	arrow.glow:ClearAllPoints()
@@ -1049,35 +1071,27 @@ local function StyleArrow(arrow, unit)
 	arrow.glow:SetPoint("BOTTOMRIGHT", arrow, "BOTTOMRIGHT", 24 * size, -14 * size)
 	arrow.left:SetShown(style == "brackets")
 	arrow.right:SetShown(style == "brackets")
-	arrow.left:ClearAllPoints()
-	arrow.left:SetPoint("RIGHT", arrow, "LEFT", -3, 0)
-	arrow.right:ClearAllPoints()
-	arrow.right:SetPoint("LEFT", arrow, "RIGHT", 3, 0)
 	for _, piece in ipairs({ arrow.over, arrow.glow, arrow.left, arrow.right }) do
 		piece:SetVertexColor(r, g, b)
 	end
 	arrow.left:SetSize(11 * size, 24 * size)
 	arrow.right:SetSize(11 * size, 24 * size)
-	-- Moving: the arrow and chevron bob, the brackets close in, the glow pulses.
-	local moving = ArrowSetting("Bob")
-	for _, bob in ipairs(arrow.bobs) do
-		if bob.x then
-			bob.anim:SetOffset(bob.x * 3 * size, bob.y * 4 * size)
-		end
-		if moving and not bob:IsPlaying() then
-			bob:Play()
-		elseif not moving and bob:IsPlaying() then
-			bob:Stop()
-		end
+	-- (Placed at rest, then moving each frame while it shows, if it moves.)
+	arrow.size, arrow.overY = size, 18 + ArrowSetting("Y")
+	for _, piece in ipairs({ arrow.over, arrow.left, arrow.right }) do
+		piece:ClearAllPoints()
 	end
+	PlaceArrow(arrow, 0)
+	arrow:SetScript("OnUpdate", ArrowSetting("Bob") and ArrowMoves or nil)
 	arrow.styled = true
 end
 
--- For the Target Arrow page's preview.
+-- For the Target Indicator page's preview.
 function ns.MakeTargetArrow(parent, bar)
 	return MakeArrow(parent, bar)
 end
 ns.StyleTargetArrow = StyleArrow
+ns.TargetArrowColour = ArrowColour
 
 local function TargetArrow(plate)
 	local arrow = arrows[plate]
@@ -1089,6 +1103,164 @@ local function TargetArrow(plate)
 	arrow:SetIgnoreParentAlpha(true)
 	arrows[plate] = arrow
 	return arrow
+end
+
+-- Target colors (the Target Indicator page's Name, Health bar and Border
+-- ticks): your target's name, health bar and border in the arrow's color,
+-- blended in as far as the row shows. The game paints these again whenever
+-- it likes, so they're painted every frame while a plate is tinted, then
+-- given back the colors they had. (Our own name text: DrawName keeps its color.)
+-- TintTarget(plate, level, unit): level 0 lets the plate go, if it's tinted.
+local TintTarget
+do
+	local BORDER_FIELDS = { "selectionHighlight", "healthBar.selectedBorder" }
+	local saved = {} -- [region] = { r, g, b, getter, setter }: the color it had first
+
+	-- A region's color, if the game will say: r, g, b and its alpha (or nil).
+	local function ReadColour(region, getter)
+		local ok, r, g, b, a = pcall(region[getter], region)
+		if ok and type(r) == "number" and Known(r) and Known(g) and Known(b) then
+			return r, g, b, type(a) == "number" and Known(a) and a or nil
+		end
+	end
+
+	-- (Alpha kept: on WoW Forever a text's or texture's color carries it.)
+	local function SetColour(region, setter, r, g, b, a)
+		if a then
+			pcall(region[setter], region, r, g, b, a)
+		else
+			pcall(region[setter], region, r, g, b)
+		end
+	end
+
+	-- The game paints a part's color again whenever it likes, and once a
+	-- frame wasn't enough: its color flickered through on frames it painted
+	-- after us. So each part's setter is hooked, once: whatever color the game
+	-- sets is kept as the one to give back, and ours goes straight back over
+	-- it. (painting: our own calls, which the hook lets be.)
+	local painting = false
+	local hooked = {}
+	local Paint
+
+	local function Hook(region, setter)
+		if hooked[region] then
+			return
+		end
+		hooked[region] = true
+		hooksecurefunc(region, setter, function(self, r, g, b)
+			local first = saved[self]
+			if painting or not first or not targetTint.frame then
+				return
+			end
+			if type(r) == "number" and Known(r) and Known(g) and Known(b) then
+				first[1], first[2], first[3] = r, g, b
+			end
+			Paint(self, first[4], first[5])
+		end)
+	end
+
+	function Paint(region, getter, setter)
+		if not (region[getter] and region[setter]) then
+			return
+		end
+		local r, g, b, a = ReadColour(region, getter)
+		if not r then
+			return
+		end
+		local first = saved[region]
+		if not first then
+			first = { r, g, b, getter, setter }
+			saved[region] = first
+			Hook(region, setter)
+		end
+		local br, bg, bb = Blend(first[1], first[2], first[3], targetTint)
+		painting = true
+		SetColour(region, setter, br, bg, bb, a)
+		painting = false
+	end
+
+	-- The border's textures (Forever's is a frame of them round the bar).
+	local function PaintBorder(unitFrame)
+		for _, field in ipairs(BORDER_FIELDS) do
+			local region = Field(unitFrame, field)
+			if Usable(region) and region.GetObjectType then
+				if region:GetObjectType() == "Texture" then
+					Paint(region, "GetVertexColor", "SetVertexColor")
+				elseif region.GetRegions then
+					for _, child in ipairs({ region:GetRegions() }) do
+						if child:GetObjectType() == "Texture" then
+							Paint(child, "GetVertexColor", "SetVertexColor")
+						end
+					end
+				end
+			end
+		end
+	end
+
+	local painter = CreateFrame("Frame")
+	painter:Hide()
+	painter:SetScript("OnUpdate", ns.Profiled("Target colors", function()
+		local unitFrame = targetTint.frame
+		if not Usable(unitFrame) then
+			return
+		end
+		if targetTint.name then
+			if Usable(unitFrame.name) then
+				Paint(unitFrame.name, "GetTextColor", "SetTextColor")
+			end
+			local text = texts[unitFrame]
+			if text and text.baseR then
+				local alpha = text:GetAlpha()
+				text:SetTextColor(Blend(text.baseR, text.baseG, text.baseB, targetTint))
+				text:SetAlpha(alpha)
+			end
+		end
+		if targetTint.bar and Usable(unitFrame.healthBar) then
+			Paint(unitFrame.healthBar, "GetStatusBarColor", "SetStatusBarColor")
+		end
+		if targetTint.border then
+			PaintBorder(unitFrame)
+		end
+	end))
+
+	-- Every color given back as it was.
+	local function Untint()
+		painting = true
+		for region, first in pairs(saved) do
+			local _, _, _, a = ReadColour(region, first[4])
+			SetColour(region, first[5], first[1], first[2], first[3], a)
+		end
+		painting = false
+		wipe(saved)
+		local text = targetTint.frame and texts[targetTint.frame]
+		if text and text.baseR then
+			local alpha = text:GetAlpha()
+			text:SetTextColor(text.baseR, text.baseG, text.baseB)
+			text:SetAlpha(alpha)
+		end
+		targetTint.frame = nil
+		painter:Hide()
+	end
+
+	function TintTarget(plate, level, unit)
+		local unitFrame = plate.UnitFrame
+		local name, bar, border = Style("targetColorName"), Style("targetColorBar"), Style("targetColorBorder")
+		if level <= 0 or not (name or bar or border) or not Usable(unitFrame) then
+			if targetTint.frame and targetTint.frame == unitFrame then
+				Untint()
+			end
+			return
+		end
+		-- (Another plate, or a part unticked: the old colors back first.)
+		if targetTint.frame and (targetTint.frame ~= unitFrame or targetTint.name ~= name
+			or targetTint.bar ~= bar or targetTint.border ~= border) then
+			Untint()
+		end
+		targetTint.frame, targetTint.level = unitFrame, level
+		targetTint.name, targetTint.bar, targetTint.border = name, bar, border
+		targetTint.r, targetTint.g, targetTint.b = ArrowColour(unit)
+		painter:Show()
+	end
 end
 
 -- Shows or hides a plate's arrow as its row says, on your target's alone.
@@ -1104,6 +1276,8 @@ local function RefreshTargetArrow(plate)
 		end
 	end
 	local arrow = arrows[plate]
+	local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+	TintTarget(plate, level, unit)
 	if level <= 0 then
 		if arrow then
 			arrow:Hide()
@@ -1114,14 +1288,14 @@ local function RefreshTargetArrow(plate)
 	arrow = TargetArrow(plate)
 	if arrow then
 		if not arrow.styled then
-			StyleArrow(arrow, plate.namePlateUnitToken or plate.UnitFrame.unit)
+			StyleArrow(arrow, unit)
 		end
 		arrow:SetAlpha(level)
 		arrow:Show()
 	end
 end
 
--- After a change on the Target Arrow page: the arrows styled anew.
+-- After a change on the Target Indicator page: the arrows styled anew.
 function ns.RefreshTargetArrows()
 	for plate, arrow in pairs(arrows) do
 		arrow.styled = false
@@ -1177,7 +1351,7 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 	end
 	-- (The arrow moves to the new target's plate.)
 	if event == "PLAYER_TARGET_CHANGED" then
-		if (levels.TargetArrow or 0) > 0 or next(arrows) then
+		if (levels.TargetArrow or 0) > 0 or next(arrows) or targetTint.frame then
 			for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
 				RefreshTargetArrow(plate)
 			end
@@ -1213,6 +1387,7 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 			arrows[plate]:Hide()
 			arrows[plate].styled = false
 		end
+		TintTarget(plate, 0)
 		return
 	end
 	plateClass[plate], plateRole[plate] = nil, nil

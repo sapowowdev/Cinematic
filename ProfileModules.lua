@@ -266,10 +266,10 @@ ns.PROFILE_MODULES = {
 			set("enemyShow", fights)
 			set("instanceShow", EveryRow(true, false))
 		end },
-	{ key = "pure-plates", name = "Pure: nameplates", scope = { "Nameplates" },
+	{ key = "pure-plates", name = "Pure: nameplates", scope = { "Nameplates", "Target Indicator" },
 		tip = "Enemies' nameplates (and their minions') in fights, not kept up otherwise; in PvP and " ..
 		"battlegrounds, none; in instances, friendly players' and NPCs' hidden; no group members' or friendly " ..
-		"targets'; an arrow over your target's plate all through CineMode.",
+		"targets'; an arrow over your target's plate all through CineMode, and its name in the arrow's color.",
 		apply = function(set)
 			for _, key in ipairs({ "plateAlwaysGroupMembers", "plateAlwaysGroupMinions", "plateGroupFriends",
 				"plateGroupFriendlyMinions", "plateAlwaysMyFriendlyNPCTarget", "plateAlwaysMyFriendlyPlayerTarget",
@@ -285,6 +285,8 @@ ns.PROFILE_MODULES = {
 			for _, prefix in ipairs({ "plateCinematic", "plateCombat", "plateInPvP", "plateInBGs", "plateInInstances" }) do
 				set(prefix .. "PartTargetArrow", true)
 			end
+			-- And your target's name in its color, often all there is of it to see.
+			set("targetColorName", true)
 			set("plateInstanceFriends", "hide")
 			set("plateInstanceFriendlyNPCs", "hide")
 		end },

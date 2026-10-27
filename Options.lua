@@ -1201,7 +1201,7 @@ do
 		-- (The Names page: the dev copy's only.)
 		{ name = "Style", pages = {
 			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names" },
-			{ "Target Arrow", "Interface\\Icons\\Ability_Marksmanship" },
+			{ "Target Indicator", "Interface\\Icons\\Ability_Marksmanship" },
 		} },
 		{ name = "Visions", pages = {
 			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl", label = "General" },
@@ -5843,8 +5843,9 @@ local function CreatePlatesPanel()
 		{ "RoleHealer", L["Role Icon (Healer)"], L[" A role icon beside your group's healers' health bars."], icon = true },
 		{ "RoleDamager", L["Role Icon (Damage)"], L[" A role icon beside your group's damage dealers' health bars."],
 			icon = true },
-		{ "TargetArrow", L["Target Arrow"], L[" An arrow over your target's nameplate, shown even while the rest of " ..
-			"the plate is faded or shows just its name."], icon = true },
+		{ "TargetArrow", L["Target Indicator"], L[" A mark on your target's nameplate (and its name, health bar or " ..
+			"border in its color), shown even while the rest of the plate is faded or shows just its name. Its " ..
+			"look: the Style hub's Target Indicator page."], icon = true },
 	}
 	-- (The class and role icons and the arrow are the addon's own: off unless
 	-- ticked, outside CineMode shown only with Always ticked, and in a section
@@ -6262,20 +6263,22 @@ local function CreateNameStylePanel()
 	RegisterSubpage(canvas, "Name Style", "Name Style")
 end
 
--- The Style hub's Target Arrow page: how the Nameplates page's Target Arrow
--- row looks (PlateParts draws it), with a preview of it on a plate at the top.
+-- The Style hub's Target Indicator page: how the Nameplates page's Target
+-- Indicator row looks (PlateParts draws it: a mark, and your target's name,
+-- health bar or border in its color), with a preview of it on a plate at the top.
 -- (In a block: the main chunk's locals are near Lua's cap.)
 local CreateTargetArrowPanel
 do
 	function CreateTargetArrowPanel()
 		local canvas, content = CreateScrollPage()
 
-		local title = Label(content, "GameFontNormalLarge", L["Target Arrow"])
+		local title = Label(content, "GameFontNormalLarge", L["Target Indicator"])
 		title:SetPoint("TOPLEFT", 16, -16)
 		local subtitle = PageIntro(content, title,
-			L["How the Target Arrow looks: the mark on your target's nameplate, for when no target frame shows " ..
-			"what you've targeted. When it shows is the Target Arrow row's, on the Nameplates page's Cinematic Plate " ..
-			"Parts grid. Changes show at once, here and on your target."])
+			L["How your target stands out on the nameplates, for when no target frame shows what you've " ..
+			"targeted: a mark on its plate, and its name, health bar or border in the mark's color. When it " ..
+			"shows is the Target Indicator row's, on the Nameplates page's Cinematic Plate Parts grid. Changes " ..
+			"show at once, here and on your target."])
 
 		local preview -- (below: drawn again as each setting changes)
 		local function Changed()
@@ -6306,6 +6309,22 @@ do
 		barEdge:SetPoint("TOPLEFT", -1, 1)
 		barEdge:SetPoint("BOTTOMRIGHT", 1, -1)
 		barEdge:SetColorTexture(0, 0, 0, 1)
+		-- The game's border round your target's bar: white, 2 pixels, just
+		-- outside the bar's black edge (four edges, so none rounds away).
+		local border = {}
+		for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+			local edge = bar:CreateTexture(nil, "BORDER", nil, 1)
+			if side == "TOP" or side == "BOTTOM" then
+				edge:SetPoint(side .. "LEFT", barEdge, side .. "LEFT", -2, side == "TOP" and 2 or -2)
+				edge:SetPoint(side .. "RIGHT", barEdge, side .. "RIGHT", 2, side == "TOP" and 2 or -2)
+				edge:SetHeight(2)
+			else
+				edge:SetPoint("TOP" .. side, barEdge, "TOP" .. side, side == "LEFT" and -2 or 2, 0)
+				edge:SetPoint("BOTTOM" .. side, barEdge, "BOTTOM" .. side, side == "LEFT" and -2 or 2, 0)
+				edge:SetWidth(2)
+			end
+			border[#border + 1] = edge
+		end
 		local name = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 		name:SetPoint("BOTTOM", bar, "TOP", 0, 3)
 		name:SetTextColor(1, 0.2, 0.2)
@@ -6316,6 +6335,14 @@ do
 			if not ns.MakeTargetArrow then return end
 			arrow = arrow or ns.MakeTargetArrow(preview, bar)
 			ns.StyleTargetArrow(arrow)
+			-- (The preview's unit: a hostile NPC, its name and bar red, its border the game's white.)
+			local db = ns.GetDB()
+			local r, g, b = ns.TargetArrowColour()
+			if db.targetColorName then name:SetTextColor(r, g, b) else name:SetTextColor(1, 0.2, 0.2) end
+			if db.targetColorBar then fill:SetColorTexture(r, g, b, 1) else fill:SetColorTexture(0.75, 0.1, 0.1, 1) end
+			for _, edge in ipairs(border) do
+				if db.targetColorBorder then edge:SetColorTexture(r, g, b, 1) else edge:SetColorTexture(1, 1, 1, 1) end
+			end
 		end
 		controls[#controls + 1] = preview
 
@@ -6343,6 +6370,7 @@ do
 			{ "chevron", L["Chevron"], L["Two chevrons pointing down at the plate, over its name."] },
 			{ "glow", L["Glow"], L["A soft glow behind the plate's health bar."] },
 			{ "brackets", L["Brackets"], L["Brackets either side of the plate's health bar."] },
+			{ "none", L["None"], L["No mark: just the colors below, on the parts ticked."] },
 		})
 
 		stack:Header(content, L["Color"])
@@ -6377,6 +6405,23 @@ do
 				Changed()
 			end)
 		end)
+		-- Your target's own parts in the color too.
+		local alsoLabel = stack:Add(Label(content, "GameFontHighlight", L["Also color its:"]), "label", 28)
+		local lastAlso
+		for _, info in ipairs({
+			{ "targetColorName", L["Name"], L["Your target's name in the color, on its plate or shown alone."] },
+			{ "targetColorBar", L["Health bar"], L["Your target's health bar in the color."] },
+			{ "targetColorBorder", L["Border"], L["The border the game puts round your target's health bar, in the color."] },
+		}) do
+			local key = info[1]
+			local check = Check(content, key, info[2], info[3], function(value)
+				ns.GetDB()[key] = value
+				Changed()
+			end)
+			check:SetPoint("LEFT", lastAlso and (lastAlso.Text or lastAlso.text) or alsoLabel, "RIGHT",
+				lastAlso and 16 or 10, 0)
+			lastAlso = check
+		end
 
 		stack:Header(content, L["Size and movement"])
 		stack:Add(Slider(content, "targetArrowSize", L["Size"], 50, 200, 5, "%d%%", 100, Changed), "slider")
@@ -6392,7 +6437,7 @@ do
 
 		canvas:SetScript("OnShow", PageShown(Refresh, content))
 		canvas:Hide()
-		RegisterSubpage(canvas, "Target Arrow")
+		RegisterSubpage(canvas, "Target Indicator")
 	end
 end
 

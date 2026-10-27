@@ -634,8 +634,12 @@ DEFAULTS.plateInstanceFriendlyMinions = "hide"
 DEFAULTS.plateInstanceFriendlyNPCs = "target"
 -- And your target's plate, shown everywhere whatever its own row says.
 DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the game's own options decide)
--- The Target Arrow row's look (the Style hub's Target Arrow page; see PlateParts).
-DEFAULTS.targetArrowStyle = "arrow" -- "arrow", "chevron" (over the plate), "glow" (behind its bar) or "brackets"
+-- The Target Indicator row's look (the Style hub's Target Indicator page; see PlateParts).
+DEFAULTS.targetArrowStyle = "arrow" -- "arrow", "chevron" (over the plate), "glow" (behind its bar), "brackets" or "none"
+-- Your target's name, health bar and border in the arrow's color, while the row shows.
+DEFAULTS.targetColorName = false
+DEFAULTS.targetColorBar = false
+DEFAULTS.targetColorBorder = false
 DEFAULTS.targetArrowColor = "gold" -- "gold", "reaction" (red, yellow, green), "class" (players; else reaction) or "custom"
 DEFAULTS.targetArrowR, DEFAULTS.targetArrowG, DEFAULTS.targetArrowB = 1, 0.82, 0 -- the custom color
 DEFAULTS.targetArrowSize = 1 -- times its own
@@ -3757,6 +3761,14 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				end
 			end
 			ns.db.targetArrowV1 = true
+		end
+		-- And colors your target's name with it (often all there is of it to
+		-- see): likewise, once.
+		if not ns.db.targetColorV1 then
+			if (ns.db.liveProfile or ns.db.profile) == "Pure Cinema" then
+				ns.db.targetColorName = true
+			end
+			ns.db.targetColorV1 = true
 		end
 		-- The Buffs/debuffs page's peeks as their defaults in every profile
 		-- (debuffs now held until gone, long auras skipped). Once. (Not the
