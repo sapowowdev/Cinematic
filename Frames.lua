@@ -3976,7 +3976,7 @@ end
 -- a secret time counts as ready, a secret "shown" as shown.
 local COOLDOWN_VIEWERS = { EssentialCooldownViewer = true, UtilityCooldownViewer = true }
 local GCD = 1.6
-local cooldownCheckedAt, cooldownRecharging = 0, false
+local cooldownCheckedAt, cooldownRecharging = 0, {} -- (group -> true while one in it is)
 
 local function Secret(...)
 	if not issecretvalue then return false end
@@ -4076,14 +4076,18 @@ local function EachCooldownFrame(visit)
 	end
 end
 
-local function AnyCooldownRecharging(now)
+-- Whether a cooldown in a bar is recharging: group "essential" (with
+-- Enhanced Cooldown Manager's bars) or "utility".
+local function AnyCooldownRecharging(now, group)
 	if now - cooldownCheckedAt < 0.25 then
-		return cooldownRecharging
+		return cooldownRecharging[group] or false
 	end
 	cooldownCheckedAt = now
-	local found = false
-	EachCooldownFrame(function(_, frame)
-		if found or Hidden(frame) then return end
+	wipe(cooldownRecharging)
+	EachCooldownFrame(function(entry, frame)
+		local bar = ns.COOLDOWN_BAR_GROUPS[entry.name] or "essential"
+		if cooldownRecharging[bar] or Hidden(frame) then return end
+		local found = false
 		EachCooldownPart(frame, 3, function(part, kind)
 			if found then return end
 			local start, duration
@@ -4095,9 +4099,9 @@ local function AnyCooldownRecharging(now)
 			end
 			if start and Recharging(start, duration, now) then found = true end
 		end)
+		cooldownRecharging[bar] = found or nil
 	end)
-	cooldownRecharging = found
-	return found
+	return cooldownRecharging[group] or false
 end
 
 -- The Cooldown Manager page's "Only when ready in combat" spells
@@ -4188,6 +4192,15 @@ local CooldownLength = ns.CooldownLength
 -- (db.cooldownGroupDefaults[group]), else these.
 ns.COOLDOWN_GROUP_MODES = { utility = "recharge" }
 ns.COOLDOWN_BAR_GROUPS = { EssentialCooldownViewer = "essential", UtilityCooldownViewer = "utility" }
+-- The bars with Close the gaps on until it's set (below: CenterCooldownIcons).
+ns.COOLDOWN_GROUP_CENTER = { utility = true }
+
+-- Whether a bar's Close the gaps is on.
+function ns.CooldownGroupCentered(group)
+	local set = ns.db.cooldownGroupDefaults[group]
+	if set and set.center ~= nil then return set.center end
+	return ns.COOLDOWN_GROUP_CENTER[group] or false
+end
 
 -- A group's mode, and its Resources and Show Early seconds (nil: the default share).
 function ns.CooldownGroupSettings(group)
@@ -4332,7 +4345,7 @@ do
 	end
 end
 
--- Every icon faded here back to full.
+-- Every icon faded here back to full (and back in its place).
 local function ReleaseReadyIcons()
 	wipe(readyTargets)
 	for icon in pairs(readyAlpha) do
@@ -4340,6 +4353,186 @@ local function ReleaseReadyIcons()
 			icon:SetAlpha(1)
 		end
 		readyAlpha[icon] = nil
+	end
+	ns.UncenterCooldownIcons()
+end
+
+-- A bar's Close the gaps (ns.CooldownGroupCentered; the Essential and
+-- Utility bars): the icons it shows sit together in their
+-- order, centered on the bar's rows (or columns), instead of faded ones
+-- leaving gaps; the faded ones wait after the last shown. Each icon's place
+-- in the game's own layout is read off it while it's where the game put it:
+-- found anywhere but where it was last put here, the game laid the bar out
+-- again. Not in Edit Mode. (The others slide; one coming back from faded is
+-- put straight in its place.)
+do
+	local SLIDE_RATE = 12 -- (share of the distance left, a second)
+	local slotOf = setmetatable({}, { __mode = "k" }) -- icon -> the game's place: { point, relativeTo, relativePoint, x, y }
+	local putAt = setmetatable({}, { __mode = "k" }) -- icon -> { x, y }, where it was last put here
+	local goal = setmetatable({}, { __mode = "k" }) -- icon -> { x, y }, where it's going
+	local placeOf = setmetatable({}, { __mode = "k" }) -- icon -> its place in its bar (layoutIndex)
+	local barIcons, lineCross, wanted, shownIn = {}, {}, {}, {}
+
+	local function Movable(icon)
+		return not IsForbidden(icon)
+			and not (InCombatLockdown() and icon.IsProtected and ns.Flag(icon:IsProtected()))
+	end
+
+	-- The game's place for an icon (read again if it's not where it was put here), or nil.
+	local function ReadSlot(icon)
+		local okCount, count = pcall(icon.GetNumPoints, icon)
+		if not okCount or Secret(count) or count ~= 1 then return slotOf[icon] end
+		local ok, point, relativeTo, relativePoint, x, y = pcall(icon.GetPoint, icon, 1)
+		if not ok or Secret(point, relativeTo, relativePoint, x, y) or type(x) ~= "number" or type(y) ~= "number" then
+			return slotOf[icon]
+		end
+		local at = putAt[icon]
+		if at and math.abs(at[1] - x) < 0.01 and math.abs(at[2] - y) < 0.01 then
+			return slotOf[icon]
+		end
+		putAt[icon] = nil
+		local slot = slotOf[icon] or {}
+		slot[1], slot[2], slot[3], slot[4], slot[5] = point, relativeTo, relativePoint, x, y
+		slotOf[icon] = slot
+		return slot
+	end
+
+	local function Put(icon, x, y)
+		local slot = slotOf[icon]
+		if not slot or not Movable(icon) then return end
+		icon:SetPoint(slot[1], slot[2], slot[3], x, y)
+		local at = putAt[icon] or {}
+		at[1], at[2] = x, y
+		putAt[icon] = at
+	end
+
+	local function PutBack(icon)
+		ReadSlot(icon)
+		local slot = slotOf[icon]
+		if slot and putAt[icon] and Movable(icon) then
+			icon:SetPoint(slot[1], slot[2], slot[3], slot[4], slot[5])
+		end
+		putAt[icon], goal[icon] = nil, nil
+	end
+
+	local function SetGoal(icon, x, y)
+		local at = goal[icon] or {}
+		at[1], at[2] = x, y
+		goal[icon] = at
+	end
+
+	local function ByPlace(a, b)
+		local placeA, placeB = placeOf[a], placeOf[b]
+		if placeA ~= placeB then return placeA < placeB end
+		local slotA, slotB = slotOf[a], slotOf[b]
+		if slotA[5] ~= slotB[5] then return slotA[5] > slotB[5] end
+		return slotA[4] < slotB[4]
+	end
+
+	-- A bar's icons (each with its game place) to their goals.
+	local function PlaceBar(icons)
+		table.sort(icons, ByPlace)
+		local first, second = slotOf[icons[1]], slotOf[icons[2]]
+		local stepX, stepY = second[4] - first[4], second[5] - first[5]
+		local across = math.abs(stepY) < 0.5 -- (side by side: rows; else columns)
+		-- The game's lines (rows or columns), by where each sits across them.
+		wipe(lineCross)
+		local lineLength, count = 0, 0
+		for _, icon in ipairs(icons) do
+			local slot = slotOf[icon]
+			local cross = across and slot[5] or slot[4]
+			if #lineCross == 0 or math.abs(cross - lineCross[#lineCross]) > 0.5 then
+				lineCross[#lineCross + 1] = cross
+			end
+			if #lineCross == 1 then lineLength = lineLength + 1 end
+			shownIn[icon] = readyTargets[icon] ~= 0
+			if shownIn[icon] then count = count + 1 end
+		end
+		local function Goal(icon, line, along)
+			local cross = lineCross[line + 1] or lineCross[#lineCross]
+			if across then
+				SetGoal(icon, first[4] + along * stepX, cross)
+			else
+				SetGoal(icon, cross, first[5] + along * stepY)
+			end
+		end
+		local lastLine = math.max(0, math.floor((count - 1) / lineLength))
+		local inLast = count - lastLine * lineLength
+		local shown, faded = 0, 0
+		for _, icon in ipairs(icons) do
+			wanted[icon] = true
+			if shownIn[icon] then
+				local line = math.floor(shown / lineLength)
+				local inLine = math.min(lineLength, count - line * lineLength)
+				Goal(icon, line, shown % lineLength + (lineLength - inLine) / 2)
+				shown = shown + 1
+			else
+				Goal(icon, lastLine, (lineLength - inLast) / 2 + inLast + faded)
+				faded = faded + 1
+			end
+		end
+		wipe(shownIn)
+	end
+
+	local function Collect(icon, _, bar)
+		local group = ns.COOLDOWN_BAR_GROUPS[bar]
+		if group and ns.CooldownGroupCentered(group) and ReadSlot(icon) then
+			local place = icon.layoutIndex
+			if Secret(place) or type(place) ~= "number" then place = math.huge end
+			placeOf[icon] = place
+			barIcons[bar] = barIcons[bar] or {}
+			table.insert(barIcons[bar], icon)
+		end
+	end
+
+	-- Each pass of the When Ready check: every centered bar's goals.
+	function ns.CenterCooldownIcons()
+		local on = false
+		for _, group in pairs(ns.COOLDOWN_BAR_GROUPS) do
+			on = on or ns.CooldownGroupCentered(group)
+		end
+		if not on and not next(putAt) then return end
+		wipe(wanted)
+		local editMode = _G.EditModeManagerFrame
+		if on and not (editMode and editMode.IsEditModeActive and ns.Flag(editMode:IsEditModeActive())) then
+			for _, icons in pairs(barIcons) do wipe(icons) end
+			EachCooldownIcon(Collect)
+			for _, icons in pairs(barIcons) do
+				if #icons > 1 then PlaceBar(icons) end
+			end
+		end
+		for icon in pairs(putAt) do
+			if not wanted[icon] then PutBack(icon) end
+		end
+		for icon in pairs(goal) do
+			if not wanted[icon] then goal[icon] = nil end
+		end
+	end
+
+	-- Each frame: the icons on their way.
+	function ns.SlideCooldownIcons(elapsed)
+		for icon, at in pairs(goal) do
+			local was = putAt[icon]
+			local slot = ReadSlot(icon)
+			if was and not putAt[icon] then
+				goal[icon] = nil -- (the game laid it out again: placed on the next pass)
+			elseif slot then
+				local x, y = slot[4], slot[5]
+				if was then x, y = was[1], was[2] end
+				if x ~= at[1] or y ~= at[2] then
+					local alpha = readyAlpha[icon]
+					local share = (alpha and alpha < 0.2) and 1 or math.min(1, elapsed * SLIDE_RATE)
+					x, y = x + (at[1] - x) * share, y + (at[2] - y) * share
+					if math.abs(at[1] - x) < 0.5 and math.abs(at[2] - y) < 0.5 then x, y = at[1], at[2] end
+					Put(icon, x, y)
+				end
+			end
+		end
+	end
+
+	function ns.UncenterCooldownIcons()
+		for icon in pairs(putAt) do PutBack(icon) end
+		wipe(goal)
 	end
 end
 
@@ -4586,7 +4779,9 @@ local function UpdateReadyOnly(elapsed, now)
 				end
 			end)
 		end
+		ns.CenterCooldownIcons()
 	end
+	ns.SlideCooldownIcons(elapsed)
 	for icon, target in pairs(readyTargets) do
 		if target < 1 and not readyAlpha[icon] then
 			readyAlpha[icon] = 1
@@ -4666,7 +4861,8 @@ function ns.ReportCooldowns()
 		ns.Print("no Cooldown Manager frames found among the faded frames")
 	end
 	cooldownCheckedAt = 0
-	ns.Print("recharging now: " .. tostring(AnyCooldownRecharging(now)))
+	ns.Print(("recharging now: essential %s, utility %s"):format(tostring(AnyCooldownRecharging(now, "essential")),
+		tostring(AnyCooldownRecharging(now, "utility"))))
 end
 
 -- /cine debug frame <text>: how the faded frames with <text> in their name,
@@ -5535,9 +5731,14 @@ function ns.UpdateFrames(cinematic, elapsed)
 	events.tracking = minimapPage and not taxiHidesMinimap and ((keepForGathering and not trackingPaused) or keepForCreatures
 		or ns.IsMinimapRevealed(now))
 	events.quest, events.gamepad, events.roster = ns.PageOn("handleQuests") and questReveal, padReveal, rosterReveal
-	events.cooldown = cinematic and ns.PageOn("handleCooldowns") and ns.db.cooldownWhileRecharging
-		and (not ns.db.cooldownAfterCombat or now - lastCombatAt < ns.db.calmTime)
-		and AnyCooldownRecharging(now)
+	-- (Each bar's own Stay up while recharging: Essential's, with Enhanced
+	-- Cooldown Manager's bars, and Utility's.)
+	local calm = now - lastCombatAt < ns.db.calmTime
+	events.cooldown = cinematic and ns.PageOn("handleCooldowns")
+		and ((ns.db.cooldownWhileRecharging and (calm or not ns.db.cooldownAfterCombat)
+				and AnyCooldownRecharging(now, "essential"))
+			or (ns.db.cooldownUtilityWhileRecharging and (calm or not ns.db.cooldownUtilityAfterCombat)
+				and AnyCooldownRecharging(now, "utility")))
 	-- (auraOnly: rows brought up by a buff or debuff peek and nothing else.)
 	local auraOnly = wipe(tickTables.auraOnly)
 	for _, group in ipairs(hoverGroups) do

@@ -116,7 +116,10 @@ local DEFAULTS = {
 	minimapPingTime = 30,       -- ...for this many seconds (once faded in), then it fades
 	cooldownWhileRecharging = false, -- the Cooldown Manager stays up while a cooldown recharges (Mouseover groups
 	                                 -- with Cooldown recharging ticked: the Cooldowns group by default)
-	cooldownAfterCombat = true,     -- ...only within the Calm Timer after a fight
+	cooldownAfterCombat = true,     -- ...only within the Calm Timer after a fight (these two: the Essential bar,
+	                                -- with Enhanced Cooldown Manager's; the Utility bar's below)
+	cooldownUtilityWhileRecharging = false,
+	cooldownUtilityAfterCombat = true,
 	minimapIndoors = false,    -- keep the minimap up indoors (hidden there, its map goes stale)
 	minimapKeepQuest = true,   -- keep the minimap up while a quest is tracked
 	minimapKeepQuestFor = 1,   -- ...only this many minutes after picking one up or progress on one (0 = off)
@@ -4305,6 +4308,18 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			BarsOff((ns.db.profiles or {})["Immersive (CDM)"])
 			if (ns.db.liveProfile or ns.db.profile) == "Immersive (CDM)" then BarsOff(ns.db) end
 			ns.db.cdmBarsV1 = true
+		end
+		-- Stay up while recharging is each bar's now: the Utility bar's starts
+		-- as the one setting was (live and in every profile). Once.
+		if not ns.db.cooldownUtilityRechargeV1 then
+			local function Copy(t)
+				if type(t) ~= "table" then return end
+				if t.cooldownWhileRecharging ~= nil then t.cooldownUtilityWhileRecharging = t.cooldownWhileRecharging end
+				if t.cooldownAfterCombat ~= nil then t.cooldownUtilityAfterCombat = t.cooldownAfterCombat end
+			end
+			Copy(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do Copy(saved) end
+			ns.db.cooldownUtilityRechargeV1 = true
 		end
 		-- The Raid Frame Manager's default Mouseover group held the raid and
 		-- party frames too, so hovering them brought it up: just the manager now. Once.

@@ -215,6 +215,7 @@ ns.PROFILE_MODULES = {
 		apply = function(set)
 			set("cooldownManagerOn", true)
 			set("cooldownWhileRecharging", true)
+			set("cooldownUtilityWhileRecharging", true)
 			for _, list in ipairs({ "combatShow", "enemyShow" }) do
 				local rows = All(MAIN_BARS, false)
 				for row in pairs(All(EXTRA_BARS, false)) do rows[row] = false end
@@ -253,7 +254,9 @@ ns.PROFILE_MODULES = {
 		apply = function(set)
 			set("cooldownManagerOn", true)
 			set("cooldownWhileRecharging", true)
+			set("cooldownUtilityWhileRecharging", true)
 			set("cooldownAfterCombat", false)
+			set("cooldownUtilityAfterCombat", false)
 			local fights = All({ "mainbar", "art", "bottomleft", "bottomright", "pet", "stance", "totems", "micro",
 				"bags", "xp" }, false)
 			local combat = {}

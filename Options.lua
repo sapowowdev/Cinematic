@@ -7420,19 +7420,32 @@ local function CreateCooldownPanel()
 		"you pick. Off: they don't; it still fades as its Standard Frames row says."], subtitle)
 	local function Handled() return ns.GetDB().handleCooldowns end
 
-	local recharging = Check(content, "cooldownWhileRecharging", L["Stay up while a cooldown is recharging"],
-		L["Keeps the Cooldown Manager up until every cooldown in it is ready again, then it fades. Not " ..
-		"the global cooldown, nor its buff bars. (It brings up the Mouseover groups with Cooldown " ..
-		"recharging ticked: the Cooldowns group by default.)"])
-	recharging:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 0, -8)
-	recharging:HookScript("OnClick", Refresh) -- grey out / enable the option below
-	GreyUnless(recharging, function(db) return db.handleCooldowns end)
+	-- Stay up while recharging, each bar's own (Essential's keys also count
+	-- Enhanced Cooldown Manager's bars).
+	local afterCombat = handleCheck
+	for i, bar in ipairs({
+		{ prefix = "cooldown", label = L["Essential: stay up while a cooldown is recharging"],
+			tip = L["Keeps the Cooldown Manager up until every cooldown in its Essential bar (and Enhanced " ..
+			"Cooldown Manager's cooldown bars) is ready again, then it fades. Not the global cooldown, nor its " ..
+			"buff bars. (It brings up the Mouseover groups with Cooldown recharging ticked: the Cooldowns " ..
+			"group by default.)"] },
+		{ prefix = "cooldownUtility", label = L["Utility: stay up while a cooldown is recharging"],
+			tip = L["Keeps the Cooldown Manager up until every cooldown in its Utility bar is ready again, " ..
+			"then it fades. (It brings up the Mouseover groups with Cooldown recharging ticked: the Cooldowns " ..
+			"group by default.)"] },
+	}) do
+		local whileKey = bar.prefix .. "WhileRecharging"
+		local recharging = Check(content, whileKey, bar.label, bar.tip)
+		recharging:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", i == 1 and 0 or -16, i == 1 and -8 or -2)
+		recharging:HookScript("OnClick", Refresh) -- grey out / enable the option below
+		GreyUnless(recharging, function(db) return db.handleCooldowns end)
 
-	local afterCombat = Check(content, "cooldownAfterCombat", L["Only after combat"],
-		L["Only within the Calm Timer after a fight (CineMode page): after that it fades even with a " ..
-		"long cooldown still going, and cooldowns used out of fights don't bring it up."])
-	afterCombat:SetPoint("TOPLEFT", recharging, "BOTTOMLEFT", 16, -2)
-	GreyUnless(afterCombat, function(db) return db.handleCooldowns and db.cooldownWhileRecharging end)
+		afterCombat = Check(content, bar.prefix .. "AfterCombat", L["Only after combat"],
+			L["Only within the Calm Timer after a fight (CineMode page): after that it fades even with a " ..
+			"long cooldown still going, and cooldowns used out of fights don't bring it up."])
+		afterCombat:SetPoint("TOPLEFT", recharging, "BOTTOMLEFT", 16, -2)
+		GreyUnless(afterCombat, function(db) return db.handleCooldowns and db[whileKey] end)
+	end
 
 	-- Each spell's icon: always shown (the game's own), only when ready in
 	-- fights, or only while recharging. A row per spell in the Cooldown
@@ -7729,16 +7742,28 @@ local function CreateCooldownPanel()
 		row.earlyText:Hide()
 		row.power:Hide()
 		if row.line then row.line:Hide() end
+		if row.center then row.center:Hide() end
 	end
 
 	-- A group's heading row: its name in gold, its defaults beside it, and a
-	-- rule under it across the columns.
+	-- rule under it across the columns; for a bar, its Close the gaps under
+	-- that (db.cooldownGroupDefaults[group].center; not set: ns.COOLDOWN_GROUP_CENTER).
 	local function GroupRow(group)
 		if not groupRows[group] then
 			local row = NewRow(GROUP, "GameFontNormal")
 			row.line = content:CreateTexture(nil, "ARTWORK")
 			row.line:SetColorTexture(1, 0.82, 0, 0.4)
 			row.line:SetSize(GROUP_WIDTH, 1)
+			if group ~= "other" then
+				row.center = Check(content, nil, L["Close the gaps (centered)"],
+					L["The icons this bar shows sit together in their order, centered on the bar, instead of " ..
+					"faded ones leaving gaps. Edit Mode shows the game's own layout."], function(value)
+					GroupDefaults(group).center = value -- (false kept: Utility's is on until set)
+				end)
+				row.center.Refresh = function(self)
+					self:SetChecked(ns.CooldownGroupCentered(group))
+				end
+			end
 			groupRows[group] = row
 		end
 		return groupRows[group]
@@ -7773,6 +7798,12 @@ local function CreateCooldownPanel()
 				row.line:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, y - 30)
 				row.line:Show()
 				y = y - GROUP_HEIGHT
+				if row.center then
+					row.center:ClearAllPoints()
+					row.center:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", -4, y + 2)
+					row.center:Show()
+					y = y - ROW_HEIGHT
+				end
 			end
 			local row = rows[i] or NewRow(SPELL, "GameFontHighlight")
 			rows[i] = row
