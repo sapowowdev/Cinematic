@@ -183,9 +183,15 @@ local function Command(m)
 	return grow and m.grow or m.shrink
 end
 
+-- The drift's wanted: set, and not held still for Quest talk's bubble over
+-- the NPC's head (following their plate, it jiggled as the camera drifted).
+local function DriftWanted()
+	return (ns.db.questCamDrift or 0) >= 1 and not (ns.QuestTalkHoldsCamera and ns.QuestTalkHoldsCamera())
+end
+
 -- Settled and drifting to and fro (or about to).
 local function Drifting()
-	return cam.active and not cam.handedOver and (ns.db.questCamDrift or 0) >= 1
+	return cam.active and not cam.handedOver and DriftWanted()
 end
 
 local function StopMove(m)
@@ -514,7 +520,7 @@ end
 -- (the tilt and the zoom go together). waitZoom: not while the zoom's moving.
 local function StepSequence(now)
 	while true do
-		local drift = cam.active and not cam.handedOver and #cam.steps == 0 and (ns.db.questCamDrift or 0) >= 1
+		local drift = cam.active and not cam.handedOver and #cam.steps == 0 and DriftWanted()
 		if movers.yaw.moving or movers.pitch.moving
 			or now - math.max(movers.yaw.stoppedAt or 0, movers.pitch.stoppedAt or 0) < (drift and DRIFT_GAP or STEP_GAP) then
 			return
@@ -683,7 +689,7 @@ local function Start()
 		-- With nothing after it but the drift, the turn flows straight into it
 		-- (stopping and starting again showed as a pause).
 		local tail
-		if (db.questCamDrift or 0) >= 1 and db.questCamLower <= 0 then
+		if DriftWanted() and db.questCamLower <= 0 then
 			tail = { extra = db.questCamDrift / 2, R = DRIFT_EASE * DRIFT_TIME,
 				speed = db.questCamDrift / (DRIFT_TIME * (1 - DRIFT_EASE)) }
 		end
@@ -764,7 +770,14 @@ clickWatcher:SetScript("OnEvent", function()
 	local x = GetCursorPosition() / UIParent:GetEffectiveScale()
 	lastClick.at = GetTime()
 	lastClick.side = x > UIParent:GetWidth() / 2 and "right" or "left"
+	lastClick.x = x / UIParent:GetWidth()
 end)
+
+-- How far across the screen (a share of its width) the click that opened the
+-- conversation was, or nil if it wasn't a click (Quest talk's Opposite Clicked).
+function ns.ClickedX()
+	return GetTime() - lastClick.at <= CLICK_WINDOW and lastClick.x or nil
+end
 
 local OPENS = {
 	QUEST_GREETING = true, QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true,
