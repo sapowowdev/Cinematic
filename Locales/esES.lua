@@ -2361,6 +2361,8 @@ L["The fastest the camera swings toward a new speaker. Each swing speeds up and 
 L["Leave the speaker off center"] = "Dejar a quien habla fuera del centro"
 L["The swing stops with the speaker this far from the middle of the screen, on their side, so you stay in the shot beside them. 0 aims right at them (you may block the view)."] = "El giro se detiene con quien habla a esta distancia del centro de la pantalla, por su lado, para que sigas en el plano a su lado. 0 apunta justo a esa persona (puedes tapar la vista)."
 L["Once the camera has settled on a speaker, it drifts slowly to and fro, side to side, across this many degrees, so the shot isn't stock-still. 0 holds still."] = "Cuando la cámara se ha asentado en quien habla, se desliza despacio de un lado a otro, tantos grados como estos, para que el plano no quede inmóvil. 0 la deja quieta."
+L["Look around for speakers off screen"] = "Buscar a quien habla fuera de la pantalla"
+L["When someone talks out of sight (behind you, say), the camera turns around, a full turn at most, until their chat bubble shows, then frames them. If they're nowhere to be seen, it ends up back where it was."] = "Cuando alguien habla fuera de la vista (detrás de ti, por ejemplo), la cámara gira, una vuelta completa como mucho, hasta que aparece su bocadillo de chat, y luego lo encuadra. Si no se le ve por ningún lado, vuelve a donde estaba."
 L["Ending"] = "Final"
 L["Over after no one talks for"] = "Termina si nadie habla durante"
 L["With no one talking for this long, the camera turns back and zooms back out. Moving ends it at once, leaving the camera where it is."] = "Si nadie habla durante este tiempo, la cámara vuelve y se aleja. Si te mueves, termina al instante y la cámara se queda donde está."

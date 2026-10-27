@@ -14,7 +14,8 @@
 -- SIDE_TURN at most, and how far it moved them isn't learnt from. More
 -- lines from the one the
 -- camera's on don't move it: the drift keeps the shot alive. A speaker with
--- no bubble on screen leaves the camera on whoever it was on.
+-- no bubble on screen is looked round for (chatCamSearch: see SEARCH_SPEED),
+-- or leaves the camera on whoever it was on.
 --
 -- The turns are sent as the quest cam sends its own (see
 -- SPEED_MIN_SETTING), along eased curves; a drift leg going a new speaker's
@@ -117,6 +118,14 @@ local SPEED_PRIME_TIME = 0.2 -- seconds the lowest setting is in before the move
 local SPEED_RESTORE_DELAY = 0.3 -- seconds after a move stops before your setting comes back
 local TALKED_WINDOW = 30 -- seconds after a gossip or quest window closes its NPC's lines still start it at once
 local BUBBLE_WAIT = 2  -- seconds after a line its bubble is waited for before saying there's none
+-- A speaker with no bubble on screen by then (behind you, say): with
+-- chatCamSearch on, the camera wraps round, a full turn at most, toward the
+-- side their bubble's drawn off screen if it is, or where they were placed
+-- before, until their bubble shows (then the usual swing frames them). Once
+-- per speaker a conversation: found nowhere (a yell from afar, say), it's
+-- back where it started, and their later lines don't search again.
+local SEARCH_SPEED = 45 -- degrees a second the look round goes at most
+local SEARCH_ACCEL = 30 -- ...speeding up and slowing down no harder than this (degrees/sec per second)
 local AIM_EVERY = 0.25 -- seconds between looks for a new speaker's bubble
 local LET_GO_TIME = 0.3 -- seconds a move under way takes to stop as you move off (quick: it's yours)
 local ZOOM_MARGIN = 0.5 -- yards: already about this close, so no zoom in
@@ -133,7 +142,8 @@ local FOLLOW_CVARS = { values = { cameraSmoothStyle = "0" } } -- (camera follow 
 local turn = { amount = 0, moving = false, stoppedAt = 0, primedUntil = 0 }
 -- The conversation going on: { startedAt, lastLineAt, nextAimAt, turnedAt, on (who
 -- the camera's on), center (the drift's middle), driftOut, zoom (your
--- distance), zoomedTo, speaker = { name, text, at, missing } }
+-- distance), zoomedTo, base (where turns are counted from: 0, or where a
+-- look round found someone), search, searched, speaker = { name, text, at, missing } }
 local convo
 local leaving -- once it's over: { zoom, zoomedTo, startedAt } until the turn back starts
 local zoomingOut -- the distance the zoom back out is heading for
@@ -155,6 +165,7 @@ ns.DEFAULTS.chatCamSwingSpeed = 15   -- degrees a second a swing goes at most
 ns.DEFAULTS.chatCamFrame = 6         -- degrees off the middle a speaker's left at, on their side
 ns.DEFAULTS.chatCamDrift = 0         -- degrees it drifts to and fro on a speaker (0: holds still)
 ns.DEFAULTS.chatCamQuiet = 20       -- seconds with no one talking before it's over
+ns.DEFAULTS.chatCamSearch = true    -- a speaker off screen: the camera looks round for them (see SEARCH_SPEED)
 -- A row on the Camera Modes page's grid (Turn off in, Calm Timer) and a box in
 -- the Minimap page's "Hide in camera modes", as key "chatcam" (the Chat page's
 -- own settings start with "chat"). Added here, so after Core.lua made the
@@ -418,6 +429,7 @@ local function Leave(now)
 	end
 	if not leaving.turnedBack then
 		leaving.turnedBack = true
+		turn.amount = (turn.amount + 180) % 360 - 180 -- (looked round for someone: the shorter way back)
 		if turn.amount ~= 0 then
 			MoveTo(0, SwingTime(math.abs(turn.amount), Ease(BACK_EASE), BACK_MIN_TIME), Ease(BACK_EASE), "back")
 			return
@@ -522,6 +534,25 @@ local function BubbleAngle(text)
 	end
 	if angle then
 		return angle, sx, sy, shown - 1, how
+	end
+	return nil
+end
+
+-- Which side of the screen (1 right, -1 left) a bubble saying `text` is
+-- drawn off it, or nil (none, or it can't be read).
+local function BubbleSide(text)
+	if fake or not (C_ChatBubbles and C_ChatBubbles.GetAllChatBubbles and ns.BubbleSays) then
+		return nil
+	end
+	for _, bubble in ipairs(C_ChatBubbles.GetAllChatBubbles(false)) do
+		if not (bubble.IsForbidden and bubble:IsForbidden()) and ns.BubbleSays(bubble, text) then
+			local x = Place(bubble)
+			if x and x < 0 then
+				return -1
+			elseif x and x > WorldFrame:GetWidth() then
+				return 1
+			end
+		end
 	end
 	return nil
 end
@@ -862,16 +893,67 @@ local function ZoomIn(now)
 	end
 end
 
+-- Looks round for a speaker with no bubble on screen (see SEARCH_SPEED): a
+-- full turn their way at most, eased in and out.
+local function StartSearch(now, speaker)
+	convo.searched = convo.searched or {}
+	convo.searched[speaker.name] = true
+	local way, why = BubbleSide(speaker.text), "their bubble's off that side"
+	local placed = convo.placed and convo.placed[speaker.name]
+	if not way and placed then
+		way = placed.at - convo.gain * (turn.amount - convo.base) >= 0 and 1 or -1
+		why = "where they were before"
+	end
+	if not way then
+		way, why = math.random() < 0.5 and 1 or -1, "no telling which way"
+	end
+	local R = SEARCH_SPEED * math.pi / (2 * SEARCH_ACCEL) -- (seconds speeding up: see SwingTime)
+	local T = 360 / SEARCH_SPEED + R
+	convo.search = { from = turn.amount, way = way }
+	convo.turnedAt = convo.turnedAt or now
+	Say(("%s: no bubble on screen, looking round to the %s for them (%s)"):format(
+		speaker.name, way > 0 and "right" or "left", why))
+	Note("search for " .. speaker.name)
+	MoveTo(turn.amount + 360 * way, T, R / T, "search")
+end
+
 -- A new speaker: swing toward their bubble once it shows.
 -- drifting: a move's under way (a drift leg, a swing, the turn back). Going
 -- the new swing's way, it turns into it; the other way, it eases to a stop
 -- first (Aim again after).
 local function Aim(now, drifting)
 	local speaker = convo.speaker
+	local search = convo.search
+	if search then
+		if BubbleAngle(speaker.text) then
+			-- (Eased to a stop, then the usual swing frames them.)
+			convo.search, convo.rebase = nil, true
+			Say(("found %s's bubble %+.0f deg round: stopping"):format(speaker.name, turn.amount - search.from))
+			EaseToStop()
+		elseif not turn.moving then
+			convo.search, speaker.missing = nil, true
+			turn.amount = turn.amount - 360 * search.way -- (a full turn: back where it started)
+			Say(("%s: no bubble anywhere round, staying on %s"):format(speaker.name, convo.on or "where it is"))
+		end
+		return
+	end
+	if convo.rebase then
+		-- (Turned round to find someone: where the camera's got to is the new
+		-- start, for the spots and how far it turns from there.)
+		convo.rebase, convo.base, convo.placed = nil, turn.amount, nil
+	end
 	local zooming = ns.QuestCamZooming and ns.QuestCamZooming()
 	local angle, sx, sy, others, how = BubbleAngle(speaker.text)
 	if not angle then
 		if not speaker.missing and now - speaker.at > BUBBLE_WAIT then
+			if ns.db.chatCamSearch and not (convo.searched and convo.searched[speaker.name]) then
+				if drifting then
+					EaseToStop() -- (a stop first, then the look round)
+				else
+					StartSearch(now, speaker)
+				end
+				return
+			end
 			speaker.missing = true
 			Say(("%s: no bubble on screen, staying on %s%s"):format(speaker.name, convo.on or "where it is",
 				convo.zoomChecked and "" or " (no zoom in)"))
@@ -891,7 +973,7 @@ local function Aim(now, drifting)
 	convo.placed = convo.placed or {}
 	local placed = convo.placed[speaker.name]
 	if not placed or (good and not placed.good) then
-		convo.placed[speaker.name] = { at = angle + convo.gain * turn.amount, good = good }
+		convo.placed[speaker.name] = { at = angle + convo.gain * (turn.amount - convo.base), good = good }
 	end
 	-- Each speaker's spot by their order, left to right, spread evenly from
 	-- SIDE_TURN left to SIDE_TURN right (once two have talked).
@@ -908,7 +990,7 @@ local function Aim(now, drifting)
 		end)
 		for i, name in ipairs(names) do
 			if name == speaker.name then
-				spotAt = -SIDE_TURN + 2 * SIDE_TURN * (i - 1) / (#names - 1)
+				spotAt = convo.base - SIDE_TURN + 2 * SIDE_TURN * (i - 1) / (#names - 1)
 				spot = ("spot %d of %d from the left"):format(i, #names)
 			end
 		end
@@ -926,12 +1008,12 @@ local function Aim(now, drifting)
 	elseif good or off == 0 then
 		wanted = turn.amount -- (the only one so far, and in view)
 	else
-		wanted = off > 0 and SIDE_TURN or -SIDE_TURN -- (the only one so far: SIDE_TURN their way)
+		wanted = convo.base + (off > 0 and SIDE_TURN or -SIDE_TURN) -- (the only one so far: SIDE_TURN their way)
 	end
 	local target = math.max(turn.amount - MAX_SWING, math.min(turn.amount + MAX_SWING, wanted))
 	-- (Mid zoom in, the gain's the close-up one, not yet true: SIDE_TURN at most.)
 	local most = zooming and SIDE_TURN or MAX_TURN
-	target = math.max(-most, math.min(most, target))
+	target = math.max(convo.base - most, math.min(convo.base + most, target))
 	local step = target - turn.amount
 	local carry = drifting and turn.sent and math.abs(step) >= MIN_TURN and (step > 0) == turn.right
 	if drifting and not carry then
@@ -1033,7 +1115,7 @@ local function OnUpdate(_, elapsed)
 						gain <= 0 and " - WRONG WAY? /cine chatcam flip" or ""))
 					-- Still well off: one more go (not for a speaker someone else has since taken over from).
 					if gain > 0 and not speaker.correcting and speaker == convo.speaker
-						and math.abs(after) > ns.db.chatCamFrame + CORRECT and math.abs(turn.amount) < MAX_TURN then
+						and math.abs(after) > ns.db.chatCamFrame + CORRECT and math.abs(turn.amount - convo.base) < MAX_TURN then
 						speaker.correcting, speaker.aimed, convo.on = true, false, nil
 					end
 				end
@@ -1107,7 +1189,7 @@ end
 local function Heard(text, name)
 	local now = GetTime()
 	if not convo then
-		convo = { nextAimAt = 0, startedAt = now, gain = GAIN_START }
+		convo = { nextAimAt = 0, startedAt = now, gain = GAIN_START, base = 0 }
 		if frameLog.on or fake then -- (a Test button run is always logged)
 			ns.db.chatCamLog = {}
 			frameLog.lines, frameLog.startedAt = ns.db.chatCamLog, now
@@ -1125,6 +1207,13 @@ local function Heard(text, name)
 		Say(("%s started talking%s"):format(name, fake and " (test)" or ""))
 	elseif name == convo.on then
 		Say(("%s again: staying on them"):format(name))
+	end
+	if convo.search and convo.speaker.name ~= name then
+		-- (Someone else talking mid look round: it eases to a stop, and they're
+		-- looked for from there.)
+		Say(("%s talking: stopped looking for %s"):format(name, convo.speaker.name))
+		convo.search, convo.rebase = nil, true
+		EaseToStop()
 	end
 	convo.lastLineAt = now
 	convo.speaker = { name = name, text = text, at = now }

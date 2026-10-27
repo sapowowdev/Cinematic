@@ -3002,6 +3002,11 @@ local function CreateChatCamPanel()
 	Tooltip(drift, L["Once the camera has settled on a speaker, it drifts slowly to and fro, side " ..
 		"to side, across this many degrees, so the shot isn't stock-still. 0 holds still."])
 	GreyUnless(drift, IfOn)
+	local search = stack:Add(Check(content, "chatCamSearch", L["Look around for speakers off screen"],
+		L["When someone talks out of sight (behind you, say), the camera turns around, a full turn " ..
+		"at most, until their chat bubble shows, then frames them. If they're nowhere to be seen, " ..
+		"it ends up back where it was."]), "check")
+	GreyUnless(search, IfOn)
 	stack:Header(content, L["Ending"])
 	local quiet = stack:Add(Slider(content, "chatCamQuiet", L["Over after no one talks for"], 3, 30, 1, L["%d sec"]), "slider")
 	Tooltip(quiet, L["With no one talking for this long, the camera turns back and zooms back out. " ..
