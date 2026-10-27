@@ -974,7 +974,6 @@ local function AddIcon(entry)
 		b.count = b:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
 		b.count:SetPoint("BOTTOMRIGHT", b.icon, -1, 1)
 		b.name = b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-		b.name:SetPoint("LEFT", b.nameFrame, "LEFT", 15, 0)
 		b.name:SetJustifyH("LEFT")
 		if b.name.SetMaxLines then b.name:SetMaxLines(2) end
 		b.mark = b:CreateTexture(nil, "OVERLAY", nil, 2)
@@ -1010,8 +1009,13 @@ local function AddIcon(entry)
 	-- (Wider than the game's 147, the name frame and highlight stretch to suit.)
 	local wide = IconWidth()
 	b:SetSize(wide, BUTTON_HIGH)
-	b.nameFrame:SetSize(128 * (wide - ICON + 10) / (147 - ICON + 10), 64)
-	b.name:SetWidth(wide - ICON - 5 - 16)
+	-- (The art's edge stretches with it, so the name's 15 in does too, or
+	-- it sits on the frame's border.)
+	local stretch = (wide - ICON + 10) / (147 - ICON + 10)
+	b.nameFrame:SetSize(128 * stretch, 64)
+	b.name:ClearAllPoints()
+	b.name:SetPoint("LEFT", b.nameFrame, "LEFT", 15 * stretch, 0)
+	b.name:SetWidth(wide - ICON + 10 - 15 * stretch - 16)
 	b.chosen:SetSize(256 * wide / 147, 64)
 	b:ClearAllPoints()
 	b:SetPoint("TOPLEFT", 14 + iconColumn * (wide + 8), -cursor - 4)
@@ -1079,11 +1083,17 @@ local function SetButtons(first, second)
 		end
 	end
 	cursor = cursor + 10
+	-- (Side by side, centered, with room between for the second's key,
+	-- which sits just outside its left edge.)
 	buttons[1]:ClearAllPoints()
-	buttons[1]:SetPoint("TOP", panel, "TOP", second and -60 or 0, -cursor)
 	if second then
+		local gap = 16
+		local left = -(buttons[1]:GetWidth() + gap + buttons[2]:GetWidth()) / 2
+		buttons[1]:SetPoint("TOPLEFT", panel, "TOP", left, -cursor)
 		buttons[2]:ClearAllPoints()
-		buttons[2]:SetPoint("TOP", panel, "TOP", 60, -cursor)
+		buttons[2]:SetPoint("TOPLEFT", buttons[1], "TOPRIGHT", gap, 0)
+	else
+		buttons[1]:SetPoint("TOP", panel, "TOP", 0, -cursor)
 	end
 	cursor = cursor + 26
 end
@@ -1802,7 +1812,7 @@ local function CreatePanel()
 			if self.onClick then self.onClick() end
 		end)
 		b.key = b:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-		b.key:SetPoint("LEFT", 8, 0)
+		b.key:SetPoint("RIGHT", b, "LEFT", -3, 0)
 		b:Hide()
 		buttons[i] = b
 	end

@@ -675,15 +675,15 @@ DEFAULTS.questTalkStyle = "parchment" -- or "bubble" (the game's chat bubble)
 -- Where the bubble goes: "head" (over their nameplate), "fixed" (where you
 -- drag it) or "opposite" (across the screen from where you clicked them).
 DEFAULTS.questTalkPlace = "head"
-DEFAULTS.questTalkGameButton = true -- "Show the game's window" on the card
+DEFAULTS.questTalkGameButton = false -- "Show the game's window" on the card
 DEFAULTS.questTalkMiddle = 0.1         -- Opposite Clicked: clicks this share of the screen's width round its middle count as the middle
 DEFAULTS.questTalkStill = true -- Over the head: the quest camera holds still (no drift) while it's up
 DEFAULTS.questTalkKeys = true         -- 1-0 pick, Space turns the page / first button
 DEFAULTS.questTalkScale = 1
 DEFAULTS.questTalkTopGap = 0.03       -- the bubble kept this share of the screen down from its top (and the bar)
 DEFAULTS.questTalkLines = 7          -- the bubble's height, in lines of its words
-DEFAULTS.questTalkCardSide = "side" -- the quest card beside the bubble: "below", "side" (Opposite Clicked: its outer side, else the right), "right" or "left"
-DEFAULTS.questTalkCardSame = false   -- the card on the bubble's background
+DEFAULTS.questTalkCardSide = "below" -- the quest card beside the bubble: "below", "side" (Opposite Clicked: its outer side, else the right), "right" or "left"
+DEFAULTS.questTalkCardSame = true    -- the card on the bubble's background
 DEFAULTS.questTalkPortrait = true -- the NPC's portrait on the bubble's corner
 DEFAULTS.questTalkListY = 0.46 -- the list's top edge up the screen, till it's dragged
 DEFAULTS.duelPlates = true -- in CineMode, the nameplates of two players dueling near you show (see Effects)
