@@ -1884,6 +1884,8 @@ local function Open(kind)
 	end
 	talk.choice, talk.cardPage = nil, nil
 	talk.kind = kind
+	-- (Whether "npc" is there to go: some talks never have it, see Ending.)
+	talk.hadNpc = ns.Flag(UnitExists("npc"))
 	-- Anything going wrong: the game's window, so the conversation can go on.
 	local ok, err = pcall(Show)
 	if not ok then
@@ -1947,14 +1949,30 @@ end)
 -- at once then, not to the middle for the moment till the close (the next
 -- screen, if one opens, shows them again). A plate just swapped comes back
 -- a moment later, so only still gone after that is it the middle.
+-- ("npc" gone counts only if the talk began with it: some NPCs' never do,
+-- and a plate coming or going nearby then hid ours mid-talk.) Hidden for an
+-- end that doesn't come (the window still open a moment later, no close
+-- on its way): ours back.
 local REPLATE_WAIT = 0.1
+local ENDING_WAIT = 0.3
 local function Ending()
-	return closeTimer ~= nil or not TalkWindowOpen() or not ns.Flag(UnitExists("npc"))
+	return closeTimer ~= nil or not TalkWindowOpen()
+		or talk.hadNpc and not ns.Flag(UnitExists("npc"))
+end
+local function HideForEnd()
+	bubble:Hide()
+	panel:Hide()
+	local kind, opened = talk.kind, talk.opened
+	C_Timer.After(ENDING_WAIT, function()
+		if talk.kind == kind and talk.opened == opened and not gameWindow
+			and not closeTimer and TalkWindowOpen() and not panel:IsShown() then
+			pcall(Show, true)
+		end
+	end)
 end
 local function Replace()
 	if Ending() then
-		bubble:Hide()
-		panel:Hide()
+		HideForEnd()
 		return
 	end
 	if PlaceMode() == "head" and not NpcPlate() then
@@ -1963,8 +1981,7 @@ local function Replace()
 				return
 			end
 			if Ending() then
-				bubble:Hide()
-				panel:Hide()
+				HideForEnd()
 				return
 			end
 			Place()
