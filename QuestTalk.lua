@@ -1942,6 +1942,40 @@ watcher:SetScript("OnUpdate", function(_, elapsed)
 	end
 end)
 
+-- A plate came or went while ours show. A quest accepted refreshes the
+-- NPC's plate (its mark goes) as the talk ends, when "npc" is gone: ours go
+-- at once then, not to the middle for the moment till the close (the next
+-- screen, if one opens, shows them again). A plate just swapped comes back
+-- a moment later, so only still gone after that is it the middle.
+local REPLATE_WAIT = 0.1
+local function Ending()
+	return closeTimer ~= nil or not TalkWindowOpen() or not ns.Flag(UnitExists("npc"))
+end
+local function Replace()
+	if Ending() then
+		bubble:Hide()
+		panel:Hide()
+		return
+	end
+	if PlaceMode() == "head" and not NpcPlate() then
+		C_Timer.After(REPLATE_WAIT, function()
+			if not (Shown() and bubble) then
+				return
+			end
+			if Ending() then
+				bubble:Hide()
+				panel:Hide()
+				return
+			end
+			Place()
+			PlacePanel()
+		end)
+		return
+	end
+	Place()
+	PlacePanel() -- (the list beside it, or back on its own)
+end
+
 local events = CreateFrame("Frame")
 for event in pairs(OPENS) do events:RegisterEvent(event) end
 for event in pairs(CLOSES) do events:RegisterEvent(event) end
@@ -1953,8 +1987,7 @@ events:SetScript("OnEvent", function(_, event)
 	if event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED" then
 		-- (Their plate gone, or handed to someone else: over them again, or the middle.)
 		if Shown() and bubble then
-			Place()
-			PlacePanel() -- (the list beside it, or back on its own)
+			Replace()
 		end
 	elseif OPENS[event] then
 		-- (A frame later: the game's windows have shown and set themselves up.)
