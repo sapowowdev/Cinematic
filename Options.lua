@@ -6418,7 +6418,7 @@ do
 	-- drawer under it, in from the left, a line each (Row, Name, Mark, Color,
 	-- Plate, When; Default's own no Row: it's always there).
 	local SHOW_X, PREVIEW_X, NAME_X, CHIPS_X = 16, 44, 92, 290
-	local ROW_W, NAME_W, CHIPS_W = 590, 192, 236
+	local ROW_W, NAME_W, CHIPS_W = 590, 192, 228
 	local DRAWER_X, LINE_H, LABEL_W = 44, 34, 48
 	-- The Also color column's parts: setting (<kind>Color<part>), name, tip,
 	-- and (targetOnly) whether only your target's plate has one: the game's
@@ -6636,7 +6636,8 @@ do
 		stack:Help(content, L["A plate takes its whole look (mark, colors, opacity) from the first row that " ..
 			"fits it, top to bottom; the rows below aren't looked at. Click a row to open its settings: its " ..
 			"mark, the plate's colors and opacity, and When it fits. The chips beside its name show what's set " ..
-			"apart from the usual. Move a row with its arrows, take it off with its x. Add row puts a new one at " ..
+			"apart from the usual. Move a row with its arrows, copy it with its two squares, take it off with its x. " ..
+			"Add row puts a new one at " ..
 			"the end; its Row line says what it's for: a Kind, for Aggro and Units which of them, Who for just its " ..
 			"enemies, neutral units or friends, and Distance for just those within or past 11, 28 or 40 yards (Any " ..
 			"unit past 40 yards fades far plates). The same kind again is another row of it (Target (2)), say with " ..
@@ -7155,6 +7156,41 @@ do
 			preview:Pick(new)
 		end
 
+		-- A row copied: the next free of its kind, Who and Distance, with its
+		-- look, When, roles and name (marked a copy), just below it, opened.
+		-- Nothing with five of them on the grid.
+		local function CopyRow(id)
+			local db = ns.GetDB()
+			local base, reaction, _, distance = ns.MarkRowBase(id)
+			local new = FreeRow(base, reaction, distance)
+			if not new then return end
+			for _, key in ipairs(MARK_COPY) do
+				db[MarkKey(new, key)] = ns.TargetMarkOwn(key, id)
+			end
+			for _, part in ipairs(MARK_PARTS) do
+				db[new .. "Color" .. part] = ns.TargetMarkOwn("Color" .. part, id) and true or false
+			end
+			db[new .. "When"] = db[id .. "When"]
+			for _, word in ipairs(ns.MARK_WHEN_WORDS) do
+				db[new .. "When" .. word[2]] = db[id .. "When" .. word[2]]
+			end
+			for _, list in ipairs({ "frameRules", "tankHide", "healerHide", "damageHide" }) do
+				if type(db[list]) == "table" then db[list][new .. "When"] = db[list][id .. "When"] end
+			end
+			db.markNames = db.markNames or {}
+			local own = db.markNames[id]
+			db.markNames[new] = own and (L["%s (copy)"]):format(own):sub(1, 40) or nil
+			local order = Order()
+			local at = #order + 1
+			for i, each in ipairs(order) do
+				if each == id then at = i + 1 end
+			end
+			table.insert(order, at, new)
+			opened[new] = true
+			SetOrder(order)
+			preview:Pick(new)
+		end
+
 		function MakeRow(id)
 			local info = RowInfo(id)
 			local kind, base = id, info.base
@@ -7310,6 +7346,32 @@ do
 			row.toggle:SetScript("OnClick", function() Toggle(kind) end)
 			Tooltip(row.toggle, L["Show or hide this row's settings."])
 			if kind ~= "others" then
+				-- (Copy: two squares, one over the other, drawn here.)
+				local copy = Place(CreateFrame("Button", nil, row), ROW_W - 66)
+				copy:SetSize(16, 16)
+				-- (Back one first, each its edge then its middle, so the front
+				-- one's covers the back one's.)
+				for i, square in ipairs({ { 0, 5 }, { 5, 0 } }) do
+					local x, y = square[1], square[2]
+					local edge = copy:CreateTexture(nil, "ARTWORK", nil, i * 2 - 2)
+					edge:SetSize(11, 11)
+					edge:SetPoint("TOPLEFT", x, -y)
+					edge:SetColorTexture(1, 0.82, 0, 1)
+					local inside = copy:CreateTexture(nil, "ARTWORK", nil, i * 2 - 1)
+					inside:SetSize(7, 7)
+					inside:SetPoint("TOPLEFT", x + 2, -y - 2)
+					inside:SetColorTexture(0.1, 0.1, 0.1, 1)
+				end
+				copy:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+				Tooltip(copy, L["Copy this row."])
+				copy:SetScript("OnClick", function() CopyRow(kind) end)
+				copy.Refresh = function(self)
+					local base, reaction, _, distance = ns.MarkRowBase(kind)
+					local free = FreeRow(base, reaction, distance) ~= nil
+					self:SetEnabled(free)
+					self:SetAlpha(free and 1 or 0.35)
+				end
+				controls[#controls + 1] = copy
 				local remove = Place(CreateFrame("Button", nil, row), ROW_W - 22)
 				remove:SetSize(16, 16)
 				remove:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
