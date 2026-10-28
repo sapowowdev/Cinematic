@@ -2783,6 +2783,7 @@ function ns.EnsureTables()
 	ns.db.cooldownProcOnly = ns.db.cooldownProcOnly or {} -- ...spell ID -> true: only while it glows (a proc)
 	ns.db.cooldownAlwaysShow = ns.db.cooldownAlwaysShow or {} -- ...spell ID -> true: Always, whatever its group's
 	ns.db.cooldownGroupDefaults = ns.db.cooldownGroupDefaults or {} -- ...group -> { mode, power, early }
+	ns.db.cooldownBuffMode = ns.db.cooldownBuffMode or {} -- ...tracked buff's spell ID -> its own mode
 	ns.db.cooldownEarlyOff = nil -- (a test build's, when Show Early started ticked)
 	ns.db.gamepadPressButtons = ns.db.gamepadPressButtons or {} -- Gamepad page: button -> reveals the bars
 	ns.db.cineFade = nil -- (a test build's CineMode column, before it became cineShow)
@@ -4713,6 +4714,36 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then UtilityToo(saved.hoverGroups) end
 			end
 			ns.db.cooldownsUtilityV1 = true
+		end
+		-- The tracked buffs and bars are rows of their own now (they went with
+		-- the Essential row), and Enhanced Cooldown Manager's buff bars too:
+		-- put them in every saved group their old row was in. Once.
+		if not ns.db.cooldownsBuffsV1 then
+			local AFTER = { cooldowns = { "cooldownsbuffs", "cooldownsbars" }, ["addon:fecm"] = { "addon:fecmAuras" } }
+			local function BuffsToo(groups)
+				for _, group in ipairs(groups or {}) do
+					local has = {}
+					for _, member in ipairs(group.members or {}) do has[member] = true end
+					for old, new in pairs(AFTER) do
+						for i, member in ipairs(group.members or {}) do
+							if member == old then
+								for _, row in ipairs(new) do
+									if not has[row] then
+										i = i + 1
+										table.insert(group.members, i, row)
+									end
+								end
+								break
+							end
+						end
+					end
+				end
+			end
+			BuffsToo(ns.db.hoverGroups)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then BuffsToo(saved.hoverGroups) end
+			end
+			ns.db.cooldownsBuffsV1 = true
 		end
 		-- "Hide the circle under your target out of combat" (hideTargetCircle)
 		-- is now the Standard Frames page's Target circle row: ticked, it

@@ -8333,7 +8333,9 @@ local function CreateCooldownPanel()
 		"only while it recharges. When it procs: in fights or not, it shows only while the game makes it " ..
 		"glow (a proc, like an instant Lightning Bolt). A faded icon keeps its place in the bar. In " ..
 		"fights the game may not say how long is left, so then it goes by when you last cast it. The " ..
-		"settings beside each group's name set every spell in it at once."]:format(ns.READY_EARLY * 100))
+		"settings beside each group's name set every spell in it at once."]:format(ns.READY_EARLY * 100) .. " " ..
+		L["Tracked buffs and bars: Always, In combat, Out of combat or Hidden (the game keeps your buffs " ..
+		"secret in fights, so they go by that alone). Click a group's name to fold it away."])
 	RecordKey(content, "cooldownReadyOnly") -- (for the page's Reset)
 	RecordKey(content, "cooldownReadyEarly")
 	RecordKey(content, "cooldownEarlyOn")
@@ -8342,6 +8344,7 @@ local function CreateCooldownPanel()
 	RecordKey(content, "cooldownGroupDefaults")
 	RecordKey(content, "cooldownProcOnly")
 	RecordKey(content, "cooldownAlwaysShow")
+	RecordKey(content, "cooldownBuffMode")
 	-- Columns: the spell, when it shows, and (When ready only) how early it's back.
 	local MODE_X, POWER_X, EARLY_X, ROW_HEIGHT = 200, 360, 440, 26
 	local GROUP_HEIGHT, GROUP_GAP, GROUP_WIDTH = 36, 12, 560
@@ -8353,15 +8356,19 @@ local function CreateCooldownPanel()
 	powerHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", POWER_X - 4, -10)
 	local earlyHeading = Label(content, "GameFontNormalSmall", L["Show Early"])
 	earlyHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", EARLY_X, -10)
-	local noSpells = Label(content, "GameFontDisable",
-		L["No spells in the Cooldown Manager's spell bars right now."])
+	local noSpells = Label(content, "GameFontDisable", L["Nothing in the Cooldown Manager right now."])
 	noSpells:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, -8)
 
 	-- A heading over each bar's spells, as the Cooldown Manager's settings group them.
 	local GROUP_NAMES = {
 		essential = L["Essential Cooldowns"], utility = L["Utility Cooldowns"],
-		other = L["Not in the Cooldown Manager now"],
+		buffs = L["Tracked Buffs"], bars = L["Tracked Bars"],
+		other = L["Not in the Cooldown Manager now"], otherbuffs = L["Buffs not in the Cooldown Manager now"],
 	}
+	-- The groups of tracked buffs and bars, with modes of their own (ns.CooldownBuffMode).
+	local BUFF_GROUP = { buffs = true, bars = true, otherbuffs = true }
+	-- Groups folded away (by clicking their name), while you play.
+	local closed = {}
 	-- A spell's mode: "always", "ready", "recharge" or "proc" (set on its own:
 	-- db.cooldownAlwaysShow, ReadyOnly, RechargeOnly, ProcOnly; else its group's).
 	local MODES = {
@@ -8370,7 +8377,14 @@ local function CreateCooldownPanel()
 		{ value = "recharge", text = L["While recharging"] },
 		{ value = "proc", text = L["When it procs"] },
 	}
+	local BUFF_MODES = {
+		{ value = "always", text = L["Always"] },
+		{ value = "combat", text = L["In combat"] },
+		{ value = "quiet", text = L["Out of combat"] },
+		{ value = "hidden", text = L["Hidden"] },
+	}
 	local groupOf, groupSpells = {}, {} -- spell ID -> its group; group -> its spells (as last listed)
+	local buffGroupOf = {} -- (the same for tracked buffs and bars: a spell can be a cooldown and a buff)
 
 	-- Each group's settings (db.cooldownGroupDefaults[group]: mode, power,
 	-- early = seconds or nil for the default share; a mode not set: the
@@ -8433,6 +8447,7 @@ local function CreateCooldownPanel()
 			db.cooldownEarlyOn[spell], db.cooldownReadyEarly[spell] = true, seconds
 		end,
 		Length = function(spell) return ns.CooldownLength(spell) end,
+		modes = MODES,
 		tip = L["When this spell's icon shows in the Cooldown Manager."],
 	}
 	local GROUP = {
@@ -8458,13 +8473,37 @@ local function CreateCooldownPanel()
 			end
 		end,
 		Length = function() return nil end,
+		modes = MODES,
 		tip = L["Sets every spell in this group to this. Spells you haven't set on their own follow it, " ..
 			"and a spell here made When Ready on its own starts with its Resources and Show Early."],
+	}
+	-- A tracked buff or bar (db.cooldownBuffMode), and their groups' settings.
+	-- (No Resources or Show Early: those are When Ready's.)
+	local function NoValue() return nil end
+	local BUFF = {
+		Mode = function(spell) return (ns.CooldownBuffMode(spell, buffGroupOf[spell])) end,
+		SetMode = function(spell, mode) ns.GetDB().cooldownBuffMode[spell] = mode end,
+		Power = NoValue, SetPower = NoValue, Early = NoValue, SetEarly = NoValue, Length = NoValue,
+		modes = BUFF_MODES,
+		tip = L["When this buff's icon or bar shows. The game keeps your buffs secret in fights, so these go " ..
+			"by whether you're in one."],
+	}
+	local BUFF_GROUP_ACCESS = {
+		Mode = function(group) return (ns.CooldownGroupSettings(group)) end,
+		SetMode = function(group, mode)
+			GroupDefaults(group).mode = mode
+			for _, spell in ipairs(groupSpells[group] or {}) do
+				ns.GetDB().cooldownBuffMode[spell] = nil
+			end
+		end,
+		Power = NoValue, SetPower = NoValue, Early = NoValue, SetEarly = NoValue, Length = NoValue,
+		modes = BUFF_MODES,
+		tip = L["Sets every buff in this group to this. Buffs you haven't set on their own follow it."],
 	}
 
 	local GetName = (C_Spell and C_Spell.GetSpellName) or function(id) return (GetSpellInfo(id)) end
 	local GetIcon = (C_Spell and C_Spell.GetSpellTexture) or GetSpellTexture
-	local rows, groupRows = {}, {}
+	local rows, buffRows, groupRows = {}, {}, {}
 
 	-- A row: a name, its mode (a dropdown, or on clients without the modern
 	-- one a button stepping through them), and for When Ready its Resources
@@ -8486,7 +8525,7 @@ local function CreateCooldownPanel()
 			dropdown:SetWidth(150)
 			dropdown.searchSkip = true
 			dropdown:SetupMenu(function(_, rootDescription)
-				for _, choice in ipairs(MODES) do
+				for _, choice in ipairs(access.modes) do
 					rootDescription:CreateRadio(choice.text,
 						function() return row.key ~= nil and access.Mode(row.key) == choice.value end,
 						function() Pick(choice.value) end)
@@ -8498,9 +8537,10 @@ local function CreateCooldownPanel()
 			button:SetSize(150, 22)
 			button:SetScript("OnClick", function()
 				local now = row.key ~= nil and access.Mode(row.key)
-				for i, choice in ipairs(MODES) do
+				local modes = access.modes
+				for i, choice in ipairs(modes) do
 					if choice.value == now then
-						Pick(MODES[i % #MODES + 1].value)
+						Pick(modes[i % #modes + 1].value)
 						break
 					end
 				end
@@ -8566,7 +8606,7 @@ local function CreateCooldownPanel()
 			if key == nil then return end
 			local mode = access.Mode(key)
 			if not self.SetupMenu then
-				for _, choice in ipairs(MODES) do
+				for _, choice in ipairs(access.modes) do
 					if choice.value == mode then self:SetText(choice.text) end
 				end
 			end
@@ -8595,11 +8635,11 @@ local function CreateCooldownPanel()
 		return row
 	end
 
-	-- Puts a row at y (below the column headings) and shows it.
-	local function PlaceRow(row, key, text, y)
+	-- Puts a row at y (below the column headings) and shows it (its name x across).
+	local function PlaceRow(row, key, text, y, x)
 		row.key, row.shown = key, true
 		row.name:ClearAllPoints()
-		row.name:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, y - 5)
+		row.name:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", x or 0, y - 5)
 		row.mode:ClearAllPoints()
 		row.mode:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", MODE_X, y)
 		row.name:SetText(text)
@@ -8616,18 +8656,35 @@ local function CreateCooldownPanel()
 		row.power:Hide()
 		if row.line then row.line:Hide() end
 		if row.center then row.center:Hide() end
+		if row.fold then row.fold:Hide() end
 	end
 
 	-- A group's heading row: its name in gold, its defaults beside it, and a
 	-- rule under it across the columns; for a bar, its Close the gaps under
 	-- that (db.cooldownGroupDefaults[group].center; not set: ns.COOLDOWN_GROUP_CENTER).
+	local ListSpells
 	local function GroupRow(group)
 		if not groupRows[group] then
-			local row = NewRow(GROUP, "GameFontNormal")
+			local row = NewRow(BUFF_GROUP[group] and BUFF_GROUP_ACCESS or GROUP, "GameFontNormal")
 			row.line = content:CreateTexture(nil, "ARTWORK")
 			row.line:SetColorTexture(1, 0.82, 0, 0.4)
 			row.line:SetSize(GROUP_WIDTH, 1)
-			if group ~= "other" then
+			-- Its name folds it away or opens it again, as in the game's settings.
+			row.fold = CreateFrame("Button", nil, content)
+			row.fold:SetSize(MODE_X - 10, 20)
+			row.fold.icon = row.fold:CreateTexture(nil, "ARTWORK")
+			row.fold.icon:SetSize(14, 14)
+			row.fold.icon:SetPoint("LEFT", 0, 0)
+			row.fold:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight", "ADD")
+			row.fold:GetHighlightTexture():SetAllPoints(row.fold.icon)
+			row.fold:SetScript("OnClick", function()
+				closed[group] = not closed[group] or nil
+				ListSpells()
+				Refresh()
+				FitContentHeight(content)
+			end)
+			Tooltip(row.fold, L["Click to show or hide its spells."])
+			if group ~= "other" and not BUFF_GROUP[group] then
 				row.center = Check(content, nil, L["Close the gaps (centered)"],
 					L["The icons this bar shows sit together in their order, centered on the bar, instead of " ..
 					"faded ones leaving gaps. Edit Mode shows the game's own layout."], function(value)
@@ -8642,58 +8699,86 @@ local function CreateCooldownPanel()
 		return groupRows[group]
 	end
 
-	local function ListSpells()
+	-- Every group's spells, then those set on their own that aren't in the
+	-- Cooldown Manager now (spells, then buffs).
+	function ListSpells()
 		local db = ns.GetDB()
-		local ids, barOf = ns.CooldownManagerSpells()
-		local others = {}
-		for _, list in ipairs({ db.cooldownReadyOnly, db.cooldownRechargeOnly, db.cooldownProcOnly }) do
-			for id in pairs(list) do
-				if not barOf[id] then others[#others + 1] = id end
-			end
+		local list = ns.CooldownManagerSpells()
+		local listed = { spell = {}, buff = {} }
+		for _, spell in ipairs(list) do
+			listed[BUFF_GROUP[spell.group] and "buff" or "spell"][spell.id] = true
 		end
-		table.sort(others)
-		for _, id in ipairs(others) do ids[#ids + 1] = id end
+		for _, set in ipairs({
+			{ "other", "spell", { db.cooldownReadyOnly, db.cooldownRechargeOnly, db.cooldownProcOnly } },
+			{ "otherbuffs", "buff", { db.cooldownBuffMode } },
+		}) do
+			local group, seen, missing = set[1], listed[set[2]], {}
+			for _, own in ipairs(set[3]) do
+				for id in pairs(own) do
+					if not seen[id] then
+						seen[id] = true
+						missing[#missing + 1] = id
+					end
+				end
+			end
+			table.sort(missing)
+			for _, id in ipairs(missing) do list[#list + 1] = { id = id, group = group } end
+		end
 		wipe(groupOf)
+		wipe(buffGroupOf)
 		wipe(groupSpells)
 		for _, row in pairs(groupRows) do HideRow(row) end
 		local y, lastGroup = -2, nil
-		for i, id in ipairs(ids) do
-			local group = barOf[id] or "other"
-			groupOf[id] = group
+		local used = { [rows] = 0, [buffRows] = 0 }
+		for _, spell in ipairs(list) do
+			local id, group = spell.id, spell.group
+			local isBuff = BUFF_GROUP[group]
+			if isBuff then buffGroupOf[id] = group else groupOf[id] = group end
 			groupSpells[group] = groupSpells[group] or {}
 			table.insert(groupSpells[group], id)
 			if group ~= lastGroup then
 				if lastGroup then y = y - GROUP_GAP end
 				lastGroup = group
 				local row = GroupRow(group)
-				PlaceRow(row, group, GROUP_NAMES[group], y - 4)
+				PlaceRow(row, group, GROUP_NAMES[group], y - 4, 18)
+				row.fold:ClearAllPoints()
+				row.fold:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, y - 4)
+				row.fold.icon:SetTexture(closed[group] and "Interface\\Buttons\\UI-PlusButton-Up"
+					or "Interface\\Buttons\\UI-MinusButton-Up")
+				row.fold:Show()
 				row.line:ClearAllPoints()
 				row.line:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, y - 30)
 				row.line:Show()
 				y = y - GROUP_HEIGHT
-				if row.center then
+				if row.center and not closed[group] then
 					row.center:ClearAllPoints()
 					row.center:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", -4, y + 2)
 					row.center:Show()
 					y = y - ROW_HEIGHT
 				end
 			end
-			local row = rows[i] or NewRow(SPELL, "GameFontHighlight")
-			rows[i] = row
-			local okName, name = pcall(GetName, id)
-			local okIcon, icon = pcall(GetIcon, id)
-			PlaceRow(row, id, ("|T%s:16|t %s"):format(okIcon and icon or 134400,
-				okName and name or L["Spell %d"]:format(id)), y)
-			y = y - ROW_HEIGHT
+			if not closed[group] then
+				local pool = isBuff and buffRows or rows
+				used[pool] = used[pool] + 1
+				local row = pool[used[pool]] or NewRow(isBuff and BUFF or SPELL, "GameFontHighlight")
+				pool[used[pool]] = row
+				local okName, name = pcall(GetName, id)
+				local okIcon, icon = pcall(GetIcon, id)
+				PlaceRow(row, id, ("|T%s:16|t %s"):format(okIcon and icon or 134400,
+					okName and name or L["Spell %d"]:format(id)), y)
+				y = y - ROW_HEIGHT
+			end
 		end
-		for i = #ids + 1, #rows do
-			HideRow(rows[i])
+		for pool, count in pairs(used) do
+			for i = count + 1, #pool do
+				HideRow(pool[i])
+			end
 		end
-		noSpells:SetShown(#ids == 0)
-		spellHeading:SetShown(#ids > 0)
-		modeHeading:SetShown(#ids > 0)
-		earlyHeading:SetShown(#ids > 0)
-		powerHeading:SetShown(#ids > 0)
+		noSpells:SetShown(#list == 0)
+		spellHeading:SetShown(#list > 0)
+		modeHeading:SetShown(#list > 0)
+		earlyHeading:SetShown(#list > 0)
+		powerHeading:SetShown(#list > 0)
 	end
 
 	local shown = PageShown(Refresh, content)

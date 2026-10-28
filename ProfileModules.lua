@@ -80,7 +80,7 @@ end
 -- The Standard Frames columns' rows that are action bars (and the other
 -- bars: the Cooldown Manager, micro menu, bags, XP bars, gamepad bars and
 -- other addons' bars), as against the rest.
-local BAR_ROWS = { cooldowns = true, cooldownsutility = true, micro = true, bags = true, xp = true, gamepadbars = true, gamepadxp = true,
+local BAR_ROWS = { cooldowns = true, cooldownsutility = true, cooldownsbuffs = true, cooldownsbars = true, micro = true, bags = true, xp = true, gamepadbars = true, gamepadxp = true,
 	["addon:bt4Bars"] = true, ["addon:euiBars"] = true, ["addon:euiCooldowns"] = true,
 	["addon:euiEssentials"] = true, ["addon:euiDataBars"] = true }
 local function IsBarRow(item)

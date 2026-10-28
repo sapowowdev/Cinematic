@@ -29,7 +29,7 @@ local PROFILE_TABLES = {
 	"chatPeekTypes", "chatPeekChannelList", "combatShow", "calmShow", "quietShow", "camShow", "cineShow", "targetShow", "enemyShow",
 	"friendlyShow", "bgShow", "worldShow", "cityShow", "groupShow", "instanceShow", "addonFrames", "gamepadPressButtons",
 	"hoverGroups", "cooldownReadyOnly", "cooldownReadyEarly", "cooldownEarlyOn", "cooldownRechargeOnly", "cooldownNeedsPower",
-	"cooldownGroupDefaults", "cooldownProcOnly", "cooldownAlwaysShow",
+	"cooldownGroupDefaults", "cooldownProcOnly", "cooldownAlwaysShow", "cooldownBuffMode",
 	"frameRules", -- (none in any built-in profile: each starts with no Custom Visibility Rules)
 	"tankHide", "healerHide", "damageHide",
 }

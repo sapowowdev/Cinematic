@@ -1686,14 +1686,17 @@ ns.COMBAT_SHOW = {
 	{ key = "castbar", label = L["Cast bar"], default = false, frames = FRAME_GROUPS.castbar },
 	-- The game's own damage meter (made when first opened).
 	{ key = "meters", label = L["Damage meter (the game's)"], default = false, frames = FRAME_GROUPS.meters },
-	-- The Cooldown Manager's two spell bars, a row each (the tracked buffs go
-	-- with the Essential bar). Utility follows Essential's ticks until set
-	-- (see ROW_FALLBACK), as it was one row before.
+	-- The Cooldown Manager's two spell bars and its tracked buffs and bars, a
+	-- row each. The others follow Essential's ticks until set (see
+	-- ROW_FALLBACK), as they were one row before.
 	{ key = "cooldowns", label = L["Essential Cooldowns"], default = false, addon = "Blizzard_CooldownViewer",
-		frames = { "EssentialCooldownViewer", "BuffIconCooldownViewer", "BuffBarCooldownViewer" },
-		morePage = "Cooldown Manager" },
+		frames = { "EssentialCooldownViewer" }, morePage = "Cooldown Manager" },
 	{ key = "cooldownsutility", label = L["Utility Cooldowns"], default = false, addon = "Blizzard_CooldownViewer",
 		frames = { "UtilityCooldownViewer" }, morePage = "Cooldown Manager" },
+	{ key = "cooldownsbuffs", label = L["Tracked Buffs"], default = false, addon = "Blizzard_CooldownViewer",
+		frames = { "BuffIconCooldownViewer" }, morePage = "Cooldown Manager" },
+	{ key = "cooldownsbars", label = L["Tracked Bars"], default = false, addon = "Blizzard_CooldownViewer",
+		frames = { "BuffBarCooldownViewer" }, morePage = "Cooldown Manager" },
 	-- Always ticked to start with (CINE_SHOW_DEFAULT): a boss's or quest's bar to watch.
 	{ key = "encounter", label = L["Encounter bar"], default = false, frames = FRAME_GROUPS.encounter,
 		tip = L["The extra bar some bosses, quests and vehicles bring up, such as a boss's own power."] },
@@ -1766,7 +1769,7 @@ local ROW_SECTIONS = {
 	player = "units", petframe = "units", prd = "units", prdpower = "units", target = "units", tot = "units", focus = "units", focustot = "units",
 	targetcircle = "units",
 	buffs = "combat", swing = "combat", castbar = "combat", meters = "combat", cooldowns = "combat",
-	cooldownsutility = "combat", encounter = "combat",
+	cooldownsutility = "combat", cooldownsbuffs = "combat", cooldownsbars = "combat", encounter = "combat",
 	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars",
 	pet = "bars", stance = "bars", totems = "bars", extra = "bars",
 	right1 = "extrabars", right2 = "extrabars", bar6 = "extrabars", bar7 = "extrabars", bar8 = "extrabars",
@@ -1941,7 +1944,8 @@ ns.HOVER_GROUPS_DEFAULT = {
 	{ preset = "chat", icon = "Interface\\Icons\\INV_Scroll_03", name = L["Chat"],
 		members = { "chat" }, triggers = { whisper = true, typing = true } },
 	{ preset = "cooldowns", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", name = L["Cooldowns"],
-		members = { "cooldowns", "cooldownsutility", "addon:fecm" }, triggers = { cooldown = true } },
+		members = { "cooldowns", "cooldownsutility", "cooldownsbuffs", "cooldownsbars", "addon:fecm", "addon:fecmAuras" },
+		triggers = { cooldown = true } },
 }
 
 -- The icons a group you make can have (the Mouseover groups page's picker).
@@ -2142,7 +2146,8 @@ end
 local ROW_FALLBACK = {
 	art = "mainbar", petframe = "player", prdpower = "prd", focustot = "focus", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
 	minimapzone = "minimap", minimapclock = "minimap", minimapdial = "minimap", bags = "micro",
-	cooldownsutility = "cooldowns",
+	cooldownsutility = "cooldowns", cooldownsbuffs = "cooldowns", cooldownsbars = "cooldowns",
+	["addon:fecmAuras"] = "addon:fecm",
 }
 -- (And the raid-style party frames' rows the raid frames'.)
 for raidKey, key in pairs(ns.RAID_STYLE_PARTY) do
@@ -4215,10 +4220,10 @@ local function SwipeTimes(cooldown)
 end
 
 -- Calls visit(frame, kind) for each icon ("item", one with a spell) and each
--- cooldown swipe ("swipe") under frame.
-local function EachCooldownPart(frame, depth, visit)
+-- cooldown swipe ("swipe") under frame (all: hidden ones too).
+local function EachCooldownPart(frame, depth, visit, all)
 	for _, child in ipairs({ frame:GetChildren() }) do
-		if not Hidden(child) then
+		if all or not Hidden(child) then
 			local isCooldown = child.GetObjectType and child:GetObjectType() == "Cooldown"
 			if isCooldown then
 				visit(child, "swipe")
@@ -4226,7 +4231,7 @@ local function EachCooldownPart(frame, depth, visit)
 				visit(child, "item")
 			end
 			if not isCooldown and depth > 0 then
-				EachCooldownPart(child, depth - 1, visit)
+				EachCooldownPart(child, depth - 1, visit, all)
 			end
 		end
 	end
@@ -4362,6 +4367,9 @@ local CooldownLength = ns.CooldownLength
 -- (db.cooldownGroupDefaults[group]), else these.
 ns.COOLDOWN_GROUP_MODES = { utility = "recharge" }
 ns.COOLDOWN_BAR_GROUPS = { EssentialCooldownViewer = "essential", UtilityCooldownViewer = "utility" }
+-- Its tracked buffs and bars: groups of their own, with modes of their own
+-- (ns.CooldownBuffMode), and not counted for recharging.
+ns.COOLDOWN_BUFF_GROUPS = { BuffIconCooldownViewer = "buffs", BuffBarCooldownViewer = "bars" }
 -- (The Mouseover groups' cooldown bar rows, and whose Stay up while
 -- recharging brings each up.)
 ns.COOLDOWN_MEMBER_BAR = { cooldowns = "essential", ["addon:fecm"] = "essential", cooldownsutility = "utility" }
@@ -4397,6 +4405,24 @@ function ns.CooldownSpellMode(id, group)
 	end
 	local mode, power, early = ns.CooldownGroupSettings(group or "other")
 	return mode, false, power, true, early
+end
+
+-- A tracked buff's or bar's mode ("always", "combat": in fights, "quiet":
+-- out of fights, "hidden"), and whether it's its own (db.cooldownBuffMode,
+-- by spell ID), else its group's. Each goes by whether you're in a fight
+-- only: the game keeps your buffs secret in fights.
+function ns.CooldownBuffMode(id, group)
+	local own = ns.db.cooldownBuffMode[id]
+	if own then return own, true end
+	return (ns.CooldownGroupSettings(group or "buffs")), false
+end
+
+-- Whether a tracked buff's or bar's icon shows in a mode.
+function ns.CooldownBuffShows(mode, inCombat)
+	if mode == "hidden" then return false end
+	if mode == "combat" then return inCombat end
+	if mode == "quiet" then return not inCombat end
+	return true
 end
 
 -- How long before a spell's icon is ready it comes back (sec), or nil until its cooldown's known.
@@ -4470,11 +4496,14 @@ local function IconShows(icon, id, now, power, earlyOn, seconds)
 end
 
 -- Calls visit(icon, spell, bar) for each icon in the Cooldown Manager's spell
--- bars (bar: the viewer's name).
-local function EachCooldownIcon(visit)
-	EachCooldownFrame(function(entry, frame)
-		if COOLDOWN_VIEWERS[entry.name] then
-			EachCooldownPart(frame, 3, function(part, kind)
+-- bars and its tracked buffs and bars (bar: the viewer's name). all: hidden
+-- ones too (a buff that isn't up), for its page: the viewer's own icons in
+-- use when it says, else every icon in it.
+local function EachCooldownIcon(visit, all)
+	for _, entry in ipairs(ns.managed) do
+		local name, frame = entry.name, entry.frame
+		if COOLDOWN_VIEWERS[name] or ns.COOLDOWN_BUFF_GROUPS[name] then
+			local function Item(part, kind)
 				if kind == "item" then
 					local id = ItemSpell(part)
 					if id then
@@ -4482,39 +4511,46 @@ local function EachCooldownIcon(visit)
 					end
 					id = id or iconSpell[part]
 					if id then
-						visit(part, id, entry.name)
+						visit(part, id, name)
 					end
 				end
-			end)
+			end
+			local pool = all and frame.itemFramePool
+			if type(pool) == "table" and type(pool.EnumerateActive) == "function" then
+				for part in pool:EnumerateActive() do Item(part, "item") end
+			else
+				EachCooldownPart(frame, 3, Item, all)
+			end
 		end
-	end)
+	end
 end
 
--- The spells in the Cooldown Manager's spell bars now, for its page: the
--- Essential bar's first, then the Utility bar's, each in the order you set
--- in its settings (the icon's place in its bar). Also returns spell ID ->
--- "essential" or "utility".
+-- The spells in the Cooldown Manager now, for its page, as its settings
+-- group them: the Essential bar's, the Utility bar's, the tracked buffs',
+-- then the tracked bars', each in the order you set there (the icon's place
+-- in its bar). Each is { id = spell ID, group = "essential", "utility",
+-- "buffs" or "bars" }. (A spell can be in two: a cooldown and its buff.)
 do
-	local BAR_ORDER = { EssentialCooldownViewer = 1, UtilityCooldownViewer = 2 }
-	local BAR_KIND = ns.COOLDOWN_BAR_GROUPS
+	local BAR_ORDER = { EssentialCooldownViewer = 1, UtilityCooldownViewer = 2, BuffIconCooldownViewer = 3,
+		BuffBarCooldownViewer = 4 }
 	function ns.CooldownManagerSpells()
-		local found, barOf = {}, {}
+		local found, listed = {}, {}
 		EachCooldownIcon(function(icon, id, bar)
-			if not barOf[id] then
-				barOf[id] = BAR_KIND[bar]
+			local group = ns.COOLDOWN_BAR_GROUPS[bar] or ns.COOLDOWN_BUFF_GROUPS[bar]
+			listed[group] = listed[group] or {}
+			if not listed[group][id] then
+				listed[group][id] = true
 				local place = icon.layoutIndex
 				if Secret(place) or type(place) ~= "number" then place = math.huge end
-				found[#found + 1] = { id = id, bar = BAR_ORDER[bar] or 3, place = place, seen = #found }
+				found[#found + 1] = { id = id, group = group, bar = BAR_ORDER[bar] or 5, place = place, seen = #found }
 			end
-		end)
+		end, true)
 		table.sort(found, function(a, b)
 			if a.bar ~= b.bar then return a.bar < b.bar end
 			if a.place ~= b.place then return a.place < b.place end
 			return a.seen < b.seen
 		end)
-		local ids = {}
-		for i, spell in ipairs(found) do ids[i] = spell.id end
-		return ids, barOf
+		return found
 	end
 end
 
@@ -4971,12 +5007,22 @@ local function UpdateReadyOnly(elapsed, now)
 		wipe(readyTargets)
 		local db = ns.db
 		local any = next(db.cooldownReadyOnly) or next(db.cooldownRechargeOnly) or next(db.cooldownProcOnly)
-		for _, group in pairs(ns.COOLDOWN_BAR_GROUPS) do
-			any = any or ns.CooldownGroupSettings(group) ~= "always"
+			or next(db.cooldownBuffMode)
+		for _, list in ipairs({ ns.COOLDOWN_BAR_GROUPS, ns.COOLDOWN_BUFF_GROUPS }) do
+			for _, group in pairs(list) do
+				any = any or ns.CooldownGroupSettings(group) ~= "always"
+			end
 		end
 		if any then
 			local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
 			EachCooldownIcon(function(icon, id, bar)
+				local buffGroup = ns.COOLDOWN_BUFF_GROUPS[bar]
+				if buffGroup then
+					if not ns.CooldownBuffShows(ns.CooldownBuffMode(id, buffGroup), inCombat) then
+						readyTargets[icon] = 0
+					end
+					return
+				end
 				local mode, _, power, earlyOn, seconds = ns.CooldownSpellMode(id, ns.COOLDOWN_BAR_GROUPS[bar])
 				if mode == "ready" then
 					readyTargets[icon] = (inCombat and IconShows(icon, id, now, power, earlyOn, seconds)) and 1 or 0
@@ -5066,6 +5112,29 @@ function ns.ReportCooldowns()
 		end)
 		if count == 0 then print("  (no icons or swipes found)") end
 	end)
+	-- The tracked buffs and bars: each icon in use (a buff not up too) and its mode.
+	local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+	for _, entry in ipairs(ns.managed) do
+		local group = ns.COOLDOWN_BUFF_GROUPS[entry.name]
+		if group then
+			any = true
+			local ok, shown = pcall(entry.frame.IsShown, entry.frame)
+			ns.Print(("%s: shown=%s, in a fight=%s, %s's mode %s"):format(entry.name, ok and Show(shown) or "?",
+				tostring(inCombat), group, (ns.CooldownGroupSettings(group))))
+		end
+	end
+	local count = 0
+	EachCooldownIcon(function(icon, id, bar)
+		local group = ns.COOLDOWN_BUFF_GROUPS[bar]
+		if not group then return end
+		count = count + 1
+		if count > 30 then return end
+		local mode, own = ns.CooldownBuffMode(id, group)
+		local okShown, shown = pcall(icon.IsShown, icon)
+		print(("  %s spell=%s up=%s mode=%s%s -> %s, alpha %s"):format(group, tostring(id),
+			okShown and Show(shown) or "?", mode, own and "" or " (its group's)",
+			ns.CooldownBuffShows(mode, inCombat) and "shown" or "faded", Show(readyAlpha[icon] or 1)))
+	end, true)
 	if not any then
 		ns.Print("no Cooldown Manager frames found among the faded frames")
 	end

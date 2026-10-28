@@ -1108,7 +1108,7 @@ L["Only when ready in combat"] = "Solo cuando está listo en combate"
 L["Tick a spell to show its icon only in fights, and only once it's nearly ready: out of fights, and while it recharges, it fades out, in CineMode or not. It comes back once it's ready, or with Show Early ticked the seconds set beside it before (left empty: %d%% of its cooldown). Its place in the bar stays, so it sits best at the end of one. In fights the game may not say how long is left, so then it goes by when you last cast it."] = "Marca un hechizo para mostrar su icono solo en combate, y solo cuando está casi listo: fuera de combate, y mientras se recarga, se desvanece, con CineMode o sin él. Vuelve cuando está listo o, con Mostrar antes marcado, los segundos indicados al lado antes (si lo dejas vacío: el %d%% de su reutilización). Su sitio en la barra se mantiene, así que queda mejor al final de una. En combate puede que el juego no diga cuánto falta, así que entonces se guía por la última vez que lo lanzaste."
 L["Spell"] = "Hechizo"
 L["Show Early"] = "Mostrar antes"
-L["No spells in the Cooldown Manager's spell bars right now."] = "No hay hechizos en las barras de hechizos del Gestor de reutilización ahora mismo."
+L["Nothing in the Cooldown Manager right now."] = "No hay nada en el Gestor de reutilización ahora mismo."
 L["Out of fights, and while it recharges, this spell's icon fades out of the Cooldown Manager."] = "Fuera de combate, y mientras se recarga, el icono de este hechizo se desvanece del Gestor de reutilización."
 L["Bring the icon back a little before it's ready, by the seconds beside it. Unticked, it comes back once it's ready."] = "Hace volver el icono un poco antes de que esté listo, los segundos indicados al lado. Desmarcado, vuelve cuando está listo."
 L["How many seconds before it's ready the icon comes back. Leave it empty for %d%% of its cooldown."] = "Cuántos segundos antes de estar listo vuelve el icono. Déjalo vacío para el %d%% de su reutilización."
@@ -1133,6 +1133,13 @@ L["Ready also needs the resources to cast it: Maelstrom, mana, rage and so on. U
 L["Essential Cooldowns"] = "Reutilizaciones esenciales"
 L["Utility Cooldowns"] = "Reutilizaciones de utilidad"
 L["Not in the Cooldown Manager now"] = "Ahora no está en el Gestor de reutilización"
+L["Tracked Buffs"] = "Beneficios rastreados"
+L["Tracked Bars"] = "Barras rastreadas"
+L["Buffs not in the Cooldown Manager now"] = "Beneficios que ahora no están en el Gestor de reutilización"
+L["Tracked buffs and bars: Always, In combat, Out of combat or Hidden (the game keeps your buffs secret in fights, so they go by that alone). Click a group's name to fold it away."] = "Beneficios y barras rastreados: Siempre, En combate, Fuera de combate u Oculto (el juego mantiene en secreto tus beneficios en combate, así que se guían solo por eso). Haz clic en el nombre de un grupo para plegarlo."
+L["When this buff's icon or bar shows. The game keeps your buffs secret in fights, so these go by whether you're in one."] = "Cuándo se muestra el icono o la barra de este beneficio. El juego mantiene en secreto tus beneficios en combate, así que esto se guía por si estás en uno."
+L["Sets every buff in this group to this. Buffs you haven't set on their own follow it."] = "Ajusta todos los beneficios de este grupo a esto. Los beneficios que no hayas ajustado por separado lo siguen."
+L["Click to show or hide its spells."] = "Haz clic para mostrar u ocultar sus hechizos."
 L["On: CineMode hides tooltips as this page says. Off: every tooltip shows as normal."] = "Activado: CineMode oculta los tooltips según esta página. Desactivado: todos los tooltips se muestran con normalidad."
 L["Only in CineMode. Hold your Show hidden tooltips key (set it on the Keybinds page) to see a hidden one anyway."] = "Solo en CineMode. Mantén pulsada tu tecla de mostrar tooltips ocultos (asígnala en la página de Atajos) para ver uno oculto igualmente."
 L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems."] = "Jugadores y PNJ a los que puedes atacar (también los neutrales), y sus mascotas, esbirros y tótems."
@@ -1625,7 +1632,8 @@ L["its combat text over your character"] = "su texto de combate sobre tu persona
 L["its flight timer, loot feed, threat meter and junk list"] = "su temporizador de vuelo, registro de botín, medidor de amenaza y lista de basura"
 
 -- Support/ForeverEnhancedCooldownManager.lua
-L["its cooldown and buff bars, and the pulse when a cooldown is ready"] = "sus barras de reutilización y de beneficios, y el destello cuando una reutilización está lista"
+L["its cooldown bars, and the pulse when a cooldown is ready"] = "sus barras de reutilización, y el destello cuando una reutilización está lista"
+L["its buff bars"] = "sus barras de beneficios"
 
 -- Support/Plater.lua
 L["Follows the Nameplates page"] = "Sigue la página Placas de nombre"
