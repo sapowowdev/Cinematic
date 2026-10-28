@@ -1302,6 +1302,7 @@ local function PlateKind(unit)
 	end
 	return neutral and "NeutralNPCs" or "EnemyNPCs"
 end
+ns.PlateKindOf = PlateKind -- (the Style hub's Nameplates page's Players and Minions rows: PlateParts)
 
 -- The Nameplates page only steers plates in cinematic mode: outside it the
 -- game's own options decide. Set each frame.
@@ -2356,7 +2357,9 @@ local function PlateAlphas(unit, plate)
 	if alpha <= 0 then
 		return 0, 1, 0, 0
 	end
-	return alpha, body / alpha, name / alpha, mark / alpha
+	-- (The Style hub's Nameplates page: its row's Opacity, over the whole plate.)
+	local opacity = ns.PlateStyleOpacity and ns.PlateStyleOpacity(plate) or 1
+	return alpha * opacity, body / alpha, name / alpha, mark / alpha
 end
 
 -- (For /cine debug names: why a plate's name is kept or not.)
@@ -2391,25 +2394,60 @@ local function LetGoOfPlate(plate)
 	end
 end
 
+-- With the Nameplates page's switch off: just the Style hub's Nameplates
+-- page's opacity, or the plate left to the game.
+local function StyleOnly(plate)
+	local opacity = ns.PlateStyleOpacity and ns.PlateStyleOpacity(plate) or 1
+	if opacity < 1 then
+		ns.SetPlateAlpha(plate, opacity)
+	else
+		if plate.UnitFrame and plate.UnitFrame.cinematicAlpha and not (plate.IsForbidden and plate:IsForbidden()) then
+			ns.SetPlateAlpha(plate, 1) -- (back from an opacity of ours)
+		end
+		LetGoOfPlate(plate) -- (left to the game: Nameplates page's switch off)
+	end
+end
+
+-- Sets a plate's alpha as worked out now (or lets go of it at full).
+local function ApplyPlateAlpha(plate, unit)
+	local alpha, body, name, mark = PlateAlphas(unit, plate)
+	if alpha < 1 or body < 1 or PlatesFiltered() then
+		SetPlateAlphas(plate, alpha, body, name, mark)
+	else
+		ns.SetPlateBody(plate, 1, 0)
+		if plate.UnitFrame and plate.UnitFrame.cinematicAlpha and not (plate.IsForbidden and plate:IsForbidden()) then
+			ns.SetPlateAlpha(plate, 1) -- (back from a fade of ours)
+		end
+		LetGoOfPlate(plate) -- a reused plate: let go of its last unit's alpha
+	end
+end
+
 function ns.RefreshPlate(plate, unit)
 	if not plate then
 		return
 	end
 	if not ns.db.handlePlates then
-		LetGoOfPlate(plate) -- (left to the game: Nameplates page's switch off)
+		StyleOnly(plate)
 		return
 	end
 	unit = unit or plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
 	ForgetTargetFade(plate) -- only called for a plate given a new unit
 	duels.Forget(plate)
 	duels.Attach(plate, unit)
-	local alpha, body, name, mark = PlateAlphas(unit, plate)
-	if alpha < 1 or body < 1 or PlatesFiltered() then
-		SetPlateAlphas(plate, alpha, body, name, mark)
-	else
-		ns.SetPlateBody(plate, 1, 0)
-		LetGoOfPlate(plate) -- a reused plate: let go of its last unit's alpha
+	ApplyPlateAlpha(plate, unit)
+end
+
+-- A plate's alpha again, its unit the same (its Style hub opacity changed:
+-- PlateParts).
+function ns.RefreshPlateAlpha(plate)
+	if not plate or (plate.IsForbidden and plate:IsForbidden()) or not ns.db then
+		return
 	end
+	if not ns.db.handlePlates then
+		StyleOnly(plate)
+		return
+	end
+	ApplyPlateAlpha(plate, plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit))
 end
 
 local function RefreshAllPlates()

@@ -644,7 +644,8 @@ DEFAULTS.targetArrowStyle = "arrow"
 -- Each row's Also color: the unit's name, health bar and border in its
 -- mark's color, while the row shows (<kind>ColorName, ColorBar, ColorBorder).
 -- Your target's and your focus's names and bars to start with.
-for _, kind in ipairs({ "target", "aggro", "focus", "mouseover", "others" }) do
+for _, kind in ipairs({ "target", "aggro", "focus", "mouseover", "others", "aggroother", "aggrononank",
+	"npc", "elite", "players", "minions" }) do
 	local colored = kind == "target" or kind == "focus"
 	DEFAULTS[kind .. "ColorName"] = colored
 	DEFAULTS[kind .. "ColorBar"] = colored
@@ -657,34 +658,103 @@ DEFAULTS.targetArrowY = 0 -- the marks over the plate: up from just over the nam
 DEFAULTS.targetArrowBareY = -20 -- and with no plate showing: up from where its middle is (-40 to 40)
 DEFAULTS.targetArrowBob = true -- the arrow and chevron bob, the brackets close in, the glow pulses
 -- Its other rows, <kind>Mark<key> as the Target row's (Show, Style, Color, R,
--- G, B, Size, Bob): your target while it's after you (aggro: its size,
--- height and movement your target's; style and color "same" for your
--- target's too, and its Also color while aggroMarkAlsoSame: then your
--- target's ticks in your target's color), your focus, and the unit under
--- the mouse.
+-- G, B, Size, Bob, Alpha): any enemy that's after you (aggro, Aggro on
+-- you: its height your target's; style and color "same" for your target's
+-- too, and its Also color while its AlsoSame: then your target's ticks in
+-- your target's color), your focus, the unit under the mouse, and kinds of
+-- plate (MARK_ROW_KINDS below).
 -- Which row a plate goes by when more than one fits (your target that's
--- your focus too, say): the first in this order (aggro under target's
--- never shows). Rows can be added for one reaction of a kind's units
--- (targetEnemy, focusFriendly, othersNeutral...: MarkRowBase), their
--- settings keyed as their kind's with the row's id in its place (their
--- Default ones last, before Default's own).
+-- your focus too, say): the first in this order, every row but Default's
+-- own (always last) taken off or added again from the page. A row's id is
+-- its kind, then a Who for just those units (Enemy, Neutral, Friendly),
+-- then a number from 2 for another row of the same: "target", "targetEnemy",
+-- "npcEnemy3" (MarkRowBase). Its settings are keyed by its id in its kind's
+-- place; one it hasn't got, the same row's without the number, then its kind's.
+-- Default's added rows last, before Default's own.
 DEFAULTS.markOrder = "target,mouseover,focus,aggro"
 ns.MARK_REACTIONS = { "Enemy", "Neutral", "Friendly" }
-ns.MARK_REACTION_KINDS = { "target", "focus", "mouseover", "others" }
--- A row's kind and reaction ("targetEnemy": "target", "Enemy"; nil reaction:
--- all its units).
+ns.MARK_COPIES = 5 -- (rows of one kind and Who at most)
+-- The kinds of row, and the Whos each takes (none: just Any). Aggro on not
+-- you (aggroother) and Aggro on non-tank (aggrononank): any enemy in a fight
+-- that's after someone friendly other than you, or after a player who isn't
+-- a tank (you too). Normal NPC (npc) and Elite NPC (elite): living NPCs by
+-- rank (elite, rare elite and world boss; ns.NPCRank). Players and Minions
+-- (pets, totems, guardians): as the Nameplates page sorts them, friendly or
+-- enemy (no neutral players).
+ns.MARK_ROW_KINDS = {
+	target = ns.MARK_REACTIONS, focus = ns.MARK_REACTIONS, mouseover = ns.MARK_REACTIONS,
+	aggro = {}, aggroother = {}, aggrononank = {},
+	npc = ns.MARK_REACTIONS, elite = ns.MARK_REACTIONS,
+	players = { "Enemy", "Friendly" }, minions = { "Enemy", "Friendly" },
+	others = ns.MARK_REACTIONS,
+}
+-- A row's kind, Who (nil: all its units) and number (nil: the first):
+-- "npcEnemy3": "npc", "Enemy", 3.
 function ns.MarkRowBase(id)
-	for _, reaction in ipairs(ns.MARK_REACTIONS) do
-		local base = id:match("^(%l+)" .. reaction .. "$")
-		if base then return base, reaction end
+	local base, rest = tostring(id):match("^(%l+)(.*)$")
+	if not base then
+		return id, nil, nil
 	end
-	return id, nil
+	local reaction, copy = rest:match("^(%u%l+)(%d*)$")
+	if not reaction then
+		copy = rest:match("^(%d*)$")
+	end
+	return base, reaction, tonumber(copy or "")
+end
+-- Whether an id names a row the grid can have (Default's own aside: always there).
+function ns.MarkRowValid(id)
+	local base, reaction, copy = ns.MarkRowBase(id)
+	local whos = ns.MARK_ROW_KINDS[base]
+	if not whos or id == "others" or (copy and (copy < 2 or copy > ns.MARK_COPIES)) then
+		return false
+	end
+	if reaction then
+		for _, who in ipairs(whos) do
+			if who == reaction then return true end
+		end
+		return false
+	end
+	return true
+end
+-- A row's setting that's no default (a row added on the page: Target (2),
+-- Normal NPC - Enemy...): the default its kind's would have, so profiles
+-- keep it and shared ones bring it; nil for any other key. Its settings:
+-- <id>Mark<key>, <id>Color<part>, <id>When and <id>When<word>.
+function ns.MarkRowDefault(key)
+	if type(key) ~= "string" or DEFAULTS[key] ~= nil then
+		return nil
+	end
+	local id, rest = key:match("^(%l+%u?%l*%d*)(Mark%u%a*)$")
+	if not id then id, rest = key:match("^(%l+%u?%l*%d*)(Color%u%a*)$") end
+	if not id then id, rest = key:match("^(%l+%u?%l*%d*)(When%a*)$") end
+	if not id or not ns.MarkRowValid(id) then
+		return nil
+	end
+	local base = ns.MarkRowBase(id)
+	local own = base == "target" and rest:find("^Mark") and "targetArrow" .. rest:sub(5) or base .. rest
+	local default = DEFAULTS[own]
+	-- (Aggro on you's Your target's for Also color: off.)
+	if default == nil and rest == "MarkAlsoSame" then default = false end
+	return default
 end
 DEFAULTS.aggroMarkShow = true
 DEFAULTS.aggroMarkStyle = "same"
 DEFAULTS.aggroMarkColor = "custom"
 DEFAULTS.aggroMarkAlsoSame = false
 DEFAULTS.aggroMarkR, DEFAULTS.aggroMarkG, DEFAULTS.aggroMarkB = 1, 0.19, 0.19
+DEFAULTS.aggroMarkSize = 1
+DEFAULTS.aggroMarkBob = true
+-- (Aggro on not you and Aggro on non-tank: a glow behind the bar to start
+-- with, orange and red.)
+for kind, rgb in pairs({ aggroother = { 1, 0.55, 0 }, aggrononank = { 1, 0.15, 0.15 } }) do
+	DEFAULTS[kind .. "MarkShow"] = true
+	DEFAULTS[kind .. "MarkStyle"] = "glow"
+	DEFAULTS[kind .. "MarkColor"] = "custom"
+	DEFAULTS[kind .. "MarkR"], DEFAULTS[kind .. "MarkG"], DEFAULTS[kind .. "MarkB"] = rgb[1], rgb[2], rgb[3]
+	DEFAULTS[kind .. "MarkSize"] = 1
+	DEFAULTS[kind .. "MarkBob"] = true
+	DEFAULTS[kind .. "MarkAlpha"] = 1
+end
 DEFAULTS.focusMarkShow = true
 DEFAULTS.focusMarkStyle = "diamond"
 DEFAULTS.focusMarkColor = "custom"
@@ -698,13 +768,24 @@ DEFAULTS.mouseoverMarkR, DEFAULTS.mouseoverMarkG, DEFAULTS.mouseoverMarkB = 1, 1
 DEFAULTS.mouseoverMarkSize = 1
 DEFAULTS.mouseoverMarkBob = false
 -- Default (others, after all of them in the order): every other plate,
--- the game's own look (no mark, no Also color) until you change it.
-DEFAULTS.othersMarkShow = true
-DEFAULTS.othersMarkStyle = "none"
-DEFAULTS.othersMarkColor = "reaction"
-DEFAULTS.othersMarkR, DEFAULTS.othersMarkG, DEFAULTS.othersMarkB = 1, 1, 1
-DEFAULTS.othersMarkSize = 1
-DEFAULTS.othersMarkBob = false
+-- the game's own look (no mark, no Also color) until you change it. The
+-- kinds of plate likewise: no mark, the game's colors.
+for _, kind in ipairs({ "others", "npc", "elite", "players", "minions" }) do
+	DEFAULTS[kind .. "MarkShow"] = true
+	DEFAULTS[kind .. "MarkStyle"] = "none"
+	DEFAULTS[kind .. "MarkColor"] = "reaction"
+	DEFAULTS[kind .. "MarkR"], DEFAULTS[kind .. "MarkG"], DEFAULTS[kind .. "MarkB"] = 1, 1, 1
+	DEFAULTS[kind .. "MarkSize"] = 1
+	DEFAULTS[kind .. "MarkBob"] = false
+end
+-- Each row's Opacity: the whole plate's, times CineMode's own fade (Effects'
+-- PlateAlphas); a plate takes the first fitting row's below 100%.
+DEFAULTS.targetArrowAlpha = 1
+for _, kind in ipairs({ "aggro", "focus", "mouseover", "others", "npc", "elite", "players", "minions" }) do
+	DEFAULTS[kind .. "MarkAlpha"] = 1
+end
+-- (Normal NPC - Enemy: the adds faded to 40% while an elite's near, below.)
+DEFAULTS.npcEnemyMarkAlpha = 0.4
 -- When each row fits (the page's When grid, as the Standard Frames page's
 -- rows): <kind>When is Always, <kind>When<Word> each of the dropdowns' ticks
 -- (the rules' words, MARK_WHEN_WORDS); frameRules[<kind>When] a rule in their
@@ -716,12 +797,16 @@ ns.MARK_WHEN_WORDS = {
 	{ "world", "World" }, { "city", "City" }, { "inn", "Inn" }, { "bg", "BG" }, { "instance", "Instance" },
 	{ "dungeon", "Dungeon" }, { "raid", "Raid" }, { "group", "Group" },
 }
-for _, kind in ipairs({ "aggro", "target", "focus", "mouseover", "others" }) do
+for kind in pairs(ns.MARK_ROW_KINDS) do
 	DEFAULTS[kind .. "When"] = true
 	for _, word in ipairs(ns.MARK_WHEN_WORDS) do
 		DEFAULTS[kind .. "When" .. word[2]] = false
 	end
 end
+-- (A row added with a rule as its When, in place of Always: Normal NPC -
+-- Enemy, while an elite enemy is within about 28 yards. Not in the
+-- dropdowns, so the row shows the rule's text; Edit changes it.)
+ns.MARK_ROW_RULES = { npcEnemy = "elite28" }
 -- Names on plates showing just their name (CineMode), drawn like the game's
 -- names over heads (Nameplates page's tick, the Style hub's Names page; see PlateParts).
 DEFAULTS.plateNameStyle = true

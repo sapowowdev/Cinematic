@@ -1796,3 +1796,226 @@ do
 		return math.min(logged, MAX_LINES)
 	end
 end
+
+-- Plates in a fight (/cine debug platefight [spell] [seconds]) ----------------
+-- For two possible plate options (fade far enemies in a fight; shrink
+-- non-elites while an elite is up): what the game tells addons about each
+-- enemy plate's distance and rank, plain or secret, in and out of combat. And
+-- a try on the plates themselves for the seconds given (5 unless said; up to
+-- 300): non-elites shrink to 70% and enemies beyond about 28 yards fade to
+-- 30% (CheckInteractDistance, as the rules' near28; else the spell's range,
+-- from the secret answer if that's all there is), and whether the game keeps
+-- what we set. It looks again every second, so a long run can go in and out
+-- of a fight: each plate's answers go in the log when they change, and at the
+-- end a count of what was plain or secret, in combat and out.
+do
+	local DEFAULT_SECONDS, MAX_SECONDS = 5, 300
+	local SHRINK, FAR_ALPHA = 0.7, 0.3
+	local trying -- plate -> { scale, alpha, set } while a try runs
+	local ticker, lastLine, tally, keptCount
+
+	local function Secret(value)
+		return issecretvalue ~= nil and issecretvalue(value) == true
+	end
+
+	-- A check's answer for the log (true, false, nil, secret, error, no API),
+	-- and the value itself.
+	local function Answer(func, ...)
+		if not func then return "no API", nil end
+		local ok, value = pcall(func, ...)
+		if not ok then return "error", nil end
+		if Secret(value) then return "secret", value end
+		return tostring(value), value
+	end
+
+	local function IsElite(unit)
+		local _, rank = Answer(UnitClassification, unit)
+		return rank == "elite" or rank == "rareelite" or rank == "worldboss"
+	end
+
+	-- The spell to test range with: the one named, else the first harmful
+	-- spell with a range on the action bars, else auto attack.
+	local function RangeSpell(arg)
+		if arg and arg ~= "" then
+			return tonumber(arg) or arg
+		end
+		local harmful = C_Spell and C_Spell.IsSpellHarmful or IsHarmfulSpell
+		local hasRange = C_Spell and C_Spell.SpellHasRange or SpellHasRange
+		for slot = 1, 120 do
+			local ok, kind, id = pcall(GetActionInfo, slot)
+			if ok and kind == "spell" and type(id) == "number" and not Secret(id) then
+				local okHarm, isHarmful = pcall(harmful, id)
+				local okRange, ranged = pcall(hasRange, id)
+				if okHarm and isHarmful == true and okRange and ranged == true then
+					return id
+				end
+			end
+		end
+		return 6603
+	end
+
+	-- Counts each check's kind of answer, in combat and out.
+	local function Count(combat, check, text)
+		local kind = (text == "secret" or text == "error" or text == "nil" or text == "no API") and text or "plain"
+		local key = (combat and "in combat" or "out of combat") .. ": " .. check
+		tally[key] = tally[key] or {}
+		tally[key][kind] = (tally[key][kind] or 0) + 1
+	end
+
+	local function Restore()
+		for plate, saved in pairs(trying or {}) do
+			local frame = plate.UnitFrame
+			if frame then
+				pcall(frame.SetScale, frame, saved.scale)
+				pcall(frame.SetAlpha, frame, saved.alpha)
+			end
+		end
+		trying = nil
+		if ticker then ticker:Cancel() end
+		ticker = nil
+	end
+
+	-- One look at every enemy plate: its answers, then the try. Prints the
+	-- plates on the first look (show); logs any plate whose answers changed.
+	local function Pass(spell, show)
+		local combat = InCombatLockdown and InCombatLockdown() and true or false
+		local isSpell = C_Spell and C_Spell.IsSpellInRange or IsSpellInRange
+		local plates = C_NamePlate and C_NamePlate.GetNamePlates and C_NamePlate.GetNamePlates() or {}
+		local enemies, elites = 0, 0
+		for _, plate in ipairs(plates) do
+			local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+			local frame = plate.UnitFrame
+			local _, canAttack = Answer(UnitCanAttack, "player", unit)
+			if unit and frame and canAttack ~= false then
+				enemies = enemies + 1
+				local elite = IsElite(unit)
+				if elite then elites = elites + 1 end
+
+				-- Did the game keep the size the last look set?
+				local saved = trying[plate]
+				if saved and saved.set then
+					local _, scale = Answer(frame.GetScale, frame)
+					local kept = type(scale) == "number" and not Secret(scale) and math.abs(scale - saved.set) < 0.01
+					local key = kept and "kept" or "changed"
+					keptCount[key] = keptCount[key] + 1
+				end
+
+				local checks = {
+					{ "name", (Answer(UnitName, unit)) },
+					{ "rank", (Answer(UnitClassification, unit)) },
+					{ "level", (Answer(UnitLevel, unit)) },
+					{ "boss", (Answer(UnitIsBossMob, unit)) },
+					{ "in combat", (Answer(UnitAffectingCombat, unit)) },
+					{ "threat", (Answer(UnitThreatSituation, "player", unit)) },
+				}
+				local rangeText, inRange = Answer(isSpell, spell, unit)
+				checks[#checks + 1] = { "spell range", rangeText }
+				for index = 1, 4 do
+					checks[#checks + 1] = { "interact" .. index, (Answer(CheckInteractDistance, unit, index)) }
+				end
+				checks[#checks + 1] = { "plate scale", (Answer(plate.GetEffectiveScale, plate)) }
+				checks[#checks + 1] = { "plate alpha", (Answer(plate.GetAlpha, plate)) }
+
+				-- The try: shrink non-elites, fade the far.
+				if not saved then
+					local _, scale = Answer(frame.GetScale, frame)
+					local _, alpha = Answer(frame.GetAlpha, frame)
+					saved = {
+						scale = type(scale) == "number" and not Secret(scale) and scale or 1,
+						alpha = type(alpha) == "number" and not Secret(alpha) and alpha or 1,
+					}
+					trying[plate] = saved
+				end
+				saved.set = elite and saved.scale or saved.scale * SHRINK
+				local okScale = pcall(frame.SetScale, frame, saved.set)
+				local fade = "no range answer"
+				-- (Interact distance first: the rules' near28, plain in retail fights.)
+				local _, near28 = Answer(CheckInteractDistance, unit, 4)
+				if type(near28) == "boolean" and not Secret(near28) then
+					fade = pcall(frame.SetAlpha, frame, near28 and 1 or FAR_ALPHA)
+						and "faded by near28" or "near28 fade error"
+				elseif Secret(inRange) and frame.SetAlphaFromBoolean then
+					fade = pcall(frame.SetAlphaFromBoolean, frame, inRange, 1, FAR_ALPHA)
+						and "faded by secret" or "secret fade error"
+				elseif type(inRange) == "boolean" then
+					fade = pcall(frame.SetAlpha, frame, inRange and 1 or FAR_ALPHA)
+						and "faded by plain" or "plain fade error"
+				end
+				checks[#checks + 1] = { "shrink", okScale and (elite and "kept size" or "shrunk") or "error" }
+				checks[#checks + 1] = { "fade", fade }
+
+				local parts = {}
+				for _, check in ipairs(checks) do
+					parts[#parts + 1] = check[1] .. " " .. check[2]
+					if check[1] ~= "name" and check[1] ~= "level" and check[1] ~= "fade" and check[1] ~= "shrink" then
+						Count(combat, check[1], check[2])
+					end
+				end
+				Count(combat, fade, "plain")
+				local line = unit .. ": " .. table.concat(parts, ", ")
+				if lastLine[unit] ~= line then
+					lastLine[unit] = line
+					ns.Log("platefight", (combat and "[combat] " or "[no combat] ") .. line)
+				end
+				if show and enemies <= 8 then print("  " .. line) end
+			end
+		end
+		if show and enemies > 8 then print(("  ...and %d more in /cine log"):format(enemies - 8)) end
+		return enemies, elites, combat
+	end
+
+	-- The counts at the end of a run.
+	local function Summary()
+		local keys = {}
+		for key in pairs(tally) do keys[#keys + 1] = key end
+		table.sort(keys)
+		for _, key in ipairs(keys) do
+			local kinds = {}
+			for kind, count in pairs(tally[key]) do kinds[#kinds + 1] = kind .. " " .. count end
+			table.sort(kinds)
+			local line = key .. ": " .. table.concat(kinds, ", ")
+			print("  " .. line)
+			ns.Log("platefight", line)
+		end
+		ns.Print(("platefight: sizes kept by the game %d times, changed %d"):format(keptCount.kept, keptCount.changed))
+	end
+
+	function ns.PlateFightDebug(arg)
+		if trying then
+			Summary()
+			Restore()
+			ns.Print("platefight: stopped, plates put back")
+			return
+		end
+		-- (A number at the end, up to 300, is the seconds; the rest is the spell.)
+		local rest, last = (arg or ""):match("^(.-)%s*(%d+)$")
+		local seconds = tonumber(last)
+		if seconds and seconds >= 1 and seconds <= MAX_SECONDS then
+			arg = rest
+		else
+			seconds = DEFAULT_SECONDS
+		end
+		local spell = RangeSpell(arg)
+		local _, spellName = Answer(C_Spell and C_Spell.GetSpellName or GetSpellInfo, spell)
+		local plates = C_NamePlate and C_NamePlate.GetNamePlates and C_NamePlate.GetNamePlates() or {}
+		local first = plates[1] and plates[1].UnitFrame
+		trying, lastLine, tally, keptCount = {}, {}, {}, { kept = 0, changed = 0 }
+		local enemies, elites, combat = Pass(spell, true)
+		ns.Print(("platefight (%s): %d enemies, %d elite, range spell %s (%s), SetAlphaFromBoolean %s."
+			.. " For %d seconds non-elites shrink to %d%% and enemies beyond ~28 yards fade to %d%%"
+			.. " (again to stop)"):format(combat and "in combat" or "out of combat", enemies, elites,
+			tostring(spellName), tostring(spell), first and first.SetAlphaFromBoolean and "exists" or "missing",
+			seconds, SHRINK * 100, FAR_ALPHA * 100))
+
+		local passes = 0
+		ticker = C_Timer.NewTicker(1, function()
+			passes = passes + 1
+			Pass(spell, false)
+			if passes >= seconds then
+				Summary()
+				Restore()
+				ns.Print("platefight: done, plates put back. Each plate's answers are in /cine log")
+			end
+		end)
+	end
+end

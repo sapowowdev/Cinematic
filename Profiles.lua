@@ -189,6 +189,16 @@ function ns.ForgetProfileBases()
 	wipe(baseCache)
 end
 
+-- The settings of rows added on the Style hub's Nameplates page in a
+-- table (no defaults of their own: Core's MarkRowDefault): fn(key, value).
+local function EachRowSetting(t, fn)
+	local keys = {}
+	for k in pairs(t) do
+		if ns.MarkRowDefault(k) ~= nil then keys[#keys + 1] = k end
+	end
+	for _, k in ipairs(keys) do fn(k, t[k]) end
+end
+
 -- A profile's settings as they'd be live: the active one's are; another's,
 -- its base with its saved changes (for comparing them).
 function ns.ProfileSettings(name)
@@ -196,6 +206,7 @@ function ns.ProfileSettings(name)
 	if name == ns.ActiveProfile() then
 		for k in pairs(ns.DEFAULTS) do settings[k] = ns.db[k] end
 		for _, k in ipairs(PROFILE_TABLES) do settings[k] = ns.db[k] end
+		EachRowSetting(ns.db, function(k, v) settings[k] = v end)
 		return settings
 	end
 	local base, saved = ns.ProfileBase(name), ns.db.profiles[name] or {}
@@ -203,6 +214,7 @@ function ns.ProfileSettings(name)
 		if saved[k] ~= nil then settings[k] = saved[k] else settings[k] = base[k] end
 	end
 	for _, k in ipairs(PROFILE_TABLES) do settings[k] = saved[k] or base[k] end
+	EachRowSetting(saved, function(k, v) settings[k] = v end)
 	return settings
 end
 
@@ -243,6 +255,8 @@ local function Snapshot(name)
 	for _, k in ipairs(PROFILE_TABLES) do
 		if type(db[k]) == "table" and next(db[k]) ~= nil then saved[k] = CopyTable(db[k]) end
 	end
+	-- (The Style hub's Nameplates page's added rows: all of theirs.)
+	EachRowSetting(db, function(k, v) saved[k] = v end)
 	return saved
 end
 
@@ -250,6 +264,9 @@ end
 local function Load(name)
 	local db, base = ns.db, ns.ProfileBase(name)
 	local saved = db.profiles[name] or {}
+	-- (The Style hub's Nameplates page's added rows: the profile's, none else.)
+	EachRowSetting(db, function(k) db[k] = nil end)
+	EachRowSetting(saved, function(k, v) db[k] = v end)
 	for k in pairs(ns.DEFAULTS) do
 		if IsProfileKey(k) then
 			if saved[k] ~= nil then
@@ -629,6 +646,7 @@ local function AgainstDefaults(saved, base)
 		local list = saved[k] or base[k]
 		if type(list) == "table" and next(list) ~= nil then shared[k] = CopyTable(list) end
 	end
+	EachRowSetting(saved, function(k, v) shared[k] = v end)
 	return shared
 end
 
@@ -650,6 +668,8 @@ function ns.KnownProfileSetting(key, value)
 	local default = ns.DEFAULTS[key]
 	-- (An old grid's setting, from before they went over: kept, to go over as it's added.)
 	if default == nil then default = ns.OldGridDefault(key) end
+	-- (A row added on the Style hub's Nameplates page: as its kind's.)
+	if default == nil then default = ns.MarkRowDefault(key) end
 	return default ~= nil and IsProfileKey(key) and type(value) == type(default)
 end
 

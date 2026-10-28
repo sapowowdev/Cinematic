@@ -101,6 +101,7 @@ local function PrintDebugHelp()
 	print("  /cine debug unitframes - log every part of the player, pet, target and focus frames (names, textures, sizes, held hidden) to the saved log")
 	print("  /cine debug plates - nameplate settings, and how the plates (and your target) are sorted")
 	print("  /cine debug range - what the game says about how far your target and units with name-only plates are")
+	print("  /cine debug platefight [spell] [seconds] - enemy plates' range and rank, plain or secret; shrinks non-elites and fades far ones for 5 seconds or the seconds given, e.g. 30 (go in and out of a fight)")
 	print("  /cine debug names - log players' plate names as they show and hide (again to stop, /reload to save)")
 	print("  /cine debug marks - the Target Indicator's marks on the plates now, and why each sits where it does")
 	print("  /cine debug readycheck - the raid frames' ready check icons and whether they fade (Ready check row)")
@@ -841,6 +842,8 @@ local function HandleSlash(msg)
 		ns.PrintPlatesDebug()
 	elseif cmd == "debug" and arg == "range" then
 		ns.PrintRangeDebug()
+	elseif cmd == "debug" and arg:find("^platefight") then
+		ns.PlateFightDebug(arg:match("^platefight%s+(.+)"))
 	elseif cmd == "debug" and arg == "readycheck" then
 		ns.ReportRaidReadyCheck()
 	elseif cmd == "debug" and arg:find("^marker") then

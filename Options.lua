@@ -6285,9 +6285,9 @@ do
 	-- and movement (no cells of its own for them), and by its style, color
 	-- and Also color where they say Your target's.
 	local MARK_KINDS = {
-		{ "aggro", L["After you"], L["Your target while it's attacking you (you have its aggro): above the " ..
-			"Target row, or that one wins. A cell set to Your target's takes the Target row's; change it to set " ..
-			"this one apart. Its size, height and movement are always your target's."] },
+		{ "aggro", L["Aggro on you"], L["Any enemy attacking you (you have its aggro). Above the Target row, " ..
+			"or that one wins on your target. A cell set to Your target's takes the Target row's; change it to " ..
+			"set this one apart."] },
 		{ "target", L["Target"], L["Your target."] },
 		{ "focus", L["Focus"], L["Your focus."] },
 		{ "mouseover", L["Mouseover"], L["The unit under the mouse. " ..
@@ -6334,9 +6334,12 @@ do
 	local function MarkKey(kind, key)
 		return kind == "target" and "targetArrow" .. key or kind .. "Mark" .. key
 	end
-	-- The grid's columns: where each starts, from the row's left.
-	local COL_SHOW, COL_STYLE, COL_COLOR, COL_SWATCH, COL_ALSO, COL_SIZE, COL_MOVING =
-		90, 120, 222, 316, 342, 446, 530
+	-- A row's line: where its parts start, from its left, and its size; its
+	-- drawer under it, in from the left, three lines (Mark, Plate, When).
+	local SHOW_X, PREVIEW_X, NAME_X, CHIPS_X = 16, 44, 92, 290
+	local ROW_W, NAME_W, CHIPS_W = 590, 192, 236
+	local DRAWER_X, LINE_H, LABEL_W = 44, 34, 48
+	local DRAWER_H = LINE_H * 3 + 8
 	-- The Also color column's parts: setting (<kind>Color<part>), name, tip,
 	-- and (targetOnly) whether only your target's plate has one: the game's
 	-- border, round your target's health bar alone.
@@ -6347,18 +6350,7 @@ do
 			"color."], targetOnly = true },
 	}
 	local ALSO_SHORT = { Name = L["Name"], Bar = L["Bar"], Border = L["Border"] }
-	local ROW_H = 36
-	-- The preview's plates, by kind (named for their rows; Default has none,
-	-- the game's look): the name's color, the bar's, and whether it has the
-	-- game's target border. (Target and aggro: a hostile NPC; focus neutral,
-	-- mouseover friendly.)
-	local PREVIEW_UNITS = {
-		target = { nil, { 1, 0.2, 0.2 }, { 0.75, 0.1, 0.1 }, true },
-		aggro = { nil, { 1, 0.2, 0.2 }, { 0.75, 0.1, 0.1 }, true },
-		focus = { nil, { 1, 1, 0 }, { 0.85, 0.75, 0 } },
-		mouseover = { nil, { 0.1, 1, 0.1 }, { 0, 0.6, 0.1 } },
-	}
-
+	local ROW_H = 28
 	function CreateTargetArrowPanel()
 		local canvas, content = CreateScrollPage()
 
@@ -6370,10 +6362,8 @@ do
 			"health bar or border in its mark's color (the row's Also color). When they show is the Target Indicator row's, on " ..
 			"the Nameplates page's Cinematic Plate Parts grid. Changes show at once, here and on the plates."])
 
-		local preview -- (below: drawn again as each setting changes)
 		local function Changed()
 			if ns.RefreshTargetArrows then ns.RefreshTargetArrows() end
-			if preview then preview:Refresh() end
 		end
 		-- (Its switch: the marks and their colors on the plates, or none at all.)
 		local switch = PageSwitch(content, "handlePlateStyle", L["Enable page"],
@@ -6381,95 +6371,6 @@ do
 			"Indicator row says. Off: none of them do. Each setting keeps its value for when you turn this " ..
 			"back on."], subtitle, Changed)
 		local stack = Stack(switch, "check")
-
-		-- The preview: a plate for each kind, its health bar and name on a dark
-		-- ground, with its mark.
-		local PREVIEW_W, PREVIEW_H, PLATE_W = 560, 130, 140
-		preview = CreateFrame("Frame", nil, content)
-		preview:SetSize(PREVIEW_W, PREVIEW_H)
-		stack:Add(preview, "label")
-		local ground = preview:CreateTexture(nil, "BACKGROUND")
-		ground:SetAllPoints()
-		ground:SetColorTexture(0.11, 0.14, 0.18, 0.95)
-		local caption = Label(preview, "GameFontDisableSmall", L["Preview"])
-		caption:SetPoint("TOPLEFT", 6, -5)
-		caption.searchSkip = true
-		local plates = {}
-		for i, info in ipairs(MARK_KINDS) do
-			local unit = PREVIEW_UNITS[info[1]]
-			if not unit then break end
-			local plate = {}
-			plates[info[1]] = plate
-			local bar = CreateFrame("Frame", nil, preview)
-			bar:SetSize(90, 8)
-			bar:SetPoint("CENTER", preview, "LEFT", PLATE_W * (i - 0.5), -22)
-			bar:SetFrameLevel(preview:GetFrameLevel() + 2)
-			plate.bar = bar
-			plate.fill = bar:CreateTexture(nil, "ARTWORK")
-			plate.fill:SetAllPoints()
-			local barEdge = bar:CreateTexture(nil, "BORDER")
-			barEdge:SetPoint("TOPLEFT", -1, 1)
-			barEdge:SetPoint("BOTTOMRIGHT", 1, -1)
-			barEdge:SetColorTexture(0, 0, 0, 1)
-			-- The game's border round your target's bar: white, 2 pixels, just
-			-- outside the bar's black edge (four edges, so none rounds away).
-			plate.border = {}
-			for _, side in ipairs(unit[4] and { "TOP", "BOTTOM", "LEFT", "RIGHT" } or {}) do
-				local edge = bar:CreateTexture(nil, "BORDER", nil, 1)
-				if side == "TOP" or side == "BOTTOM" then
-					edge:SetPoint(side .. "LEFT", barEdge, side .. "LEFT", -2, side == "TOP" and 2 or -2)
-					edge:SetPoint(side .. "RIGHT", barEdge, side .. "RIGHT", 2, side == "TOP" and 2 or -2)
-					edge:SetHeight(2)
-				else
-					edge:SetPoint("TOP" .. side, barEdge, "TOP" .. side, side == "LEFT" and -2 or 2, 0)
-					edge:SetPoint("BOTTOM" .. side, barEdge, "BOTTOM" .. side, side == "LEFT" and -2 or 2, 0)
-					edge:SetWidth(2)
-				end
-				plate.border[#plate.border + 1] = edge
-			end
-			plate.name = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-			plate.name:SetPoint("BOTTOM", bar, "TOP", 0, 3)
-			plate.name:SetText(info[2])
-			plate.name.searchSkip = true
-		end
-		function preview:Refresh()
-			if not ns.MakeTargetArrow then return end
-			local db = ns.GetDB()
-			-- (Left to right in the grid's order.)
-			for at, kind in ipairs(ns.TargetMarkOrder()) do
-				plates[kind].bar:SetPoint("CENTER", preview, "LEFT", PLATE_W * (at - 0.5), -22)
-			end
-			for kind, plate in pairs(plates) do
-				local unit = PREVIEW_UNITS[kind]
-				local shown = ns.TargetMarkSetting("Show", kind) and true or false
-				plate.arrow = plate.arrow or ns.MakeTargetArrow(preview, plate.bar)
-				ns.StyleTargetArrow(plate.arrow, nil, kind)
-				plate.arrow:SetShown(shown)
-				-- (Your target's own parts in its mark's color, as ticked below:
-				-- After you's, your target's while its Also color is.)
-				local tintKind = ns.TargetMarkTintKind(kind)
-				local r, g, b = ns.TargetArrowColour(nil, tintKind)
-				local name, fill = unit[2], unit[3]
-				if shown and db[tintKind .. "ColorName"] then
-					plate.name:SetTextColor(r, g, b)
-				else
-					plate.name:SetTextColor(name[1], name[2], name[3])
-				end
-				if shown and db[tintKind .. "ColorBar"] then
-					plate.fill:SetColorTexture(r, g, b, 1)
-				else
-					plate.fill:SetColorTexture(fill[1], fill[2], fill[3], 1)
-				end
-				for _, edge in ipairs(plate.border) do
-					if shown and db[tintKind .. "ColorBorder"] then
-						edge:SetColorTexture(r, g, b, 1)
-					else
-						edge:SetColorTexture(1, 1, 1, 1)
-					end
-				end
-			end
-		end
-		controls[#controls + 1] = preview
 
 		-- A choice from a list: a dropdown, or on a client without the modern
 		-- one a button that steps through them.
@@ -6501,56 +6402,122 @@ do
 			return pick
 		end
 
-		-- The grid: its column headings, then a row for each kind.
+		-- The grid: a line for each row in the order a plate tries them, its
+		-- mark's preview, name and what's set apart from the usual (chips);
+		-- its settings in a drawer under it, opened by clicking the line.
 		stack:Header(content, L["Marks"])
-		stack:Help(content, L["Each part of a plate (its mark, name, health bar and border) comes from the " ..
-			"first row that fits it and sets that part, top to bottom: a row left on None passes it to the next. " ..
-			"Move a row with its arrows. After you fits your target only while it's attacking you, so it needs " ..
-			"to be above Target to change anything. Default, always last, is the game's look unless you change it. " ..
-			"Add row adds one for just the enemies, neutral units or friends of Target, Focus, Mouseover or " ..
-			"Default: put it above that kind's own row, so it comes first for them."])
+		stack:Help(content, L["A plate takes its whole look (mark, colors, opacity) from the first row that " ..
+			"fits it, top to bottom; the rows below aren't looked at. Click a row to open its settings: its " ..
+			"mark, the plate's colors and opacity, and When it fits. The chips beside its name show what's set " ..
+			"apart from the usual. Move a row with its arrows, take it off with its x. Add more under the grid: " ..
+			"a Kind, for Aggro and Units which of them, and Who for just its enemies, neutral units or friends; " ..
+			"the same again makes another row of it (Target (2)), say with a different When for raids. Put a " ..
+			"row for just some units above its kind's own row, so it comes first for them. Default, always " ..
+			"last, is for plates no row fits: the game's look unless you change it."])
 		local grid = CreateFrame("Frame", nil, content)
-		grid:SetSize(COL_MOVING + 50, 18 + ROW_H * #MARK_KINDS)
+		grid:SetSize(ROW_W, ROW_H * #MARK_KINDS)
 		stack:Add(grid, "label")
-		for _, heading in ipairs({
-			{ COL_SHOW - 4, L["Show"] }, { COL_STYLE, L["Style"] }, { COL_COLOR, L["Color"] },
-			{ COL_ALSO, L["Also color"] }, { COL_SIZE, L["Size"] }, { COL_MOVING - 6, L["Moving"] },
-		}) do
-			local label = Label(grid, "GameFontNormalSmall", heading[2])
-			label:SetPoint("TOPLEFT", grid, "TOPLEFT", heading[1], 0)
-			label.searchSkip = true
-		end
-		-- Every row there can be: the kinds' own (MARK_KINDS), and one for each
-		-- reaction of Target, Focus, Mouseover and Default, shown once added
-		-- (in markOrder: Core's MarkRowBase). id, base kind, label, reaction's
-		-- name (nil: all its units), tip.
-		local ROWS = {}
-		for _, info in ipairs(MARK_KINDS) do
-			ROWS[#ROWS + 1] = { id = info[1], base = info[1], label = info[2], tip = info[3] }
-		end
+		-- The kinds of row (Core's MARK_ROW_KINDS), in the Kind dropdown's
+		-- order: id, name, tip.
+		local KINDS = {
+			{ "target", L["Target"], L["Your target."] },
+			{ "focus", L["Focus"], L["Your focus."] },
+			{ "mouseover", L["Mouseover"], MARK_KINDS[4][3] },
+			{ "aggro", L["Aggro on you"], MARK_KINDS[1][3] },
+			{ "aggroother", L["Aggro on not you"], L["Any enemy in a fight attacking someone friendly other " ..
+				"than you: a group member, a pet or another player. For a tank, the ones to pick up."] },
+			{ "aggrononank", L["Aggro on non-tank"], L["Any enemy attacking a player who isn't a tank (you too, " ..
+				"unless you're one): for a healer, who's in trouble; for a tank, the ones to taunt. A pet tanking " ..
+				"doesn't count."] },
+			{ "npc", L["Normal NPC"], L["Living NPCs that aren't elite, rare elite or a boss (minor critters " ..
+				"too). Normal NPC - Enemy starts faded to 40% while an elite enemy is within about 28 yards (its " ..
+				"When rule: elite28), so in a pull the elites stand out."] },
+			{ "elite", L["Elite NPC"], L["Living elite, rare elite and boss NPCs."] },
+			{ "players", L["Players"], L["Players, friendly or enemy as the Nameplates page has them (the other " ..
+				"faction's are enemies)."] },
+			{ "minions", L["Minions"], L["Anything a player controls: pets, totems and guardians."] },
+			{ "others", L["Default"], MARK_KINDS[5][3] },
+		}
+		local KIND_INFO = {}
+		for _, kind in ipairs(KINDS) do KIND_INFO[kind[1]] = kind end
 		local REACTION_NAMES = { Enemy = L["Enemy"], Neutral = L["Neutral"], Friendly = L["Friendly"] }
 		local REACTION_TIPS = { Enemy = L["This row: just the enemies among them."],
 			Neutral = L["This row: just the neutral ones among them."],
 			Friendly = L["This row: just the friendly ones among them."] }
-		local REACTS = {}
-		for _, kind in ipairs(ns.MARK_REACTION_KINDS) do REACTS[kind] = true end
-		for _, info in ipairs(MARK_KINDS) do
-			if REACTS[info[1]] then
-				for _, reaction in ipairs(ns.MARK_REACTIONS) do
-					ROWS[#ROWS + 1] = { id = info[1] .. reaction, base = info[1], label = info[2],
-						reaction = REACTION_NAMES[reaction], tip = info[3] .. " " .. REACTION_TIPS[reaction] }
-				end
-			end
+		-- A row's names and tip from its id: its kind's name (label), what's
+		-- under it (sub: its Who and number), all in one line (full).
+		local function RowInfo(id)
+			local base, reaction, copy = ns.MarkRowBase(id)
+			local kind = KIND_INFO[base] or KINDS[1]
+			local who = reaction and REACTION_NAMES[reaction]
+			local number = copy and "(" .. copy .. ")"
+			local sub = who and number and who .. " " .. number or who or number
+			return { id = id, base = base, reaction = reaction, label = kind[2], sub = sub,
+				full = kind[2] .. (who and " - " .. who or "") .. (number and " " .. number or ""),
+				tip = kind[3] .. (reaction and " " .. REACTION_TIPS[reaction] or "") }
 		end
 
-		-- The rows top to bottom in the order a plate tries them (Default
-		-- last), each with arrows to move it up or down within its part (an
-		-- added Default row only among Default's), and the added ones a button
-		-- to take them off.
-		local rows, moves = {}, {}
-		-- (The When grid below, its rows in the same order: made further down.)
-		local whenRows, whenTop = {}, nil
-		local WHEN_ROW_H = 26
+		-- When each row fits, in its drawer (as the Standard Frames page's rows:
+		-- Always, the dropdowns, roles, a rule: Core's MARK_WHEN_WORDS).
+		local WHEN_LAYOUT = { roles = true, edit = true }
+		local WHEN_GROUP = { combat = 1, calm = 1, nocombat = 1, camera = 1, enemy = 2, friendly = 2, near = 2,
+			near28 = 2 }
+		local WHEN_NAMES = { combat = L["In combat"], calm = L["Calm Timer"], nocombat = L["Out of combat"],
+			camera = L["In a camera mode"], enemy = L["Enemy targeted"], friendly = L["Friend targeted"],
+			near = L["Near (11 yards)"], near28 = L["Near (28 yards)"], world = L["Open World"], city = L["Cities"],
+			inn = L["Inns"], bg = L["BGs & Arenas"], instance = L["Instances"], dungeon = L["Dungeons"],
+			raid = L["Raids"], group = L["Grouped"] }
+
+		-- What's set apart from the usual on a row, for its chips: { text,
+		-- what (fade: an opacity; when: its When; nil: the rest) }. Nothing at
+		-- 100%, normal size, no Also color and When on Always.
+		local function RowChips(kind)
+			local db, list = ns.GetDB(), {}
+			local alpha = ns.TargetMarkSetting("Alpha", kind) or 1
+			if alpha < 1 then
+				list[#list + 1] = { ("%d%%"):format(alpha * 100 + 0.5), "fade" }
+			end
+			local key = kind .. "When"
+			local rule = db.frameRules and db.frameRules[key]
+			if type(rule) == "string" and rule:find("%S") then
+				list[#list + 1] = { rule, "when" }
+			elseif not db[key] then
+				local ticked = {}
+				for _, word in ipairs(ns.MARK_WHEN_WORDS) do
+					if db[key .. word[2]] then ticked[#ticked + 1] = WHEN_NAMES[word[1]] end
+				end
+				list[#list + 1] = { #ticked == 0 and L["Never"] or #ticked == 1 and ticked[1]
+					or ticked[1] .. " +" .. (#ticked - 1), "when" }
+			end
+			for _, roleList in ipairs({ "tankHide", "healerHide", "damageHide" }) do
+				if ns.RoleHidden(db, roleList, key) then
+					list[#list + 1] = { L["Some roles"], "when" }
+					break
+				end
+			end
+			if ns.MarkRowBase(kind) == "aggro" and ns.TargetMarkOwn("AlsoSame", kind) then
+				list[#list + 1] = { L["Your target's"] }
+			else
+				local parts = {}
+				for _, part in ipairs(ALSO_PARTS) do
+					if ns.TargetMarkOwn("Color" .. part[1], kind) then parts[#parts + 1] = ALSO_SHORT[part[1]] end
+				end
+				if #parts > 0 then list[#list + 1] = { table.concat(parts, ", ") } end
+			end
+			local size = ns.TargetMarkSetting("Size", kind) or 1
+			if math.abs(size - 1) > 0.001 and ns.TargetMarkSetting("Style", kind) ~= "none" then
+				list[#list + 1] = { (L["Size %d%%"]):format(size * 100 + 0.5) }
+			end
+			return list
+		end
+		-- (Chip colors: an opacity amber, a When blue, the rest grey.)
+		local CHIP_COLORS = { fade = { 0.35, 0.25, 0.05, 1, 0.8, 0.35 }, when = { 0.08, 0.2, 0.35, 0.55, 0.8, 1 } }
+		local CHIP_PLAIN = { 0.18, 0.18, 0.18, 0.8, 0.8, 0.8 }
+
+		-- The rows, each made the first time it's on the grid; a drawer each,
+		-- open while opened says so (kept till /reload).
+		local rows, moves, drawers, opened = {}, {}, {}, {}
+		local MakeRow -- (below)
 		local function RowList()
 			local list = {}
 			for _, id in ipairs(ns.TargetMarkOrder()) do list[#list + 1] = id end
@@ -6561,41 +6528,62 @@ do
 		function grid:Refresh()
 			local list = RowList()
 			local at = {}
-			for i, id in ipairs(list) do at[id] = i end
+			for i, id in ipairs(list) do
+				at[id] = i
+				if not rows[id] then MakeRow(id) end
+			end
 			for id, row in pairs(rows) do
-				local i = at[id]
-				row:SetShown(i ~= nil)
-				if i then
-					row:ClearAllPoints()
-					row:SetPoint("TOPLEFT", grid, "TOPLEFT", 0, -18 - ROW_H * (i - 1))
-					if moves[id] then
-						moves[id].up:SetShown(i > 1 and Group(list[i - 1]) == Group(id))
-						moves[id].down:SetShown(i < #list - 1 and Group(list[i + 1]) == Group(id))
-					end
-					-- (A row for one reaction under its kind's own: that one sets first.)
-					if row.reaction then
-						local base = ns.MarkRowBase(id)
-						local below = base ~= "others" and at[base] and at[base] < i
-						row.reaction:SetTextColor(below and 1 or 0.6, below and 0.55 or 0.6, below and 0.1 or 0.6)
-						row.below = below
-					end
-				end
-				local whenRow = whenRows[id]
-				if whenRow then
-					whenRow:SetShown(i ~= nil)
-					if i then
-						whenRow:ClearAllPoints()
-						whenRow:SetPoint("TOPLEFT", whenTop, "TOPLEFT", 0,
-							-FRAME_HEADING_HEIGHT - 4 - WHEN_ROW_H * (i - 1))
-						whenRow.grid:SetBand(i)
-					end
+				if not at[id] then
+					row:Hide()
+					drawers[id]:Hide()
+					drawers[id].searchAlways = false
 				end
 			end
-			grid:SetHeight(18 + ROW_H * #list)
-			if whenTop then whenTop:SetHeight(FRAME_HEADING_HEIGHT + 4 + WHEN_ROW_H * #list) end
+			local y = 0
+			for i, id in ipairs(list) do
+				local row, drawer = rows[id], drawers[id]
+				row:ClearAllPoints()
+				row:SetPoint("TOPLEFT", grid, "TOPLEFT", 0, -y)
+				row:Show()
+				y = y + ROW_H
+				if moves[id] then
+					moves[id].up:SetShown(i > 1 and Group(list[i - 1]) == Group(id))
+					moves[id].down:SetShown(i < #list - 1 and Group(list[i + 1]) == Group(id))
+				end
+				-- (A row for some units under a row of its kind for all of
+				-- them: that one sets first. Its Who in orange.)
+				local base, reaction = ns.MarkRowBase(id)
+				local below = false
+				for j = 1, i - 1 do
+					local otherBase, otherReaction = ns.MarkRowBase(list[j])
+					if reaction and otherBase == base and not otherReaction and base ~= "others" then
+						below = true
+					end
+				end
+				row.below = below
+				row:SetName()
+				-- (Its drawer: a closed one's settings still count for page
+				-- search, which opens it.)
+				drawer.searchAlways = true
+				row.toggle:SetNormalTexture(opened[id] and "Interface\\Buttons\\UI-MinusButton-Up"
+					or "Interface\\Buttons\\UI-PlusButton-Up")
+				if opened[id] then
+					drawer:ClearAllPoints()
+					drawer:SetPoint("TOPLEFT", grid, "TOPLEFT", DRAWER_X, -y)
+					drawer:Show()
+					y = y + DRAWER_H + 4
+				else
+					drawer:Hide()
+				end
+			end
+			grid:SetHeight(math.max(y, 1))
 		end
 		controls[#controls + 1] = grid
 		RecordKey(content, "markOrder")
+		local function Toggle(id)
+			opened[id] = not opened[id]
+			grid:Refresh()
+		end
 		local function SetOrder(order)
 			ns.GetDB().markOrder = table.concat(order, ",")
 			Refresh()
@@ -6629,30 +6617,48 @@ do
 			button:SetScript("OnClick", function() Move(kind, by) end)
 			return button
 		end
-		-- An added row, starting as a copy of its kind's own (look, Also color,
-		-- When, rule and roles), just above it (Default's: at the end).
-		local MARK_COPY = { "Show", "Style", "Color", "R", "G", "B", "Size", "Bob" }
+		-- The next free row of a kind and Who: its own id while it isn't on
+		-- the grid (Default's always is), else the first number free; nil
+		-- with all of them taken.
+		local function FreeRow(base, reaction)
+			local first, on = base .. (reaction or ""), {}
+			for _, id in ipairs(ns.TargetMarkOrder()) do on[id] = true end
+			if first ~= "others" and not on[first] then return first end
+			for copy = 2, ns.MARK_COPIES do
+				if not on[first .. copy] then return first .. copy end
+			end
+		end
+		-- An added row, its look a copy of the first of its kind and Who (that
+		-- one itself: its own look if it had one, else its kind's or its own
+		-- to start with, as Normal NPC - Enemy's 40%), written out so its cells
+		-- show it; its When afresh: Always, or its kind's rule (Core's
+		-- MARK_ROW_RULES), every role. Just above the first row of its kind,
+		-- or after the rest.
+		local MARK_COPY = { "Show", "Style", "Color", "R", "G", "B", "Size", "Bob", "Alpha", "AlsoSame" }
 		local function AddRow(id)
-			local db, base = ns.GetDB(), ns.MarkRowBase(id)
+			local db = ns.GetDB()
+			local base, reaction = ns.MarkRowBase(id)
+			local first = base .. (reaction or "")
 			for _, key in ipairs(MARK_COPY) do
-				db[MarkKey(id, key)] = ns.TargetMarkSetting(key, base)
+				db[MarkKey(id, key)] = ns.TargetMarkOwn(key, first)
 			end
 			for _, part in ipairs({ "Name", "Bar", "Border" }) do
-				db[id .. "Color" .. part] = db[base .. "Color" .. part]
+				db[id .. "Color" .. part] = ns.TargetMarkOwn("Color" .. part, first) and true or false
 			end
-			db[id .. "When"] = db[base .. "When"]
+			local rule = ns.MARK_ROW_RULES[first]
+			db[id .. "When"] = not rule
 			for _, word in ipairs(ns.MARK_WHEN_WORDS) do
-				db[id .. "When" .. word[2]] = db[base .. "When" .. word[2]]
+				db[id .. "When" .. word[2]] = false
 			end
 			db.frameRules = db.frameRules or {}
-			db.frameRules[id .. "When"] = db.frameRules[base .. "When"]
+			db.frameRules[id .. "When"] = rule
 			for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
-				if type(db[list]) == "table" then db[list][id .. "When"] = db[list][base .. "When"] end
+				if type(db[list]) == "table" then db[list][id .. "When"] = nil end
 			end
 			local order = Order()
 			local at = #order + 1
 			for i, each in ipairs(order) do
-				if each == base then at = i break end
+				if ns.MarkRowBase(each) == base then at = i break end
 			end
 			table.insert(order, at, id)
 			SetOrder(order)
@@ -6665,44 +6671,40 @@ do
 			SetOrder(order)
 		end
 
-		local NAME_X = 18
-		for _, info in ipairs(ROWS) do
-			local kind, base = info.id, info.base
-			local row = CreateFrame("Frame", nil, grid)
-			row:SetSize(COL_MOVING + 50, ROW_H)
+		-- A row's slider setting: a row without one of its own reads its
+		-- kind's (as the plates do).
+		local function RowSetting(kind, key, dbKey)
+			return { get = function() return ns.TargetMarkSetting(key, kind) or 1 end,
+				set = function(value) ns.GetDB()[dbKey] = value end }
+		end
+
+		function MakeRow(id)
+			local info = RowInfo(id)
+			local kind, base = id, info.base
+			local row = CreateFrame("Button", nil, grid)
+			row:SetSize(ROW_W, ROW_H)
 			row:Hide()
 			rows[kind] = row
+			local hover = row:CreateTexture(nil, "HIGHLIGHT")
+			hover:SetAllPoints()
+			hover:SetColorTexture(1, 1, 1, 0.05)
+			local line = row:CreateTexture(nil, "BACKGROUND")
+			line:SetPoint("BOTTOMLEFT")
+			line:SetPoint("BOTTOMRIGHT")
+			line:SetHeight(1)
+			line:SetColorTexture(1, 1, 1, 0.08)
+			row:SetScript("OnClick", function() Toggle(kind) end)
 			local function Place(control, x, dy)
 				control:SetPoint("LEFT", row, "LEFT", x, dy or 0)
 				return control
 			end
-			local function Shown(db)
-				return db[MarkKey(kind, "Show")] and true or false
+			local function Shown()
+				return ns.TargetMarkSetting("Show", kind) and true or false
 			end
 			-- (Default stays last: no arrows.)
 			if kind ~= "others" then
 				moves[kind] = { up = MoveButton(row, kind, -1), down = MoveButton(row, kind, 1) }
 			end
-			-- (The row's name: a button, for its tip; an added row's reaction
-			-- under it, orange while its kind's own row is above it.)
-			local nameButton = Place(CreateFrame("Button", nil, row), NAME_X)
-			nameButton:SetSize(COL_SHOW - 4 - NAME_X, info.reaction and 30 or 20)
-			local name = Label(nameButton, "GameFontHighlight", info.label)
-			name:SetPoint(info.reaction and "TOPLEFT" or "LEFT")
-			name:SetPoint(info.reaction and "TOPRIGHT" or "RIGHT")
-			name:SetJustifyH("LEFT")
-			if info.reaction then
-				row.reaction = Label(nameButton, "GameFontHighlightSmall", info.reaction)
-				row.reaction:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -1)
-			end
-			Tooltip(nameButton, info.tip)
-			nameButton:HookScript("OnEnter", function()
-				if row.below then
-					GameTooltip:AddLine((L["%s's own row is above this one, so it sets its parts first: move " ..
-						"this one above it."]):format(info.label), 1, 0.55, 0.1, true)
-					GameTooltip:Show()
-				end
-			end)
 
 			local showKey = MarkKey(kind, "Show")
 			RecordKey(content, showKey)
@@ -6710,20 +6712,166 @@ do
 				ns.GetDB()[showKey] = value
 				Refresh()
 				Changed()
-			end), COL_SHOW)
-			show.searchLabel = info.label .. (info.reaction and " " .. info.reaction or "")
+			end), SHOW_X)
+			show.searchLabel = info.full
 
-			local style = Place(Pick(row, MarkKey(kind, "Style"), kind == "aggro" and AGGRO_STYLES
+			-- Its mark's preview: a plate in small (its bar, in its Also
+			-- color's color if it takes one), the mark on it, at its opacity.
+			local preview = Place(CreateFrame("Frame", nil, row), PREVIEW_X)
+			preview:SetSize(42, 22)
+			if preview.SetClipsChildren then preview:SetClipsChildren(true) end
+			local previewBack = preview:CreateTexture(nil, "BACKGROUND")
+			previewBack:SetAllPoints()
+			previewBack:SetColorTexture(0, 0, 0, 0.45)
+			local holder = CreateFrame("Frame", nil, preview)
+			holder:SetSize(140, 73)
+			holder:SetScale(0.3)
+			holder:SetPoint("CENTER")
+			local bar = CreateFrame("Frame", nil, holder)
+			bar:SetSize(84, 10)
+			bar:SetPoint("CENTER", holder, "CENTER", 0, -12)
+			bar:SetFrameLevel(holder:GetFrameLevel() + 2)
+			local barEdge = bar:CreateTexture(nil, "BORDER")
+			barEdge:SetPoint("TOPLEFT", -2, 2)
+			barEdge:SetPoint("BOTTOMRIGHT", 2, -2)
+			barEdge:SetColorTexture(0, 0, 0, 1)
+			local barFill = bar:CreateTexture(nil, "ARTWORK")
+			barFill:SetAllPoints()
+			preview.Refresh = function()
+				if not ns.MakeTargetArrow then return end
+				local shown = Shown()
+				preview.arrow = preview.arrow or ns.MakeTargetArrow(holder, bar)
+				ns.StyleTargetArrow(preview.arrow, nil, kind)
+				preview.arrow:SetShown(shown and ns.TargetMarkSetting("Style", kind) ~= "none")
+				local tintKind = ns.TargetMarkTintKind(kind)
+				if shown and ns.TargetMarkSetting("ColorBar", tintKind) then
+					local r, g, b = ns.TargetArrowColour(nil, tintKind)
+					barFill:SetColorTexture(r, g, b, 1)
+				else
+					barFill:SetColorTexture(0.6, 0.12, 0.12, 1)
+				end
+				holder:SetAlpha(shown and (ns.TargetMarkSetting("Alpha", kind) or 1) or 0.3)
+			end
+			controls[#controls + 1] = preview
+
+			-- Its name: the kind's, its Who and number dimmed after it (orange
+			-- while a row of its kind for all its units is above it).
+			local name = Place(Label(row, "GameFontHighlight", ""), NAME_X)
+			name:SetWidth(NAME_W)
+			name:SetWordWrap(false)
+			name.searchSkip = true
+			function row:SetName()
+				local sub = info.sub and ((self.below and " |cffff8c1a" or " |cff999999") .. info.sub .. "|r") or ""
+				name:SetText(info.label .. sub)
+				name:SetAlpha(Shown() and 1 or 0.5)
+			end
+
+			-- The chips: what's set apart from the usual, in order, as many as
+			-- fit (hovering the row lists them all).
+			local chips = Place(CreateFrame("Frame", nil, row), CHIPS_X)
+			chips:SetSize(CHIPS_W, 16)
+			chips.searchSkip = true
+			chips.pool = {}
+			chips.Refresh = function()
+				local list = RowChips(kind)
+				row.chipList = list
+				local x, shownChips = 0, 0
+				for i, info2 in ipairs(list) do
+					local chip = chips.pool[i]
+					if not chip then
+						chip = CreateFrame("Frame", nil, chips)
+						chip:SetHeight(16)
+						chip.back = chip:CreateTexture(nil, "BACKGROUND")
+						chip.back:SetAllPoints()
+						chip.text = chip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+						chip.text:SetPoint("CENTER")
+						chips.pool[i] = chip
+					end
+					chip.text:SetText(info2[1])
+					local width = math.ceil(chip.text:GetStringWidth()) + 10
+					if x + width > CHIPS_W then break end
+					local c = CHIP_COLORS[info2[2] or ""] or CHIP_PLAIN
+					chip.back:SetColorTexture(c[1], c[2], c[3], 0.9)
+					chip.text:SetTextColor(c[4], c[5], c[6])
+					chip:SetWidth(width)
+					chip:ClearAllPoints()
+					chip:SetPoint("LEFT", chips, "LEFT", x, 0)
+					chip:Show()
+					x, shownChips = x + width + 4, i
+				end
+				for i = shownChips + 1, #chips.pool do chips.pool[i]:Hide() end
+				row:SetName()
+			end
+			controls[#controls + 1] = chips
+
+			-- Its tip: what it's for, everything set apart, and the click.
+			row:SetScript("OnEnter", function(self)
+				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+				GameTooltip:SetText(info.full, 1, 1, 1)
+				GameTooltip:AddLine(info.tip, 0.8, 0.8, 0.8, true)
+				for _, chip in ipairs(self.chipList or {}) do
+					GameTooltip:AddLine("- " .. chip[1], 1, 0.82, 0)
+				end
+				if self.below then
+					GameTooltip:AddLine((L["%s's own row is above this one, so it sets its parts first: move " ..
+						"this one above it."]):format(info.label), 1, 0.55, 0.1, true)
+				end
+				GameTooltip:AddLine(L["Click to show or hide its settings."], 0.6, 0.6, 0.6)
+				GameTooltip:Show()
+			end)
+			row:SetScript("OnLeave", GameTooltip_Hide)
+
+			-- Its drawer's button, and (every row but Default's own) a button
+			-- to take it off.
+			row.toggle = Place(CreateFrame("Button", nil, row), ROW_W - 44)
+			row.toggle:SetSize(14, 14)
+			row.toggle:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+			row.toggle:SetScript("OnClick", function() Toggle(kind) end)
+			Tooltip(row.toggle, L["Show or hide this row's settings."])
+			if kind ~= "others" then
+				local remove = Place(CreateFrame("Button", nil, row), ROW_W - 22)
+				remove:SetSize(16, 16)
+				remove:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
+				remove:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+				Tooltip(remove, L["Remove this row. Add it again under the grid."])
+				remove:SetScript("OnClick", function() RemoveRow(kind) end)
+			end
+
+			-- The drawer: Mark (style, color, size, movement), Plate (Also
+			-- color, opacity) and When. Page search finding something in it
+			-- opens it (openSection).
+			local drawer = CreateFrame("Frame", nil, grid)
+			drawer:SetSize(ROW_W - DRAWER_X, DRAWER_H)
+			drawer:Hide()
+			drawers[kind] = drawer
+			drawer.openSection = function()
+				opened[kind] = true
+				grid:Refresh()
+			end
+			local drawerBack = drawer:CreateTexture(nil, "BACKGROUND")
+			drawerBack:SetAllPoints()
+			drawerBack:SetColorTexture(0, 0, 0, 0.3)
+			local function At(lineNumber, control, x, dy)
+				control:SetPoint("LEFT", drawer, "TOPLEFT", x, -4 - LINE_H * (lineNumber - 0.5) + (dy or 0))
+				return control
+			end
+			for lineNumber, text in ipairs({ L["Mark"], L["Plate"], L["When"] }) do
+				local label = At(lineNumber, Label(drawer, "GameFontNormalSmall", text), 6)
+				label.searchSkip = true
+			end
+
+			-- Mark: style, color and its custom color's swatch, size, movement.
+			local style = At(1, Pick(drawer, MarkKey(kind, "Style"), base == "aggro" and AGGRO_STYLES
 				or base == "others" and OTHERS_STYLES
-				or base == "mouseover" and MOUSEOVER_STYLES or MARK_STYLES, 96), COL_STYLE)
+				or base == "mouseover" and MOUSEOVER_STYLES or MARK_STYLES, 100), LABEL_W)
+			style.searchLabel = info.full .. " " .. L["Style"]
 			GreyUnless(style, Shown)
-
-			local color = Place(Pick(row, MarkKey(kind, "Color"), kind == "aggro" and AGGRO_COLORS or MARK_COLORS, 90),
-				COL_COLOR)
+			local color = At(1, Pick(drawer, MarkKey(kind, "Color"), base == "aggro" and AGGRO_COLORS or MARK_COLORS, 92),
+				LABEL_W + 106)
+			color.searchLabel = info.full .. " " .. L["Color"]
 			GreyUnless(color, Shown)
-			-- The custom color's swatch: picking from it chooses Custom.
 			local rKey, gKey, bKey = MarkKey(kind, "R"), MarkKey(kind, "G"), MarkKey(kind, "B")
-			local swatch = Place(CreateFrame("Button", nil, row), COL_SWATCH)
+			local swatch = At(1, CreateFrame("Button", nil, drawer), LABEL_W + 204)
 			swatch:SetSize(18, 18)
 			local swatchBorder = swatch:CreateTexture(nil, "BACKGROUND")
 			swatchBorder:SetAllPoints()
@@ -6732,51 +6880,71 @@ do
 			swatchColor:SetPoint("TOPLEFT", 2, -2)
 			swatchColor:SetPoint("BOTTOMRIGHT", -2, 2)
 			Tooltip(swatch, L["Click to choose the mark's custom color."])
-			-- (After you on Your target's: your target's color, to start a custom one from.)
-			local function SwatchColor(db)
-				if kind == "aggro" and db[MarkKey(kind, "Color")] == "same" and ns.TargetArrowColour then
+			-- (An aggro row on Your target's: your target's color, to start a custom one from.)
+			local function SwatchColor()
+				if base == "aggro" and ns.TargetMarkOwn("Color", kind) == "same" and ns.TargetArrowColour then
 					return ns.TargetArrowColour(nil, "target")
 				end
-				return db[rKey] or 1, db[gKey] or 1, db[bKey] or 1
+				return ns.TargetMarkOwn("R", kind) or 1, ns.TargetMarkOwn("G", kind) or 1,
+					ns.TargetMarkOwn("B", kind) or 1
 			end
 			swatch.Refresh = function(self)
-				local db = ns.GetDB()
-				local r, g, b = SwatchColor(db)
+				local r, g, b = SwatchColor()
 				swatchColor:SetColorTexture(r, g, b, 1)
-				self:SetEnabled(Shown(db))
-				self:SetAlpha(Shown(db) and 1 or 0.4)
+				self:SetEnabled(Shown())
+				self:SetAlpha(Shown() and 1 or 0.4)
 			end
 			controls[#controls + 1] = swatch
 			for _, key in ipairs({ rKey, gKey, bKey }) do RecordKey(content, key) end
 			swatch:SetScript("OnClick", function()
 				local db = ns.GetDB()
-				local r0, g0, b0 = SwatchColor(db)
+				local r0, g0, b0 = SwatchColor()
 				OpenColorPicker(r0, g0, b0, function(r, g, b)
 					db[rKey], db[gKey], db[bKey], db[MarkKey(kind, "Color")] = r, g, b, "custom"
 					Refresh()
 					Changed()
 				end)
 			end)
+			local sizeKey, bobKey = MarkKey(kind, "Size"), MarkKey(kind, "Bob")
+			RecordKey(content, sizeKey)
+			RecordKey(content, bobKey)
+			local size = At(1, Slider(drawer, RowSetting(kind, "Size", sizeKey), L["Size"], 50, 200, 5, "%d%%", 100,
+				Changed), LABEL_W + 234, -6)
+			size:SetWidth(96)
+			size.searchLabel = info.full .. " " .. L["Size"]
+			GreyUnless(size, Shown)
+			local moving = At(1, Check(drawer, bobKey, L["Moving"],
+				L["The arrow, chevron and diamond bob up and down, the brackets, carets and corners close " ..
+				"in and out, the glow and underline pulse. Unticked, it holds still."], function(value)
+					ns.GetDB()[bobKey] = value
+					Changed()
+				end), LABEL_W + 340)
+			moving.searchLabel = info.full .. " " .. L["Moving"]
+			GreyUnless(moving, Shown)
 
-			-- Also color: the unit's own parts in its mark's color, ticked from a
-			-- menu (or, on a client without menus, stepped through each mix).
-			local also = Place(ns.GridMenuButton(row, 96), COL_ALSO)
+			-- Plate: the unit's own parts in its mark's color (Also color),
+			-- ticked from a menu (or, on a client without menus, stepped
+			-- through each mix); the whole plate's opacity.
+			local also = At(2, ns.GridMenuButton(drawer, 150), LABEL_W)
 			Tooltip(also, L["The unit's own parts in its mark's color: its name and health bar (and on your " ..
 				"target, the game's border round it)."])
-			also.searchLabel = info.label .. " " .. L["Also color"]
+			also.searchLabel = info.full .. " " .. L["Also color"]
 			local function AlsoChanged()
 				Refresh()
 				Changed()
 			end
 			local entries, parts = {}, {}
 			for _, part in ipairs(ALSO_PARTS) do
-				if not part.targetOnly or base == "target" or kind == "aggro" then parts[#parts + 1] = part end
+				if not part.targetOnly or base == "target" or base == "aggro" then parts[#parts + 1] = part end
 			end
-			-- (After you: first, Your target's, your target's ticks in its color;
-			-- its own parts then greyed in the menu.)
-			local sameKey = kind == "aggro" and "aggroMarkAlsoSame" or nil
+			-- (An aggro row: first, Your target's, your target's ticks in its
+			-- color; its own parts then greyed in the menu.)
+			local sameKey = base == "aggro" and MarkKey(kind, "AlsoSame") or nil
 			local function Own()
-				return not (sameKey and ns.GetDB()[sameKey])
+				return not (sameKey and ns.TargetMarkOwn("AlsoSame", kind))
+			end
+			local function Ticked(part)
+				return ns.TargetMarkOwn("Color" .. part, kind) and true or false
 			end
 			if sameKey then
 				RecordKey(content, sameKey)
@@ -6787,20 +6955,20 @@ do
 			for _, part in ipairs(parts) do
 				local key = kind .. "Color" .. part[1]
 				RecordKey(content, key)
-				entries[#entries + 1] = { part[2], function() return ns.GetDB()[key] and true or false end,
-					function() ns.GetDB()[key] = not ns.GetDB()[key] end, sameKey and Own or nil, part[3] }
+				entries[#entries + 1] = { part[2], function() return Ticked(part[1]) end,
+					function() ns.GetDB()[key] = not Ticked(part[1]) end, sameKey and Own or nil, part[3] }
 			end
 			also:SetScript("OnClick", function(self)
 				if ns.GRID_MENUS then
 					ns.TickMenu(self, entries, AlsoChanged, true)
 					return
 				end
-				-- (No menus: the next of the mixes; for After you, Your target's
-				-- before the first and after the last.)
+				-- (No menus: the next of the mixes; for an aggro row, Your
+				-- target's before the first and after the last.)
 				local db, mix = ns.GetDB(), 0
 				if Own() then
 					for bit, part in ipairs(parts) do
-						if db[kind .. "Color" .. part[1]] then mix = mix + 2 ^ (bit - 1) end
+						if Ticked(part[1]) then mix = mix + 2 ^ (bit - 1) end
 					end
 					mix = (mix + 1) % 2 ^ #parts
 					if sameKey and mix == 0 then
@@ -6817,160 +6985,218 @@ do
 				AlsoChanged()
 			end)
 			also.Refresh = function(self)
-				local db, names = ns.GetDB(), {}
+				local names = {}
 				if not Own() then
-					self:SetText(L["Your target's"])
-					self:SetEnabled(Shown(db))
+					self:SetText(L["Also color"] .. ": " .. L["Your target's"])
+					self:SetEnabled(Shown())
 					return
 				end
 				for _, part in ipairs(parts) do
-					if db[kind .. "Color" .. part[1]] then names[#names + 1] = ALSO_SHORT[part[1]] end
+					if Ticked(part[1]) then names[#names + 1] = ALSO_SHORT[part[1]] end
 				end
-				self:SetText(#names > 0 and table.concat(names, ", ")
-					or "|cff808080" .. (base == "others" and L["The game's"] or L["None"]) .. "|r")
-				self:SetEnabled(Shown(db))
+				self:SetText(L["Also color"] .. ": " .. (#names > 0 and table.concat(names, ", ")
+					or "|cff808080" .. (base == "others" and L["The game's"] or L["None"]) .. "|r"))
+				self:SetEnabled(Shown())
 			end
 			controls[#controls + 1] = also
+			local alphaKey = MarkKey(kind, "Alpha")
+			RecordKey(content, alphaKey)
+			local opacity = At(2, Slider(drawer, RowSetting(kind, "Alpha", alphaKey), L["Opacity"], 0, 100, 5, "%d%%",
+				100, Changed), LABEL_W + 166, -6)
+			opacity:SetWidth(110)
+			opacity.searchLabel = info.full .. " " .. L["Opacity"]
+			Tooltip(opacity, L["The whole plate's opacity while this row fits it, whether it has a mark or not. " ..
+				"CineMode's own fade comes on top."])
+			GreyUnless(opacity, Shown)
 
-			-- (Aggro: your target's size and movement, so none of its own; said
-			-- across both cells.)
-			if kind == "aggro" then
-				local same = Place(Label(row, "GameFontDisableSmall", L["Your target's"]), COL_SIZE)
-				same.searchSkip = true
-			else
-				local sizeKey, bobKey = MarkKey(kind, "Size"), MarkKey(kind, "Bob")
-				RecordKey(content, sizeKey)
-				RecordKey(content, bobKey)
-				local size = Place(Slider(row, sizeKey, "", 50, 200, 5, "%d%%", 100, Changed), COL_SIZE, -6)
-				size:SetWidth(76)
-				size.searchLabel = info.label .. " " .. L["Size"]
-				GreyUnless(size, Shown)
-				local moving = Place(Check(row, bobKey, "",
-					L["The arrow, chevron and diamond bob up and down, the brackets, carets and corners close " ..
-					"in and out, the glow and underline pulse. Unticked, it holds still."], function(value)
-						ns.GetDB()[bobKey] = value
-						Changed()
-					end), COL_MOVING)
-				moving.searchLabel = info.label .. " " .. L["Moving"]
-				GreyUnless(moving, Shown)
-			end
-			-- (An added row: a button to take it off.)
-			if info.reaction then
-				local remove = Place(CreateFrame("Button", nil, row), COL_MOVING + 30)
-				remove:SetSize(16, 16)
-				remove:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
-				remove:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
-				Tooltip(remove, L["Remove this row."])
-				remove:SetScript("OnClick", function() RemoveRow(kind) end)
-			end
-		end
-
-		-- Add row: the rows not on the grid yet, from a menu (none on a client
-		-- without menus: the button hides).
-		local add = ns.PanelButton(content)
-		add:SetSize(100, 22)
-		add:SetText(L["Add row"])
-		Tooltip(add, L["Adds a row for just the enemies, neutral units or friends of Target, Focus, Mouseover " ..
-			"or Default, a copy of that kind's own row to start with, just above it."])
-		add:SetScript("OnClick", function(self)
-			local on = {}
-			for _, id in ipairs(ns.TargetMarkOrder()) do on[id] = true end
-			MenuUtil.CreateContextMenu(self, function(_, root)
-				for _, info in ipairs(ROWS) do
-					if info.reaction and not on[info.id] then
-						root:CreateButton(info.label .. " - " .. info.reaction, function() AddRow(info.id) end)
-					end
-				end
-			end)
-		end)
-		add.Refresh = function(self)
-			local count = 0
-			for _ in ipairs(ns.TargetMarkOrder()) do count = count + 1 end
-			self:SetShown(ns.GRID_MENUS and true or false)
-			-- (All added: nothing left to add.)
-			self:SetEnabled(count < #ROWS - 1)
-		end
-		controls[#controls + 1] = add
-		stack:Add(add, "label")
-
-		-- When: a row for each of the grid's, in its order, as the Standard
-		-- Frames page's rows (Always, the dropdowns, roles, a rule: Core's
-		-- MARK_WHEN_WORDS). A row that doesn't fit now leaves the plate to the next.
-		stack:Header(content, L["When"])
-		stack:Help(content, L["When each row above fits: Always, or only in the fights, targets and places " ..
-			"ticked (or as its rule says). A row that doesn't fit now leaves the plate to the next one. The " ..
-			"Nameplates page's Target Indicator row still says when marks show at all."])
-		local WHEN_NAME_W = 120
-		local WHEN_LAYOUT = { roles = true, edit = true }
-		local WHEN_GROUP = { combat = 1, calm = 1, nocombat = 1, camera = 1, enemy = 2, friendly = 2, near = 2,
-			near28 = 2 }
-		local WHEN_NAMES = { combat = L["In combat"], calm = L["Calm Timer"], nocombat = L["Out of combat"],
-			camera = L["In a camera mode"], enemy = L["Enemy targeted"], friendly = L["Friend targeted"],
-			near = L["Near (11 yards)"], near28 = L["Near (28 yards)"], world = L["Open World"], city = L["Cities"],
-			inn = L["Inns"], bg = L["BGs & Arenas"], instance = L["Instances"], dungeon = L["Dungeons"],
-			raid = L["Raids"], group = L["Grouped"] }
-		whenTop = CreateFrame("Frame", nil, content)
-		whenTop:SetSize(WHEN_NAME_W + ns.GridWidth(WHEN_LAYOUT), FRAME_HEADING_HEIGHT + 4 + WHEN_ROW_H * #MARK_KINDS)
-		stack:Add(whenTop, "label")
-		ns.GridHeadings(ns.GRID_KIT, whenTop, whenTop, WHEN_NAME_W, WHEN_LAYOUT)
-		for _, info in ipairs(ROWS) do
-			local kind, base = info.id, info.id .. "When"
-			local shownName = info.label .. (info.reaction and " - " .. info.reaction or "")
-			local row = CreateFrame("Frame", nil, whenTop)
-			row:SetSize(whenTop:GetWidth(), 24)
-			row:Hide()
-			whenRows[kind] = row
-			local name = Label(row, info.reaction and "GameFontHighlightSmall" or "GameFontHighlight", shownName)
-			name:SetPoint("LEFT", row, "LEFT", 0, 0)
-			name:SetWidth(WHEN_NAME_W - 4)
-			name:SetJustifyH("LEFT")
-			name:SetWordWrap(false)
-			name.searchSkip = true
-			RecordKey(content, base)
+			-- When: as the Standard Frames page's rows.
+			local whenKey = kind .. "When"
+			RecordKey(content, whenKey)
 			local menus, words = { {}, {}, {} }, {}
 			for _, word in ipairs(ns.MARK_WHEN_WORDS) do
-				local key = base .. word[2]
+				local key = whenKey .. word[2]
 				RecordKey(content, key)
 				words[word[1]] = true
 				local group = menus[WHEN_GROUP[word[1]] or 3]
 				group[#group + 1] = { WHEN_NAMES[word[1]], function() return ns.GetDB()[key] and true or false end,
 					function() ns.GetDB()[key] = not ns.GetDB()[key] end }
 			end
-			RuleTarget(base, shownName .. " (" .. L["Nameplates"] .. ")", "Nameplate Style")
-			ns.GRID_RULE_KEYS[base] = true
+			RuleTarget(whenKey, info.full .. " (" .. L["Nameplates"] .. ")", "Nameplate Style")
+			ns.GRID_RULE_KEYS[whenKey] = true
 			for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
 				RecordKey(content, list)
-				RecordRow(content, list, base)
+				RecordRow(content, list, whenKey)
 			end
-			row.grid = ns.GridRow(ns.GRID_KIT, row, WHEN_NAME_W, WHEN_LAYOUT, {
+			local function WhenChanged()
+				Changed()
+				chips.Refresh()
+			end
+			local when = ns.GridRow(ns.GRID_KIT, drawer, 0, WHEN_LAYOUT, {
 				band = 1,
-				always = { isOn = function() return ns.GetDB()[base] end,
-					set = function(value) ns.GetDB()[base] = value end,
+				always = { isOn = function() return ns.GetDB()[whenKey] end,
+					set = function(value) ns.GetDB()[whenKey] = value end,
 					tip = L["This row fits everywhere. The rest of the row keeps its ticks for when you untick this."] },
 				menus = menus,
-				rule = { key = function() return base end, label = function() return shownName end, grid = words,
+				rule = { key = function() return whenKey end, label = function() return info.full end, grid = words,
 					words = function()
 						local ticked = {}
 						for _, word in ipairs(ns.MARK_WHEN_WORDS) do
-							if ns.GetDB()[base .. word[2]] then ticked[#ticked + 1] = word[1] end
+							if ns.GetDB()[whenKey .. word[2]] then ticked[#ticked + 1] = word[1] end
 						end
 						return ticked
 					end,
 					apply = function(isAlways, ticked)
 						local db = ns.GetDB()
-						db[base] = isAlways and true or false
+						db[whenKey] = isAlways and true or false
 						for _, word in ipairs(ns.MARK_WHEN_WORDS) do
-							db[base .. word[2]] = ticked[word[1]] and true or false
+							db[whenKey .. word[2]] = ticked[word[1]] and true or false
 						end
 					end,
-					changed = Changed },
-				roles = { key = function() return base end, changed = Changed,
+					changed = WhenChanged },
+				roles = { key = function() return whenKey end, changed = WhenChanged,
 					tip = L["Tick roles to have this row fit only while you're one of them (your specialization's, " ..
 					"or the one picked in the group finder), whatever the row says. None ticked (-): every role."] },
-				changed = Changed,
+				changed = WhenChanged,
 			})
-			row.grid:SetPoint("LEFT", row, "LEFT", WHEN_NAME_W, 0)
+			At(3, when, LABEL_W)
+			when:SetBand(1)
 		end
+
+		-- Adding a row: a Kind; for Aggro and Units a Type (which of them); a
+		-- Who (that kind's own: none for the aggro rows, no Neutral for players
+		-- and minions); and Add row. A dropdown each (or on a client without
+		-- them a button that steps through), Type and Who only while there's
+		-- a choice to make. Kind and Type name a row kind (Core's MARK_ROW_KINDS).
+		local ADD_KINDS = {
+			{ "target", L["Target"] }, { "focus", L["Focus"] }, { "mouseover", L["Mouseover"] },
+			{ "aggro", L["Aggro"], { { "aggro", L["On you"] }, { "aggroother", L["Not on you"] },
+				{ "aggrononank", L["On a non-tank"] } } },
+			{ "units", L["Units"], { { "npc", L["Normal NPC"] }, { "elite", L["Elite NPC"] },
+				{ "players", L["Players"] }, { "minions", L["Minions"] } } },
+			{ "others", L["Default"] },
+		}
+		local addKind, addType, addWho = "target", nil, "Any"
+		local function AddKindInfo()
+			for _, kind in ipairs(ADD_KINDS) do
+				if kind[1] == addKind then return kind end
+			end
+			return ADD_KINDS[1]
+		end
+		-- (The row kind picked: Kind's own, or its Type's.)
+		local function RowKind()
+			local kind = AddKindInfo()
+			return kind[3] and (addType or kind[3][1][1]) or kind[1]
+		end
+		local function KindChoices()
+			local list = {}
+			for _, kind in ipairs(ADD_KINDS) do list[#list + 1] = { value = kind[1], text = kind[2] } end
+			return list
+		end
+		local function TypeChoices()
+			local list = {}
+			for _, kind in ipairs(AddKindInfo()[3] or {}) do list[#list + 1] = { value = kind[1], text = kind[2] } end
+			return list
+		end
+		local function WhoChoices()
+			local list = { { value = "Any", text = L["Any"] } }
+			for _, who in ipairs(ns.MARK_ROW_KINDS[RowKind()] or {}) do
+				list[#list + 1] = { value = who, text = REACTION_NAMES[who] }
+			end
+			return list
+		end
+		-- (A Who the row kind picked hasn't got: back to Any.)
+		local function KeepWho()
+			local known = false
+			for _, choice in ipairs(WhoChoices()) do known = known or choice.value == addWho end
+			if not known then addWho = "Any" end
+		end
+		local function Choice(parent, width, Choices, Get, Set)
+			local ok, dropdown = ns.MenuDropdown(parent)
+			if ok and dropdown and dropdown.SetupMenu then
+				dropdown:SetWidth(width)
+				dropdown:SetupMenu(function(_, root)
+					for _, choice in ipairs(Choices()) do
+						root:CreateRadio(choice.text, function() return Get() == choice.value end, function()
+							Set(choice.value)
+							Refresh()
+						end)
+					end
+				end)
+				dropdown.Refresh = function(self) self:GenerateMenu() end
+			else
+				dropdown = ns.PanelButton(parent)
+				dropdown:SetSize(width, 22)
+				dropdown:SetScript("OnClick", function()
+					local list, now = Choices(), 0
+					for i, choice in ipairs(list) do
+						if Get() == choice.value then now = i end
+					end
+					Set(list[now % #list + 1].value)
+					Refresh()
+				end)
+				dropdown.Refresh = function(self)
+					for _, choice in ipairs(Choices()) do
+						if Get() == choice.value then self:SetText(choice.text) end
+					end
+				end
+			end
+			dropdown.searchSkip = true
+			controls[#controls + 1] = dropdown
+			return dropdown
+		end
+		local adding = CreateFrame("Frame", nil, content)
+		adding:SetSize(460, 24)
+		stack:Add(adding, "label")
+		local kindPick = Choice(adding, 120, KindChoices, function() return addKind end, function(value)
+			addKind, addType = value, nil
+			KeepWho()
+		end)
+		kindPick:SetPoint("LEFT", adding, "LEFT", 0, 0)
+		Tooltip(kindPick, L["The kind of plate the new row is for: your target, focus or the unit under the " ..
+			"mouse; Aggro, enemies by who they're attacking; Units, by what they are; or Default, every other plate."])
+		local typePick = Choice(adding, 120, TypeChoices, function() return RowKind() end, function(value)
+			addType = value
+			KeepWho()
+		end)
+		Tooltip(typePick, L["Which of them: for Aggro, who the enemy's attacking; for Units, NPCs by rank, " ..
+			"players or their pets, totems and guardians (minions)."])
+		local whoPick = Choice(adding, 100, WhoChoices, function() return addWho end,
+			function(value) addWho = value end)
+		Tooltip(whoPick, L["Any: all of that kind. Enemy, Neutral or Friendly: just those of them."])
+		local add = ns.PanelButton(adding)
+		add:SetSize(100, 22)
+		add:SetText(L["Add row"])
+		Tooltip(add, L["Adds a row for the kind and Who picked, a copy of the first such row's look to start " ..
+			"with (its When on Always), just above the first row of its kind. The same again makes another, " ..
+			"numbered: Target (2). Five of each at most."])
+		local function Picked()
+			return FreeRow(RowKind(), addWho ~= "Any" and addWho or nil)
+		end
+		add:SetScript("OnClick", function()
+			local id = Picked()
+			if id then AddRow(id) end
+		end)
+		-- (Type and Who shown only with a choice to make; the rest close up
+		-- to the left.)
+		add.Refresh = function(self)
+			local hasType = AddKindInfo()[3] ~= nil
+			local hasWho = #(ns.MARK_ROW_KINDS[RowKind()] or {}) > 0
+			typePick:SetShown(hasType)
+			whoPick:SetShown(hasWho)
+			local last = kindPick
+			for _, pick in ipairs({ typePick, whoPick }) do
+				if pick:IsShown() then
+					pick:ClearAllPoints()
+					pick:SetPoint("LEFT", last, "RIGHT", 6, 0)
+					last = pick
+				end
+			end
+			self:ClearAllPoints()
+			self:SetPoint("LEFT", last, "RIGHT", 6, 0)
+			self:SetEnabled(Picked() ~= nil)
+		end
+		controls[#controls + 1] = add
+
 		grid:Refresh()
 
 		stack:Header(content, L["All marks"])

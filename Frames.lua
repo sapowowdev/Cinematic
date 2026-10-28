@@ -2312,6 +2312,8 @@ ns.RULE_WORDS = {
 	targetself = "targetself", enemyplayer = "enemyplayer", hostilenpc = "hostilenpc", neutralplayer = "neutralplayer",
 	neutralnpc = "neutralnpc", friendlyplayer = "friendlyplayer", friendlynpc = "friendlynpc",
 	noplate = "noplate", plateoff = "noplate", offscreen = "noplate", near = "near", close = "near", near28 = "near28",
+	near40 = "near40",
+	elite11 = "elite11", elite = "elite28", elite28 = "elite28", elite40 = "elite40",
 	bg = "bg", bgs = "bg", pvp = "bg", battleground = "battleground", arena = "arena", arenas = "arena",
 	world = "world", group = "group", grouped = "group", instance = "instance",
 	dungeon = "dungeon", raid = "raid", city = "city", inn = "inn",
@@ -2437,12 +2439,144 @@ do
 		return (ns.CompileRule(text))
 	end
 
-	-- Whether your target is within an interact distance (the rules' near:
-	-- 2, about 11 yards; near28: 4, about 28). Plain in fights too on retail
+	-- Whether a unit is within an interact distance (the rules' near: 2,
+	-- about 11 yards; near28: 4, about 28). Plain in fights too on retail
 	-- (tested; Auto Attack's range was nil there). False when it can't say.
-	local function TargetWithin(index)
-		local ok, near = pcall(CheckInteractDistance, "target", index)
+	local function UnitWithin(unit, index)
+		local ok, near = pcall(CheckInteractDistance, unit, index)
 		return ok and near ~= nil and not (issecretvalue and issecretvalue(near)) and near and true or false
+	end
+	local function TargetWithin(index)
+		return UnitWithin("target", index)
+	end
+
+	-- near40: no interact distance goes past 28, so a 40-yard spell's range
+	-- from your action bars (harmful for enemies, helpful for friends; plain in
+	-- retail fights, tested with Lightning Bolt). Looked for again every few
+	-- seconds (bars and talents change). False with no such spell.
+	local RANGE_YARDS, RANGE_LOOK_EVERY = 40, 3
+	local rangeSpells, rangeLookAt = {}, -math.huge
+	local RANGE_TESTS = {
+		harmful = C_Spell and C_Spell.IsSpellHarmful or IsHarmfulSpell,
+		helpful = C_Spell and C_Spell.IsSpellHelpful or IsHelpfulSpell,
+	}
+	local function FindRangeSpells()
+		rangeSpells.harmful, rangeSpells.helpful = nil, nil
+		local best = {}
+		for slot = 1, 180 do
+			local ok, kind, id = pcall(GetActionInfo, slot)
+			if ok and kind == "spell" and type(id) == "number" and not (issecretvalue and issecretvalue(id)) then
+				local maxRange
+				if C_Spell and C_Spell.GetSpellInfo then
+					local okInfo, info = pcall(C_Spell.GetSpellInfo, id)
+					maxRange = okInfo and type(info) == "table" and info.maxRange
+				elseif GetSpellInfo then
+					maxRange = select(6, GetSpellInfo(id))
+				end
+				-- (The nearest range at or past 40, so the word means about 40.)
+				if type(maxRange) == "number" and not (issecretvalue and issecretvalue(maxRange))
+					and maxRange >= RANGE_YARDS then
+					for key, test in pairs(RANGE_TESTS) do
+						local okTest, is = pcall(test, id)
+						if okTest and is == true and (not best[key] or maxRange < best[key]) then
+							rangeSpells[key], best[key] = id, maxRange
+						end
+					end
+				end
+			end
+		end
+	end
+	-- Whether a spell reaches a unit: true, false, or nil when it can't say.
+	local function SpellReaches(id, unit)
+		local inRange = C_Spell and C_Spell.IsSpellInRange or IsSpellInRange
+		if not id or not inRange then return nil end
+		-- (Old clients want the name and answer 1 or 0.)
+		local spell = C_Spell and C_Spell.IsSpellInRange and id or (GetSpellInfo and GetSpellInfo(id))
+		local ok, answer = pcall(inRange, spell, unit)
+		if ok and answer ~= nil and not (issecretvalue and issecretvalue(answer)) then
+			return answer == true or answer == 1
+		end
+	end
+	local function UnitWithin40(unit, enemyOnly)
+		local now = GetTime()
+		if now - rangeLookAt >= RANGE_LOOK_EVERY then
+			rangeLookAt = now
+			FindRangeSpells()
+		end
+		local answer = SpellReaches(rangeSpells.harmful, unit)
+		if answer == nil and not enemyOnly then
+			answer = SpellReaches(rangeSpells.helpful, unit)
+		end
+		return answer or false
+	end
+	local function TargetWithin40()
+		return UnitWithin40("target")
+	end
+
+	-- A unit's rank, for the rules' elite words and the Nameplates page's
+	-- Normal NPC and Elite NPC rows: "elite" (elite, rare elite or world
+	-- boss) or "normal" (the rest: normal, rare, minor) for a living NPC; nil
+	-- for anything else (players and their pets, totems and guardians, the
+	-- dead) or when the game won't say. (Plain in retail fights, tested.)
+	local ELITE_RANKS = { elite = true, rareelite = true, worldboss = true }
+	local function Plain(fn, ...)
+		local ok, value = pcall(fn, ...)
+		if ok and not (issecretvalue and issecretvalue(value)) then return value end
+	end
+	function ns.NPCRank(unit)
+		if not unit or Plain(UnitIsDeadOrGhost, unit) ~= false
+			or Plain(UnitIsPlayer, unit) ~= false or Plain(UnitPlayerControlled, unit) ~= false then
+			return nil
+		end
+		-- (Forever: UnitIsPlayer can say no for players; their GUID still says
+		-- Player. A hunter's or warlock's pet: Pet.)
+		local guid = Plain(UnitGUID, unit)
+		if type(guid) == "string" and (guid:find("^Player%-") or guid:find("^Pet%-")) then
+			return nil
+		end
+		local rank = Plain(UnitClassification, unit)
+		if type(rank) ~= "string" then
+			return nil
+		end
+		return ELITE_RANKS[rank] and "elite" or "normal"
+	end
+	-- (The same for an NPC you can attack; nil for the rest.)
+	function ns.EnemyNPCRank(unit)
+		if not unit or Plain(UnitCanAttack, "player", unit) ~= true then
+			return nil
+		end
+		return ns.NPCRank(unit)
+	end
+
+	-- elite11, elite28, elite40: a living elite enemy within about 11, 28 or
+	-- 40 yards of you, measured as near, near28 and near40 measure your
+	-- target. Only units with a plate count (the game makes them for units in
+	-- view, up to its plate distance). Looked at four times a second.
+	local ELITE_EVERY = 0.25
+	local eliteAt, elitesNear = -math.huge, {}
+	local function ElitesNear()
+		local now = GetTime()
+		if now - eliteAt < ELITE_EVERY then
+			return elitesNear
+		end
+		eliteAt = now
+		elitesNear[11], elitesNear[28], elitesNear[40] = false, false, false
+		local plates = C_NamePlate and C_NamePlate.GetNamePlates and C_NamePlate.GetNamePlates() or {}
+		for _, plate in ipairs(plates) do
+			local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+			if ns.EnemyNPCRank(unit) == "elite" then
+				-- (Each band takes in the ones inside it.)
+				if not elitesNear[11] and UnitWithin(unit, 2) then
+					elitesNear[11], elitesNear[28], elitesNear[40] = true, true, true
+				elseif not elitesNear[28] and UnitWithin(unit, 4) then
+					elitesNear[28], elitesNear[40] = true, true
+				elseif not elitesNear[40] and UnitWithin40(unit, true) then
+					elitesNear[40] = true
+				end
+				if elitesNear[11] then break end
+			end
+		end
+		return elitesNear
 	end
 
 	-- The facts for where you are now (inCombat: as the In combat column has
@@ -2485,6 +2619,9 @@ do
 		-- (Your target up close, where its plate goes to the top: see TargetWithin.)
 		facts.near = hasTarget and not targetSelf and TargetWithin(2) or false
 		facts.near28 = hasTarget and not targetSelf and TargetWithin(4) or false
+		facts.near40 = hasTarget and not targetSelf and TargetWithin40() or false
+		local elites = ElitesNear()
+		facts.elite11, facts.elite28, facts.elite40 = elites[11], elites[28], elites[40]
 		facts.bg = place == "pvp"
 		-- (Apart, for rules: battlegrounds, and arenas.)
 		facts.arena = facts.bg and select(2, IsInInstance()) == "arena"
