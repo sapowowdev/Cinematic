@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-28", page = "Cameras", title = "Cameras page",
+		text = "Camera Modes and Camera Triggers are now one Cameras page: a row for each trigger (an emote, " ..
+		"a campfire, going AFK, a flight...) with the camera it starts, its music and CineMode, and where it " ..
+		"can start. Copy a row to give a trigger a different camera in other places." },
 	{ date = "2026-10-28", page = "Socials", title = "Socials",
 		text = "A new page in the Community hub with links to the Discord, YouTube, CurseForge and GitHub, " ..
 		"ready to copy." },

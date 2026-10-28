@@ -117,7 +117,8 @@ local function Objectives()
 	pcall(function()
 		for index = 1, log.GetNumQuestLogEntries() or 0 do
 			local questID = log.GetQuestIDForLogIndex(index)
-			for _, objective in ipairs(type(questID) == "number" and log.GetQuestObjectives(questID) or {}) do
+			local open = type(questID) == "number" and not ns.QuestDone(questID)
+			for _, objective in ipairs(open and log.GetQuestObjectives(questID) or {}) do
 				local text = objective.text
 				if not objective.finished and type(text) == "string" and Known(text) then
 					objectives[#objectives + 1] = text:lower()
@@ -181,7 +182,7 @@ local function NeededFor()
 	pcall(function()
 		for index = 1, log.GetNumQuestLogEntries() or 0 do
 			local questID = log.GetQuestIDForLogIndex(index)
-			if type(questID) == "number" and questID > 0 then
+			if type(questID) == "number" and questID > 0 and not ns.QuestDone(questID) then
 				local here = true
 				if log.IsOnMap then
 					local ok, onMap = pcall(log.IsOnMap, questID)
@@ -813,6 +814,9 @@ function ns.PrintQuestMobDebug()
 		Text(UnitIsDead, unit), Text(UnitCanAttack, "player", unit)))
 	ns.Print(("  quest mob=%s, can't interact (in progress mark)=%s, in progress atlas=%s"):format(
 		tostring(ns.IsQuestMob(unit)), tostring(ns.IsPassiveQuestMob(unit)), tostring(ns.QuestProgressAtlas())))
+	if ns.DescribeGameIcon then
+		ns.Print("  " .. ns.DescribeGameIcon(unit))
+	end
 	ns.Print("  " .. ns.DescribeQuestSpent(unit))
 	ns.Print("  " .. ns.DescribeQuestKills(unit))
 	local info, lineTypes = C_TooltipInfo, Enum and Enum.TooltipDataLineType

@@ -56,7 +56,8 @@ end
 local barTexts -- [normalized text] = true, or nil until needed
 
 local function Normalize(text)
-	text = text:lower():gsub("%d+%s*/%s*%d+", ""):gsub("%d+%s*%%", ""):gsub("[%(%)%-:]", "")
+	-- (A bracketed note goes too: "(Optional)" can be on the log's line and not the tooltip's.)
+	text = text:lower():gsub("%d+%s*/%s*%d+", ""):gsub("%d+%s*%%", ""):gsub("%b()", ""):gsub("[%(%)%-:]", "")
 	return (text:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
@@ -82,6 +83,54 @@ local function BarTexts()
 		end
 	end)
 	return barTexts
+end
+
+-- Whether a quest is ready to hand in. Its other objectives can go back to
+-- not done after ("Just In Case...": 0/8 Fragmented Keystone (Optional) once
+-- they're combined, the quest complete): nothing more to do for them. Also for QuestGlow.
+function ns.QuestDone(questID)
+	local log = C_QuestLog
+	for _, ask in ipairs({ log and log.ReadyForTurnIn, log and log.IsComplete }) do
+		local ok, done = pcall(ask, questID)
+		if ok and Known(done) and done then
+			return true
+		end
+	end
+	return false
+end
+
+-- The objectives of quests ready to hand in, by text as Normalize has it
+-- (rebuilt as the quest log changes): their lines on a unit's tooltip don't count.
+local doneTexts -- [normalized text] = true, or nil until needed
+
+local function DoneTexts()
+	if doneTexts then
+		return doneTexts
+	end
+	doneTexts = {}
+	local log = C_QuestLog
+	if not (log and log.GetNumQuestLogEntries and log.GetInfo and log.GetQuestObjectives) then
+		return doneTexts
+	end
+	pcall(function()
+		for i = 1, log.GetNumQuestLogEntries() do
+			local info = log.GetInfo(i)
+			local questID = info and not info.isHeader and info.questID
+			if type(questID) == "number" and ns.QuestDone(questID) then
+				for _, objective in ipairs(log.GetQuestObjectives(questID) or {}) do
+					local text = objective.text
+					if type(text) == "string" and Known(text) then
+						doneTexts[Normalize(text)] = true
+					end
+				end
+			end
+		end
+	end)
+	return doneTexts
+end
+
+local function IsDoneQuestLine(text)
+	return type(text) == "string" and Known(text) and DoneTexts()[Normalize(text)] == true
 end
 
 local function IsBarLine(text)
@@ -120,12 +169,12 @@ local function FromTooltip(unit)
 				if done == nil then
 					done = TextDone(text)
 				end
-				if not done and not (friendly and IsBarLine(text)) then
+				if not done and not (friendly and IsBarLine(text)) and not IsDoneQuestLine(text) then
 					return true
 				end
 			elseif type(text) == "string" and Known(text) and text:find("^%s*%-%s*%d+%s*/%s*%d+") then
 				-- (Clients without line kinds: " - 5/7 Thistle Boar slain".)
-				if not TextDone(text) then
+				if not TextDone(text) and not IsDoneQuestLine(text) then
 					return true
 				end
 			end
@@ -170,7 +219,8 @@ local function KillNames()
 			for i = 1, log.GetNumQuestLogEntries() do
 				local info = log.GetInfo(i)
 				local questID = info and not info.isHeader and info.questID
-				for _, objective in ipairs(type(questID) == "number" and log.GetQuestObjectives(questID) or {}) do
+				local open = type(questID) == "number" and not ns.QuestDone(questID)
+				for _, objective in ipairs(open and log.GetQuestObjectives(questID) or {}) do
 					local name = objective.type == "monster" and not objective.finished and KillName(objective.text)
 					if name then
 						killNames[name] = true
@@ -450,6 +500,7 @@ watcher:SetScript("OnEvent", function()
 	wipe(passiveAnswers)
 	settleAt = GetTime() + SETTLE
 	barTexts = nil
+	doneTexts = nil
 	killNames = nil
 end)
 
@@ -699,8 +750,14 @@ function ns.DescribeQuestKills(unit)
 		names[#names + 1] = name
 	end
 	table.sort(names)
-	return ("tooltip says=%s, kill log match=%s, kill objectives: %s"):format(tostring(FromTooltip(unit)),
-		tostring(FromKillLog(unit)), #names > 0 and table.concat(names, ", ") or "none")
+	local done = {}
+	for text in pairs(DoneTexts()) do
+		done[#done + 1] = text
+	end
+	table.sort(done)
+	return ("tooltip says=%s, kill log match=%s, kill objectives: %s; ignored (quest ready to hand in): %s"):format(
+		tostring(FromTooltip(unit)), tostring(FromKillLog(unit)), #names > 0 and table.concat(names, ", ") or "none",
+		#done > 0 and table.concat(done, ", ") or "none")
 end
 
 -- For /cine debug questmob: the unit's GUID and whether it counts as done.

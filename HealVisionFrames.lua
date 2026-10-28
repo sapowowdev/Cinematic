@@ -238,6 +238,31 @@ for _, name in ipairs({ "CompactUnitFrame_UpdateInRange", "CompactUnitFrame_Upda
 	if type(_G[name]) == "function" then hooksecurefunc(name, Reassert) end
 end
 
+-- The plain party frames' parts: the game setting one's alpha (a texture's
+-- colour carries it: the portrait, recoloured as health changes, flashed on
+-- its own) gets ours back straight away.
+local partOf = {}   -- part -> its member frame, for the parts faded now
+local hookedParts = {}
+local settingPart = false
+local function ReassertPart(part)
+	if settingPart then return end
+	local member = members[partOf[part]]
+	if member and not member.whole and type(member.alpha) ~= "nil" and Free(part) then
+		settingPart = true
+		pcall(part.SetAlpha, part, member.alpha)
+		settingPart = false
+	end
+end
+if ns.Profiled then ReassertPart = ns.Profiled("Heal Vision part alpha hook", ReassertPart) end
+
+local function HookPart(part)
+	if hookedParts[part] then return end
+	hookedParts[part] = true
+	for _, method in ipairs({ "SetAlpha", "SetAlphaFromBoolean", "SetVertexColor" }) do
+		if type(part[method]) == "function" then hooksecurefunc(part, method, ReassertPart) end
+	end
+end
+
 -- A member's parts: its regions and child frames, less the ones that ignore its alpha.
 local function Parts(frame)
 	local parts = {}
@@ -351,13 +376,24 @@ local function Scan()
 		for _, part in ipairs(member.parts) do still[part] = true end
 	end
 	for _, title in ipairs(foundTitles) do still[title] = true end
+	settingPart = true -- (not put back by ReassertPart)
 	for frame in pairs(touched) do
 		if not still[frame] then
-			if Free(frame) then frame:SetAlpha(1) end
+			if Free(frame) then pcall(frame.SetAlpha, frame, 1) end
 			touched[frame] = nil
 		end
 	end
+	settingPart = false
 	members, titles = found, foundTitles
+	wipe(partOf)
+	for frame, member in pairs(members) do
+		if not member.whole then
+			for _, part in ipairs(member.parts) do
+				partOf[part] = frame
+				HookPart(part)
+			end
+		end
+	end
 	wipe(byUnit)
 	for frame, member in pairs(members) do
 		byUnit[member.unit] = byUnit[member.unit] or {}
@@ -595,12 +631,14 @@ local function Update(frame)
 			end
 		end
 	else
+		settingPart = true
 		for _, part in ipairs(member.parts) do
 			if Free(part) then
-				if not pcall(part.SetAlpha, part, alpha) then part:SetAlpha(1) end
+				if not pcall(part.SetAlpha, part, alpha) then pcall(part.SetAlpha, part, 1) end
 				touched[part] = true
 			end
 		end
+		settingPart = false
 	end
 end
 

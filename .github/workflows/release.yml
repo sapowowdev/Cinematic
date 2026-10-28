@@ -23,3 +23,9 @@ jobs:
       - run: bash Tools/commits.sh ChangelogCommits.lua
 
       - uses: BigWigsMods/packager@v2
+
+      # The release's new features to the Discord channel, with a link to the
+      # patch notes page; posts nothing until the DISCORD_WEBHOOK secret is set.
+      - run: python3 Tools/discord_notes.py "$GITHUB_REF_NAME"
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}

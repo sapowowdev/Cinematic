@@ -7,8 +7,11 @@
 -- nameplates), only where its chat bubble is drawn. A bubble's offset from
 -- the screen's middle, through the camera's field of view, is an angle off
 -- the view; the swing leaves them chatCamFrame degrees off it, on their side (see
--- the gain, below), at most MAX_TURN from where the camera started, and no
--- faster than chatCamSwingSpeed. If one swing leaves them well off, one more follows.
+-- the gain, below), at most MAX_TURN from where the camera started, no more
+-- than TURN_BUDGET in a few seconds, and no faster than chatCamSwingSpeed
+-- (every move held to its top speed: see TopSpeed). If one swing leaves them
+-- well off, one more follows. A speaker it's on who walks off the framing
+-- while talking is kept up with by a steady turn (see TRACK_CATCH).
 -- It's measured while the camera's still or only drifting (mid-swing, the
 -- bubble's place is already out of date); a swing alongside the zoom in goes
 -- SIDE_TURN at most, and how far it moved them isn't learnt from. More
@@ -50,6 +53,25 @@ local MAX_TURN = 30    -- degrees from where the camera started, at most (45 swu
 local MAX_SWING = 30   -- degrees one swing goes, at most (the test's first layout swung 84 and 98:
                        -- the view whipped right round)
 local MIN_TURN = 2     -- degrees: a smaller swing isn't worth a move
+-- Keeping up: the one it's on walking off the framing (chatCamFrame) while
+-- talking. Swinging after them once they were 10 degrees past it, then
+-- resting 3 seconds, left them running off while it looked elsewhere. Now
+-- one turn their way, its speed set at each look (AIM_EVERY) to make up how
+-- far they're past the framing in TRACK_CATCH seconds (no faster than
+-- chatCamSwingSpeed, speeding up and slowing down no harder than
+-- MAX_ACCEL), easing to a stop once they're back in it or their bubble's gone.
+local TRACK_START = 2  -- degrees past the framing before it starts after them
+local TRACK_CATCH = 1  -- seconds the turn's speed makes up the gap in (walking on, they stay about their speed times this past it)
+local TRACK_MAX = 90   -- degrees from where the camera started it follows them to, at most
+-- Swings share a budget: TURN_BUDGET degrees in any TURN_WINDOW seconds, a
+-- swing past it cut to what's left (or held, under MIN_TURN). Two speakers
+-- too far apart to frame together got a full 30-degree swing each way at
+-- every line, one every 5 to 8 seconds, and it felt jumpy. 30 made two
+-- speakers 21 degrees apart (Arator, Decimus, Lothraxion) wait 3 to 5
+-- seconds at every other line, and turning felt late: 45 lets two such
+-- swings through, a third still waits.
+local TURN_BUDGET = 45
+local TURN_WINDOW = 10
 -- Up close, the game moves a bubble's box off its speaker's head (its middle
 -- once read x -0.38 for Zul'jarra standing at -0.05, and each swing went 45
 -- degrees for two speakers 8 apart). Its tail says where they are (tested,
@@ -124,7 +146,7 @@ local BUBBLE_WAIT = 2  -- seconds after a line its bubble is waited for before s
 -- before, until their bubble shows (then the usual swing frames them). Once
 -- per speaker a conversation: found nowhere (a yell from afar, say), it's
 -- back where it started, and their later lines don't search again.
-local SEARCH_SPEED = 45 -- degrees a second the look round goes at most
+local SEARCH_SPEED = 30 -- degrees a second the look round goes at most (45 felt like a whip)
 local SEARCH_ACCEL = 30 -- ...speeding up and slowing down no harder than this (degrees/sec per second)
 local AIM_EVERY = 0.25 -- seconds between looks for a new speaker's bubble
 local LET_GO_TIME = 0.3 -- seconds a move under way takes to stop as you move off (quick: it's yours)
@@ -137,7 +159,8 @@ local CVAR, DEFAULT_SPEED = "cameraYawMoveSpeed", 180
 local FOLLOW_CVARS = { values = { cameraSmoothStyle = "0" } } -- (camera follow would pull the view back)
 
 -- amount: degrees turned, counted (positive: toward the right of the screen).
--- kind: "swing", "drift" or "back". stopping: easing to a stop early.
+-- kind: "swing", "drift", "track" or "back". stopping: easing to a stop early.
+-- want: a track's speed wanted (degrees/sec; it has no end of its own).
 -- sent: the speed sent (degrees/sec), right: which way. share: the move's
 -- share of your speed setting, setting: the speed setting sent, speed: the
 -- curve's speed now, primedUntil: when the move starts.
@@ -152,7 +175,7 @@ local zoomingOut -- the distance the zoom back out is heading for
 
 local watcher = CreateFrame("Frame")
 
--- The Camera Triggers page's rows (each "chat" or "none"): "NPCs you talk
+-- The Cameras page's rows (each "chat" or "none"): "NPCs you talk
 -- to" (chatCamera) and "NPCs chatting nearby" (chatNearbyCamera, once you've
 -- stood still chatNearbyDelay seconds: see Ambient).
 ns.DEFAULTS.chatCamera = "chat"
@@ -168,7 +191,7 @@ ns.DEFAULTS.chatCamFrame = 6         -- degrees off the middle a speaker's left 
 ns.DEFAULTS.chatCamDrift = 0         -- degrees it drifts to and fro on a speaker (0: holds still)
 ns.DEFAULTS.chatCamQuiet = 20       -- seconds with no one talking before it's over
 ns.DEFAULTS.chatCamSearch = true    -- a speaker off screen: the camera looks round for them (see SEARCH_SPEED)
--- A row on the Camera Modes page's grid (Turn off in, Calm Timer) and a box in
+-- A row on the Cameras page's grid (Turn off in, Calm Timer) and a box in
 -- the Minimap page's "Hide in camera modes", as key "chatcam" (the Chat page's
 -- own settings start with "chat"). Added here, so after Core.lua made the
 -- other cameras' defaults: its own follow (no camera in battlegrounds and
@@ -294,6 +317,15 @@ local function Push(speed)
 	turn.sent = turn.setting * turn.share
 end
 
+-- A move's top speed (degrees/sec) and its most speeding up or slowing
+-- down (degrees/sec per second), by kind.
+local function TopSpeed(kind)
+	if kind == "search" then
+		return SEARCH_SPEED, SEARCH_ACCEL
+	end
+	return ns.db.chatCamSwingSpeed, MAX_ACCEL
+end
+
 -- Turns to `target` degrees (counted) over T seconds. from: the speed it's
 -- turning at already, the same way (a drift turned into a swing): the move
 -- carries on from it rather than stopping and starting again.
@@ -307,18 +339,37 @@ local function MoveTo(target, T, ease, kind, from)
 		StopMove()
 		return
 	end
-	turn.target, turn.t, turn.T, turn.ease, turn.kind = target, 0, T, ease, kind
-	turn.right = target > turn.amount
-	turn.from = from or 0
-	turn.speed = from or 0
 	-- (The top speed that covers the distance: speeding up from `from` over the
 	-- first ease * T seconds, then on, then slowing to rest over the last.)
-	local R = ease * T
-	turn.cruise = math.max(turn.from, (distance - turn.from * R / 2) / (T - R))
+	local carrying = from ~= nil
+	from = from or 0
+	local function Cruise()
+		local R = ease * T
+		return math.max(from, (distance - from * R / 2) / (T - R)), R
+	end
+	-- The safeguard, whatever asked for the move: no faster than its top
+	-- speed, speeding up and slowing down no harder than its most (stretched
+	-- till it fits).
+	local top, accel = TopSpeed(kind)
+	top = math.max(top, from) -- (already going faster: it can't be helped)
+	local asked, cruise, R = T, Cruise()
+	for _ = 1, 100 do
+		if cruise <= top * 1.001 and (R <= 0 or cruise * math.pi / (2 * R) <= accel * 1.001) then
+			break
+		end
+		T = T * 1.05
+		cruise, R = Cruise()
+	end
+	if T > asked * 1.01 then
+		Say(("%s held to %.0f deg/sec: %.1fs, not %.1fs"):format(kind, top, T, asked))
+	end
+	turn.target, turn.t, turn.T, turn.ease, turn.kind = target, 0, T, ease, kind
+	turn.right = target > turn.amount
+	turn.from, turn.speed, turn.cruise = from, from, cruise
 	-- The share of your speed setting it's sent at: your setting is then its top speed.
 	ns.SaveCVar(CVAR)
 	turn.share = turn.cruise / (tonumber(ns.db.savedCVars[CVAR]) or DEFAULT_SPEED)
-	if from and turn.sent then
+	if carrying and turn.sent then
 		-- (Carrying on from a move under way: sent again at the new share, the
 		-- setting moved so the speed holds.)
 		SendSetting(math.max(SPEED_MIN_SETTING, from / turn.share))
@@ -329,6 +380,21 @@ local function MoveTo(target, T, ease, kind, from)
 		SendSetting(SPEED_MIN_SETTING)
 		turn.primedUntil = GetTime() + SPEED_PRIME_TIME
 	end
+	turn.stopping = nil
+	turn.moving = true
+	ns.ApplyCVarSet(FOLLOW_CVARS, true)
+end
+
+-- Starts keeping up with the one it's on (see TRACK_CATCH), from rest: sent
+-- at the share that makes your setting chatCamSwingSpeed, its speed then
+-- set by turn.want.
+local function StartTrack(right, want)
+	StopMove()
+	turn.kind, turn.right, turn.want, turn.speed, turn.t = "track", right, want, 0, 0
+	ns.SaveCVar(CVAR)
+	turn.share = ns.db.chatCamSwingSpeed / (tonumber(ns.db.savedCVars[CVAR]) or DEFAULT_SPEED)
+	SendSetting(SPEED_MIN_SETTING)
+	turn.primedUntil = GetTime() + SPEED_PRIME_TIME
 	turn.stopping = nil
 	turn.moving = true
 	ns.ApplyCVarSet(FOLLOW_CVARS, true)
@@ -346,8 +412,16 @@ local function SwingTime(distance, ease, least)
 end
 
 -- A move under way slows to a stop from the speed it's at, over STOP_TIME
--- (or T seconds; cut dead, it jolts). Not started yet: just dropped.
+-- (or T seconds; cut dead, it jolts). Not started yet: just dropped. With
+-- no T, no harder than STOP_HARDER times the move's most (a swing at 15
+-- degrees/sec stopped over 0.8 seconds slowed by 29 a second, three times a
+-- swing's own; at its own most, it ran on 20 degrees the wrong way first).
+local STOP_HARDER = 2
 local function EaseToStop(T)
+	if not T and turn.moving then
+		local _, accel = TopSpeed(turn.kind)
+		T = math.max(STOP_TIME, (turn.speed or turn.sent or 0) * math.pi / (2 * accel * STOP_HARDER))
+	end
 	if not turn.moving or (turn.stopping and turn.stopping.T <= (T or STOP_TIME)) then
 		return
 	end
@@ -383,16 +457,22 @@ local function StepMove(elapsed)
 		stopping.t = stopping.t + elapsed
 		over = stopping.t >= stopping.T
 		speed = over and 0 or stopping.from * (1 + math.cos(math.pi * stopping.t / stopping.T)) / 2
+	elseif turn.kind == "track" then
+		-- (Toward the speed wanted, no harder than MAX_ACCEL; at rest with none wanted: over.)
+		local step = MAX_ACCEL * elapsed
+		speed = (turn.speed or 0) + math.max(-step, math.min(step, (turn.want or 0) - (turn.speed or 0)))
+		over = speed <= 0 and (turn.want or 0) <= 0
+		speed = math.max(0, speed)
 	else
 		over = turn.t >= turn.T
 		speed = over and 0 or MoveSpeed(turn.t)
 	end
 	turn.speed = speed
 	if over then
-		if not turn.stopping then
+		if not turn.stopping and turn.kind ~= "track" then
 			turn.amount = turn.target -- (counted as it went: this tidies the last hundredth)
 		end
-		StopMove() -- (stopped early: where it's got to)
+		StopMove() -- (stopped early, or a track: where it's got to)
 		return
 	end
 	Push(speed)
@@ -408,7 +488,7 @@ end
 -- Let go where it is: nothing undone (you moved, or moved the camera, or
 -- another camera took over). quick: a move under way stops over LET_GO_TIME
 -- rather than dead.
-local function HandOver(why, quick)
+local function HandOver(why, quick, hold)
 	if Turned() or (convo and convo.zoomedTo) or leaving or ns.QuestCamZooming() then
 		Say(("let go at %+.1f deg (%s)"):format(turn.amount, why))
 	end
@@ -417,8 +497,25 @@ local function HandOver(why, quick)
 	else
 		StopMove()
 	end
+	-- hold: let go as you moved off or turned the camera (not zoomed it). The
+	-- zoom back out to your distance is then held till you've walked off, as
+	-- the quest cam's own (ns.QuestCamHoldZoomOut), not dropped. (Your speed
+	-- setting eases back rather than at once: the game's last bit of zoom
+	-- still to go showed as a hop in.)
+	local was = convo or leaving
+	local back = zoomingOut and ns.QuestCamZooming() and zoomingOut
+	if not back and was and was.zoom and was.zoomedTo and GetCameraZoom
+		and not ns.PlayerZoomedSince(was.startedAt)
+		and (ns.QuestCamZooming() or math.abs(GetCameraZoom() - was.zoomedTo) < ZOOM_YOURS) then
+		back = was.zoom
+	end
+	hold = hold and back and ns.db.chatCamZoomOutSpeed > 0 and ns.QuestCamHoldZoomOut
 	if (convo and convo.zoomedTo) or (leaving and leaving.zoomedTo) or (zoomingOut and ns.QuestCamZooming()) then
-		ns.QuestCamStopZoom()
+		ns.QuestCamStopZoom(hold)
+	end
+	if hold then
+		Say(("zoom back out to %.1f yards held till you walk off"):format(back))
+		ns.QuestCamHoldZoomOut(back, ns.db.chatCamZoomOutSpeed)
 	end
 	zoomingOut = nil
 	turn.amount, convo, leaving = 0, nil, nil
@@ -878,11 +975,23 @@ local function TakenOver()
 	elseif ns.CameraHolder("chatcam") and ns.CameraHolder("chatcam") ~= "you" then
 		return "the " .. ns.CameraHolder("chatcam") .. " camera has the view"
 	elseif not fake and ns.IsCameraOffHere("chatcam") then
-		return "turned off here (Camera Modes page)"
+		return "turned off here (Cameras page)"
 	elseif ns.CameraMode() then
 		return "camera mode " .. tostring(ns.CameraMode())
 	end
 	return nil
+end
+
+-- How high (-1 to 1) the speaker's bubble middle goes before the zoom in
+-- stops: ZOOM_EDGE, brought down by the letterbox's top bar while it shows
+-- (the bubble's kept under the bar: see Bubbles.lua).
+local function ZoomTop()
+	local letterbox = ns.letterbox
+	local height = UIParent:GetHeight()
+	if not (letterbox and ns.Flag(letterbox:IsShown()) and letterbox:GetAlpha() > 0 and height > 0) then
+		return ZOOM_EDGE
+	end
+	return ZOOM_EDGE - 2 * letterbox.top:GetHeight() / height
 end
 
 -- The first bubble seen in the conversation: in to the quest cam's distance
@@ -897,7 +1006,7 @@ local function ZoomIn(now, sx, sy)
 	end
 	if ns.PlayerZoomedSince(now - (ns.PLAYER_ZOOM_WAIT or 1)) then
 		Say("you're zooming: no zoom in")
-	elseif (sy >= ZOOM_EDGE or math.abs(sx) >= ZOOM_EDGE) and not ns.QuestCamZooming() then
+	elseif (sy >= ZoomTop() or math.abs(sx) >= ZOOM_EDGE) and not ns.QuestCamZooming() then
 		Say(("bubble near the edge already (x %+.2f y %+.2f): no zoom in"):format(sx, sy))
 	elseif GetCameraZoom() > db.chatCamDistance + ZOOM_MARGIN or ns.QuestCamZooming() then
 		convo.zoom = convo.zoom or (ns.PlayerZoom and ns.PlayerZoom()) or GetCameraZoom()
@@ -960,7 +1069,11 @@ local function Aim(now, drifting)
 	local zooming = ns.QuestCamZooming and ns.QuestCamZooming()
 	local angle, sx, sy, others, how = BubbleAngle(speaker.text)
 	if not angle then
-		if not speaker.missing and now - speaker.at > BUBBLE_WAIT then
+		if speaker.waiting and not speaker.missing then
+			-- (Done talking before the budget let it swing: no looking round.)
+			speaker.missing = true
+			Say(("%s's bubble gone before the swing, staying where it is"):format(speaker.name))
+		elseif not speaker.missing and now - speaker.at > BUBBLE_WAIT then
 			if ns.db.chatCamSearch and not (convo.searched and convo.searched[speaker.name]) then
 				if drifting then
 					EaseToStop() -- (a stop first, then the look round)
@@ -1030,6 +1143,34 @@ local function Aim(now, drifting)
 	local most = zooming and SIDE_TURN or MAX_TURN
 	target = math.max(convo.base - most, math.min(convo.base + most, target))
 	local step = target - turn.amount
+	-- (The budget: what's been swung in the last TURN_WINDOW seconds.)
+	local swings, spent = convo.swings or {}, 0
+	for i = #swings, 1, -1 do
+		if now - swings[i].at >= TURN_WINDOW then
+			table.remove(swings, i)
+		else
+			spent = spent + swings[i].amount
+		end
+	end
+	convo.swings = swings
+	local budget
+	local left = math.max(0, TURN_BUDGET - spent)
+	if math.abs(step) > left then
+		if off ~= 0 and left < math.min(math.abs(step), SIDE_TURN) then
+			-- (Well off the framing, and little budget left: waits for it, rather
+			-- than a crawl of small swings, or none (one left a speaker on the
+			-- screen's edge, x -0.96).)
+			if not speaker.waiting then
+				speaker.waiting = true
+				Say(("%s: %+.1f deg off the middle, waiting to swing (%.0f deg swung in the last %ds)"):format(
+					speaker.name, angle, spent, TURN_WINDOW))
+			end
+			return
+		end
+		budget = (", cut from %+.1f: %.0f deg swung in the last %ds"):format(step, spent, TURN_WINDOW)
+		step = left * (step > 0 and 1 or -1)
+		target = turn.amount + step
+	end
 	local carry = drifting and turn.sent and math.abs(step) >= MIN_TURN and (step > 0) == turn.right
 	if drifting and not carry then
 		EaseToStop() -- (the other way, or not worth a swing: a stop first, then a fresh look)
@@ -1039,15 +1180,17 @@ local function Aim(now, drifting)
 	convo.on = speaker.name
 	convo.center, convo.driftOut = target, nil
 	if math.abs(step) < MIN_TURN then
-		Say(("on %s: %+.1f deg off the middle (bubble x %+.2f y %+.2f, %s)%s, already in view"):format(
-			speaker.name, angle, sx, sy, reading, spot and (", " .. spot) or ""))
+		Say(("on %s: %+.1f deg off the middle (bubble x %+.2f y %+.2f, %s)%s, %s"):format(
+			speaker.name, angle, sx, sy, reading, spot and (", " .. spot) or "",
+			budget and ("held (%.0f deg swung in the last %ds)"):format(spent, TURN_WINDOW) or "already in view"))
 		return
 	end
+	swings[#swings + 1] = { at = now, amount = math.abs(step) }
 	local T = SwingTime(math.abs(step), Ease(SWING_EASE), SWING_MIN_TIME)
 	Say(("swinging to %s%s: %+.1f deg off the middle (bubble x %+.2f y %+.2f, %s), gain %.2f, %+.1f to %+.1f over %.1fs%s"):format(
 		speaker.correcting and "(again) " or "", speaker.name, angle, sx, sy, reading,
 		convo.gain, step, target, T,
-		(target ~= wanted and " (as far as it goes)" or "") .. (spot and (", " .. spot) or "")))
+		(target ~= wanted and " (as far as it goes)" or "") .. (spot and (", " .. spot) or "") .. (budget or "")))
 	Note("swing to " .. speaker.name)
 	convo.turnedAt = convo.turnedAt or now
 	if carry then
@@ -1079,8 +1222,12 @@ local function OnUpdate(_, elapsed)
 	local now = GetTime()
 	if convo then
 		local takenOver = TakenOver()
-		if convo.turnedAt and ns.GetLastCameraInput() > convo.turnedAt then
-			HandOver(ns.lastCameraInputWhat == "zoom" and "you zoomed" or "you moved the camera")
+		-- (Your mouse already held on the camera as it started counts too: turning
+		-- as the quest cam let go, its swing went against yours.)
+		if convo.turnedAt and (ns.GetLastCameraInput() > convo.turnedAt or ns.IsMouseOnCamera()) then
+			local zoomed = ns.lastCameraInputWhat == "zoom"
+			HandOver(zoomed and "you zoomed"
+				or ("you moved the camera: %s"):format(tostring(ns.lastCameraInputWhat)), nil, not zoomed)
 		elseif takenOver then
 			if Turned() or convo.zoomedTo then
 				HandOver(takenOver)
@@ -1090,7 +1237,7 @@ local function OnUpdate(_, elapsed)
 		elseif UnitAffectingCombat("player") then
 			End("fight")
 		elseif ns.playerMoving then
-			HandOver("you moved", true)
+			HandOver("you moved", true, true)
 		elseif now - convo.lastLineAt >= ns.db.chatCamQuiet then
 			End(("no one's talked for %d seconds"):format(ns.db.chatCamQuiet))
 		else
@@ -1104,7 +1251,7 @@ local function OnUpdate(_, elapsed)
 			if zooming and convo.zoomingIn and convo.speaker and now >= (convo.edgeAt or 0) then
 				convo.edgeAt = now + AIM_EVERY / 2
 				local _, sx, sy = BubbleAngle(convo.speaker.text)
-				if sx and (sy >= ZOOM_EDGE or math.abs(sx) >= ZOOM_EDGE) then
+				if sx and (sy >= ZoomTop() or math.abs(sx) >= ZOOM_EDGE) then
 					convo.zoomingIn = nil
 					local goal = ns.QuestCamEaseZoomStop and ns.QuestCamEaseZoomStop(ZOOM_STOP_TIME)
 					if goal then
@@ -1151,6 +1298,45 @@ local function OnUpdate(_, elapsed)
 				end
 			end
 			local speaker = convo.speaker
+			-- Keeping up: the one it's on walking off the framing while talking
+			-- (Decimus went from -1.6 to -43.8 with the camera all but still): see
+			-- TRACK_CATCH. Only a good bubble (see TAIL_MIDDLE) counts, and not
+			-- mid-swing or mid-zoom.
+			local tracking = turn.moving and turn.kind == "track" and not turn.stopping
+			if speaker and speaker.name == convo.on and not convo.check and not convo.search
+				and now >= (convo.trackAt or 0)
+				and (tracking or (turn.moving and turn.kind == "drift" and not turn.stopping)
+					or (not turn.moving and now - turn.stoppedAt >= DRIFT_GAP)) then
+				convo.trackAt = now + AIM_EVERY
+				local angle, _, sy, others, how = BubbleAngle(speaker.text)
+				local good = angle and not zooming and BubbleReading(sy, others, how)
+				local frame = ns.db.chatCamFrame
+				local off = (not good or math.abs(angle) <= frame) and 0 or (angle - (angle > 0 and frame or -frame))
+				-- (No further than TRACK_MAX from where it started.)
+				local room = TRACK_MAX - (off > 0 and 1 or -1) * (turn.amount - convo.base)
+				if tracking then
+					-- (Their way only: past the framing the other side, it stops first.)
+					local want = (off > 0) == turn.right and room > 0
+						and math.min(ns.db.chatCamSwingSpeed, math.abs(off) / convo.gain / TRACK_CATCH) or 0
+					if want == 0 and turn.want > 0 then
+						Say(("%s: %s at %+.1f deg"):format(speaker.name,
+							not good and "no good bubble, stopping" or room <= 0 and "as far as it goes, stopping"
+							or "caught up, stopping", turn.amount))
+					end
+					turn.want = want
+					convo.center, convo.driftOut = turn.amount, nil
+				elseif math.abs(off) > TRACK_START and room > 0 then
+					if turn.moving then
+						EaseToStop() -- (a drift leg: a stop first, then after them)
+					else
+						local want = math.min(ns.db.chatCamSwingSpeed, math.abs(off) / convo.gain / TRACK_CATCH)
+						Say(("%s walked to %+.1f deg off the middle: keeping up (%.1f deg/sec)"):format(
+							speaker.name, angle, want))
+						convo.turnedAt = convo.turnedAt or now
+						StartTrack(off > 0, want)
+					end
+				end
+			end
 			-- (Swings go alongside the zoom in, as the quest cam's turn to the side
 			-- does: waiting for it, a line 8 seconds into the zoom got its swing as
 			-- it ended. Earlier, the two together moved in jolts: watch for it.)
@@ -1170,7 +1356,7 @@ local function OnUpdate(_, elapsed)
 			end
 		end
 	elseif ns.playerMoving and (leaving or (turn.moving and not turn.stopping) or (zoomingOut and ns.QuestCamZooming())) then
-		HandOver("you moved", true) -- (turning back or zooming back out: stops there too)
+		HandOver("you moved", true, true) -- (turning back or zooming back out: stops there too)
 	elseif leaving then
 		Leave(now)
 	end
@@ -1297,7 +1483,7 @@ local function NotTaken(text, event, name)
 		return "you're moving"
 	elseif fake then
 		return "Test running"
-	-- (Turned off here, or the Calm Timer still running after a fight: Camera Modes page.)
+	-- (Turned off here, or the Calm Timer still running after a fight: Cameras page.)
 	elseif not convo and ns.IsCameraOffHere("chatcam") then
 		return "turned off here"
 	elseif not convo and not ns.CombatWaitOver("chatcam", GetTime()) then
@@ -1333,7 +1519,7 @@ ns.CAMERA_TESTS = ns.CAMERA_TESTS or {}
 ns.CAMERA_TESTS["Chat Cam"] = {
 	start = function()
 		if not On() or ns.playerMoving or ns.IsSuspended() then
-			ns.Print(ns.L["Chat Cam can't start now: it's off (Camera Triggers page), or you're moving."])
+			ns.Print(ns.L["Chat Cam can't start now: it's off (Cameras page), or you're moving."])
 			return false
 		end
 		if convo or leaving or turn.moving then
@@ -1403,7 +1589,7 @@ ns.RegisterCamera("chatcam", function()
 		or leaving ~= nil or zoomingOut ~= nil
 		or (ns.QuestCamZoomBy and ns.QuestCamZoomBy() == "chatcam" and ns.QuestCamZoomHeld())
 end, function()
-	HandOver("you moved the camera")
+	HandOver("you moved the camera", nil, ns.lastCameraInputWhat ~= "zoom")
 end)
 
 -- Whether a conversation has the camera now (the Minimap page hides the
@@ -1448,7 +1634,7 @@ function ns.ChatCamCommand(arg)
 			.. " (/reload afterwards to save it)", true)
 		return
 	end
-	-- (Both Camera Triggers rows together, NPCs you talk to and chatting nearby.)
+	-- (Both its Cameras page rows together, NPCs you talk to and chatting nearby.)
 	local value = On() and "none" or "chat"
 	ns.db.chatCamera, ns.db.chatNearbyCamera = value, value
 	Say("(prototype) " .. (On() and "on" or "off") .. (ns.db.enabled and "" or " (Cinematic is off)")

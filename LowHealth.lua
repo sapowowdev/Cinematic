@@ -1,9 +1,8 @@
 -- Vitals Vision, low-health edges: as your health drops, dark edges creep in round the
 -- screen, like the death screen's vignette, with a theme's art soaking in
--- past them (blood, frost, fire, smoke...: Media/make_lowhealth.py), its
--- effects moving over it (drips running down, drops splashing on, embers
--- rising...), a heartbeat that quickens as you weaken and a flash on big
--- hits. So you can tell how you're doing without the portrait. Themes are in
+-- past them (blood, smoke, a glow: Media/make_lowhealth.py), the world's
+-- colour draining if ticked, a heartbeat that quickens as you weaken and a
+-- flash on big hits. So you can tell how you're doing without the portrait. Themes are in
 -- LowHealthThemes.lua: one for each class's talent trees, picked by Auto.
 -- Its own overlay, under the UI like the death screen's; the death screen
 -- takes over as you die. This is Vitals Vision: its page is at the bottom.
@@ -21,12 +20,11 @@ DEFAULTS.lowHealthFull = 0.15      -- ...and are all the way in at
 DEFAULTS.lowHealthReach = 0.3      -- share of the screen each edge's shadow covers at full
 DEFAULTS.lowHealthDark = 0.85      -- the shadow's darkness at full
 DEFAULTS.lowHealthRed = 0.6        -- 0 black (like the death screen) to 1 the theme's colour
-DEFAULTS.lowHealthBlood = true     -- the theme's art (and its drips and effects)
+DEFAULTS.lowHealthGrade = false    -- the whole picture drained toward a cold grey, tinged by the theme
+DEFAULTS.lowHealthGradeAmount = 0.5 -- ...how far, at full
+DEFAULTS.lowHealthBlood = true     -- the theme's art
 DEFAULTS.lowHealthBloodAlpha = 0.9
 DEFAULTS.lowHealthBloodReach = 0.7 -- how far in the art comes at full (0-1)
-DEFAULTS.lowHealthDrips = true     -- drips running down from the art at the top
-DEFAULTS.lowHealthDripRate = 12    -- ...a minute, at full (fewer as it starts)
-DEFAULTS.lowHealthDrops = true     -- the theme's effects (drops, embers, cracks...)
 DEFAULTS.lowHealthPulse = true     -- a heartbeat: the edges throb
 DEFAULTS.lowHealthPulseAmount = 0.25
 DEFAULTS.lowHealthBpmSlow = 60     -- beats a minute as they start creeping in...
@@ -62,33 +60,28 @@ local LIFT_EASE = 0.8        -- how quickly the lift speeds up and slows down (a
 local TEST_HOLD = 2          -- seconds the test stays at its last share before handing back
 local TEST_HIT_EVERY = 0.7   -- seconds between the test's hits
 local ART = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\LowHealth\\"
-local NO_TOP = {} -- (a material with no top edge known: drips start at the screen's top)
-local DRIP_SPAN = { 4 / 32, 28 / 32 } -- (where in the texture drips can start: not the corners)
-local MAX_DRIPS, MAX_EFFECTS = 8, 24
--- A drip runs down (its tip leading) over its run time to its length, keeps
--- creeping a little, then fades. Sizes in shares of the screen's height.
-local DRIP_RUN = { 0.8, 2.2 }      -- seconds
-local DRIP_LIFE = { 4, 7 }         -- seconds in all
-local DRIP_LENGTH = { 0.03, 0.12 }
-local DRIP_WIDTH = { 0.008, 0.014 }
-local DRIP_CREEP = 0.25            -- longer by this share over the rest of its life
-local DRIP_HIDE = 0.008            -- starts this far up into the art
--- Effects (LowHealthThemes.lua says how each kind moves).
-local POP = 0.12                   -- seconds a splat takes to land, a reveal to draw on
-local SPLAT_SLIDE = 0.012          -- how far a splat slides over its life
-local FADE_IN, FADE_END = 0.3, 1.2 -- seconds effects fade in (those that do) and out over
 local SWAY = 0.012                 -- how far a sloshing theme's art rocks (share of the height, times its sway)
-local EFFECTS_COLUMNS, EFFECTS_ROWS = 8, 4
--- (Cells drawn mirrored now and then, for variety: the ones it doesn't show.)
-local FLIPPABLE = { Splat = true, Slash = true, Claw = true, CrackBurst = true, Puff = true, Dust = true,
-	Bruise = true, Shard = true, Bolt = true, Leaf = true, Feather = true }
+-- Sparks (a theme's sparks, LowHealthThemes.lua): the few sprites left, each
+-- its own texture: lightning flickering in by the top edge, stars twinkling,
+-- motes rising, gas billowing in.
+local MAX_SPARKS = 24
+local FADE_IN, FADE_END = 0.3, 1.2 -- seconds those that fade fade in and out over
+local GAS_REACH = 0.2              -- gas starts this share of the shadow's reach in (by the edge)...
+local GAS_DRIFT = 0.03             -- ...and billows this share of the way to the middle
 
-local frame, edges, body, glow, driver
-local drips, effects = {}, {} -- (sprite pools: made once, reused)
-local artScale = ART_OUT -- (the art's size now: drips follow its edge)
+-- The colour grade: a layer over the whole screen that multiplies what's
+-- under it (the world, not the UI above), so it can't grey colours out, only
+-- darken and tint them: toward this grey, tinged GRADE_TINT of the way to the
+-- theme's flash colour. White is no change, so it fades by its colour.
+local GRADE_GREY = { 0.6, 0.63, 0.68 }
+local GRADE_TINT = 0.3
+
+local frame, edges, body, glow, grade, driver
+local sparks = {} -- (made once, reused)
+local reachNow = 0 -- (the shadow's reach as last shown: sparks start about there)
+local artScale = ART_OUT -- (the art's size now)
 local theme, shownTheme -- (the theme wanted, and the one the textures are set up for)
 local autoTheme -- (Auto's pick, until your talents change)
-local cellIndex = {} -- cell name -> its place in Effects.tga
 local level, flash, beat = 0, 0, 0 -- shown (0-1), the hit flash (0-1), heartbeat phase
 local liftSpeed = 0 -- (lifting now: a share of all the way a second)
 local lastHealth -- (share, for spotting big hits)
@@ -111,10 +104,6 @@ end
 
 local function Secret(value)
 	return issecretvalue and issecretvalue(value)
-end
-
-local function Between(range)
-	return range[1] + (range[2] - range[1]) * math.random()
 end
 
 -- Your health as a share (0-1); nil if the game won't say (secret).
@@ -207,52 +196,43 @@ local function Create()
 	frame:SetFrameLevel(0) -- (under the letterbox, like the tint and death screen)
 	frame:EnableMouse(false)
 	ns.AddOverlay(frame)
-	-- (Drips under the art, so where they leave it doesn't show; effects on top.)
-	for i = 1, MAX_DRIPS do
-		local tex = frame:CreateTexture(nil, "BACKGROUND")
-		tex:Hide()
-		drips[i] = { tex = tex }
-	end
 	body = frame:CreateTexture(nil, "BORDER")
 	body:SetPoint("CENTER")
 	glow = frame:CreateTexture(nil, "BORDER", nil, 1)
 	glow:SetPoint("CENTER")
 	glow:SetBlendMode("ADD")
-	for i = 1, MAX_EFFECTS do
-		local tex = frame:CreateTexture(nil, "BORDER", nil, 2)
-		tex:SetTexture(ART .. "Effects")
-		tex:Hide()
-		effects[i] = { tex = tex }
-	end
 	edges = ns.CreateVignette(frame)
 	-- (The shadow under everything: over the art, it hid it.)
 	for _, piece in pairs(edges) do
 		piece:SetDrawLayer("BACKGROUND", -8)
 	end
-	frame:Hide()
-	for i, name in ipairs(ns.LOW_HEALTH_CELLS) do
-		cellIndex[name] = i
+	grade = frame:CreateTexture(nil, "BACKGROUND", nil, -7)
+	grade:SetAllPoints(frame)
+	grade:SetTexture("Interface\\Buttons\\WHITE8X8")
+	grade:SetBlendMode("MOD")
+	grade:Hide()
+	for i = 1, MAX_SPARKS do
+		local tex = frame:CreateTexture(nil, "BORDER", nil, 2)
+		tex:Hide()
+		sparks[i] = { tex = tex }
 	end
+	frame:Hide()
 	-- (Its own frame, not under UIParent, so it runs with the UI hidden too.)
 	driver = CreateFrame("Frame")
 	driver:Hide()
 end
 
-local function ClearSprites()
-	for _, drip in ipairs(drips) do
-		drip.born = nil
-		drip.tex:Hide()
-	end
-	for _, fx in ipairs(effects) do
-		fx.born = nil
-		fx.tex:Hide()
+local function ClearSparks()
+	for _, spark in ipairs(sparks) do
+		spark.born = nil
+		spark.tex:Hide()
 	end
 end
 
--- Sets the textures up for a theme (its art, glow and drips).
+-- Sets the textures up for a theme (its art and glow).
 local function UseTheme(wanted)
 	shownTheme = wanted
-	ClearSprites()
+	ClearSparks()
 	body:SetPoint("CENTER") -- (a sloshing theme's rocking, undone)
 	glow:SetPoint("CENTER")
 	if wanted.edge and wanted.body then
@@ -262,14 +242,86 @@ local function UseTheme(wanted)
 		glow:SetTexture(ART .. wanted.edge .. "Glow")
 		glow:SetBlendMode("ADD")
 	end
-	if wanted.drip then
-		for _, drip in ipairs(drips) do
-			drip.tex:SetTexture(ART .. wanted.drip.tex)
+end
+
+-- A heartbeat: a strong beat and a softer one just after (0-1).
+local function Between(range)
+	return range[1] + (range[2] - range[1]) * math.random()
+end
+
+-- Where a spark starts (shares of the screen across and down), about where
+-- the shadow reaches now: by the top or bottom edge, the sides, or any.
+-- spread: anywhere along the edge, corners too (else not the last tenths).
+local function Place(at, reach, spread)
+	local along = spread and math.random() or 0.1 + 0.8 * math.random()
+	local inset = reach * (0.4 + 0.7 * math.random())
+	local side = at == "top" and 1 or at == "bottom" and 2 or at == "sides" and math.random(3, 4)
+		or math.random(4)
+	if side == 1 then return along, inset end
+	if side == 2 then return along, 1 - inset end
+	-- (Left and right: the reach is a share of the width there, and screens are wide.)
+	if side == 3 then return inset * 0.6, along end
+	return 1 - inset * 0.6, along
+end
+
+local function Spark(info)
+	for _, spark in ipairs(sparks) do
+		if not spark.born then
+			spark.info = info
+			spark.born, spark.life, spark.size = GetTime(), Between(info.life), Between(info.size)
+			-- (Gas stays over the edges, where it blends in: alone further in, it
+			-- looked pasted on.)
+			local gas = info.kind == "drift"
+			spark.x, spark.y = Place(info.at, gas and reachNow * GAS_REACH or reachNow, gas)
+			spark.phase = math.random() * 2 * math.pi
+			spark.tex:SetTexture(ART .. info.tex)
+			spark.tex:SetBlendMode(info.flat and "BLEND" or "ADD")
+			-- (mirrored now and then)
+			if math.random() < 0.5 then spark.tex:SetTexCoord(0, 1, 0, 1) else spark.tex:SetTexCoord(1, 0, 0, 1) end
+			return
 		end
 	end
 end
 
--- A heartbeat: a strong beat and a softer one just after (0-1).
+-- The sparks now. flicker: on and off, fading out; twinkle: fading in and
+-- out; rise: floating up, swaying, fading in and out; drift: billowing in
+-- a little toward the middle, growing, fading in slowly and out.
+local function AnimateSparks(now, width, height, alpha)
+	for _, spark in ipairs(sparks) do
+		if spark.born then
+			local t, info = now - spark.born, spark.info
+			if t >= spark.life then
+				spark.born = nil
+				spark.tex:Hide()
+			else
+				local a
+				local x, y, size = spark.x, spark.y, spark.size
+				if info.kind == "flicker" then
+					a = (math.sin(t * 55 + spark.phase) > -0.4 and 1 or 0.15) * (1 - t / spark.life)
+				elseif info.kind == "twinkle" then
+					a = math.sin(math.pi * t / spark.life)
+				elseif info.kind == "drift" then
+					local share = t / spark.life
+					x, y = x + (0.5 - x) * GAS_DRIFT * share, y + (0.5 - y) * GAS_DRIFT * share
+					size = size * (1 + 0.5 * share)
+					a = math.min(1, t / (FADE_IN * 2), (spark.life - t) / FADE_END)
+				else
+					y = y - (info.speed or 0.1) * t
+					x = x + math.sin(spark.phase + t * 2) * 0.008
+					a = math.min(1, t / FADE_IN, (spark.life - t) / FADE_END)
+				end
+				local px = size * height
+				spark.tex:ClearAllPoints()
+				spark.tex:SetPoint("CENTER", frame, "TOPLEFT", x * width, -y * height)
+				spark.tex:SetSize(px, px)
+				local color = info.color
+				spark.tex:SetVertexColor(color[1], color[2], color[3], alpha * a)
+				spark.tex:Show()
+			end
+		end
+	end
+end
+
 local function Heartbeat(phase)
 	local p = phase % 1
 	local first = math.exp(-((p - 0.05) / 0.05) ^ 2)
@@ -277,227 +329,9 @@ local function Heartbeat(phase)
 	return math.max(first, second)
 end
 
--- How far down from the screen's top the art's edge is at x (0-1 across the
--- screen), in shares of the screen's height (below 0: off the top). up: how
--- far up from the bottom, instead.
-local function ArtTopAt(x, up)
-	local tops = (up and ns.LOW_HEALTH_BOTTOMS or ns.LOW_HEALTH_TOPS)[shownTheme.edge] or NO_TOP
-	local u = 0.5 + (x - 0.5) / artScale -- (across the texture)
-	local at = math.max(0, math.min(32, u * 32))
-	local i = math.floor(at)
-	local a, b = tops[i + 1] or 0, tops[math.min(33, i + 2)] or 0
-	local top = a + (b - a) * (at - i)
-	return artScale * top - (artScale - 1) / 2
-end
-
-local function StartDrip()
-	for _, drip in ipairs(drips) do
-		if not drip.born then
-			-- (across the screen, where that's in the texture's middle span)
-			local lo = math.max(0.02, 0.5 + (DRIP_SPAN[1] - 0.5) * artScale)
-			local hi = math.min(0.98, 0.5 + (DRIP_SPAN[2] - 0.5) * artScale)
-			drip.x = lo + (hi - lo) * math.random()
-			drip.born, drip.run, drip.life = GetTime(), Between(DRIP_RUN), Between(DRIP_LIFE)
-			drip.length, drip.width = Between(DRIP_LENGTH), Between(DRIP_WIDTH)
-			local color = shownTheme.drip.color
-			drip.r, drip.g, drip.b = color[1], color[2], color[3]
-			drip.up = shownTheme.drip.up
-			return
-		end
-	end
-end
-
--- Where an effect starts (shares of the screen across and down), about
--- where the shadow reaches now, and the side (1 top, 2 bottom, 3 left, 4 right).
-local function Place(at, reach)
-	local along, inset = 0.1 + 0.8 * math.random(), reach * (0.4 + 0.7 * math.random())
-	local side = at == "top" and 1 or at == "bottom" and 2 or at == "sides" and math.random(3, 4)
-		or at == "across" and math.random(2) or math.random(4)
-	if side == 1 then return along, inset, side end
-	if side == 2 then return along, 1 - inset, side end
-	-- (Left and right: the reach is a share of the width there, and screens are wide.)
-	if side == 3 then return inset * 0.6, along, side end
-	return 1 - inset * 0.6, along, side
-end
-
--- delay: seconds before it shows (a trail's later steps); x, y, side: where
--- (else picked).
-local function StartEffect(info, reach, delay, x, y, side)
-	for _, fx in ipairs(effects) do
-		if not fx.born then
-			fx.info = info
-			if x then
-				fx.x, fx.y, fx.side = x, y, side
-			else
-				fx.x, fx.y, fx.side = Place(info.at, reach)
-			end
-			fx.born, fx.life, fx.size = GetTime() + (delay or 0), Between(info.life), Between(info.size)
-			fx.phase = math.random() * 2 * math.pi
-			fx.dir = math.random() < 0.5 and -1 or 1 -- (a sweep's way along the edge)
-			-- Its cell (a splat: any of the four), mirrored now and then.
-			local i = cellIndex[info.cell] or cellIndex[info.cell .. math.random(4)] or 1
-			local column, row = (i - 1) % EFFECTS_COLUMNS, math.floor((i - 1) / EFFECTS_COLUMNS)
-			local left, right = column / EFFECTS_COLUMNS, (column + 1) / EFFECTS_COLUMNS
-			local top, bottom = row / EFFECTS_ROWS, (row + 1) / EFFECTS_ROWS
-			if FLIPPABLE[info.cell] and math.random() < 0.5 then left, right = right, left end
-			if FLIPPABLE[info.cell] and info.kind ~= "fall" and math.random() < 0.5 then
-				top, bottom = bottom, top
-			end
-			-- (A sweep's picture faces the way it goes: the wind's head leads.)
-			if info.kind == "sweep" and (fx.dir < 0) == (left < right) then left, right = right, left end
-			fx.left, fx.right, fx.top, fx.bottom = left, right, top, bottom
-			fx.tex:SetTexCoord(left, right, top, bottom)
-			fx.tex:SetBlendMode(info.add and "ADD" or "BLEND")
-			return fx
-		end
-	end
-end
-
--- A trail (paw prints walking along an edge): info.trail steps, each a
--- little further on and later, alternating either side of the way.
-local function StartTrail(info, reach)
-	local x, y, side = Place(info.at, reach)
-	local dir = math.random() < 0.5 and -1 or 1
-	local step = info.step or 0.05
-	for i = 0, info.trail - 1 do
-		local offset = (i % 2 == 0 and -1 or 1) * step * 0.3
-		local fx
-		if side <= 2 then
-			fx = StartEffect(info, reach, i * (info.every or 0.35), x + dir * i * step * 0.6, y + offset, side)
-		else
-			fx = StartEffect(info, reach, i * (info.every or 0.35), x + offset * 0.6, y + dir * i * step, side)
-		end
-		if not fx then return end
-	end
-end
-
--- A sprite's alpha at age t of its life: fading out over the end.
-local function FadeOut(t, life)
-	return math.max(0, math.min(1, (life - t) / FADE_END))
-end
-
-local function AnimateDrips(now, width, height, alpha)
-	for _, drip in ipairs(drips) do
-		if drip.born then
-			local t = now - drip.born
-			if t >= drip.life then
-				drip.born = nil
-				drip.tex:Hide()
-			else
-				local run = math.min(1, t / drip.run)
-				run = 1 - (1 - run) ^ 3 -- (fast off the edge, slowing as it goes)
-				local creep = math.max(0, t - drip.run) / (drip.life - drip.run) * DRIP_CREEP
-				local length = drip.length * (run + creep) * height
-				local top = (ArtTopAt(drip.x, drip.up) - DRIP_HIDE) * height
-				local shown = math.min(1, run + creep) -- (the sprite's bottom part: its tip first)
-				drip.tex:ClearAllPoints()
-				if drip.up then
-					-- (from the bottom edge, upside down: its tip leading up)
-					drip.tex:SetPoint("BOTTOM", frame, "BOTTOMLEFT", drip.x * width, top)
-					drip.tex:SetTexCoord(0, 1, 1, 1 - shown)
-				else
-					drip.tex:SetPoint("TOP", frame, "TOPLEFT", drip.x * width, -top)
-					drip.tex:SetTexCoord(0, 1, 1 - shown, 1)
-				end
-				drip.tex:SetSize(drip.width * height, math.max(1, length + DRIP_HIDE * height))
-				drip.tex:SetVertexColor(drip.r, drip.g, drip.b, alpha * FadeOut(t, drip.life))
-				drip.tex:Show()
-			end
-		end
-	end
-end
-
--- One effect at age t: where it is (shares of the screen), its size (shares
--- of the height) and width (times that), its alpha, and how much of it is
--- drawn on (reveal: 0-1 across).
-local function EffectNow(fx, t)
-	local info, x, y, size, wide, alpha, drawn = fx.info, fx.x, fx.y, fx.size, 1, FadeOut(t, fx.life), 1
-	local kind = info.kind
-	if kind == "splat" then
-		-- (lands growing to 120%, settling back to its size)
-		size = size * (t < POP and 0.4 + 0.8 * t / POP or 1 + 0.2 * math.max(0, 1 - (t - POP) / 0.1))
-		y = y + t / fx.life * SPLAT_SLIDE
-	elseif kind == "reveal" then
-		drawn = math.min(1, t / POP)
-	elseif kind == "rise" then
-		y = y - (info.speed or 0.1) * t
-		x = x + math.sin(fx.phase + t * 2) * 0.008
-		alpha = alpha * math.min(1, t / FADE_IN)
-	elseif kind == "fall" then
-		y = y + (info.speed or 0.3) * t
-	elseif kind == "flutter" then
-		y = y + (info.speed or 0.06) * t
-		x = x + math.sin(fx.phase + t * 1.5) * 0.025
-		wide = 0.3 + 0.7 * math.abs(math.cos(fx.phase + t * 2)) -- (turning as it falls)
-		alpha = alpha * math.min(1, t / FADE_IN)
-	elseif kind == "drift" then
-		local share = t / fx.life
-		x, y = x + (0.5 - x) * 0.15 * share, y + (0.5 - y) * 0.15 * share
-		size = size * (1 + 0.8 * share)
-		alpha = alpha * math.min(1, t / (FADE_IN * 2))
-	elseif kind == "ripple" then
-		size = size * (0.3 + 1.2 * t / fx.life)
-		alpha = 1 - t / fx.life
-	elseif kind == "flicker" then
-		alpha = (math.sin(t * 55 + fx.phase) > -0.4 and 1 or 0.15) * (1 - t / fx.life)
-	elseif kind == "twinkle" then
-		alpha = math.sin(math.pi * t / fx.life)
-	elseif kind == "bubble" then
-		-- (swells, wobbling, and bursts: gone in its last tenth)
-		local share = t / fx.life
-		size = size * (0.5 + 0.6 * share) * (1 + 0.05 * math.sin(t * 9 + fx.phase))
-		alpha = share < 0.9 and math.min(1, t / FADE_IN) or (1 - share) * 10
-		y = y - (info.speed or 0) * t
-	elseif kind == "pull" then
-		-- (drawn in toward the middle, faster as it goes, shrinking)
-		local share = (t / fx.life) ^ 1.6
-		x, y = x + (0.5 - x) * 0.6 * share, y + (0.5 - y) * 0.6 * share
-		size = size * (1 - 0.6 * share)
-		alpha = math.min(1, t / FADE_IN) * (1 - share)
-	elseif kind == "sweep" then
-		-- (along the edge it started by: across on the top and bottom, up or down the sides)
-		local moved = (info.speed or 0.4) * t * fx.dir
-		if fx.side == 3 or fx.side == 4 then y = y + moved else x = x + moved * 0.6 end
-		alpha = math.min(1, t / FADE_IN) * FadeOut(t, fx.life)
-	end
-	return x, y, size, wide, alpha, drawn
-end
-
-local function AnimateEffects(now, width, height, alpha)
-	for _, fx in ipairs(effects) do
-		if fx.born then
-			local t = now - fx.born
-			if t < 0 then
-				fx.tex:Hide() -- (a trail's step not reached yet)
-			elseif t >= fx.life then
-				fx.born = nil
-				fx.tex:Hide()
-			else
-				local x, y, size, wide, a, drawn = EffectNow(fx, t)
-				local px = size * height
-				local tex = fx.tex
-				tex:ClearAllPoints()
-				if drawn < 1 then
-					-- (drawn on from its left: the left part of its cell)
-					tex:SetPoint("LEFT", frame, "TOPLEFT", x * width - px / 2, -y * height)
-					tex:SetSize(math.max(1, px * drawn), px)
-					tex:SetTexCoord(fx.left, fx.left + (fx.right - fx.left) * drawn, fx.top, fx.bottom)
-				else
-					tex:SetPoint("CENTER", frame, "TOPLEFT", x * width, -y * height)
-					tex:SetSize(math.max(1, px * wide), px)
-					tex:SetTexCoord(fx.left, fx.right, fx.top, fx.bottom)
-				end
-				local color = fx.info.color
-				tex:SetVertexColor(color[1], color[2], color[3], alpha * a)
-				tex:Show()
-			end
-		end
-	end
-end
-
 -- k: how far in (0 none, 1 full; a little more on a beat or a flash); heart:
--- the heartbeat now (0-1). Returns the shadow's reach (share of the screen).
-local function Apply(k, fade, heart)
+-- the heartbeat now (0-1).
+local function Apply(k, fade, heart, secret)
 	local c = math.min(1, k)
 	c = c * c * (3 - 2 * c)
 	local over = math.max(0, k - 1)
@@ -512,6 +346,22 @@ local function Apply(k, fade, heart)
 		shadowColor[i] = v + (flashColor[i] - v) * flash * FLASH_TINT
 	end
 	ns.SetVignette(edges, size, alpha, shadowColor[1], shadowColor[2], shadowColor[3])
+	-- The grade: by how far in the edges are, not their throb (the world
+	-- shouldn't pulse). Not with secret health: the game's alpha may not fade
+	-- a multiplying layer, so it would stay at full.
+	local graded = db.lowHealthGrade and level > 0 and not secret
+	if graded then
+		local g = level * level * (3 - 2 * level) * db.lowHealthGradeAmount * fade
+		local tint = shownTheme.flash
+		local r, gr, b
+		for i = 1, 3 do
+			local target = GRADE_GREY[i] + (tint[i] - GRADE_GREY[i]) * GRADE_TINT
+			local v = 1 + (target - 1) * g
+			if i == 1 then r = v elseif i == 2 then gr = v else b = v end
+		end
+		grade:SetVertexColor(r, gr, b)
+	end
+	grade:SetShown(graded)
 	if db.lowHealthBlood and c > 0 then
 		local deep = ART_SHALLOWEST + (ART_DEEPEST - ART_SHALLOWEST) * db.lowHealthBloodReach
 		artScale = math.max(1, ART_OUT + (deep - ART_OUT) * c - over * 0.05)
@@ -545,14 +395,11 @@ local function Apply(k, fade, heart)
 		else
 			glow:Hide()
 		end
-		local now = GetTime()
-		local spriteAlpha = db.lowHealthBloodAlpha * math.min(1, c * 2) * fade
-		AnimateDrips(now, width, height, spriteAlpha)
-		AnimateEffects(now, width, height, spriteAlpha)
+		AnimateSparks(GetTime(), width, height, db.lowHealthBloodAlpha * math.min(1, c * 2) * fade)
 	else
 		body:Hide()
 		glow:Hide()
-		ClearSprites()
+		ClearSparks()
 	end
 	return size
 end
@@ -584,28 +431,7 @@ local function Wanted(now)
 	return HealthShare(), true
 end
 
-local reachNow = 0 -- (the shadow's reach as last shown: effects start about there)
 local belowStart = false -- health known to be under Starts below (not when secret)
-
--- The theme's effects that a hit, a heartbeat or time brings on.
-local function SpawnEffects(why, elapsed)
-	if not (db.lowHealthBlood and db.lowHealthDrops and level > 0.05) then return end
-	for _, info in ipairs(shownTheme.effects) do
-		if level >= (info.from or 0) then
-			local count = 0
-			if why == "hit" and info.hit then
-				count = math.random(info.hit[1], info.hit[2])
-			elseif why == "beat" and info.beat and math.random() < info.beat * level then
-				count = 1
-			elseif why == "time" and info.rate and math.random() < info.rate / 60 * elapsed * level then
-				count = 1
-			end
-			for _ = 1, count do
-				if info.trail then StartTrail(info, reachNow) else StartEffect(info, reachNow) end
-			end
-		end
-	end
-end
 
 local function Update(_, elapsed)
 	local now = GetTime()
@@ -614,7 +440,7 @@ local function Update(_, elapsed)
 	local share, on, testing, dead = Wanted(now)
 	testShare = testing and share or nil
 	-- A big hit, or smaller ones adding up to Hits adding up to: a flash (only
-	-- by what was shown: a heal doesn't), and the theme's effects for it.
+	-- by what was shown: a heal doesn't).
 	-- (Secret health, in fights on retail: by the hit event's amounts, plain.)
 	local lostNow, bigHit = 0, false
 	if on and share and lastHealth then
@@ -625,16 +451,20 @@ local function Update(_, elapsed)
 	end
 	woundLost, woundHit = 0, false
 	lostAdding = on and lostAdding + lostNow or 0
+	local sparking = db.lowHealthBlood and level > 0.05 and shownTheme.sparks
 	if bigHit or lostAdding >= db.lowHealthFlashAdded then
 		lostAdding = 0
 		if db.lowHealthFlash then flash = 1 end
-		SpawnEffects("hit")
+		if sparking then
+			for _, info in ipairs(sparking) do
+				for _ = 1, info.hit and math.random(info.hit[1], info.hit[2]) or 0 do Spark(info) end
+			end
+		end
 	end
-	SpawnEffects("time", elapsed)
-	local drip = shownTheme.drip
-	if drip and db.lowHealthBlood and db.lowHealthDrips and level > 0.05
-		and math.random() < db.lowHealthDripRate * (drip.rate or 1) / 60 * elapsed * level then
-		StartDrip()
+	if sparking then
+		for _, info in ipairs(sparking) do
+			if info.rate and math.random() < info.rate / 60 * elapsed * level then Spark(info) end
+		end
 	end
 	lastHealth = share
 	belowStart = on and share ~= nil and share < db.lowHealthStart
@@ -661,9 +491,7 @@ local function Update(_, elapsed)
 	if db.lowHealthPulse and level > 0 then
 		local bpm = (db.lowHealthBpmSlow + (db.lowHealthBpmFast - db.lowHealthBpmSlow) * level)
 			* (shownTheme.bpm or 1)
-		local was = beat
 		beat = (beat + elapsed * bpm / 60) % 1
-		if beat < was then SpawnEffects("beat") end
 		heart = Heartbeat(beat)
 		k = level * (1 + db.lowHealthPulseAmount * (shownTheme.pulse or 1) * heart)
 	end
@@ -684,9 +512,9 @@ local function Update(_, elapsed)
 	local shown = (k > 0 or flash > 0) and fade > 0
 	frame:SetShown(shown)
 	if shown then
-		reachNow = Apply(k, fade, heart)
+		reachNow = Apply(k, fade, heart, secret)
 	else
-		ClearSprites()
+		ClearSparks()
 	end
 	-- Settled with nothing showing (and not secret: that's left running, as
 	-- the game's alpha follows your health with no events to go by here).
@@ -717,7 +545,7 @@ end
 
 -- A quick look (the welcome window's Cinema level): the page's test, shorter,
 -- with nothing said in chat. Health falls in hits to low, so the theme's art
--- soaks in with its flashes and effects, held for seconds, then back to yours.
+-- soaks in with its flashes, held for seconds, then back to yours.
 local GLIMPSE_FROM, GLIMPSE_TO, GLIMPSE_TIME = 0.7, 0.1, 1.4
 function ns.FlashVitals(seconds)
 	db = db or ns.GetDB()
@@ -733,7 +561,7 @@ function ns.StopVitalsFlash()
 	if not (test and test.quiet) then return end
 	test, testShare, lastHealth = nil, nil, nil
 	level, flash, liftSpeed = 0, 0, 0
-	ClearSprites()
+	ClearSparks()
 	if frame then frame:Hide() end
 	Wake()
 end
@@ -741,6 +569,91 @@ end
 function ns.StopLowHealthTest()
 	test = nil
 	Wake()
+end
+
+-- A small camera shake, as a big hit might give (the dev copy's page has a
+-- button to try it; hits don't shake yet). Each step turns the view for
+-- SHAKE_STEP seconds at its share of SHAKE_SPEED degrees a second, yaw and
+-- pitch; each list adds up to 0, and what frame timing leaves over is
+-- turned back at the end, so the view ends where it started. A camera of
+-- ours like any other: it waits its turn, and your input stops it.
+local SHAKE_STEP = 0.04
+local SHAKE_SPEED = { yaw = 40, pitch = 25 }
+local SHAKE_YAW = { 1, -1.8, 1.5, -1.1, 0.4 }
+local SHAKE_PITCH = { -0.6, 1.1, -0.9, 0.6, -0.2 }
+local SHAKE_AXES = {
+	yaw = { "MoveViewRightStart", "MoveViewRightStop", "MoveViewLeftStart", "MoveViewLeftStop",
+		"cameraYawMoveSpeed", 180 },
+	pitch = { "MoveViewUpStart", "MoveViewUpStop", "MoveViewDownStart", "MoveViewDownStop",
+		"cameraPitchMoveSpeed", 90 },
+}
+local shake -- { start, at = { yaw, pitch }: degrees turned so far, going = { yaw, pitch }: speed now }
+local shaker = CreateFrame("Frame")
+shaker:Hide()
+
+local function ShakeStop(axis)
+	local names = SHAKE_AXES[axis]
+	ns.CameraCall("shake", names[2])
+	ns.CameraCall("shake", names[4])
+	shake.going[axis] = 0
+end
+
+-- Turn one axis at `speed` degrees a second (signed; 0 stops). False if the
+-- view isn't ours.
+local function ShakeTurn(axis, speed)
+	if speed == shake.going[axis] then return true end
+	ShakeStop(axis)
+	if speed == 0 then return true end
+	local names = SHAKE_AXES[axis]
+	local setting = tonumber(GetCVar(names[5])) or names[6]
+	local ok = ns.CameraCall("shake", speed > 0 and names[1] or names[3], math.abs(speed) / setting)
+	shake.going[axis] = ok and speed or 0
+	return ok
+end
+
+local function EndShake()
+	if not shake then return end
+	ShakeStop("yaw")
+	ShakeStop("pitch")
+	shake = nil
+	shaker:Hide()
+end
+
+shaker:SetScript("OnUpdate", function(_, elapsed)
+	-- (What the last frame's speeds turned.)
+	for axis, speed in pairs(shake.going) do
+		shake.at[axis] = shake.at[axis] + speed * elapsed
+	end
+	local step = math.floor((GetTime() - shake.start) / SHAKE_STEP) + 1
+	if step <= #SHAKE_YAW then
+		if not (ShakeTurn("yaw", SHAKE_YAW[step] * SHAKE_SPEED.yaw)
+			and ShakeTurn("pitch", SHAKE_PITCH[step] * SHAKE_SPEED.pitch)) then
+			EndShake()
+		end
+		return
+	end
+	-- Turning back what's left over, until it's under a frame's worth.
+	local done = true
+	for axis, at in pairs(shake.at) do
+		local speed = SHAKE_SPEED[axis] * 0.5
+		if math.abs(at) > speed * math.max(elapsed, 0.01) then
+			done = false
+			ShakeTurn(axis, at > 0 and -speed or speed)
+		else
+			ShakeTurn(axis, 0)
+		end
+	end
+	if done or GetTime() - shake.start > 1 then EndShake() end
+end)
+
+function ns.ShakeCamera()
+	if shake then return end
+	shake = { start = GetTime(), at = { yaw = 0, pitch = 0 }, going = { yaw = 0, pitch = 0 } }
+	shaker:Show()
+end
+
+if ns.RegisterCamera then
+	ns.RegisterCamera("shake", function() return shake ~= nil end, EndShake)
 end
 
 -- (Events a client may not have: registering those would error.)
@@ -847,7 +760,7 @@ function ns.CreateVitalsVisionPanel(kit)
 	title:SetPoint("TOPLEFT", 16, -16)
 	local intro = kit.PageIntro(content, title,
 		L["Your health at a glance, without the portrait: as it drops, the screen's edges close in, with your " ..
-		"theme's art soaking in from them (blood, frost, fire, wind...) and its effects moving over it, a " ..
+		"theme's art soaking in from them (blood, smoke, a glow in its color), a " ..
 		"heartbeat that quickens as you weaken and a flash on big hits. Auto picks a theme for your class " ..
 		"and spec. The death screen takes over if you die."])
 	local function Changed()
@@ -978,7 +891,7 @@ function ns.CreateVitalsVisionPanel(kit)
 	-- in CineMode, fading in as your health drops.
 	stack:Header(content, L["What shows"])
 	Tick("lowHealthEdges", L["Screen edges"],
-		L["The screen's edges close in as your health drops, with your theme's art and effects (all the " ..
+		L["The screen's edges close in as your health drops, with your theme's art (all the " ..
 		"sections below)."])
 	local BARS_TIP = "\n\n" .. L["In CineMode, a health bar faded out comes back as your health drops: hidden " ..
 		"above Starts below, fading in to fully up at All the way in at."]
@@ -1014,20 +927,18 @@ function ns.CreateVitalsVisionPanel(kit)
 	Slide("lowHealthDark", L["Darkness"], 0, 100, 5, "%d%%", 100, L["How dark the edges are at full."], Edges)
 	Slide("lowHealthRed", L["Shadow tint"], 0, 100, 5, "%d%%", 100,
 		L["0%: black, like the death screen. 100%: the theme's own color (deep red for blood)."], Edges)
+	Tick("lowHealthGrade", L["Color grade"], L["The whole picture drains toward a cold grey, tinged with the " ..
+		"theme's color, as the edges close in. The world only: your UI stays as it is. Off in fights where " ..
+		"the game keeps your health secret."], Edges)
+	Slide("lowHealthGradeAmount", L["Grade strength"], 10, 100, 5, "%d%%", 100,
+		L["How far the picture drains at full."], function(d) return Edges(d) and d.lowHealthGrade end)
 
 	stack:Header(content, L["Theme art"])
 	Tick("lowHealthBlood", L["Show the theme's art"], L["The theme's art soaking in from the edges as they " ..
-		"close in (blood, frost, fire...), with its drips and effects. Unticked: just the shadow."], Edges)
+		"close in (blood, smoke, a glow...). Unticked: just the shadow."], Edges)
 	Slide("lowHealthBloodAlpha", L["Opacity"], 0, 100, 5, "%d%%", 100, nil, Art)
 	Slide("lowHealthBloodReach", L["Reach"], 0, 100, 5, "%d%%", 100,
 		L["How far in the art comes at full: 0% just the screen's edges, 100% all of it."], Art)
-	Tick("lowHealthDrips", L["Drips"], L["Drips (or icicles) running down from the art, in themes that " ..
-		"have them."], Art)
-	Slide("lowHealthDripRate", L["Drips a minute"], 2, 60, 1, "%d", 1,
-		L["How many at full (fewer as the edges come in; some themes have more or fewer)."],
-		function(d) return Art(d) and d.lowHealthDrips end)
-	Tick("lowHealthDrops", L["Effects"], L["The theme's effects: drops splashing on, cuts, cracks, embers, " ..
-		"smoke, wind, leaves... (with big hits, heartbeats or over time)."], Art)
 
 	stack:Header(content, L["Heartbeat"])
 	Tick("lowHealthPulse", L["Heartbeat"], L["The edges throb with a heartbeat, quicker as you weaken."], Edges)
@@ -1040,10 +951,20 @@ function ns.CreateVitalsVisionPanel(kit)
 	Tick("lowHealthFlash", L["Flash on big hits"],
 		L["The edges flash in the theme's color when a hit takes a lot at once."], Edges)
 	Slide("lowHealthFlashHit", L["A big hit takes"], 2, 40, 1, "%d%%", 100,
-		L["The share of your health a hit has to take at once to count as big (and bring on its effects)."], Edges)
+		L["The share of your health a hit has to take at once to count as big."], Edges)
 	Slide("lowHealthFlashAdded", L["Or hits adding up to"], 5, 60, 1, "%d%%", 100,
 		L["Smaller hits count as a big one too once they've taken this much of your health together " ..
 			"(since the last one; again each fight)."], Edges)
+	-- (Dev copy: try a camera shake, before hits get one.)
+	if ns.isDev then
+		local shakeRow = CreateFrame("Frame", nil, content)
+		shakeRow:SetSize(300, 26)
+		stack:Add(shakeRow, "label", 2)
+		Button(shakeRow, "Test camera shake", 160, "A small shake, as a big hit might give. Close the " ..
+			"settings first or watch the world behind them.", function()
+				C_Timer.After(0.3, ns.ShakeCamera)
+			end):SetPoint("LEFT")
+	end
 
 	-- The test: its own settings, and Test and Stop. (Not page controls:
 	-- they work with the page off.)
@@ -1054,7 +975,7 @@ function ns.CreateVitalsVisionPanel(kit)
 	Slide("lowHealthTestTo", L["To"], 0, 100, 5, "%d%%", 100)
 	Slide("lowHealthTestTime", L["Over"], 1, 30, 1, L["%ds"], 1)
 	stack:Add(kit.Check(content, "lowHealthTestHits", L["In hits"],
-		L["Ticked, your health falls in hits (each a big hit, with its flash and effects); unticked, smoothly."]),
+		L["Ticked, your health falls in hits (each a big hit, with its flash); unticked, smoothly."]),
 		"check")
 	local row = CreateFrame("Frame", nil, content)
 	row:SetSize(300, 26)

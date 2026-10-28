@@ -418,7 +418,9 @@ local function StepZoomRelease(elapsed)
 	end
 	release.t = release.t + elapsed
 	local f = release.t / ZOOM_RELEASE_TIME
-	if f >= 1 then
+	-- (Yours already put back by something else, the camera watch say: stop,
+	-- or the next step would leave it at a crawl with nothing to restore.)
+	if f >= 1 or ns.db.savedCVars[ZOOM_CVAR] == nil then
 		zoomer.release, zoomer.sent = nil, nil
 		RestoreSpeed(ZOOM_CVAR)
 		return
@@ -429,6 +431,7 @@ end
 
 local function SetZoomSpeed(speed)
 	if not zoomer.sent or math.abs(speed - zoomer.sent) > zoomer.sent * MOVE_CHANGE then
+		ns.SaveCVar(ZOOM_CVAR) -- (again if yours was put back mid-zoom: no crawl left behind)
 		SetCVar(ZOOM_CVAR, ("%.2f"):format(speed))
 		zoomer.sent = speed
 	end
@@ -621,7 +624,8 @@ end
 
 -- You moved the camera yourself: it's yours, nothing to put back. (Except
 -- the zoom back out to your distance, once it's over, unless you zoomed.)
-local function HandOver()
+local function HandOver(what)
+	ns.Log("questcam", ("handed over to you (%s): turn, tilt and zoom stopped"):format(tostring(what)))
 	for _, m in pairs(movers) do
 		StopMove(m)
 		m.amount = 0
@@ -679,6 +683,7 @@ local function Start()
 	local db = ns.db
 	cam.active, cam.closingAt, cam.handedOver = true, nil, false
 	cam.startedAt = GetTime()
+	ns.Log("questcam", ("started (%s)"):format(cam.test and "test" or tostring(cam.npcName or cam.event)))
 	cam.log = nil
 	if db.debugQuestCam or ns.Verbose() then
 		db.questCamLog = {}
@@ -805,12 +810,12 @@ local function Stop()
 	cam.zoom, cam.zoomedTo = nil, nil
 end
 
--- The conversation's event (Camera Triggers page): its camera isn't "none".
+-- The conversation's event (Cameras page): its camera here isn't "none".
 -- cam.event is "Quest" (a quest giver) or "QuestGossip" (only "(Quest)"
 -- options so far).
 local function Wanted()
 	local db = ns.db
-	return db and db.enabled and db["event" .. (cam.event or "Quest") .. "Camera"] ~= "none"
+	return db and db.enabled and ns.TriggerHasCamera(cam.event or "Quest")
 		and not InCombatLockdown()
 		and not cam.movie and not ns.OnTaxi() and not ns.IsCameraOffHere("quest")
 		and ns.CombatWaitOver("quest", GetTime())
@@ -1001,6 +1006,57 @@ local function OnEvent(_, event)
 	end
 end
 
+-- The live log (/cine debug tab, the Cinematic chat tab): when it thinks
+-- you're moving the camera and when you've stopped, and what of the quest
+-- cam's still going each time that changes, down to nothing left.
+local WatchLog
+do
+	local INPUT_QUIET = 0.5 -- seconds without camera input: you've stopped (Core.lua's PLAYER_HOLD)
+	local inputSeen, yours, partsWas = -math.huge, false, ""
+
+	-- What keeps it holding the view (as its camera lock busy, below), by name.
+	local function Parts()
+		local parts = {}
+		if cam.active then parts[#parts + 1] = cam.handedOver and "on (handed over)" or "on" end
+		if ns.QuestCamPending() then parts[#parts + 1] = "about to start" end
+		if #cam.steps > 0 then parts[#parts + 1] = "steps to go" end
+		if movers.yaw.moving then parts[#parts + 1] = cam.drifting and "drifting" or "turning" end
+		if movers.pitch.moving then parts[#parts + 1] = "tilting" end
+		if zoomer.moving then parts[#parts + 1] = (cam.zoomBy and cam.zoomBy .. "'s " or "") .. "zoom" end
+		if zoomer.release then parts[#parts + 1] = "zoom speed easing back" end
+		if zoomer.pending then parts[#parts + 1] = "zoom out held till you walk off" end
+		if (cam.restoring or 0) > 0 then parts[#parts + 1] = "speed settings going back" end
+		if GetTime() - (zoomer.wantsAt or -math.huge) < 0.5 then parts[#parts + 1] = "waiting for the view to zoom out" end
+		return table.concat(parts, ", ")
+	end
+
+	function WatchLog(now)
+		local mouse = ns.IsMouseOnCamera and ns.IsMouseOnCamera() or false
+		local last = ns.GetLastCameraInput()
+		local parts = Parts()
+		-- (Only around a quest cam: not every drag all day.)
+		local around = parts ~= "" or partsWas ~= ""
+		if last > inputSeen or mouse then
+			if not yours and around then
+				ns.Log("questcam", ("you're moving the camera: %s%s; quest cam: %s"):format(
+					mouse and "mouse held" or tostring(ns.lastCameraInputWhat),
+					IsMouselooking and IsMouselooking() and " (mouselook)" or "", parts ~= "" and parts or "done"))
+			end
+			yours = yours or around
+			inputSeen = math.max(last, inputSeen)
+			if mouse then inputSeen = now end
+		elseif yours and now - inputSeen >= INPUT_QUIET then
+			yours = false
+			ns.Log("questcam", ("you've stopped moving the camera; quest cam: %s"):format(parts ~= "" and parts or "done"))
+		end
+		if parts ~= partsWas then
+			ns.Log("questcam", parts ~= "" and ("still going: " .. parts)
+				or ("all done, the view's free (holder now: %s)"):format(tostring(ns.CameraHolder("quest") or "nobody")))
+			partsWas = parts
+		end
+	end
+end
+
 local function OnUpdate(_, elapsed)
 	if ns.IsSuspended() then
 		return -- stopped after an error (Diagnostics.lua)
@@ -1014,7 +1070,7 @@ local function OnUpdate(_, elapsed)
 	local busy = cam.active or #cam.steps > 0 or movers.yaw.moving or movers.pitch.moving or zoomer.moving
 	if not cam.handedOver and cam.startedAt and busy
 		and ns.GetLastCameraInput() > cam.startedAt + INPUT_GRACE then
-		HandOver()
+		HandOver(ns.lastCameraInputWhat)
 	end
 	-- Zoomed yourself while it zooms (in, or back out): it stops, and the
 	-- wheel goes at your speed (also while the speed's still easing back).
@@ -1051,7 +1107,7 @@ local function OnUpdate(_, elapsed)
 		elseif far then
 			zoomer.pending = nil
 			ZoomTo(pending.to, math.min(ns.db.questCamZoomMaxTime or math.huge,
-				math.abs(pending.to - GetCameraZoom()) / ns.db.questCamZoomOutSpeed))
+				math.abs(pending.to - GetCameraZoom()) / (pending.speed or ns.db.questCamZoomOutSpeed)))
 			zoomer.leaving = true
 			HurryZoom(ZOOM_HURRY)
 		end
@@ -1060,18 +1116,22 @@ local function OnUpdate(_, elapsed)
 	if busy or Zooming() or zoomer.release then
 		Log(now)
 	end
+	WatchLog(now)
 	if not cam.since then
 		return
 	end
 	if cam.closingAt and now - cam.closingAt >= CLOSE_GRACE then
 		cam.since, cam.closingAt = nil, nil
 		if cam.active then
+			ns.Log("questcam", "window closed: going back")
 			Stop()
 		end
 	elseif cam.active and not Wanted() then
+		ns.Log("questcam", "turned off mid-conversation: going back")
 		Stop() -- turned off (or set to no camera) mid-conversation
 		cam.since = nil
 	elseif cam.active and ns.playerMoving then
+		ns.Log("questcam", "you walked off: going back")
 		Stop() -- walked off: back to normal, and no more until the next conversation
 		cam.cancelled = true
 	elseif not cam.active and not cam.closingAt and not cam.cancelled and not ns.playerMoving
@@ -1121,7 +1181,14 @@ function ns.QuestCamActive()
 	return cam.active and true or false
 end
 
--- The Camera Triggers row it's running for ("Quest" or "QuestGossip"): its
+-- Running with the quest giver's window still open: a click on them for the
+-- next quest isn't moving the camera (ns.IsMouseOnCamera waits on it). Once
+-- the window's closed, a held button is yours at once.
+function ns.QuestCamWindowOpen()
+	return cam.active and not cam.closingAt
+end
+
+-- The trigger (Cameras page) it's running for ("Quest" or "QuestGossip"): its
 -- Music and CineMode columns.
 function ns.QuestCamEvent()
 	return cam.event or "Quest"
@@ -1196,10 +1263,10 @@ ns.RegisterCamera("quest", function()
 	return cam.active or #cam.steps > 0 or movers.yaw.moving or movers.pitch.moving
 		or ((zoomer.moving or zoomer.release ~= nil) and cam.zoomBy == nil) or (cam.restoring or 0) > 0
 		or GetTime() - (zoomer.wantsAt or -math.huge) < 0.5 or ns.QuestCamPending()
-end, function()
+end, function(what)
 	if not cam.handedOver and GetTime() > (cam.startedAt or 0) + INPUT_GRACE then
 		Note("you took the camera")
-		HandOver()
+		HandOver(what)
 	end
 end)
 
@@ -1236,9 +1303,15 @@ end
 function ns.QuestCamEaseZoomStop(T)
 	return EaseZoomStop(T)
 end
-function ns.QuestCamStopZoom()
-	StopZoom(true)
+function ns.QuestCamStopZoom(ease)
+	StopZoom(not ease)
 	ns.RestoreZoomLimit()
+end
+-- The Chat Cam let go as you moved: its zoom back out to `distance`, held
+-- till you've walked off from here (at `speed` yards a second), as this one's.
+function ns.QuestCamHoldZoomOut(distance, speed)
+	local x, y = PlayerPosition()
+	zoomer.pending = { to = distance, x = x, y = y, since = GetTime(), walked = 0, speed = speed }
 end
 
 -- For /cine debug: whether the quest cam is on now, its moves and the shoulder state.

@@ -385,8 +385,9 @@ end
 -- can see as a bubble on screen (a yell from someone in view) doesn't need the
 -- chat window: such a line waits BUBBLE_WAIT seconds for its
 -- bubble (it shows a frame or so after the message), and peeks only if none
--- with its text showed on screen. Bubbles switched off, or kept from addons
--- (in instances, on retail), peek as before. With "Show speech from behind
+-- with its text showed on screen. Bubbles kept from addons (in instances, on
+-- retail) can't be read: a new one turning up counts as the line's. Bubbles
+-- switched off peek as before. With "Show speech from behind
 -- you" (db.chatSpeechBehind), one with no bubble shows low on the screen
 -- instead (Speech.lua), while its chat window is faded, and never keeps chat up.
 local BUBBLE_SPEECH = {
@@ -436,6 +437,10 @@ local function WatchBubbles()
 		if ns.IsBubbleOnScreen and ns.IsBubbleOnScreen(line[2]) then
 			SpeechTrace("its bubble is on screen")
 			table.remove(waiting, i)
+		elseif ns.UnreadableBubbles and ns.UnreadableBubbles() > line[7] then
+			-- (A bubble kept from addons turned up after it: taken as its own.)
+			SpeechTrace("a bubble kept from addons showed up")
+			table.remove(waiting, i)
 		elseif now >= line[3] then
 			table.remove(waiting, i)
 			SpeakOrPeek(line)
@@ -457,7 +462,8 @@ local function PeekUnlessBubble(chatFrame, event, text, author, guid)
 		PeekWindow(chatFrame)
 		return
 	end
-	waiting[#waiting + 1] = { chatFrame, text, GetTime() + BUBBLE_WAIT, event, author, guid }
+	waiting[#waiting + 1] = { chatFrame, text, GetTime() + BUBBLE_WAIT, event, author, guid,
+		ns.UnreadableBubbles and ns.UnreadableBubbles() or 0 }
 	bubbleWatch:SetScript("OnUpdate", OnBubbleWatch)
 end
 

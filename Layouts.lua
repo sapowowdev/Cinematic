@@ -14,7 +14,21 @@
 local _, ns = ...
 local L = ns.L
 
-ns.LAYOUT_NAME = "CINE_FOREVER_RETAIL_LAYOUT"
+ns.LAYOUT_NAME = "Retail Inspired"
+
+-- Cinematic's own layouts' old names, and what they're called now: one
+-- still under its old name counts as the new one, and is renamed in Edit
+-- Mode on logging in (RenameOld; Edit Mode shows the old name till the
+-- next reload) and in saved profiles (Core.lua).
+ns.LAYOUT_RENAMED = {
+	CINE_FOREVER_RETAIL_LAYOUT = "Retail Inspired",
+	CINE_PURE_CINEMA_LAYOUT = "Personal Resource Centered",
+}
+
+-- A saved layout's name, an old one of ours as it's called now.
+local function Named(layout)
+	return ns.LAYOUT_RENAMED[layout.layoutName] or layout.layoutName
+end
 
 local function AccountType()
 	return Enum.EditModeLayoutType and Enum.EditModeLayoutType.Account or 1
@@ -29,7 +43,7 @@ end
 local function FindLayout(name)
 	local info = C_EditMode.GetLayouts()
 	for i, layout in ipairs(info.layouts) do
-		if layout.layoutName == name then return info, i end
+		if Named(layout) == name then return info, i end
 	end
 	return info, nil
 end
@@ -41,7 +55,7 @@ local function IndexOf(info, name)
 		if preset.layoutName == name then return i end
 	end
 	for i, layout in ipairs(info.layouts) do
-		if layout.layoutName == name then return #presets + i end
+		if Named(layout) == name then return #presets + i end
 	end
 end
 
@@ -51,7 +65,7 @@ local function NameAt(info, index)
 	local presets = Presets()
 	if index <= #presets then return presets[index].layoutName end
 	local layout = info.layouts[index - #presets]
-	return layout and layout.layoutName
+	return layout and Named(layout)
 end
 
 -- The active layout's name.
@@ -63,7 +77,7 @@ end
 -- (ns.LAYOUT_PRESET): the one the player is on now, or was on before a
 -- profile switched it, else the first (Modern); nil: the game has none.
 local function Target(info, name)
-	if name ~= ns.LAYOUT_PRESET then return name end
+	if name ~= ns.LAYOUT_PRESET then return ns.LAYOUT_RENAMED[name] or name end
 	local presets = Presets()
 	local active = info.activeLayout
 	if active and presets[active] then return presets[active].layoutName end
@@ -224,18 +238,16 @@ local PURE_CINEMA_SYSTEMS = {
 -- an Edit Mode export string (Share > Copy to Clipboard); without one, design:
 -- changes to the Modern preset (as DESIGN). bars: the action bars it lays
 -- out, switched on with it (SyncBars).
--- label: its name on the Profiles page's layout menu (listed on client only,
--- unless it's in Edit Mode already).
 ns.EDIT_MODE_LAYOUTS = {
 	[ns.LAYOUT_NAME] = { export = nil, design = DESIGN, bars = { 2, 3 },
-		label = "Cinematic's retail look", client = "forever" },
+		client = "forever" },
 	-- Retail laid out like WoW Forever's default (the retail profile "Forever").
 	-- Not designed yet: a copy of Modern until its export string's in.
 	CINE_RETAIL_FOREVER_LAYOUT = { export = nil, design = {},
-		label = "Cinematic's WoW Forever look", client = "retail" },
+		client = "retail" },
 	-- (the Pure Cinema profile's on retail)
-	CINE_PURE_CINEMA_LAYOUT = { systems = PURE_CINEMA_SYSTEMS,
-		label = "Cinematic's Pure Cinema look", client = "retail" },
+	["Personal Resource Centered"] = { systems = PURE_CINEMA_SYSTEMS,
+		client = "retail" },
 }
 
 -- A layout from systems lines (as PURE_CINEMA_SYSTEMS): the export string is
@@ -327,7 +339,15 @@ function ns.MakeLayout(name)
 	return true
 end
 
--- One of ours made again from the code (the Profiles page's Regenerate, the
+-- Whether a layout's in Edit Mode: "active" (on now), "made", or nil (not there).
+function ns.LayoutState(name)
+	if not (C_EditMode and C_EditMode.GetLayouts) then return nil end
+	local info, index = FindLayout(name)
+	if not index then return nil end
+	return ActiveName(info) == name and "active" or "made"
+end
+
+-- One of ours made again from the code (the Customize panel's Regenerate, the
 -- Dev page's buttons), undoing changes made to it in Edit Mode, and switched
 -- to. One that was there already offers a reload (Edit Mode shows its old
 -- copy until then), after which it's switched to again.
@@ -344,9 +364,28 @@ function ns.RegenerateLayout(name)
 	return ok
 end
 
--- On logging in (or a reload), once Edit Mode has its layouts: the layout
--- just remade, switched to again; otherwise the
--- profile's, as on switching to it. Edit Mode keeps a layout per character,
+-- Ours still under an old name (ns.LAYOUT_RENAMED) renamed in Edit Mode,
+-- unless one's under the new name already. In place, so the numbers
+-- SetActiveLayout goes by stay. (Not in combat or with Edit Mode open:
+-- the next login then.)
+local function RenameOld()
+	if Blocked() then return end
+	local info = C_EditMode.GetLayouts()
+	local taken, renamed = {}, false
+	for _, layout in ipairs(info.layouts) do taken[layout.layoutName] = true end
+	for _, layout in ipairs(info.layouts) do
+		local new = ns.LAYOUT_RENAMED[layout.layoutName]
+		if new and not taken[new] then
+			ns.Log("state", ("edit mode layout renamed: %s to %s"):format(layout.layoutName, new))
+			layout.layoutName, taken[new], renamed = new, true, true
+		end
+	end
+	if renamed then C_EditMode.SaveLayouts(info) end
+end
+
+-- On logging in (or a reload), once Edit Mode has its layouts: ours under
+-- old names renamed, then the layout just remade, switched to again;
+-- otherwise the profile's, as on switching to it. Edit Mode keeps a layout per character,
 -- so one logged into from a character on another profile can be on the
 -- wrong one (Retail's on a character whose profile isn't Retail).
 local login = CreateFrame("Frame")
@@ -355,8 +394,10 @@ login:SetScript("OnEvent", function(self)
 	self:UnregisterAllEvents()
 	if not (C_EditMode and C_EditMode.GetLayouts) or not ns.chardb then return end
 	local name = ns.chardb.layoutPending
+	name = name and ns.LAYOUT_RENAMED[name] or name
 	ns.chardb.layoutPending = nil
 	C_Timer.After(1, function()
+		RenameOld()
 		if not name then
 			if ns.ProfileChosen() then ns.ApplyProfileLayout() end
 			return
@@ -451,7 +492,7 @@ function ns.ResetLayouts()
 	ns.chardb.layoutOwn = nil
 	local kept, removed = {}, 0
 	for _, layout in ipairs(info.layouts) do
-		if ns.EDIT_MODE_LAYOUTS[layout.layoutName] then
+		if ns.EDIT_MODE_LAYOUTS[Named(layout)] then
 			removed = removed + 1
 		else
 			kept[#kept + 1] = layout
@@ -515,40 +556,6 @@ function ns.FinishLayoutFade()
 	local pending = ns.pendingPreview
 	ns.pendingPreview = nil
 	if pending then ns.PreviewProfile(pending) end
-end
-
--- The Profiles page's layout menu ({ value, text } for db.editModeLayout):
--- leave it, the game's own, then the layouts as Edit Mode lists them (the
--- saved ones by their names, then the presets; the Gamepad preset only in
--- gamepad mode), Cinematic's own for this client to add if it isn't made,
--- and the profile's if it's gone.
-local PRESETS_SHOWN = 2 -- (Modern and Classic; WoW Forever's third is Gamepad)
-function ns.LayoutChoices()
-	local choices = {
-		{ value = "", text = L["Your own (Cinematic leaves it alone)"] },
-		{ value = ns.LAYOUT_PRESET, text = L["The game's own (Modern or Classic)"] },
-	}
-	local info = C_EditMode and C_EditMode.GetLayouts and C_EditMode.GetLayouts()
-	if not (info and info.layouts) then return choices end
-	local listed = { [""] = true, [ns.LAYOUT_PRESET] = true }
-	local function Add(name, text)
-		if not name or listed[name] then return end
-		listed[name] = true
-		choices[#choices + 1] = { value = name, text = text or name }
-	end
-	for _, layout in ipairs(info.layouts) do Add(layout.layoutName) end
-	local gamepad = ns.IsGamePadOn and ns.IsGamePadOn()
-	for i, preset in ipairs(Presets()) do
-		if i <= PRESETS_SHOWN or gamepad or preset.layoutName == (ns.db and ns.db.editModeLayout) then
-			Add(preset.layoutName, L["%s (Preset)"]:format(preset.layoutName))
-		end
-	end
-	for name, def in pairs(ns.EDIT_MODE_LAYOUTS) do
-		if def.client == ns.CLIENT then Add(name, L["Add %s to Edit Mode"]:format(L[def.label])) end
-	end
-	local current = ns.db and ns.db.editModeLayout
-	if current then Add(current, L["%s (not in Edit Mode)"]:format(current)) end
-	return choices
 end
 
 -- Leaving Edit Mode on another layout than the profile's: the profile takes

@@ -80,7 +80,7 @@ end
 
 local idleZoom = { active = false, saved = nil }
 local turnKeys = { left = false, right = false }
--- Events that start a standing-still camera, in the order the Camera Triggers page
+-- Events that start a standing-still camera, in the order the Cameras page
 -- lists them. Each picks its camera with event<key>Camera ("cozy", "vista",
 -- "fish", "afk", "tele" or "none"); the camera starts and the UI fades at once.
 -- The emotes and seats end as you move or jump; those marked stopsOnMove (a
@@ -144,15 +144,14 @@ ns.DEFAULTS.deathCine = false
 -- Whether a camera ticked in the CineMode column is running (or, for the
 -- standing-still events, due to start).
 function ns.TriggerStartsCine()
-	local db = ns.db
-	if ns.FlightCameraOn() and db.eventFlightCine then
+	if ns.FlightCameraOn() and ns.TriggerSetting("Flight", "cine") then
 		return true
 	end
-	if ns.QuestCamActive and ns.QuestCamActive() and db["event" .. ns.QuestCamEvent() .. "Cine"] then
+	if ns.QuestCamActive and ns.QuestCamActive() and ns.TriggerSetting(ns.QuestCamEvent(), "cine") then
 		return true
 	end
 	-- (Dead with the death camera on, CineMode stays: the release popup shows over it.)
-	if db.deathCine and ns.IsDeathCinematic() then
+	if ns.IsDeathCinematic() and ns.TriggerSetting("Death", "cine") then
 		return true
 	end
 	-- Auto-walking and auto-running start it as their camera would. Strafing
@@ -161,7 +160,7 @@ function ns.TriggerStartsCine()
 	local travel = (ns.IsRPWalking and ns.IsRPWalking() and "walk")
 		or (ns.IsAutoRunning and ns.IsAutoRunning() and "run") or nil
 	if travel then
-		ns.travelCine = db[travel .. "Cine"] and db[travel .. "Camera"] ~= "none"
+		ns.travelCine = ns.TriggerSetting(travel == "walk" and "Walk" or "Run", "cine")
 			and not ns.IsCameraOffHere(travel) or false
 	elseif not (ns.autoRunning and ns.playerMoving and not ns.OnTaxi()) then
 		ns.travelCine = false
@@ -171,7 +170,7 @@ function ns.TriggerStartsCine()
 	end
 	-- (A camera started from its key binding always does: you asked for it.)
 	local key = ns.ActiveEvent()
-	return key == "Manual" or (key ~= nil and db["event" .. key .. "Cine"] == true)
+	return key == "Manual" or (key ~= nil and ns.TriggerSetting(key, "cine") == true)
 end
 
 -- Taking a flight: the flight camera runs, unless the event is set to no camera.
@@ -181,7 +180,7 @@ function ns.FlightStarted()
 	return ns.db ~= nil and ns.OnTaxi() and flightSince ~= nil
 end
 function ns.FlightCameraOn()
-	return ns.FlightStarted() and ns.db.eventFlightCamera ~= "none" and not ns.IsCameraOffHere("flight")
+	return ns.FlightStarted() and not ns.IsCameraOffHere("flight")
 end
 -- Emote token -> its event. Over once you move, jump or do another emote.
 local EMOTE_EVENTS = {
@@ -977,9 +976,10 @@ end
 local function IsMouseOnCamera()
 	-- Fishing: a quick click (right-clicking the bobber) isn't moving the camera;
 	-- only holding the button down a moment is. Same in the quest cam (clicking
-	-- the quest giver again for their next quest).
+	-- the quest giver again for their next quest; not once their window's
+	-- closed: the drift still going fought your turn for that moment).
 	if mouseCameraHeld and ((ns.IsFishingEvent and ns.IsFishingEvent())
-		or (ns.QuestCamActive and ns.QuestCamActive())) then
+		or (ns.QuestCamWindowOpen and ns.QuestCamWindowOpen())) then
 		return GetTime() - mouseCameraHeld >= 0.4
 	end
 	return mouseCameraHeld and true or (IsMouselooking and IsMouselooking()) or false
@@ -1184,13 +1184,11 @@ function ns.GetWeaponDebug()
 	}
 end
 
--- The camera an event is set to on the Camera Triggers page, or nil for none.
+-- The camera an event starts here and now, or nil for none: the first of
+-- its rows on the Cameras page whose When fits (CameraRows.lua).
 local function EventCamera(key)
-	local camera = key and ns.db["event" .. key .. "Camera"]
+	local camera = key and ns.TriggerSetting(key, "camera")
 	if camera and camera ~= "none" then
-		if key == "Hearth" or key == "Teleport" then
-			return "tele" -- (its only camera; early test versions saved "cozy")
-		end
 		return camera
 	end
 end
@@ -1393,7 +1391,7 @@ end
 -- "vista", "fish", "afk" or "tele"), or nil. A Hearthstone or teleport cast
 -- comes first, then logging out, going AFK, the latest emote (or seat), a
 -- drawn weapon and a campfire buff; one set to no camera is passed over, and
--- one whose camera is turned off here (Camera Modes page) doesn't count.
+-- one whose camera is turned off here (Cameras page) doesn't count.
 local EVENT_CAM = { cozy = "cozy", vista = "vista", fish = "fish", afk = "idle", tele = "tele" }
 -- Asked a dozen times a frame (the tick, the orbit, the focus haze...), so
 -- worked out once a frame. What it goes by changes with events and key
@@ -1453,7 +1451,7 @@ function ns.IsEventAFK()
 end
 
 -- Whether standing still past the delay can run the AFK camera: Stand still
--- (Camera Triggers page) set to it, or another event on (one set to the AFK
+-- (Cameras page) set to it, or another event on (one set to the AFK
 -- camera, or whose own camera takes over). With Stand still set to another
 -- camera or none, just standing there doesn't start it.
 function ns.StillRunsAFK()
@@ -1473,7 +1471,7 @@ local CALM_CENTER_YAW = 70
 local CALM_CENTER_PITCH = 40
 local lastCombatAt = -math.huge
 ns.OnCalmEnd(function(cut) lastCombatAt = math.min(lastCombatAt, cut) end)
--- Cameras ticked under Calm Timer (Camera Modes page, <cam>CalmWait) hold
+-- Cameras whose row (Cameras page) has Wait for the Calm Timer ticked hold
 -- off until the Calm Timer (calmTime) has run out after a fight; the rest
 -- start straight away. Looked up by mode ("run"), orbit prefix ("runOrbit")
 -- or camera ("quest"); the flight camera's mode is "taxi".
@@ -1482,7 +1480,7 @@ local CALM_CAM = { taxi = "flight" }
 function ns.CombatWaitOver(mode, now)
 	local cam = (mode:gsub("Orbit$", ""))
 	cam = CALM_CAM[cam] or cam
-	return not ns.db[cam .. "CalmWait"] or now - lastCombatAt >= (ns.db.calmTime or 0)
+	return not ns.CameraWaitsForCalm(cam) or now - lastCombatAt >= (ns.db.calmTime or 0)
 end
 local lastAnyTurnAt = -math.huge
 local followArmed = false -- turn hold-and-glide ready (not armed mid-turn)
@@ -2403,7 +2401,7 @@ end
 -- Dead with the death camera to watch: cinematic mode stays on (popups like
 -- the release button aren't faded, so it's still there).
 function ns.IsDeathCinematic()
-	return ns.db.deathOrbit and ns.IsDead() and not ns.IsCameraOffHere("death")
+	return ns.IsDead() and not ns.IsCameraOffHere("death")
 end
 
 -- Your own zooming: you've picked a distance, so the death camera leaves it.
@@ -2946,7 +2944,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 		ns.deathTestUntil = nil -- (the death camera test too)
 		ns.deathTestLying = nil -- (and you're up already)
 	end
-	-- An event (Camera Triggers page) for the cozy, vista or AFK camera: no waiting; the
+	-- An event (Cameras page) for the cozy, vista or AFK camera: no waiting; the
 	-- AFK camera's timer counts as run, for the tint, tooltips and music too.
 	local vista = ns.IsVista()
 	local fish = ns.IsFish()

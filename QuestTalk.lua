@@ -861,6 +861,15 @@ local cursor                       -- how far down the panel the next thing goes
 local panelWidth = PANEL_WIDTH     -- the card's width now
 local Draggable                    -- (below)
 
+-- On parchment, text as the game's quest and gossip windows have it: dark
+-- ink with no shadow (a shadow under black text smudges it). After
+-- SetFontObject, which brings the font's own shadow back.
+local function Shade(fs)
+	if ink == INK.parchment then
+		fs:SetShadowOffset(0, 0)
+	end
+end
+
 local function ResetPanel()
 	for i = 1, rowCount do rows[i]:Hide() end
 	for i = 1, iconCount do icons[i]:Hide() end
@@ -881,6 +890,7 @@ local function AddText(words, font, color, gap)
 		texts[textCount] = fs
 	end
 	fs:SetFontObject(font or "GameFontHighlight")
+	Shade(fs)
 	fs:SetWidth(panelWidth - 28)
 	fs:SetText(words)
 	fs:SetTextColor(unpack(Ink(color) or ink.text))
@@ -963,8 +973,17 @@ local function AddRow(entry)
 		key = #keyed + 1
 		keyed[key] = entry.onClick
 	end
+	-- (On parchment, the words in the game's gossip font, as its window has
+	-- them; each time, as a row is reused across looks.)
+	row.text:SetFontObject(ink == INK.parchment and "QuestFont" or "GameFontHighlight")
+	row.key:SetFontObject(ink == INK.parchment and "QuestFont" or "GameFontDisableSmall")
+	row.tag:SetFontObject("GameFontNormalSmall")
+	Shade(row.text)
+	Shade(row.key)
+	Shade(row.tag)
 	-- (Its number: the key that picks it, shown only while the keys do.)
 	row.key:SetText(key and Setting("questTalkKeys") and tostring(key % 10) or "")
+	row.key:SetTextColor(unpack(ink == INK.parchment and ink.dim or GREY))
 	row.icon:SetTexture(entry.icon)
 	row.icon:SetDesaturated(entry.dim or entry.locked or false)
 	row.icon:SetShown(entry.icon ~= nil)

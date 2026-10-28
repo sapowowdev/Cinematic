@@ -41,22 +41,24 @@ ns.PROFILE_SLOTS = {
 -- settings, a question, its default (the choice a profile that picks none
 -- has), and its choices. A choice: part (its key, what profiles pick it
 -- by), label and line (what players read), client (only there),
--- hidden (only for profiles, not offered), made (a layout Cinematic makes
+-- hidden (only for profiles, not offered; a client's name: not offered
+-- there), made (a layout Cinematic makes
 -- and adds to Edit Mode for you, tagged so in Customize), and modules (each a module's key,
 -- or { forever = key, retail = key }).
 ns.SLOT_CHOICES = {
 	layout = { label = "Layout", page = "Profiles", question = "Where should your bars and menus sit?",
 		default = "own", choices = {
+		-- (Cinematic's own layouts first, then the player's and the game's)
+		{ part = "retail", client = "forever", label = "Retail Inspired", made = true,
+			line = "Action bars centered along the bottom, menus in the corner", modules = { "layout-retail" } },
+		{ part = "forever", client = "retail", hidden = true, label = "Like WoW Forever",
+			line = "Laid out like WoW Forever's default", modules = { "layout-forever" } },
+		{ part = "pure", client = "retail", label = "Personal Resource Centered", made = true,
+			line = "Your resources in the middle, the Cooldown Manager above", modules = { "layout-pure" } },
 		{ part = "own", label = "Your own", line = "Cinematic leaves your Edit Mode layout as it is",
 			modules = {} },
 		{ part = "preset", client = "forever", label = "WoW Forever's", line = "The game's own layout",
 			modules = { "layout-preset" } },
-		{ part = "retail", client = "forever", label = "Like retail", made = true,
-			line = "Action bars centered along the bottom, menus in the corner", modules = { "layout-retail" } },
-		{ part = "forever", client = "retail", hidden = true, label = "Like WoW Forever",
-			line = "Laid out like WoW Forever's default", modules = { "layout-forever" } },
-		{ part = "pure", client = "retail", label = "Resources in the middle", made = true,
-			line = "Your resources in the middle, the Cooldown Manager above", modules = { "layout-pure" } },
 	} },
 	frames = { label = "Interface", page = "Standard Frames", question = "When does your UI fade?",
 		default = "standard", choices = {
@@ -72,22 +74,26 @@ ns.SLOT_CHOICES = {
 		{ part = "standard", label = "Softly", line = "Between fights, with the minimap and group plates as usual",
 			modules = { "recovering" } },
 	} },
-	bars = { label = "Action bars", page = "Mouseover groups", question = "How do your action bars come back?",
+	bars = { label = "Action bars", page = "Mouseover groups", question = "Hide/Show Action Bars in Combat",
 		default = "standard", choices = {
-		{ part = "grouped", label = "All together", line = "Point at one and the bars, menus and XP bar come up",
-			modules = {} },
-		{ part = "split", label = "Each on its own", line = "Point at the bars, the menus or the XP bar",
-			modules = { "retail-groups", "micro-off-in-fights" } },
-		{ part = "cdm", label = "Cooldown Manager", line = "The Cooldown Manager in fights, pet and stance bars too",
-			modules = { { retail = "retail-groups" }, "cdm", "micro-off-in-fights" } },
-		{ part = "pure", label = "Cooldown Manager only", line = "In fights just the Cooldown Manager: no bars or menus",
+		{ part = "always", label = "Always Show", line = "Your action bars stay up all through CineMode",
+			modules = { "bars-always" } },
+		{ part = "grouped", label = "Action Bars (Classic Group)",
+			line = "Point at one and the bars, menus and XP bar come up", modules = {} },
+		-- (Retail Group: on retail the client's own, standard, which is the
+		-- default there; on Forever, whose own is Classic Group, split.)
+		{ part = "split", hidden = "retail", label = "Action Bars (Retail Group)",
+			line = "Point at the bars, the menus or the XP bar", modules = { "retail-groups", "micro-off-in-fights" } },
+		{ part = "standard", client = "retail", label = "Action Bars (Retail Group)",
+			line = "Point at the bars, the menus or the XP bar", modules = { { retail = "retail-groups" } } },
+		{ part = "pure", label = "Cooldown Manager", line = "In fights just the Cooldown Manager: no bars or menus",
 			modules = { { retail = "retail-groups" }, "pure-cdm" } },
-		-- (The client's own: retail's bars each on their own, Forever's together,
-		-- which is All together there, so it's offered on retail only.)
-		{ part = "standard", client = "retail", label = "Retail's own",
-			line = "Each on its own, the micro menu up in fights", modules = { { retail = "retail-groups" } } },
+		-- (Only the retired CDM profiles'.)
+		{ part = "cdm", hidden = true, label = "Cooldown Manager, pet and stance bars",
+			line = "The Cooldown Manager in fights, pet and stance bars too",
+			modules = { { retail = "retail-groups" }, "cdm", "micro-off-in-fights" } },
 	} },
-	camera = { label = "Camera", page = "Camera Modes", question = "When does the camera move on its own?",
+	camera = { label = "Camera", page = "Cameras", question = "When does the camera move on its own?",
 		default = "standard", choices = {
 		{ part = "pure", label = "All the time", line = "Every camera, standing still too, and none waits after a fight",
 			modules = { "pure-cameras" } },

@@ -3,9 +3,9 @@ local _, ns = ...
 local L = ns.L
 
 -- Each page is a canvas (registered with the Settings panel) holding a scroll
--- frame; the panel/cameraPanel/extrasPanel variables are the scrolling content
+-- frame; the panel/extrasPanel variables are the scrolling content
 -- that the widgets are built on.
-local panel, category, extrasPanel, cameraPanel, chatPanel
+local panel, category, extrasPanel, chatPanel
 local mainCanvas
 local controls = {}   -- widgets that mirror a db key, refreshed on show
 -- The settings each page's controls show (page content frame -> key -> true),
@@ -920,8 +920,8 @@ local function CreatePanel()
 
 	local fadeUI = Check(panel, "fadeUI", L["Start in CineMode (Fade UI, Queue Music, etc.)"],
 		L["Off: the UI stays as it is and the camera's left to you, with just the visual effects " ..
-		"over it (as the Visual Effects page says), as in the Subtle profile. Events ticked in " ..
-		"the Camera Triggers page's CineMode column still bring CineMode on while their camera " ..
+		"over it (as the Visual Effects page says), as in the Subtle profile. Triggers with CineMode " ..
+		"ticked on the Cameras page still bring CineMode on while their camera " ..
 		"runs: standing still or going AFK, say, for a screensaver."])
 	fadeUI:SetPoint("TOPLEFT", enabled, "BOTTOMLEFT", 0, -2)
 
@@ -1192,8 +1192,7 @@ do
 			{ "Gamepad", "Interface\\Icons\\INV_Gizmo_01" },
 		} },
 		{ name = "Camera", pages = {
-			{ "Camera Modes", "Interface\\Icons\\INV_Misc_Spyglass_03" },
-			{ "Camera Triggers", "Interface\\Icons\\Spell_Nature_Lightning" },
+			{ "Cameras", "Interface\\Icons\\INV_Misc_Spyglass_03" },
 			{ "Camera Settings", "Interface\\Icons\\Trade_Engineering" }, -- (an icon per camera instead)
 		} },
 		-- (label: the name on its icon, when the page is registered under another)
@@ -1214,23 +1213,23 @@ do
 			{ "Vitals Vision", "Interface\\Icons\\Spell_Shadow_LifeDrain02" },
 			{ "Wind Guide", "Interface\\Icons\\Spell_Nature_Cyclone" },
 		} },
-		-- (WheelsPage.lua's pages)
-		{ name = "Wheels", pages = {
-			{ "Master wheel", "Interface\\Icons\\Spell_Nature_WispSplode" },
-			{ "Your wheels", "Interface\\Icons\\INV_Misc_Note_01" },
-			{ "Camera wheel", "Interface\\Icons\\INV_Misc_Spyglass_03" },
-			{ "Menu wheel", "Interface\\Icons\\INV_Misc_Gear_01" },
-			{ "Marker wheel", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8" },
-			{ "Ground marker wheel", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_6" },
-			{ "Vision wheel", "Interface\\Icons\\Ability_EyeOfTheOwl" },
-		} },
 		{ name = "Audio", pages = {
 			{ "Audio", "Interface\\Icons\\INV_Misc_Drum_01" },
 		} },
+		-- (group: an icon of its own that opens a second row with the pages
+		-- under it; the wheels are WheelsPage.lua's pages)
 		{ name = "Quality of life", pages = {
 			{ "General", "Interface\\Icons\\INV_Misc_Bag_07" },
 			{ "Fishing", "Interface\\Icons\\Trade_Fishing" },
 			{ "Hunter", "Interface\\Icons\\INV_Weapon_Bow_07" },
+			{ "Wheels", "Interface\\Icons\\INV_Jewelry_Ring_03", group = true },
+			{ "Master wheel", "Interface\\Icons\\Spell_Nature_WispSplode", under = "Wheels" },
+			{ "Your wheels", "Interface\\Icons\\INV_Misc_Note_01", under = "Wheels" },
+			{ "Camera wheel", "Interface\\Icons\\INV_Misc_Spyglass_03", under = "Wheels" },
+			{ "Menu wheel", "Interface\\Icons\\INV_Misc_Gear_01", under = "Wheels" },
+			{ "Marker wheel", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8", under = "Wheels" },
+			{ "Ground marker wheel", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_6", under = "Wheels" },
+			{ "Vision wheel", "Interface\\Icons\\Ability_EyeOfTheOwl", under = "Wheels" },
 		} },
 		-- (WhatsNew.lua's pages, after Keybinds)
 		{ name = "Community", pages = {
@@ -1246,40 +1245,78 @@ do
 	local BAR = 30 -- (the search box and Reset page, above the icons)
 	local byName = {} -- tile by the name its page was registered under (English or shown)
 
-	local function Select(tile)
-		local hub = tile.hub
-		if hub.current == tile then return end
-		local previous = hub.current
-		if previous then
-			if previous.canvas ~= tile.canvas then previous.canvas:Hide() end
-			previous.border:SetColorTexture(0.45, 0.38, 0.2, 1)
-			previous.icon:SetDesaturated(true)
-		end
-		hub.current = tile
-		tile.border:SetColorTexture(1, 0.82, 0, 1)
-		tile.icon:SetDesaturated(false)
-		if tile.onSelect then tile.onSelect() end
-		tile.canvas:Show()
-		-- (Reset page: for a page with settings of its own)
-		hub.reset:SetShown(pageKeys[tile.resetContent or tile.canvas.content] ~= nil)
-	end
-
 	-- Icons in rows across the page's width, the picked page filling the rest.
+	-- A group's pages get a row of their own below, while one of them is shown.
 	local function Layout(hub)
 		local width = hub.frame:GetWidth()
 		if not width or width <= 0 then return end
 		local perRow = math.max(1, math.floor((width - 2 * EDGE + TILE_GAP) / (TILE + TILE_GAP)))
-		for i, tile in ipairs(hub.tiles) do
-			local column, row = (i - 1) % perRow, math.floor((i - 1) / perRow)
+		local column, row = 0, 0
+		local function Place(tile)
+			if column >= perRow then column, row = 0, row + 1 end
 			tile:ClearAllPoints()
 			tile:SetPoint("TOPLEFT", hub.frame, "TOPLEFT", EDGE + column * (TILE + TILE_GAP),
 				-BAR - EDGE - row * (TILE + TILE_GAP))
+			tile:Show()
+			column = column + 1
 		end
-		local rows = math.ceil(#hub.tiles / perRow)
+		for _, tile in ipairs(hub.tiles) do
+			if not tile.under then Place(tile) end
+		end
+		if hub.openGroup then column = perRow end -- (its pages on a new row)
+		for _, tile in ipairs(hub.tiles) do
+			if tile.under then
+				if tile.under == hub.openGroup then Place(tile) else tile:Hide() end
+			end
+		end
+		local rows = #hub.tiles > 0 and row + 1 or 0
 		hub.host:ClearAllPoints()
 		hub.host:SetPoint("TOPLEFT", hub.frame, "TOPLEFT", 0,
 			-BAR - EDGE - rows * (TILE + TILE_GAP) + TILE_GAP - 4)
 		hub.host:SetPoint("BOTTOMRIGHT")
+	end
+
+	local function Light(tile, lit)
+		if lit then tile.border:SetColorTexture(1, 0.82, 0, 1)
+		else tile.border:SetColorTexture(0.45, 0.38, 0.2, 1) end
+		tile.icon:SetDesaturated(not lit)
+	end
+
+	local function Select(tile)
+		local hub = tile.hub
+		-- (a group's icon: the page last shown under it, or its first)
+		if tile.group then
+			local pick = tile.lastPicked
+			if not pick then
+				for _, other in ipairs(hub.tiles) do
+					if other.under == tile.group then pick = other break end
+				end
+			end
+			if pick then Select(pick) end
+			return
+		end
+		if hub.current == tile then return end
+		local previous = hub.current
+		if previous then
+			if previous.canvas ~= tile.canvas then previous.canvas:Hide() end
+			Light(previous, false)
+		end
+		hub.current = tile
+		Light(tile, true)
+		if tile.onSelect then tile.onSelect() end
+		tile.canvas:Show()
+		-- (Reset page: for a page with settings of its own)
+		hub.reset:SetShown(pageKeys[tile.resetContent or tile.canvas.content] ~= nil)
+		-- Its group's icon lit and its row shown; another group's put away.
+		local groupTile = tile.under and hub.groupTiles[tile.under]
+		if groupTile then groupTile.lastPicked = tile end
+		if hub.openGroup ~= tile.under then
+			local was = hub.openGroup and hub.groupTiles[hub.openGroup]
+			if was then Light(was, false) end
+			hub.openGroup = tile.under
+			if groupTile then Light(groupTile, true) end
+			Layout(hub)
+		end
 	end
 
 	-- (made when its first page comes, so it's listed where that page would be)
@@ -1287,7 +1324,7 @@ do
 		local frame = CreateFrame("Frame")
 		frame.name = L[hub.name]
 		frame.parent = "Cinematic"
-		hub.frame, hub.tiles = frame, {}
+		hub.frame, hub.tiles, hub.groupTiles = frame, {}, {}
 		hub.host = CreateFrame("Frame", nil, frame)
 		hub.host:SetPoint("TOPLEFT", 0, -EDGE)
 		hub.host:SetPoint("BOTTOMRIGHT")
@@ -1366,8 +1403,19 @@ do
 		for _, hub in ipairs(HUBS) do
 			for order, page in ipairs(hub.pages) do
 				local english = page[1]
-				if name == english or name == L[english] then
+				if not page.group and (name == english or name == L[english]) then
 					if not hub.frame then CreateHub(hub) end
+					-- (its group's icon, made with the group's first page)
+					if page.under and not hub.groupTiles[page.under] then
+						for groupOrder, group in ipairs(hub.pages) do
+							if group.group and group[1] == page.under then
+								local groupTile = CreateTile(hub, nil, group[1], group[2])
+								groupTile.group, groupTile.order = group[1], groupOrder
+								hub.groupTiles[group[1]] = groupTile
+								hub.tiles[#hub.tiles + 1] = groupTile
+							end
+						end
+					end
 					canvas:SetParent(hub.host)
 					canvas:ClearAllPoints()
 					canvas:SetAllPoints(hub.host)
@@ -1379,6 +1427,7 @@ do
 					for i, tab in ipairs(tabs) do
 						local tile = CreateTile(hub, canvas, tab.name, tab.icon, tab.label)
 						tile.order = order + i / 100
+						tile.under = page.under
 						tile.onSelect, tile.resetContent = tab.onSelect, tab.resetContent
 						if tab.setSelect then
 							tab.setSelect(function() Select(tile) end)
@@ -1869,104 +1918,12 @@ local function BuildZoomControls(parent, prefix, anchor)
 	return zoomPastMax
 end
 
--- Sub-page: the camera modes, and the settings they share.
--- The camera modes' switch, on both the Camera Modes and Camera Triggers
--- pages (one setting): off, no camera mode starts, and both pages and the
--- Camera Settings page grey out.
+-- The camera modes' switch, on the Cameras page: off, no camera mode
+-- starts, and it and the Camera Settings page grey out.
 local function CameraModesSwitch(content, anchor)
 	return PageSwitch(content, "cameraModes", L["Enable page"],
-		L["On: the camera modes start as the Camera Modes and Camera Triggers pages say. Off: none of " ..
-		"them ever starts, and the camera is left to you; CineMode still fades the UI. The same switch " ..
-		"is on both pages."], anchor)
-end
-
-local function CreateCameraPanel()
-	local cameraCanvas
-	cameraCanvas, cameraPanel = CreateScrollPage()
-
-	local title = Label(cameraPanel, "GameFontNormalLarge", L["Camera Modes"])
-	title:SetPoint("TOPLEFT", 16, -16)
-
-	local subtitle = PageIntro(cameraPanel, title,
-		L["While CineMode is on, the camera comes alive in eight situations: Flight (on " ..
-		"flight paths), AFK (once you've stood still a while, or go AFK), Cozy (campfires and " ..
-		"emotes), Tele (casting your Hearthstone or a teleport), Vista (/stare), Fish (fishing), " ..
-		"RP Walk (auto-walking) and Auto-run. Moving by hand cancels them all. Death Cam turns " ..
-		"round your body when you die, and Quest Cam swings behind you at quest givers. The Camera Triggers page picks which camera each emote or " ..
-		"event starts. Everything goes back to normal when the UI returns. The settings here apply " ..
-		"to all of them."] .. "\n\n" ..
-		L["In the camera modes, the minimap and quest tracker hover holds and the buff and chat " ..
-		"peeks use their short default times, so they clear the view quickly."])
-
-	-- Runs in: a row per camera (below).
-	local switch = CameraModesSwitch(cameraPanel, subtitle)
-	local offHeader = Header(cameraPanel, L["Runs in"], switch, -18)
-	offHeader:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -18)
-	local offNote = PageIntro(cameraPanel, offHeader,
-		L["Where each camera can start. Anywhere else it doesn't (and stops if it's running): the UI stays " ..
-		"faded, with the camera left to you. With the Death Cam off, dying brings the UI back as usual. " ..
-		"To keep the normal UI somewhere instead, use Turn off in on the main page. For flights, Cities " ..
-		"means taking off from one, and Open World taking off anywhere else. Combat's Wait for the Calm " ..
-		"Timer: that camera waits until the Calm Timer (CineMode page) has run out after a fight."])
-	-- A row per camera, as the Standard Frames page's (GridRows.lua): where
-	-- it runs (a flight: where it takes off), and, in Combat, whether it waits
-	-- for the Calm Timer. Flights never start in instances; the Death Cam
-	-- can't wait (you die in a fight).
-	local camRows = { opts = { anyFight = true } }
-	for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
-		local alwaysKey, calmKey = "camAlways" .. cam[1], cam[1] .. "CalmWait"
-		local omit = { combatShow = true, enemyShow = true, friendlyShow = true }
-		for where in pairs(ns.CAMERA_OFF_NEVER[cam[1]] or {}) do
-			omit[where == "BGs" and "bgShow" or "instanceShow"] = true
-		end
-		local calmItem = not ns.CALM_WAIT_NEVER[cam[1]] and { L["Wait for the Calm Timer"],
-			function() return ns.GetDB()[calmKey] and true or false end,
-			function() ns.GetDB()[calmKey] = not ns.GetDB()[calmKey] end, nil,
-			L["The %s Cam waits until the Calm Timer has run out after a fight."]:format(cam[2]) } or nil
-		camRows[#camRows + 1] = { key = "cam:" .. cam[1], label = cam[2], alwaysKey = alwaysKey,
-			recordKeys = calmItem and { calmKey } or nil,
-			alwaysOn = function() return ns.GetDB()[alwaysKey] end,
-			setAlways = function(value) ns.GetDB()[alwaysKey] = value end,
-			alwaysTip = L["Runs wherever you are."],
-			opts = { omit = omit, calmItem = calmItem } }
-	end
-	local lastRow = ns.ShowTable(cameraPanel, offNote, camRows, L["Camera Modes"])
-
-	-- Indoors: hidden for now (true brings it back); the settings keep working
-	-- at their values.
-	local SHOW_INDOOR_SETTINGS = false
-	if SHOW_INDOOR_SETTINGS then
-		local indoorHeader = Header(cameraPanel, L["Indoors"], lastRow, -24)
-		local indoorLimits = Check(cameraPanel, "indoorLimits", L["Limit the camera indoors"],
-			L["Inside buildings and caves, the camera modes zoom out less and swing less, so the " ..
-			"camera doesn't keep pushing into walls and ceilings. Uses the game's own indoor check."])
-		indoorLimits:SetPoint("TOPLEFT", indoorHeader, "BOTTOMLEFT", -2, -6)
-		indoorLimits:HookScript("OnClick", Refresh) -- grey out / enable the options below
-		local function IfIndoorLimits(db) return db.indoorLimits end
-
-		local indoorZoom = Slider(cameraPanel, "indoorZoomOut", L["Zoom out indoors up to"], 0, 10, 0.5, L["%.1f yards"])
-		indoorZoom:SetPoint("TOPLEFT", indoorLimits, "BOTTOMLEFT", 4, -26)
-		Tooltip(indoorZoom, L["How far past your own distance the slow zoom may pull back indoors. It " ..
-			"also never raises the max zoom distance indoors. Walking in pulled back, the camera " ..
-			"glides in to this."])
-		GreyUnless(indoorZoom, IfIndoorLimits)
-
-		local indoorSwing = Slider(cameraPanel, "indoorSwing", L["Swing indoors up to"], 0, 90, 5, "%d°")
-		indoorSwing:SetPoint("TOPLEFT", indoorZoom, "BOTTOMLEFT", 0, -34)
-		Tooltip(indoorSwing, L["How far either side of behind the flight, RP walk and auto-run cameras " ..
-			"may swing indoors."])
-		GreyUnless(indoorSwing, IfIndoorLimits)
-
-		local indoorSweep = Check(cameraPanel, "indoorNoSweep", L["No AFK camera sweep indoors"],
-			L["The AFK camera sweeps right round your character, which can bump into walls " ..
-			"in tight rooms. Its zoom still runs (within the limit above)."])
-		indoorSweep:SetPoint("TOPLEFT", indoorSwing, "BOTTOMLEFT", -4, -14)
-		GreyUnless(indoorSweep, IfIndoorLimits)
-	end
-
-	cameraCanvas:SetScript("OnShow", PageShown(Refresh, cameraPanel))
-	cameraCanvas:Hide()
-	RegisterSubpage(cameraCanvas, L["Camera Modes"])
+		L["On: the cameras start as the rows below say. Off: none of them ever starts, and the camera is " ..
+		"left to you; CineMode still fades the UI. The Camera Settings page greys out with it."], anchor)
 end
 
 -- Camera rotation settings, built once per profile (taxiOrbit* for flights,
@@ -2284,10 +2241,6 @@ local function CreateCameraModePanel(opts)
 	end
 
 	stack:Header(content, L["Starting"])
-	if opts.instantKey then
-		stack:Add(Check(content, opts.instantKey, L["Start CineMode as soon as you %s"]:format(opts.instantWhen),
-			L["Skips the wait before fading, so the UI fades and the camera starts moving straight away."]), "check")
-	end
 	if opts.start then
 		opts.start(content, stack)
 	end
@@ -2380,42 +2333,7 @@ local function ListBox(parent, key, width, tip, onSave)
 	return box
 end
 
--- Sub-page: events (emotes, a campfire, going AFK...) and the camera each starts.
-local EVENT_CAMERAS = {
-	{ value = "cozy", text = L["Cozy camera"] },
-	{ value = "vista", text = L["Vista camera"] },
-	{ value = "fish", text = L["Fish camera"] },
-	{ value = "afk", text = L["AFK camera"] },
-	{ value = "none", text = L["No camera"] },
-}
-local FLIGHT_CAMERAS = {
-	{ value = "flight", text = L["Flight camera"] },
-	{ value = "none", text = L["No camera"] },
-}
-local WALK_CAMERAS = {
-	{ value = "walk", text = L["RP walk camera"] },
-	{ value = "none", text = L["No camera"] },
-}
-local RUN_CAMERAS = {
-	{ value = "run", text = L["Auto-run camera"] },
-	{ value = "none", text = L["No camera"] },
-}
-local DEATH_CAMERAS = {
-	{ value = true, text = L["Death camera"] },
-	{ value = false, text = L["No camera"] },
-}
-local QUEST_CAMERAS = {
-	{ value = "quest", text = L["Quest camera"] },
-	{ value = "none", text = L["No camera"] },
-}
-local CHAT_CAMERAS = {
-	{ value = "chat", text = L["Chat camera"] },
-	{ value = "none", text = L["No camera"] },
-}
-local TELE_CAMERAS = {
-	{ value = "tele", text = L["Tele camera"] },
-	{ value = "none", text = L["No camera"] },
-}
+-- Each event's tip (the Cameras page's rows).
 local EVENT_TIPS = {
 	Campfire = L["Standing or sitting still with any of the buffs listed below (like Welcoming Campfire)."],
 	Sit = L["Doing the emote (or pressing the sit key). Moving, jumping or another emote ends it."],
@@ -2454,238 +2372,11 @@ local EVENT_TIPS = {
 	QuestGossip = L["Talking to an NPC with a \"(Quest)\" line to pick but no quest to pick up or " ..
 		"hand in: a quest step done by talking to them. Works whether or not CineMode is on."],
 }
-local function CreateEventsPanel()
-	local canvas, content = CreateScrollPage()
-
-	local title = Label(content, "GameFontNormalLarge", L["Camera Triggers"])
-	title:SetPoint("TOPLEFT", 16, -16)
-	local subtitle = PageIntro(content, title,
-		L["What starts the AFK, cozy, vista and fish cameras. Pick a camera for each event; a " ..
-		"Hearthstone or teleport cast comes first, then logging out, going AFK, the latest emote, a " ..
-		"drawn weapon, a campfire, and standing still last. Taking a flight has the flight " ..
-		"camera, talking to a quest giver the quest camera, and auto-walking, auto-running and " ..
-		"dying their own."])
-
-	local CAMERA_X, MUSIC_X, CINE_X = 250, 425, 490
-	local switch = CameraModesSwitch(content, subtitle)
-	local header = Header(content, L["Event"], switch, -20)
-	header:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -20)
-	local cameraHeader = Label(content, "GameFontNormal", L["Camera"])
-	cameraHeader:SetPoint("LEFT", header, "LEFT", CAMERA_X, 0)
-	local musicHeader = Label(content, "GameFontNormal", L["Music"])
-	musicHeader:SetPoint("LEFT", header, "LEFT", MUSIC_X, 0)
-	local MUSIC_TIP = L["Music starts as this event's camera starts, unless the addon started music " ..
-		"within the fatigue time (Audio page). Music already playing just carries on. Off: this " ..
-		"camera never starts music. Needs the Audio page enabled."]
-	local cineHeader = Label(content, "GameFontNormal", "CineMode")
-	cineHeader:SetPoint("LEFT", header, "LEFT", CINE_X, 0)
-	local CINE_TIP = L["With \"Start in CineMode\" off (Cinematic's main page), this event's camera " ..
-		"starting brings CineMode on (the UI fades, music, visual effects), and it ends with the " ..
-		"camera. Tick Stand still and Go AFK for a screensaver: the normal UI while you play, " ..
-		"CineMode once you've been idle a while."]
-	-- A CineMode column switch: only with "Start in CineMode" off and a camera picked.
-	local function CineCheck(cineKey, label, hasCamera)
-		local cine = Check(content, cineKey, "", CINE_TIP)
-		cine:SetPoint("LEFT", label, "LEFT", CINE_X + 18, 0)
-		GreyUnless(cine, function(db)
-			return not db.fadeUI and hasCamera(db)
-		end)
-	end
-	local MUSIC_EXTRA_TIPS = {
-		AFK = L[" While you're flagged AFK, whatever the camera. Off also keeps music from coming back " ..
-			"after a pause while you're away."],
-		Still = L[" Off also keeps music from coming back after a pause while you stand still."],
-	}
-
-	-- A camera choice: a dropdown, or on a client without the modern one a
-	-- button that steps through them.
-	local function CameraChoice(key, choices)
-		local camera = Dropdown(content, key, choices, 150)
-		if camera then
-			return camera
-		end
-		camera = ns.PanelButton(content)
-		camera:SetSize(150, 22)
-		camera:SetScript("OnClick", function()
-			local db = ns.GetDB()
-			for i, choice in ipairs(choices) do
-				if db[key] == choice.value then
-					db[key] = choices[i % #choices + 1].value
-					break
-				end
-			end
-			Refresh()
-		end)
-		camera.Refresh = function(self)
-			for _, choice in ipairs(choices) do
-				if ns.GetDB()[key] == choice.value then self:SetText(choice.text) end
-			end
-		end
-		controls[#controls + 1] = camera
-		return camera
-	end
-
-	local previous, dx = header, 0
-	local shownEvents = {} -- (a WoW Forever event has no row on retail)
-	for _, event in ipairs(ns.EVENTS) do
-		if not (event.forever and ns.isRetail) then shownEvents[#shownEvents + 1] = event end
-	end
-	for _, event in ipairs(shownEvents) do
-		local key = "event" .. event.key
-		local label = Label(content, "GameFontHighlight", event.label)
-		label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", dx, -20)
-		label:SetWidth(CAMERA_X - 10)
-		label:SetWordWrap(false)
-		local hover = CreateFrame("Frame", nil, content)
-		hover:SetAllPoints(label)
-		hover:EnableMouse(true)
-		Tooltip(hover, EVENT_TIPS[event.key])
-
-		local choices = (event.key == "Flight" and FLIGHT_CAMERAS)
-			or ((event.key == "Quest" or event.key == "QuestGossip") and QUEST_CAMERAS)
-			or ((event.key == "Hearth" or event.key == "Teleport") and TELE_CAMERAS) or EVENT_CAMERAS
-		local camera = CameraChoice(key .. "Camera", choices)
-		camera:SetPoint("LEFT", label, "LEFT", CAMERA_X, 0)
-
-		-- Music: the event's own switch; a flight's is the flight camera's.
-		-- Going AFK's covers being AFK whatever the camera, so it isn't greyed
-		-- with the event set to none.
-		local musicKey = (event.key == "Flight" and "musicCamFlight")
-			or (ns.DEFAULTS["event" .. event.key .. "Music"] ~= nil and ("event" .. event.key .. "Music"))
-		if musicKey then
-			local music = Check(content, musicKey, "", MUSIC_TIP .. (MUSIC_EXTRA_TIPS[event.key] or ""))
-			music:SetPoint("LEFT", label, "LEFT", MUSIC_X + 8, 0)
-			GreyUnless(music, function(db)
-				return db.musicInCinematic and (event.key == "AFK" or db[key .. "Camera"] ~= "none")
-			end)
-		end
-		if ns.DEFAULTS[key .. "Cine"] ~= nil then
-			CineCheck(key .. "Cine", label, function(db) return db[key .. "Camera"] ~= "none" end)
-		end
-		previous, dx = label, 0
-
-		if event.key == "Campfire" then
-			local buffBox = ListBox(content, "cozyBuffs", 420, L["Buff names or spell IDs, separated " ..
-				"by commas. Names must match your game language; spell IDs work in any language."],
-				function() if ns.CheckIdleBuffs then ns.CheckIdleBuffs() end end)
-			buffBox:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 26, -8)
-			local note = Label(content, "GameFontHighlightSmall", L["Buffs, separated by commas."])
-			note:SetPoint("TOPLEFT", buffBox, "BOTTOMLEFT", -4, -4)
-			previous, dx = note, -22
-		elseif event.key == "Chair" then
-			local seatBox = ListBox(content, "cozyChairWords", 420, L["Words that mark a seat when " ..
-				"they're in an object's name (\"Wooden Chair\"), separated by commas. Use words in " ..
-				"your game language."])
-			seatBox:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 26, -8)
-			local note = Label(content, "GameFontHighlightSmall", L["Seat words, separated by commas."])
-			note:SetPoint("TOPLEFT", seatBox, "BOTTOMLEFT", -4, -4)
-			previous, dx = note, -22
-		elseif event.key == "Still" then
-			local delay = Slider(content, "idleOrbitDelay", L["After standing still for"], 5, 300, 5, L["%d sec"])
-			delay:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 30, -24)
-			Tooltip(delay, L["How long you stand still before this row's camera starts (an event set to " ..
-				"the AFK camera, like going AFK, skips the wait). Also used by the other options that " ..
-				"mention standing still (tint, tracking, music, tooltips)."])
-			previous, dx = delay, -30
-		elseif event.key == "Quest" or event.key == "QuestGossip" then
-			local delay = Slider(content, event.key == "Quest" and "questCamDelay" or "questCamGossipDelay",
-				L["Wait before starting"], 0, 10, 0.5, L["%.1f sec"])
-			delay:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 30, -24)
-			Tooltip(delay, L["The camera waits this long on the window before starting. Close it " ..
-				"sooner, and it doesn't move at all. 0 starts at once."])
-			GreyUnless(delay, function(db) return db[key .. "Camera"] ~= "none" end)
-			previous, dx = delay, -30
-		end
-	end
-
-	-- Auto-walking, auto-running and dying: their cameras, or none (off: the
-	-- "No camera" value), and Music. (Dying's is the death song, which needs
-	-- only game music.)
-	local rows = {
-		{ label = L["Auto-walk (RP walk)"], cameraKey = "walkCamera", choices = WALK_CAMERAS, off = "none",
-			key = "musicCamWalk", cineKey = "walkCine", delayKey = "walkCameraDelay",
-			delayLabel = L["After auto-walking for"],
-			tip = L["Auto-walking (auto-run in walk mode). The camera's settings are under RP Walk Cam on " ..
-				"the Camera Settings page; Camera Modes turns it off in some places."] },
-		{ label = L["Auto-run"], cameraKey = "runCamera", choices = RUN_CAMERAS, off = "none", key = "musicCamRun",
-			cineKey = "runCine", delayKey = "runCameraDelay", delayLabel = L["After auto-running for"],
-			tip = L["Auto-running. The camera's settings are under Auto-run Cam on the Camera Settings page; Camera Modes turns " ..
-				"it off in some places."] },
-		{ label = L["Die"], cameraKey = "deathOrbit", choices = DEATH_CAMERAS, off = false, key = "deathSong",
-			cineKey = "deathCine",
-			deathSong = true,
-			tip = L["Dying, until you release or are resurrected. The camera's settings are under Death " ..
-				"Cam on the Camera Settings page; Camera Modes turns it off in some places."],
-			musicTip = L["A song of its own plays while the death camera runs, in place of the zone music " ..
-				"(pick the songs under Death Cam on the Camera Settings page). With CineMode music off, " ..
-				"only if your game music is on."] },
-	}
-	if ns.ChatCamCommand then -- (ChatCam.lua: the dev copy only; no music or CineMode switch yet)
-		table.insert(rows, 1, { label = L["NPCs you talk to"], cameraKey = "chatCamera", choices = CHAT_CAMERAS,
-			off = "none", tip = L["An NPC you're talking to (its window open, or closed in the last 30 " ..
-				"seconds), your target, or a party NPC talking (their chat bubbles). The camera zooms in " ..
-				"and swings toward whoever's talking, drifting while they go on, and turns back once no " ..
-				"one's talked for a while. Moving hands the camera straight back to you. Its settings " ..
-				"are under Chat Cam on the Camera Settings page."] })
-		table.insert(rows, 2, { label = L["NPCs chatting nearby"], cameraKey = "chatNearbyCamera",
-			choices = CHAT_CAMERAS, off = "none", delayKey = "chatNearbyDelay",
-			delayLabel = L["After standing still for"],
-			delayTip = L["How long you stand still before NPCs chatting nearby start this row's camera. " ..
-				"0: straight away. Moving starts the count over."],
-			tip = L["Other NPCs talking near you, such as a city's citizens chatting among themselves. " ..
-				"The same chat camera, once you've stood still for the time below, so passers-by " ..
-				"don't swing it about while you're busy."] })
-	end
-	for _, cam in ipairs(rows) do
-		local label = Label(content, "GameFontHighlight", cam.label)
-		label:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", dx, -20)
-		label:SetWidth(CAMERA_X - 10)
-		label:SetWordWrap(false)
-		local hover = CreateFrame("Frame", nil, content)
-		hover:SetAllPoints(label)
-		hover:EnableMouse(true)
-		Tooltip(hover, cam.tip)
-		local camera = CameraChoice(cam.cameraKey, cam.choices)
-		camera:SetPoint("LEFT", label, "LEFT", CAMERA_X, 0)
-		if cam.key then
-			local music = Check(content, cam.key, "", cam.musicTip or MUSIC_TIP)
-			music:SetPoint("LEFT", label, "LEFT", MUSIC_X + 8, 0)
-			GreyUnless(music, function(db)
-				return (cam.deathSong or db.musicInCinematic) and db[cam.cameraKey] ~= cam.off
-			end)
-		end
-		if cam.cineKey then
-			CineCheck(cam.cineKey, label, function(db) return db[cam.cameraKey] ~= cam.off end)
-		end
-		previous, dx = label, 0
-		if cam.delayKey then
-			local delay = Slider(content, cam.delayKey, cam.delayLabel, 0, 60, 1, L["%d sec"])
-			delay:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 30, -24)
-			Tooltip(delay, cam.delayTip or L["How long you keep going before this row's camera starts (and CineMode, " ..
-				"if its CineMode box is ticked). 0: straight away. Stopping or moving by hand first " ..
-				"starts the count over."])
-			GreyUnless(delay, function(db) return db[cam.cameraKey] ~= cam.off end)
-			previous, dx = delay, -30
-		end
-	end
-
-	local note = Label(content, "GameFontHighlightSmall",
-		L["An event set to the AFK camera starts it without waiting out Stand still's time."])
-	note:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", dx, -28)
-	note:SetWidth(520)
-	note:SetJustifyV("TOP")
-
-	canvas:SetScript("OnShow", PageShown(Refresh, content))
-	canvas:Hide()
-	RegisterSubpage(canvas, L["Camera Triggers"])
-end
-
 local function CreateFlightPanel()
 	CreateCameraModePanel({
 		name = L["Flight Cam"],
 		description = L["On flight paths. The camera swings round behind you as you take off, sways " ..
 			"behind you on the way and settles behind you before landing."],
-		instantKey = "taxiInstant", instantWhen = L["take off"],
 		start = function(content, stack)
 			stack:Add(Check(content, "dropTargetOnFlights", L["Drop your target at takeoff"],
 				L["Your target's frames fade as if nothing were targeted, until you pick a new target " ..
@@ -2749,7 +2440,7 @@ local function CreateStandingPanel()
 		name = L["AFK Cam"],
 		description = L["Once you've stood still for a while with the UI faded, or as soon as you " ..
 			"go AFK, the camera slowly sweeps around your character. Moving stops it. What starts it, " ..
-			"and how long you stand still first, is on the Camera Triggers page."],
+			"and how long you stand still first, is on the Cameras page."],
 		inputPauseKey = "idleInputPause",
 		orbitPrefix = "idleOrbit", style = "sweep",
 		rotateLabel = L["Sweep round you"],
@@ -2766,7 +2457,6 @@ local function CreateAutoRunPanel()
 		description = L["While you're auto-running (the auto-run key). Pressing forward or back, or " ..
 			"stopping, ends it; stop and stand, and the AFK camera takes over. Auto-" ..
 			"walking counts as RP walk instead."],
-		instantKey = "runInstant", instantWhen = L["auto-run"],
 		inputPauseKey = "runInputPause",
 		orbitPrefix = "runOrbit", style = "back",
 		rotateLabel = L["Sway behind you"],
@@ -2784,7 +2474,7 @@ local function CreateCozyPanel()
 	CreateCameraModePanel({
 		name = L["Cozy Cam"],
 		description = L["Resting at a campfire, sitting, sleeping, dancing and the like (whichever " ..
-			"events pick it on the Camera Triggers page): the camera swings slowly round to face you, then " ..
+			"events pick it on the Cameras page): the camera swings slowly round to face you, then " ..
 			"sways gently from side to side in front of you, and eases in close. Moving (or standing " ..
 			"up) ends it."],
 		inputPauseKey = "cozyInputPause",
@@ -2812,7 +2502,7 @@ end
 local function CreateVistaPanel()
 	CreateCameraModePanel({
 		name = L["Vista Cam"],
-		description = L["Stop and /stare out at the view (or any event set to it on the Camera Triggers page): " ..
+		description = L["Stop and /stare out at the view (or any event set to it on the Cameras page): " ..
 			"the camera glides round behind you and sways very gently there, looking out the way " ..
 			"you're facing. Like the RP walk camera, only slower and softer. Moving, jumping or " ..
 			"another emote ends it."],
@@ -2835,7 +2525,7 @@ end
 local function CreateFishPanel()
 	CreateCameraModePanel({
 		name = L["Fish Cam"],
-		description = L["Cast Fishing (or any event set to it on the Camera Triggers page): the vista camera, " ..
+		description = L["Cast Fishing (or any event set to it on the Cameras page): the vista camera, " ..
 			"made for fishing. The camera glides round behind you and sways only a little either " ..
 			"side, so your bobber stays in view. It carries on after the cast until you move or jump."],
 		inputPauseKey = "fishInputPause",
@@ -2860,7 +2550,6 @@ local function CreateWalkPanel()
 		description = L["While you're auto-walking (auto-run in walk mode). Walking by hand cancels " ..
 			"the camera, as all moving by hand does. Stop and stand, and the AFK camera takes over. " ..
 			"Walking is recognized from your speed; /cine walk shows what the addon thinks."],
-		instantKey = "walkInstant", instantWhen = L["walk"],
 		inputPauseKey = "walkInputPause",
 		inputPauseTip = L["Keep it short, so it's back in time if you need to steer."],
 		orbitPrefix = "walkOrbit", style = "back",
@@ -2883,15 +2572,11 @@ local function CreateDeathPanel()
 		"slowly round your body until you release or are resurrected. CineMode stays on " ..
 		"(straight away), with the release button (and any soulstone or Reincarnation " ..
 		"button) still showing."], top)
-	local function IfOn(db) return db.deathOrbit end
+	-- (On or off, and its song, are the Die row's camera and Music on the Cameras page.)
+	local function IfOn() return ns.TriggerAnyRow("Death") end
 
 	local stack = Stack(subtitle, "label")
 	stack:Header(content, L["Starting"])
-	local on = stack:Add(Check(content, "deathOrbit", L["Use the death camera"],
-		L["The camera turns steadily round your character while you're dead. Moving the camera " ..
-		"yourself (dragging, camera keys, zooming) hands it back to you: it stops where it is " ..
-		"and doesn't move again until your next death."]), "check")
-	on:HookScript("OnClick", Refresh) -- grey out / enable everything below
 	local delay = stack:Add(Slider(content, "deathOrbitDelay", L["Start after"], 0, 10, 0.5, L["%.1f sec"]), "slider")
 	Tooltip(delay, L["How long after you die before the camera starts turning."])
 	GreyUnless(delay, IfOn)
@@ -2951,16 +2636,11 @@ local function CreateDeathPanel()
 	GreyUnless(banner, IfOn)
 
 	rightStack:Header(content, L["Music"])
-	local song = rightStack:Add(Check(content, "deathSong", L["Play a death song"],
-		L["While the death camera runs, a song picked at random from the list below plays in place " ..
-		"of the zone music. With CineMode music off, only if your game music is on. It stops when you " ..
-		"release or come back."]), "check")
-	song:HookScript("OnClick", Refresh) -- grey out / enable the file box below
-	GreyUnless(song, IfOn)
 	local songBox = ns.SkinEditBox(CreateFrame("EditBox", nil, content, "InputBoxTemplate"))
 	songBox:SetSize(260, 20)
 	songBox:SetAutoFocus(false)
 	rightStack:Add(songBox, "box")
+	RecordKey(content, "deathSongFiles")
 	local function SaveSong(self) ns.GetDB().deathSongFiles = self:GetText() end
 	songBox:SetScript("OnEnterPressed", function(self) SaveSong(self) self:ClearFocus() end)
 	songBox:SetScript("OnEditFocusLost", SaveSong)
@@ -2971,12 +2651,13 @@ local function CreateDeathPanel()
 	songBox.Refresh = function(self)
 		local db = ns.GetDB()
 		if not self:HasFocus() then self:SetText(db.deathSongFiles or "") end
-		self:SetEnabled(db.deathOrbit and db.deathSong)
+		self:SetEnabled(IfOn() and ns.TriggerAnyRow("Death", "music"))
 	end
 	controls[#controls + 1] = songBox
 	Tooltip(songBox, L["Music file IDs, separated by commas; one is picked at random each time " ..
 		"you die (Wowhead lists the IDs on each sound's page). Try one with /cine songtest <ID>."])
-	rightStack:Note(content, L["Music file IDs, separated by commas. One is picked at random."])
+	rightStack:Note(content, L["Music file IDs, separated by commas. One is picked at random while the " ..
+		"Die row's Music is ticked on the Cameras page."], 280)
 end
 
 -- Chat Cam (ChatCam.lua: the dev copy only), started by NPCs talking; laid
@@ -2987,21 +2668,10 @@ local function CreateChatCamPanel()
 		"swings toward whoever's talking (by their chat bubble), drifting slowly while they go on. It " ..
 		"swings again only when someone else speaks, and turns back and zooms out once no one's " ..
 		"talked for a while. Moving, or moving the camera yourself, hands it straight back to you."], top)
-	local function IfOn(db) return db.chatCamera ~= "none" or db.chatNearbyCamera ~= "none" end
+	-- (On or off: its two rows' cameras, on the Cameras page.)
+	local function IfOn() return ns.TriggerAnyRow("Chat") or ns.TriggerAnyRow("ChatNearby") end
 
 	local stack = Stack(subtitle, "label")
-	stack:Header(content, L["Starting"])
-	local on = stack:Add(Check(content, "chatCamera", L["Use the chat camera"],
-		L["Same as setting both the \"NPCs you talk to\" and \"NPCs chatting nearby\" events to the " ..
-		"chat camera (on) or no camera (off) on the Camera Triggers page, where each can be set apart."],
-		function(value)
-			local db = ns.GetDB()
-			db.chatCamera = value and "chat" or "none"
-			db.chatNearbyCamera = db.chatCamera
-			Refresh()
-		end), "check")
-	on.Refresh = function(self) self:SetChecked(IfOn(ns.GetDB())) end
-
 	local rotationHeader = stack:Header(content, L["Rotation"])
 	local speed = stack:Add(Slider(content, "chatCamSwingSpeed", L["Swing speed"], 5, 40, 1, L["%d°/sec"]), "slider")
 	Tooltip(speed, L["The fastest the camera swings toward a new speaker. Each swing speeds up and " ..
@@ -3061,34 +2731,20 @@ local function CreateQuestPanel()
 		"camera zooms in and swings round behind you, looking past you at them. It goes back " ..
 		"once you close the window or move off (your zoom stays if you zoomed yourself meanwhile). Works " ..
 		"whether or not CineMode is on. The \"Talk to a quest giver\" and \"Talk about a quest\" " ..
-		"events on the Camera Triggers page can also turn it off or make it wait a moment."], top)
-	local function IfOn(db) return db.eventQuestCamera ~= "none" or db.eventQuestGossipCamera ~= "none" end
+		"events on the Cameras page can also turn it off or make it wait a moment."], top)
+	-- (On or off, and the wait before starting: its two rows', on the Cameras page.)
+	local function IfOn() return ns.TriggerAnyRow("Quest") or ns.TriggerAnyRow("QuestGossip") end
 
 	local stack = Stack(subtitle, "label")
 	stack:Header(content, L["Starting"])
-	local on = stack:Add(Check(content, "eventQuestCamera", L["Use the quest camera"],
-		L["Same as setting both the \"Talk to a quest giver\" and \"Talk about a quest\" events to " ..
-		"the quest camera (on) or no camera (off) on the Camera Triggers page, where each can be set apart."],
-		function(value)
-			local db = ns.GetDB()
-			db.eventQuestCamera = value and "quest" or "none"
-			db.eventQuestGossipCamera = db.eventQuestCamera
-			Refresh()
-		end), "check")
-	on.Refresh = function(self) self:SetChecked(IfOn(ns.GetDB())) end
 	local gossip = stack:Add(Check(content, "questCamAllGossip", L["Every NPC you talk to"],
 		L["Also for NPCs with nothing to say about quests (innkeepers, guards...), as the \"Talk " ..
 		"to a quest giver\" event. Off: only when they have a quest to offer or take in, or a " ..
 		"\"(Quest)\" line (the \"Talk about a quest\" event)."]), "check")
-	GreyUnless(gossip, function(db) return db.eventQuestCamera ~= "none" end)
+	GreyUnless(gossip, function() return ns.TriggerAnyRow("Quest") end)
 	local mounted = stack:Add(Check(content, "questCamNotMounted", L["Not while mounted"],
 		L["Talking to a quest giver from your mount, the camera stays as it is."]), "check")
 	GreyUnless(mounted, IfOn)
-	local delay = stack:Add(Slider(content, "questCamDelay", L["Wait before starting"], 0, 10, 0.5, L["%.1f sec"]), "slider")
-	Tooltip(delay, L["The camera waits this long on a quest window before starting. Accept a quest and go " ..
-		"sooner, and it doesn't move at all; stay to read, and it starts. Clicking through several " ..
-		"quests, each new window adds a second to the wait. 0 starts at once."])
-	GreyUnless(delay, function(db) return db.eventQuestCamera ~= "none" end)
 
 	-- Left column: rotation, height, over the shoulder
 	local rotationHeader = stack:Header(content, L["Rotation"])
@@ -3180,27 +2836,12 @@ local function CreateTelePanel()
 		"teleport, the camera swings round in front of you, quickly enough to be there before you " ..
 		"go, then spins round you faster and faster as it zooms in. Cancel the cast and it goes " ..
 		"back to where it was; once you're there, it swings round behind you. Its music, haze and " ..
-		"tooltips follow the Cozy Cam's settings. The events on the Camera Triggers page can also make it " ..
+		"tooltips follow the Cozy Cam's settings. The events on the Cameras page can also make it " ..
 		"wait a moment."], sectionTop)
-	local function IfOn(db) return db.eventHearthCamera ~= "none" or db.eventTeleportCamera ~= "none" end
+	-- (On or off: the Hearthstone and teleport rows' cameras, on the Cameras page.)
+	local function IfOn() return ns.TriggerAnyRow("Hearth") or ns.TriggerAnyRow("Teleport") end
 
 	local stack = Stack(subtitle, "label")
-	stack:Header(content, L["Starting"])
-	for _, event in ipairs({
-		{ key = "eventHearthCamera", label = L["When you cast your Hearthstone"],
-			tip = L["Same as the \"Cast your Hearthstone\" event on the Camera Triggers page. Also Astral Recall, " ..
-				"and any spell with \"Hearthstone\" in its name (Dalaran, Garrison, the toys)."] },
-		{ key = "eventTeleportCamera", label = L["When you cast a teleport"],
-			tip = L["Same as the \"Cast a teleport\" event on the Camera Triggers page: a mage's \"Teleport: " ..
-				"Stormwind\" and the like, or a druid's Teleport: Moonglade."] },
-	}) do
-		local check = stack:Add(Check(content, event.key, event.label, event.tip,
-			function(value)
-				ns.GetDB()[event.key] = value and "tele" or "none"
-				Refresh()
-			end), "check")
-		check.Refresh = function(self) self:SetChecked(ns.GetDB()[event.key] ~= "none") end
-	end
 
 	-- Left column: rotation, and after the cast
 	local rotationHeader = stack:Header(content, L["Rotation"])
@@ -3258,11 +2899,11 @@ local function CreateCameraSettingsPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Camera Settings"])
 	title:SetPoint("TOPLEFT", 16, -16)
 	local subtitle = PageIntro(content, title, L["Each camera's own settings. Click a " ..
-		"camera's name to open its settings, and again to close them. The Camera Modes page has the " ..
-		"settings they share, and Camera Triggers what starts each one."])
+		"camera's name to open its settings, and again to close them. The Cameras page has what " ..
+		"starts each one."])
 	cameraSettingsTop = subtitle
 	subtitle.title = title
-	-- (Greyed with the camera modes' switch, which is on Camera Modes and Triggers.)
+	-- (Greyed with the camera modes' switch, which is on the Cameras page.)
 	RegisterPageSwitch(content, "cameraModes")
 
 	CreateFlightPanel()
@@ -4233,7 +3874,7 @@ local function CreateAudioPanel()
 		L["Music fades out once you leave the camera modes and move on: walking off from the cozy " ..
 		"camera, say. Going from one camera straight to another (vista to cozy) keeps it playing, " ..
 		"as does standing still. A fresh track fades in when the next camera starts (standing " ..
-		"still counts once the AFK camera starts, with Go AFK's music on, Camera Triggers page). " ..
+		"still counts once the AFK camera starts, with Go AFK's music on, Cameras page). " ..
 		"Fades at the music fade time."])
 	movingMusic:SetPoint("TOPLEFT", muteHeader, "BOTTOMLEFT", -2, -6)
 
@@ -4391,6 +4032,663 @@ end
 ns.GRID_KIT = { controls = controls, rolesMenu = ROLES_MENU, Label = Label, Tooltip = Tooltip,
 	FrameHeading = FrameHeading, RuleTarget = RuleTarget, RecordKey = RecordKey, RecordRow = RecordRow,
 	Refresh = Refresh, headingHeight = FRAME_HEADING_HEIGHT, ShowBox = ShowBox, RowShown = RowShown }
+
+-- Sub-page: the cameras (CameraRows.lua). A row per trigger (an emote, a
+-- campfire, going AFK, a flight, dying...) and the camera it starts, as the
+-- Nameplates page's Marks grid: a line with chips for what's set apart from
+-- the usual, its settings in a drawer under it (its name, its camera with
+-- Music and CineMode, When it may start, and what its trigger needs: buffs,
+-- seat words, a wait). A copy gives a trigger a second camera somewhere
+-- else: a trigger's rows are tried top to bottom, the first whose When fits
+-- picks the camera.
+local function CreateCamerasPanel()
+	local canvas, content = CreateScrollPage()
+
+	local title = Label(content, "GameFontNormalLarge", L["Cameras"])
+	title:SetPoint("TOPLEFT", 16, -16)
+	local subtitle = PageIntro(content, title,
+		L["While CineMode is on, the camera comes alive when something happens: an emote, a campfire, " ..
+		"going AFK, your Hearthstone, fishing, a flight, a quest giver, auto-walking or dying. Each row is a " ..
+		"trigger and the camera it starts; the Camera Settings page has each camera's own settings. Moving " ..
+		"by hand cancels them all, and everything goes back to normal when the UI returns."] .. "\n\n" ..
+		L["In the camera modes, the minimap and quest tracker hover holds and the buff and chat " ..
+		"peeks use their short default times, so they clear the view quickly."])
+	local switch = CameraModesSwitch(content, subtitle)
+	local header = Header(content, L["Triggers"], switch, -18)
+	header:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 2, -18)
+	local help = PageIntro(content, header,
+		L["When two triggers are on at once, a Hearthstone or teleport cast comes first, then logging out, " ..
+		"going AFK, the latest emote, a drawn weapon, a campfire, and standing still last. Click a row to open " ..
+		"its settings: its camera, Music and CineMode, When it may start, and anything its trigger needs. The " ..
+		"chips beside its name show what's set apart from the usual. Where its When doesn't fit, a row starts no " ..
+		"camera. Untick the box at the start of a row to turn it off for now."])
+
+	-- Each trigger's name and tip (the events' from ns.EVENTS and EVENT_TIPS).
+	local LABELS = { Walk = L["Auto-walk (RP walk)"], Run = L["Auto-run"], Death = L["Die"],
+		Chat = L["NPCs you talk to"], ChatNearby = L["NPCs chatting nearby"] }
+	for _, event in ipairs(ns.EVENTS) do LABELS[event.key] = event.label end
+	local TIPS = {
+		Walk = L["Auto-walking (auto-run in walk mode). The camera's settings are under RP Walk Cam on the " ..
+			"Camera Settings page."],
+		Run = L["Auto-running. The camera's settings are under Auto-run Cam on the Camera Settings page."],
+		Death = L["Dying, until you release or are resurrected. The camera's settings are under Death Cam on " ..
+			"the Camera Settings page."],
+		Chat = L["An NPC you're talking to (its window open, or closed in the last 30 seconds), your target, or " ..
+			"a party NPC talking (their chat bubbles). The camera zooms in and swings toward whoever's talking, " ..
+			"drifting while they go on, and turns back once no one's talked for a while. Moving hands the camera " ..
+			"straight back to you. Its settings are under Chat Cam on the Camera Settings page."],
+		ChatNearby = L["Other NPCs talking near you, such as a city's citizens chatting among themselves. The " ..
+			"same chat camera, once you've stood still for the time below, so passers-by don't swing it about while " ..
+			"you're busy."],
+	}
+	local MUSIC_TIP = L["Music starts as this event's camera starts, unless the addon started music " ..
+		"within the fatigue time (Audio page). Music already playing just carries on. Off: this " ..
+		"camera never starts music. Needs the Audio page enabled."]
+	local MUSIC_TIPS = {
+		AFK = MUSIC_TIP .. L[" While you're flagged AFK, whatever the camera. Off also keeps music from coming back " ..
+			"after a pause while you're away."],
+		Still = MUSIC_TIP .. L[" Off also keeps music from coming back after a pause while you stand still."],
+		Death = L["A song of its own plays while the death camera runs, in place of the zone music " ..
+			"(pick the songs under Death Cam on the Camera Settings page). With CineMode music off, " ..
+			"only if your game music is on."],
+	}
+	local CINE_TIP = L["With \"Start in CineMode\" off (Cinematic's main page), this event's camera " ..
+		"starting brings CineMode on (the UI fades, music, visual effects), and it ends with the " ..
+		"camera. Tick Stand still and Go AFK for a screensaver: the normal UI while you play, " ..
+		"CineMode once you've been idle a while."]
+	-- What each trigger needs besides (its own row's drawer only: the copies share it).
+	local EXTRAS = {
+		Campfire = { L["Buffs"], list = "cozyBuffs", tip = L["Buff names or spell IDs, separated by commas. Names " ..
+			"must match your game language; spell IDs work in any language."] },
+		Chair = { L["Seats"], list = "cozyChairWords", tip = L["Words that mark a seat when they're in an " ..
+			"object's name (\"Wooden Chair\"), separated by commas. Use words in your game language."] },
+		Still = { L["Wait"], slider = { "idleOrbitDelay", L["After standing still for"], 5, 300, 5, L["%d sec"] },
+			tip = L["How long you stand still before this row's camera starts (an event set to the AFK camera, " ..
+			"like going AFK, skips the wait). Also used by the other options that mention standing still (tint, " ..
+			"tracking, music, tooltips)."] },
+		Quest = { L["Wait"], slider = { "questCamDelay", L["Wait before starting"], 0, 10, 0.5, L["%.1f sec"] },
+			tip = L["The camera waits this long on a quest window before starting. Accept a quest and go " ..
+			"sooner, and it doesn't move at all; stay to read, and it starts. Clicking through several " ..
+			"quests, each new window adds a second to the wait. 0 starts at once."] },
+		QuestGossip = { L["Wait"], slider = { "questCamGossipDelay", L["Wait before starting"], 0, 10, 0.5,
+			L["%.1f sec"] }, tip = L["The camera waits this long on the window before starting. Close it sooner, " ..
+			"and it doesn't move at all. 0 starts at once."] },
+		Walk = { L["Wait"], slider = { "walkCameraDelay", L["After auto-walking for"], 0, 60, 1, L["%d sec"] } },
+		Run = { L["Wait"], slider = { "runCameraDelay", L["After auto-running for"], 0, 60, 1, L["%d sec"] } },
+		ChatNearby = { L["Wait"], slider = { "chatNearbyDelay", L["After standing still for"], 0, 60, 1,
+			L["%d sec"] }, tip = L["How long you stand still before NPCs chatting nearby start this row's camera. " ..
+			"0: straight away. Moving starts the count over."] },
+	}
+	-- (Fade at once, beside CineMode on these rows: the trigger's own row's.)
+	local INSTANT = { Flight = "taxiInstant", Walk = "walkInstant", Run = "runInstant" }
+	local GO_TIP = L["How long you keep going before this row's camera starts (and CineMode, if its CineMode box " ..
+		"is ticked). 0: straight away. Stopping or moving by hand first starts the count over."]
+	-- (Short camera names, for the chips; their colors: back, then text.)
+	local SHORT = { cozy = L["Cozy"], vista = L["Vista"], fish = L["Fish"], afk = L["AFK"], tele = L["Tele"],
+		flight = L["Flight"], quest = L["Quest"], walk = L["RP Walk"], run = L["Auto-run"], [true] = L["Death"],
+		chat = L["Chat"] }
+	local CAM_CHIP = {
+		cozy = { 0.29, 0.19, 0.03, 1, 0.77, 0.42 }, tele = { 0.18, 0.12, 0.29, 0.78, 0.66, 1 },
+		afk = { 0.13, 0.19, 0.29, 0.66, 0.77, 1 }, vista = { 0.05, 0.23, 0.21, 0.5, 0.88, 0.83 },
+		fish = { 0.05, 0.16, 0.27, 0.5, 0.75, 1 }, flight = { 0.09, 0.23, 0.29, 0.62, 0.88, 1 },
+		quest = { 0.29, 0.24, 0.03, 1, 0.88, 0.4 }, walk = { 0.09, 0.23, 0.09, 0.62, 0.89, 0.62 },
+		run = { 0.09, 0.23, 0.09, 0.62, 0.89, 0.62 }, [true] = { 0.23, 0.1, 0.1, 1, 0.62, 0.62 },
+		chat = { 0.18, 0.18, 0.18, 0.8, 0.8, 0.8 } }
+	local WHEN_CHIP = { 0.08, 0.2, 0.35, 0.55, 0.8, 1 }
+	local NEVER_CHIP = { 0.35, 0.25, 0.05, 1, 0.8, 0.35 }
+	local PLAIN_CHIP = { 0.18, 0.18, 0.18, 0.8, 0.8, 0.8 }
+	local PLACE_NAMES = { world = L["Open World"], city = L["Cities"], instance = L["Instances"],
+		bg = L["BGs & Arenas"], group = L["Grouped"] }
+	local PLACE_WORDS = { "world", "city", "instance", "bg" }
+	local WHEN_LAYOUT = { groups = { ns.GRID_COMBAT, ns.GRID_LOCATION }, roles = ROLES_MENU, edit = true }
+	local WHEN_HELP = { [ns.GRID_COMBAT] = L["Whether this row's camera waits for things to calm down after a fight."],
+		[ns.GRID_LOCATION] = L["Where this row's camera may start (Grouped: in a party or raid). Anywhere else the " ..
+		"next row of its trigger is tried, and with none the camera doesn't start (or stops if it's running). For " ..
+		"flights, Cities means taking off from one, and Open World taking off anywhere else."] }
+
+	-- A row's line: its arrows, on/off tick, name and chips, then copy, open and remove;
+	-- its drawer under it, a line each (Name, Camera, When, and what its
+	-- trigger needs).
+	local ROW_W, ROW_H, ON_X, NAME_X, NAME_W, CHIPS_X, CHIPS_W = 590, 28, 16, 46, 206, 256, 252
+	local DRAWER_X, LINE_H, LABEL_W = 20, 34, 62
+	-- Copies of a row (its copy button): hidden for now (true brings it back).
+	-- Copies already made still show, with their arrows and remove button.
+	local SHOW_COPY = false
+
+	local grid = CreateFrame("Frame", nil, content)
+	grid:SetSize(ROW_W, ROW_H)
+	grid:SetPoint("TOPLEFT", help, "BOTTOMLEFT", 0, -10)
+	local rows, drawers, opened = {}, {}, {}
+	local MakeRow -- (below)
+	local function Changed()
+		ns.CameraRowsChanged()
+		Refresh()
+	end
+	local function Toggle(id)
+		opened[id] = not opened[id]
+		grid:Refresh()
+	end
+	local function RowLabel(id)
+		local trigger, copy = ns.CameraRowTrigger(id)
+		return (LABELS[trigger.key] or trigger.key) .. (copy and " (" .. copy .. ")" or "")
+	end
+	local function OwnName(id)
+		local db = ns.GetDB()
+		local own = db and db.cameraRows and db.cameraRows[id .. ".name"]
+		return type(own) == "string" and own or ""
+	end
+	local function HasCamera(id)
+		local trigger = ns.CameraRowTrigger(id)
+		return ns.CameraRowValue(id, "camera") ~= trigger.off
+	end
+
+	-- What's set apart from the usual on a row, for its chips: { text, color }.
+	local function RowChips(id, parts)
+		local trigger, copy = ns.CameraRowTrigger(id)
+		local db, key = ns.GetDB(), ns.CameraRowKey(id)
+		local camera = ns.CameraRowValue(id, "camera")
+		if camera == trigger.off then return { { L["No camera"], PLAIN_CHIP } } end
+		local list = { { SHORT[camera] or tostring(camera), CAM_CHIP[camera] or PLAIN_CHIP } }
+		if trigger.music and ns.CameraRowValue(id, "music") then list[#list + 1] = { L["Music"], PLAIN_CHIP } end
+		if trigger.cine and ns.CameraRowValue(id, "cine") then list[#list + 1] = { "CineMode", PLAIN_CHIP } end
+		local extra = EXTRAS[trigger.key]
+		local delay = extra and extra.slider and db[extra.slider[1]]
+		if delay and delay > 0 and trigger.key ~= "Still" then
+			list[#list + 1] = { (L["Wait %s sec"]):format(delay), PLAIN_CHIP }
+		end
+		if not copy and trigger.key == "Still" then
+			list[#list + 1] = { (L["%d sec"]):format(db.idleOrbitDelay or 0), PLAIN_CHIP }
+		end
+		if ns.CameraRowCalm(id) then list[#list + 1] = { L["Calm Timer"], WHEN_CHIP } end
+		local rule = db.frameRules and db.frameRules[key]
+		if type(rule) == "string" and rule:find("%S") then
+			list[#list + 1] = { rule, WHEN_CHIP }
+		elseif not ns.CameraRowAlways(id) and parts then
+			local ticked, missing, all = {}, {}, 0
+			for _, word in ipairs(parts.words()) do ticked[word] = true end
+			for _, word in ipairs(PLACE_WORDS) do
+				if parts.grid[word] then
+					all = all + 1
+					if not ticked[word] then missing[#missing + 1] = PLACE_NAMES[word] end
+				end
+			end
+			if #missing == 0 then
+				-- (Everywhere: nothing set apart.)
+			elseif #missing == 1 and #missing < all then
+				list[#list + 1] = { (L["Not in %s"]):format(missing[1]), WHEN_CHIP }
+			else
+				local names = {}
+				for _, word in ipairs({ "world", "city", "instance", "bg", "group" }) do
+					if ticked[word] then names[#names + 1] = PLACE_NAMES[word] end
+				end
+				list[#list + 1] = #names == 0 and { L["Never"], NEVER_CHIP } or { table.concat(names, ", "), WHEN_CHIP }
+			end
+		end
+		for _, roleList in ipairs({ "tankHide", "healerHide", "damageHide" }) do
+			if ns.RoleHidden(db, roleList, key) then
+				list[#list + 1] = { L["Some roles"], WHEN_CHIP }
+				break
+			end
+		end
+		return list
+	end
+
+	-- A camera choice for a row: a dropdown, or on a client without the
+	-- modern one a button that steps through them.
+	local function CameraPick(parent, id)
+		local trigger = ns.CameraRowTrigger(id)
+		local function Set(value)
+			ns.SetCameraRowValue(id, "camera", value)
+			Changed()
+		end
+		local ok, pick = ns.MenuDropdown(parent)
+		if ok and pick and pick.SetupMenu then
+			pick:SetWidth(150)
+			pick:SetupMenu(function(_, root)
+				for _, value in ipairs(trigger.cameras) do
+					root:CreateRadio(ns.CAMERA_NAMES[value], function()
+						return ns.GetDB() ~= nil and ns.CameraRowValue(id, "camera") == value
+					end, function() Set(value) end)
+				end
+			end)
+			pick.Refresh = function(self) self:GenerateMenu() end
+		else
+			pick = ns.PanelButton(parent)
+			pick:SetSize(150, 22)
+			pick:SetScript("OnClick", function()
+				local now = ns.CameraRowValue(id, "camera")
+				for i, value in ipairs(trigger.cameras) do
+					if value == now then
+						Set(trigger.cameras[i % #trigger.cameras + 1])
+						return
+					end
+				end
+				Set(trigger.cameras[1])
+			end)
+			pick.Refresh = function(self) self:SetText(ns.CAMERA_NAMES[ns.CameraRowValue(id, "camera")] or "") end
+		end
+		pick.searchSkip = true
+		controls[#controls + 1] = pick
+		return pick
+	end
+
+	local function MoveButton(row, id, by)
+		local button = CreateFrame("Button", nil, row)
+		button:SetSize(14, 14)
+		button:SetPoint("LEFT", row, "LEFT", 2, by < 0 and 7 or -7)
+		local art = by < 0 and "Interface\\Buttons\\Arrow-Up-" or "Interface\\Buttons\\Arrow-Down-"
+		button:SetNormalTexture(art .. "Up")
+		button:SetPushedTexture(art .. "Down")
+		button:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+		Tooltip(button, by < 0 and L["Move this row up: its trigger tries it sooner."]
+			or L["Move this row down: its trigger tries it later."])
+		button:SetScript("OnClick", function()
+			ns.MoveCameraRow(id, by)
+			Changed()
+		end)
+		return button
+	end
+
+	function grid:Refresh()
+		local list = ns.CameraRowOrder()
+		local at = {}
+		for i, id in ipairs(list) do
+			at[id] = i
+			ns.CameraRowFollow(id) -- (its unset ticks its camera's, before its controls refresh)
+			if not rows[id] then MakeRow(id) end
+		end
+		for id, row in pairs(rows) do
+			if not at[id] then
+				row:Hide()
+				drawers[id]:Hide()
+				drawers[id].searchAlways = false
+			end
+		end
+		local y, band, last = 0, 0, nil
+		for i, id in ipairs(list) do
+			local row, drawer = rows[id], drawers[id]
+			local trigger = ns.CameraRowTrigger(id)
+			if trigger ~= last then band, last = band + 1, trigger end
+			row.band:SetColorTexture(1, 1, 1, band % 2 == 1 and 0.04 or 0)
+			row:ClearAllPoints()
+			row:SetPoint("TOPLEFT", grid, "TOPLEFT", 0, -y)
+			row:Show()
+			y = y + ROW_H
+			row.up:SetShown(i > 1 and ns.CameraRowTrigger(list[i - 1]) == trigger)
+			row.down:SetShown(i < #list and ns.CameraRowTrigger(list[i + 1]) == trigger)
+			-- (Its drawer: a closed one's settings still count for page search, which opens it.)
+			drawer.searchAlways = true
+			row.toggle:SetNormalTexture(opened[id] and "Interface\\Buttons\\UI-MinusButton-Up"
+				or "Interface\\Buttons\\UI-PlusButton-Up")
+			if opened[id] then
+				drawer:ClearAllPoints()
+				drawer:SetPoint("TOPLEFT", grid, "TOPLEFT", DRAWER_X, -y)
+				drawer:Show()
+				y = y + drawer:GetHeight() + 4
+			else
+				drawer:Hide()
+			end
+		end
+		grid:SetHeight(math.max(y, 1))
+	end
+	controls[#controls + 1] = grid
+	-- What the page's Reset puts back (and the profile modules find here):
+	-- every row it can have, made or not, and the cameras' old rows their
+	-- triggers' own rows follow until set.
+	RecordKey(content, "cameraRows")
+	for _, list in ipairs(ns.CAMERA_ROW_LISTS) do RecordKey(content, list) end
+	for _, trigger in ipairs(ns.CAMERA_TRIGGERS) do
+		for _, field in ipairs({ "camera", "music", "cine" }) do
+			if trigger[field] then RecordKey(content, trigger[field]) end
+		end
+		if INSTANT[trigger.key] then RecordKey(content, INSTANT[trigger.key]) end
+		local extra = EXTRAS[trigger.key]
+		if extra then RecordKey(content, extra.list or extra.slider[1]) end
+		for copy = 1, ns.CAMERA_ROW_COPIES do
+			local rowKey = ns.CameraRowKey(trigger.key .. (copy > 1 and copy or ""))
+			for _, list in ipairs(ns.CAMERA_ROW_LISTS) do RecordRow(content, list, rowKey) end
+		end
+	end
+	for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
+		RecordKey(content, "camAlways" .. cam[1])
+		if not ns.CALM_WAIT_NEVER[cam[1]] then RecordKey(content, cam[1] .. "CalmWait") end
+		for _, list in ipairs(ns.CAMERA_ROW_LISTS) do RecordRow(content, list, "cam:" .. cam[1]) end
+	end
+
+	function MakeRow(id)
+		local trigger, copy = ns.CameraRowTrigger(id)
+		local key, rowKey = trigger.key, ns.CameraRowKey(id)
+		local row = CreateFrame("Button", nil, grid)
+		row:SetSize(ROW_W, ROW_H)
+		row:Hide()
+		rows[id] = row
+		row.band = row:CreateTexture(nil, "BACKGROUND", nil, -8)
+		row.band:SetAllPoints()
+		local hover = row:CreateTexture(nil, "HIGHLIGHT")
+		hover:SetAllPoints()
+		hover:SetColorTexture(1, 1, 1, 0.05)
+		local line = row:CreateTexture(nil, "BACKGROUND")
+		line:SetPoint("BOTTOMLEFT")
+		line:SetPoint("BOTTOMRIGHT")
+		line:SetHeight(1)
+		line:SetColorTexture(1, 1, 1, 0.08)
+		row:SetScript("OnClick", function() Toggle(id) end)
+		local function Place(control, x)
+			control:SetPoint("LEFT", row, "LEFT", x, 0)
+			return control
+		end
+		row.up, row.down = MoveButton(row, id, -1), MoveButton(row, id, 1)
+
+		-- Its tick: off, its trigger passes it over (the next of its rows is
+		-- tried; with none, no camera).
+		local on = Place(Check(row, nil, "", L["Use this row. Unticked, its trigger passes it over: the next row " ..
+			"for it is tried, and with none it starts no camera. Its settings stay for when you tick it again."],
+			function(value)
+				ns.SetCameraRowOn(id, value)
+				Refresh()
+			end), ON_X)
+		on.Refresh = function(self) self:SetChecked(ns.CameraRowOn(id)) end
+		on.searchLabel = RowLabel(id)
+
+		-- Its name: your own (its trigger's dimmed after it), else its trigger's
+		-- and number; dimmed with no camera.
+		local name = Place(Label(row, "GameFontHighlight", ""), NAME_X)
+		name:SetWidth(NAME_W)
+		name:SetWordWrap(false)
+		name.searchSkip = true
+		function row:SetName()
+			local own = OwnName(id)
+			if own ~= "" then
+				name:SetText(own .. " |cff999999" .. RowLabel(id) .. "|r")
+			else
+				name:SetText((LABELS[key] or key) .. (copy and " |cff999999(" .. copy .. ")|r" or ""))
+			end
+			name:SetAlpha((ns.CameraRowOn(id) and HasCamera(id)) and 1 or 0.5)
+			self.chips:SetAlpha(ns.CameraRowOn(id) and 1 or 0.5)
+		end
+
+		-- The chips, as many as fit (hovering the row lists them all).
+		local chips = Place(CreateFrame("Frame", nil, row), CHIPS_X)
+		chips:SetSize(CHIPS_W, 16)
+		chips.searchSkip = true
+		chips.pool = {}
+		row.chips = chips
+		local parts -- (its When's, below)
+		chips.Refresh = function()
+			local list = RowChips(id, parts)
+			row.chipList = list
+			local x, shownChips = 0, 0
+			for i, each in ipairs(list) do
+				local chip = chips.pool[i]
+				if not chip then
+					chip = CreateFrame("Frame", nil, chips)
+					chip:SetHeight(16)
+					chip.back = chip:CreateTexture(nil, "BACKGROUND")
+					chip.back:SetAllPoints()
+					chip.text = chip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+					chip.text:SetPoint("CENTER")
+					chips.pool[i] = chip
+				end
+				chip.text:SetText(each[1])
+				local width = math.ceil(chip.text:GetStringWidth()) + 10
+				if x + width > CHIPS_W then break end
+				local c = each[2]
+				chip.back:SetColorTexture(c[1], c[2], c[3], 0.9)
+				chip.text:SetTextColor(c[4], c[5], c[6])
+				chip:SetWidth(width)
+				chip:ClearAllPoints()
+				chip:SetPoint("LEFT", chips, "LEFT", x, 0)
+				chip:Show()
+				x, shownChips = x + width + 4, i
+			end
+			for i = shownChips + 1, #chips.pool do chips.pool[i]:Hide() end
+			row:SetName()
+		end
+		controls[#controls + 1] = chips
+
+		row:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:SetText(OwnName(id) ~= "" and OwnName(id) or RowLabel(id), 1, 1, 1)
+			local tip = EVENT_TIPS[key] or TIPS[key]
+			if tip then GameTooltip:AddLine(tip, 0.8, 0.8, 0.8, true) end
+			for _, chip in ipairs(self.chipList or {}) do
+				GameTooltip:AddLine("- " .. chip[1], 1, 0.82, 0)
+			end
+			GameTooltip:AddLine(L["Click to show or hide its settings."], 0.6, 0.6, 0.6)
+			GameTooltip:Show()
+		end)
+		row:SetScript("OnLeave", GameTooltip_Hide)
+
+		-- Open, copy, and (a copy) remove.
+		row.toggle = Place(CreateFrame("Button", nil, row), ROW_W - 44)
+		row.toggle:SetSize(14, 14)
+		row.toggle:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+		row.toggle:SetScript("OnClick", function() Toggle(id) end)
+		Tooltip(row.toggle, L["Show or hide this row's settings."])
+		-- (Copy: two squares, one over the other, drawn here, the back one first.)
+		local copyButton = SHOW_COPY and Place(CreateFrame("Button", nil, row), ROW_W - 66)
+		if copyButton then
+			copyButton:SetSize(16, 16)
+			for i, square in ipairs({ { 0, 5 }, { 5, 0 } }) do
+				local x, y = square[1], square[2]
+				local edge = copyButton:CreateTexture(nil, "ARTWORK", nil, i * 2 - 2)
+				edge:SetSize(11, 11)
+				edge:SetPoint("TOPLEFT", x, -y)
+				edge:SetColorTexture(1, 0.82, 0, 1)
+				local inside = copyButton:CreateTexture(nil, "ARTWORK", nil, i * 2 - 1)
+				inside:SetSize(7, 7)
+				inside:SetPoint("TOPLEFT", x + 2, -y - 2)
+				inside:SetColorTexture(0.1, 0.1, 0.1, 1)
+			end
+			copyButton:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+			Tooltip(copyButton, L["Copy this row: another row for its trigger, just below, its settings open. Give it " ..
+				"another camera and When, and move it above to have it tried first."])
+			copyButton:SetScript("OnClick", function()
+				local new = ns.CopyCameraRow(id)
+				if new then
+					opened[new] = true
+					Changed()
+				end
+			end)
+			copyButton.Refresh = function(self)
+				local free = ns.FreeCameraRow(key) ~= nil
+				self:SetEnabled(free)
+				self:SetAlpha(free and 1 or 0.35)
+			end
+			controls[#controls + 1] = copyButton
+		end
+		if copy then
+			local remove = Place(CreateFrame("Button", nil, row), ROW_W - 22)
+			remove:SetSize(16, 16)
+			remove:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
+			remove:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+			Tooltip(remove, L["Remove this copy."])
+			remove:SetScript("OnClick", function()
+				ns.RemoveCameraRow(id)
+				opened[id] = nil
+				Changed()
+			end)
+		end
+
+		-- The drawer.
+		local extra = not copy and EXTRAS[key]
+		local LINES = { "Name", "Camera", "When" }
+		if extra then LINES[#LINES + 1] = "Extra" end
+		local LINE_NAMES = { Name = L["Name"], Camera = L["Camera"], When = L["When"], Extra = extra and extra[1] }
+		local lineTop, height = {}, 4
+		for _, each in ipairs(LINES) do
+			lineTop[each] = height
+			height = height + ((each == "Extra" and extra.slider) and 46 or LINE_H)
+		end
+		local drawer = CreateFrame("Frame", nil, grid)
+		drawer:SetSize(ROW_W - DRAWER_X, height + 4)
+		drawer:Hide()
+		drawers[id] = drawer
+		drawer.openSection = function()
+			opened[id] = true
+			grid:Refresh()
+		end
+		local drawerBack = drawer:CreateTexture(nil, "BACKGROUND")
+		drawerBack:SetAllPoints()
+		drawerBack:SetColorTexture(0, 0, 0, 0.3)
+		local function At(lineName, control, x, dy)
+			local h = (lineName == "Extra" and extra.slider) and 46 or LINE_H
+			control:SetPoint("LEFT", drawer, "TOPLEFT", x, -lineTop[lineName] - h / 2 + (dy or 0))
+			return control
+		end
+		for _, each in ipairs(LINES) do
+			local label = At(each, Label(drawer, "GameFontNormalSmall", LINE_NAMES[each]), 6)
+			label.searchSkip = true
+		end
+
+		-- Name: your own for the row (empty: its trigger's, greyed in the box).
+		local nameBox = At("Name", ns.SkinEditBox(CreateFrame("EditBox", nil, drawer, "InputBoxTemplate")),
+			LABEL_W + 6)
+		nameBox:SetSize(220, 20)
+		nameBox:SetAutoFocus(false)
+		nameBox:SetMaxLetters(40)
+		nameBox.searchSkip = true
+		local nameHint = nameBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+		nameHint:SetPoint("LEFT", 2, 0)
+		nameHint:SetPoint("RIGHT", -2, 0)
+		nameHint:SetJustifyH("LEFT")
+		nameHint:SetWordWrap(false)
+		nameBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+		nameBox:SetScript("OnEditFocusLost", function(self)
+			local text = self:GetText():match("^%s*(.-)%s*$")
+			ns.GetDB().cameraRows[id .. ".name"] = text ~= "" and text or nil
+			row:SetName()
+			nameHint:SetShown(text == "")
+		end)
+		nameBox:SetScript("OnEditFocusGained", function() nameHint:Hide() end)
+		nameBox:SetScript("OnEscapePressed", function(self)
+			self:SetText(OwnName(id))
+			self:ClearFocus()
+		end)
+		nameBox.Refresh = function(self)
+			if self:HasFocus() then return end
+			self:SetText(OwnName(id))
+			nameHint:SetText(RowLabel(id))
+			nameHint:SetShown(OwnName(id) == "")
+		end
+		controls[#controls + 1] = nameBox
+		Tooltip(nameBox, L["A name of your own for this row, shown on the grid, say AFK in dungeons. Empty: its " ..
+			"trigger's."])
+
+		-- Camera: its camera, its Music and CineMode.
+		local pick = At("Camera", CameraPick(drawer, id), LABEL_W)
+		Tooltip(pick, L["The camera this row starts. No camera: none (and its trigger's rows below aren't tried)."])
+		local x = LABEL_W + 166
+		if trigger.music then
+			local music = Check(drawer, nil, L["Music"], MUSIC_TIPS[key] or MUSIC_TIP, function(value)
+				ns.SetCameraRowValue(id, "music", value)
+				Changed()
+			end)
+			music.Refresh = function(self) self:SetChecked(ns.CameraRowValue(id, "music") and true or false) end
+			GreyUnless(music, function(db)
+				return (key == "Death" or db.musicInCinematic) and (key == "AFK" or HasCamera(id))
+			end)
+			At("Camera", music, x)
+			x = x + 90
+		end
+		if trigger.cine then
+			local cine = Check(drawer, nil, "CineMode", CINE_TIP, function(value)
+				ns.SetCameraRowValue(id, "cine", value)
+				Changed()
+			end)
+			cine.Refresh = function(self) self:SetChecked(ns.CameraRowValue(id, "cine") and true or false) end
+			GreyUnless(cine, function(db) return not db.fadeUI and HasCamera(id) end)
+			At("Camera", cine, x)
+			x = x + 100
+		end
+		if INSTANT[key] and not copy then
+			local instant = Check(drawer, INSTANT[key], L["Fade at once"],
+				L["Skips the wait before fading, so the UI fades and the camera starts moving straight away."])
+			GreyUnless(instant, function() return HasCamera(id) end)
+			At("Camera", instant, x)
+		end
+
+		-- When: as the Standard Frames page's rows, the places and the Calm
+		-- Timer wait (a trigger's own row: its camera's until set). Flights
+		-- never start in instances; the death camera can't wait (you die in a fight).
+		local omit = { combatShow = true, enemyShow = true, friendlyShow = true }
+		for where in pairs(ns.CAMERA_OFF_NEVER[ns.CameraValueMode(trigger.cameras[1])] or {}) do
+			omit[where == "BGs" and "bgShow" or "instanceShow"] = true
+		end
+		local calmItem = key ~= "Death" and { L["Wait for the Calm Timer"],
+			function() return ns.CameraRowCalm(id) end,
+			function() ns.GetDB().cameraRows[id .. ".calm"] = not ns.CameraRowCalm(id) end, nil,
+			L["This row's camera waits until the Calm Timer (CineMode page) has run out after a fight."] } or nil
+		local function Key() return rowKey end
+		local function SetAlways(value) ns.GetDB().cameraRows[id .. ".always"] = value end
+		parts = ns.ListRowParts(Key, FRAME_COLUMNS, nil, SetAlways, { anyFight = true, omit = omit, calmItem = calmItem })
+		RuleTarget(rowKey, RowLabel(id), "Cameras")
+		ns.GRID_RULE_KEYS[rowKey] = true
+		local when = ns.GridRow(ns.GRID_KIT, drawer, 0, WHEN_LAYOUT, {
+			band = 1,
+			always = { isOn = function() return ns.CameraRowAlways(id) end, set = SetAlways,
+				tip = L["This row's camera may start anywhere. The rest of the row keeps its ticks for when you " ..
+				"untick this."] },
+			menus = parts.menus,
+			help = WHEN_HELP,
+			rule = { key = Key, label = function() return RowLabel(id) end, grid = parts.grid, words = parts.words,
+				apply = parts.apply, changed = ns.CameraRowsChanged },
+			roles = { key = Key, changed = ns.CameraRowsChanged,
+				tip = L["Tick roles to have this row fit only while you're one of them (your specialization's, or " ..
+				"the one picked in the group finder), whatever the row says. None ticked (-): every role."] },
+			changed = ns.CameraRowsChanged,
+		})
+		At("When", when, LABEL_W)
+
+		-- What its trigger needs (its own row only).
+		if extra and extra.list then
+			At("Extra", ListBox(drawer, extra.list, 420, extra.tip,
+				extra.list == "cozyBuffs" and function() if ns.CheckIdleBuffs then ns.CheckIdleBuffs() end end or nil),
+				LABEL_W + 6)
+		elseif extra and extra.slider then
+			local s = extra.slider
+			local slider = At("Extra", Slider(drawer, s[1], s[2], s[3], s[4], s[5], s[6]), LABEL_W + 4, -6)
+			Tooltip(slider, extra.tip or GO_TIP)
+			if key ~= "Still" then GreyUnless(slider, function() return HasCamera(id) end) end
+		end
+	end
+
+	-- Indoors: hidden for now (true brings it back); the settings keep working
+	-- at their values.
+	local SHOW_INDOOR_SETTINGS = false
+	if SHOW_INDOOR_SETTINGS then
+		local indoorHeader = Header(content, L["Indoors"], grid, -24)
+		local indoorLimits = Check(content, "indoorLimits", L["Limit the camera indoors"],
+			L["Inside buildings and caves, the camera modes zoom out less and swing less, so the " ..
+			"camera doesn't keep pushing into walls and ceilings. Uses the game's own indoor check."])
+		indoorLimits:SetPoint("TOPLEFT", indoorHeader, "BOTTOMLEFT", -2, -6)
+		indoorLimits:HookScript("OnClick", Refresh) -- grey out / enable the options below
+		local function IfIndoorLimits(db) return db.indoorLimits end
+
+		local indoorZoom = Slider(content, "indoorZoomOut", L["Zoom out indoors up to"], 0, 10, 0.5, L["%.1f yards"])
+		indoorZoom:SetPoint("TOPLEFT", indoorLimits, "BOTTOMLEFT", 4, -26)
+		Tooltip(indoorZoom, L["How far past your own distance the slow zoom may pull back indoors. It " ..
+			"also never raises the max zoom distance indoors. Walking in pulled back, the camera " ..
+			"glides in to this."])
+		GreyUnless(indoorZoom, IfIndoorLimits)
+
+		local indoorSwing = Slider(content, "indoorSwing", L["Swing indoors up to"], 0, 90, 5, "%d°")
+		indoorSwing:SetPoint("TOPLEFT", indoorZoom, "BOTTOMLEFT", 0, -34)
+		Tooltip(indoorSwing, L["How far either side of behind the flight, RP walk and auto-run cameras " ..
+			"may swing indoors."])
+		GreyUnless(indoorSwing, IfIndoorLimits)
+
+		local indoorSweep = Check(content, "indoorNoSweep", L["No AFK camera sweep indoors"],
+			L["The AFK camera sweeps right round your character, which can bump into walls " ..
+			"in tight rooms. Its zoom still runs (within the limit above)."])
+		indoorSweep:SetPoint("TOPLEFT", indoorSwing, "BOTTOMLEFT", -4, -14)
+		GreyUnless(indoorSweep, IfIndoorLimits)
+	end
+
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Cameras")
+end
 
 -- The Standard Frames table under anchor: a row per frame (COMBAT_SHOW
 -- items), a column per situation. Used by the Gamepad and Chat pages too.
@@ -4799,7 +5097,7 @@ local function CreatePortraitsPanel()
 	local hasParts = ns.HasUnitFrameParts and ns.HasUnitFrameParts()
 	local subtitle = PageIntro(content, title, hasParts
 		and L["Which parts of the unit frames show, CineMode or not: your own frame and your pet's, and " ..
-		"the target, focus and target of target frames by who they show. Click a frame's name to open " ..
+		"the target, focus and target of target frames. Click a frame's name to open " ..
 		"its grid: the focus and target of target go as the target's grid says until you untick Same " ..
 		"as target. Untick parts to keep just the bars. The frame art is the portrait ring, the name " ..
 		"box and the bars' borders: the game draws them as one picture. Icons are the rest Zzz, the " ..
@@ -4808,82 +5106,79 @@ local function CreatePortraitsPanel()
 		"focus frames. Hit text is the damage and healing numbers on your and your pet's portraits. " ..
 		"Threat is the threat percentage and aggro glow on the target and focus frames, for NPCs you " ..
 		"can fight."] .. " " .. L["Cast bar is the bar under the target and focus frames as they cast."] ..
+		" " .. L["Health bar and Power bar are the bars (Power: mana, rage, energy...). Bar numbers are the " ..
+		"percent and value on them, hidden with their bar too."] ..
 		" " .. L["Keeping a frame up, always or in fights, is on the Standard Frames page; your own while you " ..
 		"recover, on the Personal Resources page."]
 		or L["Which parts of the player, target, focus and pet frames show. Keeping a frame up, always or " ..
 		"in fights, is on the Standard Frames page; your own while you recover, on the Personal Resources page."])
 
-	-- The Unit frame parts grids (frames laid out as retail's: see
+	-- The Unit frame parts (frames laid out as retail's: see
 	-- ns.ApplyUnitFrameParts), a section per frame that opens and closes with
-	-- a click on its name: a row per kind of unit (your frame's and your
-	-- pet's a row each), a column per part the frame has. The focus and
-	-- target of target sections have a "Same as target" tick: ticked, the
-	-- grid greys and closes and the frame goes by the target's; unticked, it
-	-- opens with the target's choices to start from.
-	local OpenSections -- (opens You and Target, and the frames set apart from the target)
+	-- a click on its name: a row per part the frame has, as the Standard
+	-- Frames page's (GridRows.lua): Always (its unitPart<frame><part>
+	-- setting, ticked to start with), the Combat, Target and Location
+	-- dropdowns, the roles and Edit, keyed by that setting. Unticked Always:
+	-- hidden but as the rest of the row says (ns.RowOnNow), CineMode or not.
+	-- The focus and target of target sections have a "Same as target" tick:
+	-- ticked, the rows grey and the section closes, and the frame goes by the
+	-- target's; unticked, it opens with the target's rows to start from.
+	local OpenSections -- (opens You, your pet and Target, and the frames set apart from the target)
 	if hasParts then
 		local note = PageSwitch(content, "handleUnitFrames", L["Enable page"],
 			L["On: the unit frames show the parts the grids below say. Off: CineMode leaves them alone, " ..
 			"every part showing as the game has it."], subtitle, function() ns.ApplyUnitFrameParts() end)
 
-		-- (Nine columns must fit the page's width, no wider than eight were at
-		-- 128 + 8 * 58: wider, the last column and the Same as target tick were
-		-- cut off at the right edge.)
-		local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = 124, 52, 24
-		local COLUMNS = {
+		local LABEL_WIDTH, ROW_HEIGHT = 150, 24
+		local PARTS = {
 			{ "Portrait", L["Portrait"] }, { "Name", L["Name"] }, { "Level", L["Level"] },
-			{ "Art", L["Frame art"] }, { "PvP", L["PvP icon"] }, { "Icons", L["Icons"] }, { "Auras", L["Auras"] },
+			{ "Health", L["Health bar"] }, { "Power", L["Power bar"] }, { "Numbers", L["Bar numbers"] },
+			{ "Art", L["Frame art"] },
+			{ "PvP", L["PvP icon"] }, { "Icons", L["Icons"] }, { "Auras", L["Auras"] },
 			{ "CombatText", L["Hit text"] }, { "Threat", L["Threat"] }, { "CastBar", L["Cast bar"] },
 		}
-		-- Whether a row has a part: the frame has it, and it's not one only
-		-- some rows have (UNIT_PART_ONLY: hit text, threat). Cells without stay empty.
-		local function Has(row, part)
-			local only = ns.UNIT_PART_ONLY[part]
-			return (not row[4] or row[4][part] ~= nil) and (not only or only[row[1]] == true)
-		end
-		-- { row, label, tip, the frame's parts (nil: all of them) }
-		local KIND_ROWS = {
-			{ "Self", L["You"], L["You, when the frame shows you."] },
-			{ "EnemyPlayer", L["Enemy Players"], L["Players you can attack."] },
-			{ "EnemyNPC", L["Hostile NPCs"], L["NPCs you can attack (neutral ones have their own row)."] },
-			{ "NeutralPlayer", L["Neutral Players"], L["The other faction's players you can't attack."] },
-			{ "NeutralNPC", L["Neutral NPCs"], L["NPCs the game calls neutral (yellow names)."] },
-			{ "FriendlyPlayer", L["Friendly Players"], L["Players on your side."] },
-			{ "FriendlyNPC", L["Friendly NPCs"], L["NPCs on your side."] },
-		}
-		local function KindRows(parts)
-			local rows = {}
-			for i, row in ipairs(KIND_ROWS) do
-				rows[i] = { row[1], row[2], row[3], parts }
-			end
-			return rows
-		end
-		-- Each grid: its title, its keys' prefix, its rows and its "Same as target" setting.
+		-- Each section: its title, its frame (unit: the settings' unitPart<unit><part>),
+		-- the frame's parts and its "Same as target" setting.
 		local SECTIONS = {
-			{ title = L["You"], prefix = "", rows = {
-				{ "Player", L["You"], L["Your own frame."], ns.UNIT_PARTS_PLAYER },
-				{ "Pet", L["Your pet"], L["Your pet's frame."], ns.UNIT_PARTS_PET },
-			} },
-			{ title = L["Target"], prefix = "", rows = KindRows(ns.UNIT_PARTS_TARGET) },
+			{ title = L["You"], unit = "Player", parts = ns.UNIT_PARTS_PLAYER },
+			{ title = L["Your pet"], unit = "Pet", parts = ns.UNIT_PARTS_PET },
+			{ title = L["Target"], unit = "Target", parts = ns.UNIT_PARTS_TARGET },
 		}
 		if _G.TargetFrameToT then
-			SECTIONS[#SECTIONS + 1] = { title = L["Target of target"], prefix = "ToT", same = "unitPartsToTSame",
-				rows = KindRows(ns.UNIT_PARTS_TOT) }
+			SECTIONS[#SECTIONS + 1] = { title = L["Target of target"], unit = "ToT", same = "unitPartsToTSame",
+				parts = ns.UNIT_PARTS_TOT }
 		end
 		if _G.FocusFrame then
-			SECTIONS[#SECTIONS + 1] = { title = L["Focus"], prefix = "Focus", same = "unitPartsFocusSame",
-				rows = KindRows(ns.UNIT_PARTS_TARGET) }
+			SECTIONS[#SECTIONS + 1] = { title = L["Focus"], unit = "Focus", same = "unitPartsFocusSame",
+				parts = ns.UNIT_PARTS_TARGET }
 		end
 		if _G.FocusFrame and _G.FocusFrameToT then
-			SECTIONS[#SECTIONS + 1] = { title = L["Focus target of target"], prefix = "FocusToT",
-				same = "unitPartsFocusToTSame", rows = KindRows(ns.UNIT_PARTS_TOT) }
+			SECTIONS[#SECTIONS + 1] = { title = L["Focus target of target"], unit = "FocusToT",
+				same = "unitPartsFocusToTSame", parts = ns.UNIT_PARTS_TOT }
 		end
+		-- Whether a section has a part: its frame has it, and it's not one only
+		-- some frames have (UNIT_PART_ONLY: hit text).
+		local function Has(section, part)
+			local only = ns.UNIT_PART_ONLY[part]
+			return section.parts[part] ~= nil and (not only or only[section.unit] == true)
+		end
+
+		local LAYOUT = { roles = ROLES_MENU, edit = true }
+		local OPTS = { quiet = true, cam = true, anyFight = true }
+		-- The lists a row keeps its dropdowns' and roles' ticks in.
+		local LISTS = { "calmShow", "quietShow", "camShow", "tankHide", "healerHide", "damageHide" }
+		for c = 2, #FRAME_COLUMNS do
+			LISTS[#LISTS + 1] = FRAME_COLUMNS[c][3]
+		end
+		local ALWAYS_TIP = L["Show it the whole time, CineMode or not. Unticked, it's hidden, except as the other " ..
+			"columns say."]
+		local liveRows = {}
 
 		local top = CreateFrame("Frame", nil, content)
 		top:SetSize(1, 1)
 		top:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 2, -10)
 
-		-- Stacks the sections, each its name row and, open, its grid.
+		-- Stacks the sections, each its name row and, open, its rows.
 		local function Layout()
 			local above
 			for _, section in ipairs(SECTIONS) do
@@ -4912,52 +5207,41 @@ local function CreatePortraitsPanel()
 		end
 		resetHooks[content] = OpenSections
 
-		-- Set apart from the target: its grid starts as the target's, unless
-		-- it has choices of its own from before.
+		-- Set apart from the target: its rows start as the target's, unless it
+		-- has choices of its own from before (Always unticked, a dropdown or
+		-- role ticked, a rule).
 		local function CopyTarget(section)
 			local db = ns.GetDB()
-			for _, row in ipairs(section.rows) do
-				for _, column in ipairs(COLUMNS) do
-					if Has(row, column[1]) and db["unitPart" .. section.prefix .. row[1] .. column[1]] == false then
-						return
-					end
+			for _, key in ipairs(section.keys) do
+				local own = "unitPart" .. section.unit .. key
+				if db[own] == false or (db.frameRules and db.frameRules[own]) then
+					return
+				end
+				for _, list in ipairs(LISTS) do
+					if db[list] and db[list][own] ~= nil then return end
 				end
 			end
-			for _, row in ipairs(section.rows) do
-				for _, column in ipairs(COLUMNS) do
-					if Has(row, column[1]) then
-						db["unitPart" .. section.prefix .. row[1] .. column[1]] = db["unitPart" .. row[1] .. column[1]]
-					end
+			for _, key in ipairs(section.keys) do
+				local own, target = "unitPart" .. section.unit .. key, "unitPartTarget" .. key
+				db[own] = db[target]
+				for _, list in ipairs(LISTS) do
+					if db[list] then db[list][own] = db[list][target] end
 				end
+				if db.frameRules then db.frameRules[own] = db.frameRules[target] end
 			end
 		end
 
-		-- Each grid: just the columns one of its rows has. All as wide as the widest.
-		local most = 0
 		for _, section in ipairs(SECTIONS) do
-			section.columns = {}
-			for _, column in ipairs(COLUMNS) do
-				for _, row in ipairs(section.rows) do
-					if Has(row, column[1]) then
-						section.columns[#section.columns + 1] = column
-						break
-					end
-				end
-			end
-			most = math.max(most, #section.columns)
-		end
-
-		for _, section in ipairs(SECTIONS) do
-			section.widgets = {}
-			section.id = "Unit Frames/" .. (section.prefix ~= "" and section.prefix or section.rows[1][1])
+			section.id = "Unit Frames/" .. section.unit
+			section.widgets, section.keys = {}, {}
 			local frame = CreateFrame("Frame", nil, content)
-			frame:SetWidth(LABEL_WIDTH + most * COLUMN_WIDTH)
+			frame:SetWidth(LABEL_WIDTH + ns.GridWidth(LAYOUT))
 			section.frame = frame
 
 			-- The name row: click to open or close.
 			local check
-			if section.same then
-				local same = section.same
+			local same = section.same
+			if same then
 				check = Check(content, same, L["Same as target"],
 					L["Ticked: this frame shows the parts the Target grid says. Untick it to give the frame " ..
 					"choices of its own."], function(value)
@@ -4976,42 +5260,56 @@ local function CreatePortraitsPanel()
 				Layout()
 			end, check)
 
-			local columns = section.columns
 			local gridTop = -BAND_HEIGHT - 6
-			for c, column in ipairs(columns) do
-				local text = Label(content, "GameFontNormalSmall", column[2])
-				text:SetWidth(COLUMN_WIDTH)
-				text:SetJustifyH("CENTER")
-				text:SetPoint("TOPLEFT", frame, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH, gridTop)
-				section.widgets[#section.widgets + 1] = text
+			local headings = CreateFrame("Frame", nil, content)
+			headings:SetSize(1, 1)
+			headings:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, gridTop)
+			for _, heading in ipairs(ns.GridHeadings(ns.GRID_KIT, content, headings, LABEL_WIDTH, LAYOUT)) do
+				section.widgets[#section.widgets + 1] = heading
 			end
-			for r, row in ipairs(section.rows) do
-				local y = gridTop - 16 - (r - 1) * ROW_HEIGHT
-				local rowLabel = Label(content, "GameFontHighlight", row[2])
-				rowLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, y - 5)
-				section.widgets[#section.widgets + 1] = rowLabel
-				for c, column in ipairs(columns) do
-					-- (Your frame has no auras, the pet's no level, PvP or auras
-					-- (its icons: the happiness face); threat is for NPCs you can fight.)
-					if Has(row, column[1]) then
-						local key = "unitPart" .. section.prefix .. row[1] .. column[1]
-						RuleTarget(key, column[2], "Unit frame parts", section.title, row[2])
-						local cb = Check(content, key, "", L["Ticked: shows. "] .. row[3], function(value)
-							ns.GetDB()[key] = value
-							ns.ApplyUnitFrameParts()
-						end)
-						cb:SetPoint("TOPLEFT", frame, "TOPLEFT", LABEL_WIDTH + (c - 1) * COLUMN_WIDTH + (COLUMN_WIDTH - 26) / 2, y)
-						-- (Greyed while a rule decides it: Rules section, Advanced Frames page.)
-						local same = section.same
-						GreyUnless(cb, function(db)
-							return (not same or db[same] == false) and not ns.RuleTest(key)
-						end)
-						section.widgets[#section.widgets + 1] = cb
+			local r = 0
+			for _, part in ipairs(PARTS) do
+				if Has(section, part[1]) then
+					r = r + 1
+					section.keys[#section.keys + 1] = part[1]
+					local key = "unitPart" .. section.unit .. part[1]
+					local y = gridTop - FRAME_HEADING_HEIGHT - 4 - (r - 1) * ROW_HEIGHT
+					RuleTarget(key, part[2], "Unit frame parts", section.title)
+					ns.GRID_RULE_KEYS[key] = true -- (edited on its row: the Rules section leaves it out)
+					RecordKey(content, key)
+					for _, list in ipairs(LISTS) do
+						RecordKey(content, list)
+						RecordRow(content, list, key)
 					end
+					local label = Label(content, "GameFontHighlight", part[2])
+					label:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, y - 5)
+					label:SetWidth(LABEL_WIDTH - 4 - ns.GRID_DOT_ROOM)
+					label:SetJustifyH("LEFT")
+					label:SetWordWrap(false)
+					section.widgets[#section.widgets + 1] = label
+					local function Key() return key end
+					local function SetAlways(value) ns.GetDB()[key] = value end
+					local parts = ns.ListRowParts(Key, FRAME_COLUMNS, nil, SetAlways, OPTS)
+					local row = ns.GridRow(ns.GRID_KIT, content, LABEL_WIDTH, LAYOUT, {
+						band = r, dot = true,
+						always = { isOn = function() return ns.GetDB()[key] ~= false end, set = SetAlways, tip = ALWAYS_TIP },
+						menus = parts.menus,
+						roles = { key = Key, changed = ns.ApplyUnitFrameParts },
+						rule = { key = Key, label = function() return section.title .. ": " .. part[2] end,
+							grid = parts.grid, words = parts.words, apply = parts.apply, changed = ns.ApplyUnitFrameParts },
+						changed = ns.ApplyUnitFrameParts,
+						-- (Greyed while it goes by the target's.)
+						enabled = same and function() return ns.GetDB()[same] == false end or nil,
+					})
+					row.debugName = section.title .. ": " .. part[2] -- (for the dev copy's page timing)
+					row:SetPoint("TOPLEFT", frame, "TOPLEFT", LABEL_WIDTH, y)
+					section.widgets[#section.widgets + 1] = row
+					liveRows[#liveRows + 1] = row
 				end
 			end
-			section.height = 6 + 16 + #section.rows * ROW_HEIGHT + 4
+			section.height = 6 + FRAME_HEADING_HEIGHT + 4 + r * ROW_HEIGHT + 4
 		end
+		ns.GridDots(content, liveRows)
 		OpenSections()
 	end
 
@@ -5335,8 +5633,8 @@ local function CreateFishingPanel()
 
 	local switch = PageSwitch(content, "handleFishing", L["Enable page"],
 		L["On: right-click (or a gamepad button) casts again, and the Fishing cast bar hides, as this " ..
-		"page says. Off: fishing is left to the game. (The fish camera is on the Camera Modes and " ..
-		"Camera Triggers pages.)"], subtitle)
+		"page says. Off: fishing is left to the game. (The fish camera is on the Cameras " ..
+		"page.)"], subtitle)
 	local stack = Stack(switch, "check")
 	stack:Header(content, L["Casting"])
 	stack:Add(Check(content, "hideFishingCastBar", L["Hide the Fishing cast bar"],
@@ -6569,7 +6867,7 @@ do
 			ns.StyleTargetArrow(self.arrow, nil, kind)
 			self.arrow:SetShown(shown and ns.TargetMarkSetting("Style", kind) ~= "none")
 			self.arrow:SetAlpha(ns.TargetMarkSetting("Opacity", kind) or 1)
-			local colors = WHO_COLORS[reaction or ""] or WHO_COLORS.Enemy
+			local colors = WHO_COLORS[(reaction or ""):match("^%u%l+") or ""] or WHO_COLORS.Enemy
 			local tintKind = ns.TargetMarkTintKind(kind)
 			local r, g, b = ns.TargetPlateColour(nil, tintKind)
 			if shown and ns.TargetMarkAlso("ColorName", tintKind) then
@@ -6592,10 +6890,15 @@ do
 					edge:SetColorTexture(1, 1, 1, 1)
 				end
 			end
-			unitName:SetText(PREVIEW_NAMES[base] or L["Unit Name"])
+			-- (A mix of units: named as its first.)
+			local first = ({ n = "npc", e = "elite", p = "players", m = "minions" })
+				[base:match("^u(%l)") or ""]
+			unitName:SetText(PREVIEW_NAMES[first or base] or L["Unit Name"])
 			holder:SetAlpha(shown and (ns.TargetMarkSetting("Alpha", kind) or 1) or 0.35)
-			-- (Its plate size, on retail: Forever's plates don't change size.)
-			holder:SetScale(1.6 * (shown and ns.isRetail and ns.TargetMarkSetting("Scale", kind) or 1))
+			-- (Its health bar's size, on retail: Forever's plates don't change size.)
+			local sized = shown and ns.isRetail
+			bar:SetSize(150 * (sized and ns.TargetMarkSetting("PlateWidth", kind) or 1),
+				11 * (sized and ns.TargetMarkSetting("PlateHeight", kind) or 1))
 		end
 		controls[#controls + 1] = preview
 
@@ -6659,6 +6962,8 @@ do
 			{ "aggrononank", L["Aggro on non-tank"], L["Any enemy attacking a player who isn't a tank (you too, " ..
 				"unless you're one): for a healer, who's in trouble; for a tank, the ones to taunt. A pet tanking " ..
 				"doesn't count."] },
+			{ "aggrohealer", L["Aggro on a healer"], L["Any enemy attacking a healer (you too, if you're " ..
+				"one): for a healer, who's after you or the other healers; for a tank, the ones to pull off them."] },
 			{ "npc", L["Normal NPC"], L["Living NPCs that aren't elite, rare elite or a boss (minor critters " ..
 				"too). Normal NPC - Enemy starts faded to 40% while an elite enemy is within about 28 yards (its " ..
 				"When rule: elite28), so in a pull the elites stand out."] },
@@ -6676,6 +6981,41 @@ do
 		local REACTION_TIPS = { Enemy = L["This row: just the enemies among them."],
 			Neutral = L["This row: just the neutral ones among them."],
 			Friendly = L["This row: just the friendly ones among them."] }
+		-- (A Who of one or more, "EnemyNeutral": Enemy/Neutral.)
+		local function WhoName(reaction)
+			local names = {}
+			for who in reaction:gmatch("%u%l+") do names[#names + 1] = REACTION_NAMES[who] or who end
+			return table.concat(names, "/")
+		end
+		-- (The Units rows' units, by Core's MARK_UNIT_FLAGS letters: their
+		-- names, NPC for both ranks, Any unit for all; their tips.)
+		local UNIT_LETTERS = { n = "npc", e = "elite", p = "players", m = "minions" }
+		local function UnitsName(flags)
+			if flags == "nepm" then return KIND_INFO.all[2] end
+			local names = {}
+			for letter in flags:gsub("ne", "N"):gmatch(".") do
+				names[#names + 1] = letter == "N" and KIND_INFO.npcs[2] or KIND_INFO[UNIT_LETTERS[letter]][2]
+			end
+			return table.concat(names, ", ")
+		end
+		-- (An Aggro mix's: Aggro: and who (You, Not you) and their roles
+		-- (Tank/Healer/DPS), each left out with all of it ticked.)
+		local AGGRO_NAMES = { t = L["Tank"], h = L["Healer"], d = L["DPS"] }
+		local function AggroName(flags)
+			local parts = {}
+			if not (flags:find("y", 1, true) and flags:find("o", 1, true)) then
+				parts[1] = flags:find("y", 1, true) and L["You"] or L["Not you"]
+			end
+			local roles = {}
+			for letter in flags:gsub("[yo]", ""):gmatch(".") do roles[#roles + 1] = AGGRO_NAMES[letter] end
+			if #roles < 3 then parts[#parts + 1] = table.concat(roles, "/") end
+			return L["Aggro"] .. ": " .. (#parts > 0 and table.concat(parts, ", ") or L["Anyone"])
+		end
+		local function UnitsTip(flags)
+			local tips = {}
+			for letter in flags:gmatch(".") do tips[#tips + 1] = KIND_INFO[UNIT_LETTERS[letter]][3] end
+			return table.concat(tips, " ")
+		end
 		-- (A Distance's name in the Distance dropdown, short beside a row's
 		-- name, and its tip.)
 		local DISTANCE_NAMES = { In11 = L["Within 11 yards"], In28 = L["Within 28 yards"],
@@ -6705,7 +7045,14 @@ do
 		function AutoRowInfo(id)
 			local base, reaction, copy, distance = ns.MarkRowBase(id)
 			local kind = KIND_INFO[base] or KINDS[1]
-			local who = reaction and REACTION_NAMES[reaction]
+			if not KIND_INFO[base] and ns.MARK_UNIT_FLAGS[base] then
+				kind = { base, UnitsName(ns.MARK_UNIT_FLAGS[base]), UnitsTip(ns.MARK_UNIT_FLAGS[base]) }
+			elseif not KIND_INFO[base] and ns.MARK_AGGRO_FLAGS[base] then
+				kind = { base, AggroName(ns.MARK_AGGRO_FLAGS[base]), L["Any enemy in a fight attacking whoever " ..
+					"its ticks say: you or someone friendly other than you, and their role (no role set counts as " ..
+					"DPS; a pet only with all three roles ticked)."] }
+			end
+			local who = reaction and WhoName(reaction)
 			local far = distance and DISTANCE_SHORT[distance]
 			local number = copy and "(" .. copy .. ")"
 			local scope = who and far and who .. ", " .. far or who or far
@@ -6714,7 +7061,8 @@ do
 				.. (distance and DISTANCE_NAMES[distance] or "")
 			return { id = id, base = base, reaction = reaction, distance = distance, label = kind[2], sub = sub,
 				full = kind[2] .. (fullScope ~= "" and " - " .. fullScope or "") .. (number and " " .. number or ""),
-				tip = kind[3] .. (reaction and " " .. REACTION_TIPS[reaction] or "")
+				tip = kind[3] .. (reaction and " " .. (REACTION_TIPS[reaction]
+					or (L["This row: just these among them: %s."]):format(WhoName(reaction))) or "")
 					.. (distance and " " .. DISTANCE_TIP or "") }
 		end
 		preview.RowInfo = RowInfo
@@ -6774,9 +7122,12 @@ do
 			if markAlpha < 1 and ns.TargetMarkSetting("Style", kind) ~= "none" then
 				list[#list + 1] = { (L["Mark %d%%"]):format(markAlpha * 100 + 0.5), "fade" }
 			end
-			local scale = ns.TargetMarkSetting("Scale", kind) or 1
-			if ns.isRetail and math.abs(scale - 1) > 0.001 then
-				list[#list + 1] = { (L["Plate size %d%%"]):format(scale * 100 + 0.5) }
+			local width = ns.TargetMarkSetting("PlateWidth", kind) or 1
+			local height = ns.TargetMarkSetting("PlateHeight", kind) or 1
+			if ns.isRetail and math.abs(width - height) > 0.001 then
+				list[#list + 1] = { (L["Plate size %d%% x %d%%"]):format(width * 100 + 0.5, height * 100 + 0.5) }
+			elseif ns.isRetail and math.abs(width - 1) > 0.001 then
+				list[#list + 1] = { (L["Plate size %d%%"]):format(width * 100 + 0.5) }
 			end
 			return list
 		end
@@ -6795,6 +7146,31 @@ do
 			return list
 		end
 		local function Group(id) return ns.MarkRowBase(id) == "others" end
+		-- (Whether row other is for all of row id's units and more: the same
+		-- kind, or Units or Aggro for all of its, its Whos, any distance or the
+		-- same.)
+		local function Covers(other, id)
+			local base, reaction, _, distance = ns.MarkRowBase(id)
+			local otherBase, otherReaction, _, otherDistance = ns.MarkRowBase(other)
+			if base == "others" or otherBase == "others" then return false end
+			local flags = ns.MARK_UNIT_FLAGS[base] or ns.MARK_AGGRO_FLAGS[base]
+			local otherFlags = ns.MARK_UNIT_FLAGS[otherBase] or ns.MARK_AGGRO_FLAGS[otherBase]
+			if flags and otherFlags then
+				for letter in flags:gmatch(".") do
+					if not otherFlags:find(letter, 1, true) then return false end
+				end
+			elseif otherBase ~= base then
+				return false
+			end
+			if otherReaction then
+				if not reaction then return false end
+				for who in reaction:gmatch("%u%l+") do
+					if not otherReaction:find(who, 1, true) then return false end
+				end
+			end
+			if otherDistance and otherDistance ~= distance then return false end
+			return otherBase ~= base or otherReaction ~= reaction or otherDistance ~= distance
+		end
 		function grid:Refresh()
 			local list = RowList()
 			local at = {}
@@ -6822,15 +7198,9 @@ do
 				end
 				-- (A row for some units under a row of its kind for more of
 				-- them: that one sets first. Its Who and Distance in orange.)
-				local base, reaction, _, distance = ns.MarkRowBase(id)
 				local below = false
 				for j = 1, i - 1 do
-					local otherBase, otherReaction, _, otherDistance = ns.MarkRowBase(list[j])
-					if otherBase == base and base ~= "others" and (not otherReaction or otherReaction == reaction)
-						and (not otherDistance or otherDistance == distance)
-						and (otherReaction ~= reaction or otherDistance ~= distance) then
-						below = true
-					end
+					below = below or Covers(list[j], id) and list[j]
 				end
 				row.below = below
 				row:SetName()
@@ -6852,10 +7222,11 @@ do
 		end
 		controls[#controls + 1] = grid
 		RecordKey(content, "markOrder")
-		local function Toggle(id)
+		-- (Right-click: folds or opens it, the preview left on its pick.)
+		local function Toggle(id, button)
 			opened[id] = not opened[id]
 			grid:Refresh()
-			preview:Pick(id)
+			if button ~= "RightButton" then preview:Pick(id) end
 		end
 		local function SetOrder(order)
 			ns.GetDB().markOrder = table.concat(order, ",")
@@ -6908,7 +7279,7 @@ do
 		-- MARK_ROW_RULES), every role. Just above the first row of its kind,
 		-- or after the rest.
 		local MARK_COPY = { "Show", "Style", "Color", "R", "G", "B", "Size", "Bob", "Alpha", "AlsoSame", "Opacity",
-			"Scale", "PlateColor", "PlateR", "PlateG", "PlateB" }
+			"PlateWidth", "PlateHeight", "PlateColor", "PlateR", "PlateG", "PlateB" }
 		-- (Fresh: its kind's defaults instead, at the end of the grid, opened.)
 		local function AddRow(id, fresh)
 			local db = ns.GetDB()
@@ -6960,19 +7331,31 @@ do
 			SetOrder(order)
 		end
 
-		-- Picking a row: a Kind; for Aggro and Units a Type (which of them); a
-		-- Who (that kind's own: none for the aggro rows, no Neutral for players
-		-- and minions); a Distance (Core's MARK_DISTANCES). Under the grid for
-		-- adding one, and in each drawer (Default's own aside) for changing it.
-		-- A pick: { kind, type, who, distance }, Kind and Type naming a row
-		-- kind (Core's MARK_ROW_KINDS).
+		-- Picking a row: a Kind; for Aggro and Units a Type (which of them:
+		-- Units' ticks, any mix of Normal NPC, Elite NPC, Players and Minions);
+		-- a Who (ticks of that kind's own: none for the aggro rows, no Neutral
+		-- without NPCs; all ticked is Any); a Distance (Core's MARK_DISTANCES).
+		-- In each drawer (Default's own aside) for changing its row. A pick:
+		-- { kind, type, who, distance }, Kind and Type naming a row kind
+		-- (Core's MARK_ROW_KINDS), who "Any" or one or more ("EnemyNeutral").
 		local ADD_KINDS = {
 			{ "target", L["Target"] }, { "focus", L["Focus"] }, { "mouseover", L["Mouseover"] },
 			{ "aggro", L["Aggro"], { { "aggro", L["On you"] }, { "aggroother", L["Not on you"] },
-				{ "aggrononank", L["On a non-tank"] } } },
+				{ "aggrononank", L["On a non-tank"] }, { "aggrohealer", L["On a healer"] } } },
+			-- (Aggro's and Units' Type is ticks; these their steps on a client
+			-- without menus, and their names for those mixes.)
 			{ "units", L["Units"], { { "all", L["Any unit"] }, { "npcs", L["NPC"] }, { "npc", L["Normal NPC"] },
 				{ "elite", L["Elite NPC"] }, { "players", L["Players"] }, { "minions", L["Minions"] } } },
 			{ "others", L["Default"] },
+		}
+		-- (Their ticks, by Core's letters: the Aggro ones in two groups, who and
+		-- role, at least one of each.)
+		local TICKS = {
+			units = { flags = ns.MARK_UNIT_FLAGS, Kind = ns.MarkUnitKind, all = "nepm",
+				{ "n", L["Normal NPC"] }, { "e", L["Elite NPC"] }, { "p", L["Players"] }, { "m", L["Minions"] } },
+			aggro = { flags = ns.MARK_AGGRO_FLAGS, Kind = ns.MarkAggroKind, all = "yothd",
+				{ "y", L["You"] }, { "o", L["Not you"] }, { "t", L["Tank"], divider = true }, { "h", L["Healer"] },
+				{ "d", L["DPS"] } },
 		}
 		local function KindInfo(pick)
 			for _, kind in ipairs(ADD_KINDS) do
@@ -7009,11 +7392,51 @@ do
 			end
 			return list
 		end
-		-- (A Who the row kind picked hasn't got: back to Any.)
+		-- (A Who of those ticked the row kind picked has: none or all of them,
+		-- Any. Whether one's ticked, and ticking or unticking one; the last
+		-- one ticked stays.)
+		local function WhoOf(pick, ticked)
+			local whos, on = ns.MARK_ROW_KINDS[PickedKind(pick)] or {}, ""
+			for _, who in ipairs(whos) do
+				if ticked[who] then on = on .. who end
+			end
+			local all = ""
+			for _, who in ipairs(whos) do all = all .. who end
+			return (on == "" or on == all) and "Any" or on
+		end
+		local function WhoOn(pick, who)
+			return pick.who == "Any" or pick.who:find(who, 1, true) ~= nil
+		end
 		local function KeepWho(pick)
-			local known = false
-			for _, choice in ipairs(WhoChoices(pick)) do known = known or choice.value == pick.who end
-			if not known then pick.who = "Any" end
+			local ticked = {}
+			for _, who in ipairs(ns.MARK_REACTIONS) do ticked[who] = WhoOn(pick, who) end
+			pick.who = WhoOf(pick, ticked)
+		end
+		local function ToggleWho(pick, who)
+			local ticked, count = {}, 0
+			for _, each in ipairs(ns.MARK_ROW_KINDS[PickedKind(pick)] or {}) do
+				ticked[each] = WhoOn(pick, each)
+				if ticked[each] then count = count + 1 end
+			end
+			if ticked[who] and count == 1 then return false end
+			ticked[who] = not ticked[who]
+			pick.who = WhoOf(pick, ticked)
+			return true
+		end
+		-- (Aggro's and Units' ticks: whether one's ticked, and ticking or
+		-- unticking one; not the last one ticked, of a group for Aggro.)
+		local function TypeOn(pick, letter)
+			local ticks = TICKS[pick.kind]
+			return ticks ~= nil and (ticks.flags[PickedKind(pick)] or ""):find(letter, 1, true) ~= nil
+		end
+		local function ToggleType(pick, letter)
+			local ticks = TICKS[pick.kind]
+			local flags = ticks and ticks.flags[PickedKind(pick)] or ""
+			local new = ticks and ticks.Kind(TypeOn(pick, letter) and flags:gsub(letter, "") or flags .. letter)
+			if not new then return false end
+			pick.type = new
+			KeepWho(pick)
+			return true
 		end
 		-- (A row's own pick, from its id.)
 		local function PickOf(id)
@@ -7024,17 +7447,33 @@ do
 					if sub[1] == base then pick.kind, pick.type = kind[1], base end
 				end
 			end
+			for family, ticks in pairs(TICKS) do
+				if ticks.flags[base] then pick.kind, pick.type = family, base end
+			end
 			return pick
 		end
 		-- (The row a pick names, without its number.)
 		local function PickedFirst(pick)
 			return PickedKind(pick) .. (pick.who ~= "Any" and pick.who or "") .. (pick.distance ~= "Any" and pick.distance or "")
 		end
-		local function Choice(parent, width, Choices, Get, Set)
+		-- (With ticks, { Items(), On(value), Toggle(value): false if it can't,
+		-- Text() } as Choices, Get and Set: ticks in the menu, kept open for
+		-- ticking more; Choices, Get and Set still step a client without menus.)
+		local function Choice(parent, width, Choices, Get, Set, ticks)
 			local ok, dropdown = ns.MenuDropdown(parent)
 			if ok and dropdown and dropdown.SetupMenu then
 				dropdown:SetWidth(width)
 				dropdown:SetupMenu(function(_, root)
+					if ticks then
+						for _, item in ipairs(ticks.Items()) do
+							if item.divider then root:CreateDivider() end
+							root:CreateCheckbox(item.text, function() return ticks.On(item.value) end, function()
+								if ticks.Toggle(item.value) then Refresh() end
+								return MenuResponse and MenuResponse.Refresh
+							end)
+						end
+						return
+					end
 					for _, choice in ipairs(Choices()) do
 						root:CreateRadio(choice.text, function() return Get() == choice.value end, function()
 							Set(choice.value)
@@ -7042,6 +7481,9 @@ do
 						end)
 					end
 				end)
+				if ticks and dropdown.SetSelectionText then
+					dropdown:SetSelectionText(function() return ticks.Text() end)
+				end
 				dropdown.Refresh = function(self) self:GenerateMenu() end
 			else
 				dropdown = ns.PanelButton(parent)
@@ -7076,20 +7518,59 @@ do
 			end)
 			Tooltip(kindPick, L["The kind of plate the row is for: your target, focus or the unit under the " ..
 				"mouse; Aggro, enemies by who they're attacking; Units, by what they are; or Default, every other plate."])
+			-- (Aggro's and Units': ticks.)
 			local typePick = Choice(parent, widths[2], function() return TypeChoices(pick) end,
 				function() return PickedKind(pick) end, function(value)
 					pick.type = value
 					KeepWho(pick)
 					changed()
-				end)
-			Tooltip(typePick, L["Which of them: for Aggro, who the enemy's attacking; for Units, NPCs by rank or " ..
-				"any NPC, players, their pets, totems and guardians (minions), or any unit."])
+				end, {
+					Items = function()
+						local list = {}
+						for _, tick in ipairs(TICKS[pick.kind] or {}) do
+							list[#list + 1] = { value = tick[1], text = tick[2], divider = tick.divider }
+						end
+						return list
+					end,
+					On = function(letter) return TypeOn(pick, letter) end,
+					Toggle = function(letter)
+						if not ToggleType(pick, letter) then return false end
+						changed()
+						return true
+					end,
+					Text = function()
+						local kind = PickedKind(pick)
+						for _, choice in ipairs(TypeChoices(pick)) do
+							if choice.value == kind then return choice.text end
+						end
+						return AutoRowInfo(kind).label
+					end,
+				})
+			Tooltip(typePick, L["Which of them, ticks. Aggro: who the enemy's attacking, You or Not you (someone " ..
+				"friendly: a group member, a pet or another player), and their role, Tank, Healer or DPS (no role " ..
+				"set counts as DPS; a pet only with all three ticked). Units: any of Normal NPC, Elite NPC (elite, " ..
+				"rare elite and bosses), Players, and Minions (their pets, totems and guardians); all four, any unit."])
 			local whoPick = Choice(parent, widths[3], function() return WhoChoices(pick) end,
 				function() return pick.who end, function(value)
 					pick.who = value
 					changed()
-				end)
-			Tooltip(whoPick, L["Any: all of that kind. Enemy, Neutral or Friendly: just those of them."])
+				end, {
+					Items = function()
+						local list = {}
+						for _, who in ipairs(ns.MARK_ROW_KINDS[PickedKind(pick)] or {}) do
+							list[#list + 1] = { value = who, text = REACTION_NAMES[who] }
+						end
+						return list
+					end,
+					On = function(who) return WhoOn(pick, who) end,
+					Toggle = function(who)
+						if not ToggleWho(pick, who) then return false end
+						changed()
+						return true
+					end,
+					Text = function() return pick.who == "Any" and L["Any"] or WhoName(pick.who) end,
+				})
+			Tooltip(whoPick, L["Tick Enemy, Neutral or Friendly for just those of them; all of them: any."])
 			local distancePick = Choice(parent, widths[4], DistanceChoices, function() return pick.distance end,
 				function(value)
 					pick.distance = value
@@ -7099,7 +7580,8 @@ do
 				"those that far from you, say Any unit past 40 yards to fade the plates far off. 40 yards asks a " ..
 				"40-yard spell on your action bars; with none there, the row fits no unit past 28 yards."])
 			return kindPick, function(after)
-				typePick:SetShown(KindInfo(pick)[3] ~= nil)
+				local kind = KindInfo(pick)
+				typePick:SetShown(kind[3] ~= nil)
 				whoPick:SetShown(#(ns.MARK_ROW_KINDS[PickedKind(pick)] or {}) > 0)
 				local last = kindPick
 				for _, each in ipairs({ typePick, whoPick, distancePick, after }) do
@@ -7155,7 +7637,6 @@ do
 			SetOrder(order)
 			preview:Pick(new)
 		end
-
 		-- A row copied: the next free of its kind, Who and Distance, with its
 		-- look, When, roles and name (marked a copy), just below it, opened.
 		-- Nothing with five of them on the grid.
@@ -7206,7 +7687,8 @@ do
 			line:SetPoint("BOTTOMRIGHT")
 			line:SetHeight(1)
 			line:SetColorTexture(1, 1, 1, 0.08)
-			row:SetScript("OnClick", function() Toggle(kind) end)
+			row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+			row:SetScript("OnClick", function(_, button) Toggle(kind, button) end)
 			local function Place(control, x, dy)
 				control:SetPoint("LEFT", row, "LEFT", x, dy or 0)
 				return control
@@ -7331,7 +7813,7 @@ do
 				end
 				if self.below then
 					GameTooltip:AddLine((L["%s's own row is above this one, so it sets its parts first: move " ..
-						"this one above it."]):format(info.label), 1, 0.55, 0.1, true)
+						"this one above it."]):format(RowInfo(self.below).label), 1, 0.55, 0.1, true)
 				end
 				GameTooltip:AddLine(L["Click to show or hide its settings."], 0.6, 0.6, 0.6)
 				GameTooltip:Show()
@@ -7451,11 +7933,12 @@ do
 			-- it), for a row's setting (or its kind's) as a whole percent, low
 			-- to high: the mouse wheel steps it by 5, or type one and press
 			-- Enter. Its name to its left.
-			local function PercentBox(line, slot, key, low, high, name, tip)
+			-- (x: its own place on the line, not its slot's.)
+			local function PercentBox(line, slot, key, low, high, name, tip, x)
 				local dbKey = MarkKey(kind, key)
 				RecordKey(content, dbKey)
 				local box = At(line, ns.SkinEditBox(CreateFrame("EditBox", nil, drawer, "InputBoxTemplate")),
-					DRAWER_W - 50 - (slot - 1) * 100)
+					x or DRAWER_W - 50 - (slot - 1) * 100)
 				box:SetSize(40, 20)
 				box:SetAutoFocus(false)
 				box:SetJustifyH("RIGHT")
@@ -7649,6 +8132,18 @@ do
 					local db = ns.GetDB()
 					if sameKey then db[sameKey] = value == "target" end
 					if value ~= "target" then db[plateKey] = value end
+					-- (A color with no part ticked colors nothing: Bar ticked
+					-- for it, so the plate and the previews show it.)
+					if value ~= "-" and value ~= "game" then
+						local any = false
+						for _, part in ipairs(ALSO_PARTS) do
+							if (not part.targetOnly or base == "target" or base == "aggro")
+								and ns.TargetMarkOwn("Color" .. part[1], kind) then
+								any = true
+							end
+						end
+						if not any then db[kind .. "ColorBar"] = true end
+					end
 					Changed()
 				end), LABEL_W)
 			plateColor.searchLabel = info.full .. " " .. L["Plate color"]
@@ -7666,37 +8161,60 @@ do
 					return ns.TargetMarkOwn("PlateR", kind) or 1, ns.TargetMarkOwn("PlateG", kind) or 1,
 						ns.TargetMarkOwn("PlateB", kind) or 1
 				end, function() return PlateHow() == "custom" end, L["Click to choose the plate's custom color."])
-			-- (Its parts, closing up to the color with no swatch beside it.)
-			local ticks = {}
+			-- (Its parts, ticks in one dropdown, closing up to the color with
+			-- no swatch beside it.)
+			local parts, partTips = {}, {}
 			for _, part in ipairs(ALSO_PARTS) do
 				if not part.targetOnly or base == "target" or base == "aggro" then
-					local key = kind .. "Color" .. part[1]
-					RecordKey(content, key)
-					local tick = Check(drawer, key, ALSO_SHORT[part[1]], part[3], function(value)
-						ns.GetDB()[key] = value
-						Refresh()
-						Changed()
-					end)
-					tick.searchLabel = info.full .. " " .. part[2]
-					GreyUnless(tick, Shown)
-					ticks[#ticks + 1] = tick
+					RecordKey(content, kind .. "Color" .. part[1])
+					parts[#parts + 1] = part
+					partTips[#partTips + 1] = part[2] .. ": " .. part[3]
 				end
 			end
+			local function PartOn(name)
+				return ns.TargetMarkOwn("Color" .. name, kind) and true or false
+			end
+			local function PartItems()
+				local list = {}
+				for _, part in ipairs(parts) do list[#list + 1] = { value = part[1], text = ALSO_SHORT[part[1]] } end
+				return list
+			end
+			local function TogglePart(name)
+				ns.GetDB()[kind .. "Color" .. name] = not PartOn(name)
+				Changed()
+				return true
+			end
+			local partPick = Choice(drawer, 110, PartItems, function() end, TogglePart, {
+				Items = PartItems,
+				On = PartOn,
+				Toggle = TogglePart,
+				Text = function()
+					local on = {}
+					for _, part in ipairs(parts) do
+						if PartOn(part[1]) then on[#on + 1] = ALSO_SHORT[part[1]] end
+					end
+					return #on > 0 and table.concat(on, ", ") or L["None"]
+				end,
+			})
+			Tooltip(partPick, L["The parts of the plate in its color, ticks."] .. "\n\n" .. table.concat(partTips, "\n"))
+			GreyUnless(partPick, Shown)
 			local placer = CreateFrame("Frame", nil, drawer)
 			placer.Refresh = function()
-				local x = LABEL_W + (plateSwatch:IsShown() and 132 or 106)
-				for _, tick in ipairs(ticks) do
-					tick:ClearAllPoints()
-					At("Plate", tick, x)
-					tick:SetShown(Colors())
-					local text = tick.Text or tick.text
-					x = x + 30 + math.ceil(text and text:GetStringWidth() or 30)
-				end
+				partPick:ClearAllPoints()
+				At("Plate", partPick, LABEL_W + (plateSwatch:IsShown() and 132 or 106))
+				partPick:SetShown(Colors())
 			end
 			controls[#controls + 1] = placer
+			-- (Width and Height, W and H, the two boxes where one Size was.)
 			if ns.isRetail then
-				PercentBox("Plate", 2, "Scale", 50, 200, L["Size"],
-					L["The plate's size, its mark too. Not on WoW Forever: its plates don't change size."])
+				local SIZE_TIP = L["Its name, mark and the rest of the plate move with the bar's edges. Not on " ..
+					"WoW Forever: its plates don't change size."]
+				local _, w = PercentBox("Plate", 2, "PlateWidth", 50, 300, L["Width"],
+					L["The health bar's width."] .. " " .. SIZE_TIP, DRAWER_W - 214)
+				w:SetText(L["W"])
+				local _, h = PercentBox("Plate", 2, "PlateHeight", 50, 300, L["Height"],
+					L["The health bar's height."] .. " " .. SIZE_TIP)
+				h:SetText(L["H"])
 			end
 			PercentBox("Plate", 1, "Alpha", 0, 100, L["Opacity"], L["The whole plate's opacity while this row fits " ..
 				"it, whether it has a mark or not. CineMode's own fade comes on top."])
@@ -7782,6 +8300,26 @@ do
 		controls[#controls + 1] = add
 
 		grid:Refresh()
+
+		-- (How fast a plate's opacity and size change, as CineMode's Fade in
+		-- time: a quick look away from an elite and back barely shows.)
+		stack:Header(content, L["All rows"])
+		local fadeTime = stack:Add(Slider(content, "plateStyleFadeTime", L["Change time"], 0, 10, 0.1,
+			L["%.1f sec"]), "slider")
+		Tooltip(fadeTime, L["How long a plate takes to change its opacity or size a whole 100% when the row it " ..
+			"goes by changes: from 100% to 15% takes a bit less. If it changes back before it's there, it turns " ..
+			"back from where it is, so a quick look away from an elite and back barely shows. A plate just come " ..
+			"into view starts at its row's. 0: at once."])
+		-- (The game's Show Offscreen Nameplates in CineMode; none on a client
+		-- without it.)
+		if GetCVar("nameplateShowOffscreen") ~= nil then
+			local offscreen = stack:Add(Check(content, "plateShowOffscreen", L["Off-screen plates in CineMode"],
+				L["The game's Show Offscreen Nameplates in CineMode. Ticked: on, plates for units out of view stay, " ..
+				"pinned to the edge of the screen, so rows and rules that look for plates still find them, like an " ..
+				"elite behind you for the elite rules. Unticked: off in CineMode. Your own setting comes back when " ..
+				"CineMode ends."]), "check")
+			offscreen.searchLabel = L["Off-screen plates in CineMode"]
+		end
 
 		stack:Header(content, L["All marks"])
 		-- (Two heights: on a showing plate, and with none; the marks move
@@ -8842,7 +9380,8 @@ local function CreateCooldownPanel()
 		"fights the game may not say how long is left, so then it goes by when you last cast it. The " ..
 		"settings beside each group's name set every spell in it at once."]:format(ns.READY_EARLY * 100) .. " " ..
 		L["Tracked buffs and bars: Always, In combat, Out of combat or Hidden (the game keeps your buffs " ..
-		"secret in fights, so they go by that alone). Click a group's name to fold it away."])
+		"secret in fights, so they go by that alone). Click a group's name to fold it away."] .. " " ..
+		L["Until you set a bar's mode, its spells with no cooldown go by what they cost, as Smart Set picks."])
 	RecordKey(content, "cooldownReadyOnly") -- (for the page's Reset)
 	RecordKey(content, "cooldownReadyEarly")
 	RecordKey(content, "cooldownEarlyOn")
@@ -8856,13 +9395,13 @@ local function CreateCooldownPanel()
 	local MODE_X, POWER_X, EARLY_X, ROW_HEIGHT = 200, 360, 440, 26
 	local GROUP_HEIGHT, GROUP_GAP, GROUP_WIDTH = 36, 12, 560
 	local spellHeading = Label(content, "GameFontNormalSmall", L["Spell"])
-	spellHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -10)
+	spellHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -42)
 	local modeHeading = Label(content, "GameFontNormalSmall", L["Icon shows"])
-	modeHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", MODE_X, -10)
+	modeHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", MODE_X, -42)
 	local powerHeading = Label(content, "GameFontNormalSmall", L["Resources"])
-	powerHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", POWER_X - 4, -10)
+	powerHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", POWER_X - 4, -42)
 	local earlyHeading = Label(content, "GameFontNormalSmall", L["Show Early"])
-	earlyHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", EARLY_X, -10)
+	earlyHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", EARLY_X, -42)
 	local noSpells = Label(content, "GameFontDisable", L["Nothing in the Cooldown Manager right now."])
 	noSpells:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, -8)
 
@@ -9288,6 +9827,62 @@ local function CreateCooldownPanel()
 		powerHeading:SetShown(#list > 0)
 	end
 
+	-- Smart Set: each spell with no cooldown in the Essential and Utility bars
+	-- set on its own by what it costs (ns.SmartCooldownMode): When Ready with
+	-- Resources for a resource you build up (Maelstrom), When it procs for the
+	-- rest. Spells with a cooldown are left as they are. (Those picks are
+	-- also the default until a group's mode is set.) Reset: those bars'
+	-- spells back to their defaults.
+	local function EachBarSpell(visit)
+		ListSpells()
+		for _, spell in ipairs(ns.CooldownManagerSpells()) do
+			if ns.COOLDOWN_SMART_GROUPS[spell.group] then visit(spell.id) end
+		end
+	end
+	local smartSet = ns.PanelButton(content)
+	smartSet:SetSize(110, 22)
+	smartSet:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -8)
+	smartSet:SetText(L["Smart Set"])
+	Tooltip(smartSet, L["Sets each spell with no cooldown in the Essential and Utility bars by what it costs: " ..
+		"When Ready with Resources if it spends a resource you build up (like Maelstrom), else When it procs " ..
+		"(like Lightning Bolt). Spells with a cooldown are left as they are."])
+	smartSet:SetScript("OnClick", function()
+		local db, procs, power = ns.GetDB(), 0, 0
+		EachBarSpell(function(id)
+			local pick = ns.SmartCooldownMode(id)
+			if pick == "power" then
+				SetSpellMode(id, "ready")
+				db.cooldownNeedsPower[id] = true
+				power = power + 1
+			elseif pick == "proc" then
+				SetSpellMode(id, "proc")
+				procs = procs + 1
+			end
+		end)
+		ns.Print(L["Smart Set: %d spells set to When it procs, %d to When Ready with Resources."]:format(procs, power))
+		ListSpells()
+		Refresh()
+	end)
+	smartSet.Refresh = function() end
+	controls[#controls + 1] = smartSet
+	local smartReset = ns.PanelButton(content)
+	smartReset:SetSize(110, 22)
+	smartReset:SetPoint("LEFT", smartSet, "RIGHT", 8, 0)
+	smartReset:SetText(L["Reset"])
+	Tooltip(smartReset, L["Puts every spell in the Essential and Utility bars back to its default: its group's setting, " ..
+		"or Smart Set's pick for one with no cooldown until you set the group's mode."])
+	smartReset:SetScript("OnClick", function()
+		local db = ns.GetDB()
+		EachBarSpell(function(id)
+			SetSpellMode(id, nil)
+			db.cooldownNeedsPower[id], db.cooldownEarlyOn[id], db.cooldownReadyEarly[id] = nil, nil, nil
+		end)
+		ListSpells()
+		Refresh()
+	end)
+	smartReset.Refresh = function() end
+	controls[#controls + 1] = smartReset
+
 	local shown = PageShown(Refresh, content)
 	canvas:SetScript("OnShow", function()
 		ListSpells()
@@ -9357,44 +9952,73 @@ local function CreateVisionPanel()
 		"when you turn this back on."], note, ApplyQuest)
 	local questStack = Stack(questSwitch, "check")
 	local function QuestPlatesOn(db) return db.handlePlates end
+	-- Ticks, each its own setting (Unit frame: the target frame's quest icon).
 	local QUEST_SHOWS = {
-		{ value = "plate", text = L["Nameplate"] },
-		{ value = "name", text = L["Name"] },
-		{ value = "mark", text = L["Quest mark (!)"] },
-		{ value = "none", text = L["No action"] },
+		{ key = "questMobsMark", text = L["Quest mark (!)"] },
+		{ key = "questMobsPlate", text = L["Nameplate"] },
+		{ key = "questMobsName", text = L["Name"] },
+		{ key = "targetQuestIcon", text = L["Unit frame"] },
 	}
-	local QUEST_SHOWS_TIP = L["In CineMode, what shows of mobs and NPCs you still need for a quest objective (a mob " ..
-		"to kill, an NPC to talk to), in fights and out, whatever the Nameplates page's grids say. Nameplate: " ..
-		"their whole nameplates. Name: just their names, on their nameplates. Quest mark: a golden ! added to " ..
-		"the nameplate or name the Nameplates page shows them with, else the ! alone. No action: as the " ..
-		"Nameplates page's settings say. Once the objective is done, they fade with the rest. Needs the " ..
-		"Nameplates page enabled."]
+	local function QuestShowTicked(key)
+		if key == "targetQuestIcon" and ns.RefreshTargetQuestIcon then ns.RefreshTargetQuestIcon() end
+		Refresh()
+	end
+	local QUEST_SHOWS_TIP = L["What shows of mobs and NPCs you still need for a quest objective (a mob to kill, " ..
+		"an NPC to talk to), whatever the Nameplates page's grids say; tick any. Nameplate: their whole " ..
+		"nameplates. Name: their names, on their nameplates. Quest mark: a golden ! added to the nameplate or " ..
+		"name shown, else the ! alone. These three in CineMode, in fights and out, and need the Nameplates page " ..
+		"enabled; once the objective is done, they fade with the rest. Unit frame: the same mark beside your " ..
+		"target frame's health bar while your target is one of them, in CineMode and out. None ticked: as the " ..
+		"Nameplates page's settings say."]
 	questStack:Add(Label(content, "GameFontHighlight", L["Always show their"]), "label")
-	local questShows = Dropdown(content, "questMobsShow", QUEST_SHOWS, 200)
-	if questShows then
+	local okMenu, questShows = ns.MenuDropdown(content)
+	if okMenu and questShows and questShows.SetupMenu then
+		questShows:SetWidth(200)
+		questShows.searchSkip = true -- (it shows the current ticks, not a label)
+		questShows:SetupMenu(function(_, root)
+			for _, choice in ipairs(QUEST_SHOWS) do
+				root:CreateCheckbox(choice.text,
+					function()
+						local db = ns.GetDB()
+						return db ~= nil and db[choice.key] and true or false
+					end,
+					function()
+						local db = ns.GetDB()
+						db[choice.key] = not db[choice.key]
+						QuestShowTicked(choice.key)
+						return MenuResponse and MenuResponse.Refresh
+					end)
+			end
+		end)
+		if questShows.SetSelectionText then
+			questShows:SetSelectionText(function()
+				local db, ticked = ns.GetDB(), {}
+				for _, choice in ipairs(QUEST_SHOWS) do
+					if db and db[choice.key] then ticked[#ticked + 1] = choice.text end
+				end
+				return #ticked > 0 and table.concat(ticked, ", ") or L["No action"]
+			end)
+		end
+		questShows.Refresh = function(self) self:GenerateMenu() end
+		controls[#controls + 1] = questShows
+		for _, choice in ipairs(QUEST_SHOWS) do RecordKey(content, choice.key) end
 		questStack:Add(questShows, "dropdown")
 		Tooltip(questShows, QUEST_SHOWS_TIP)
-		GreyUnless(questShows, QuestPlatesOn)
 	else
 		for _, choice in ipairs(QUEST_SHOWS) do
-			local check = questStack:Add(Choice(content, "questMobsShow", choice.value, choice.text, QUEST_SHOWS_TIP),
-				"check")
-			GreyUnless(check, QuestPlatesOn)
+			local check = questStack:Add(Check(content, choice.key, choice.text, QUEST_SHOWS_TIP, function(value)
+				ns.GetDB()[choice.key] = value
+				QuestShowTicked(choice.key)
+			end), "check")
+			if choice.key ~= "targetQuestIcon" then GreyUnless(check, QuestPlatesOn) end
 		end
 	end
 	local questIcon = Check(content, "plateAlwaysPartQuestIcon", L["Quest icon by their nameplates or names"],
 		L["A golden exclamation mark beside their nameplates' health bars, wherever their plates show " ..
 		"(beside their names when just their names show). Always on with Quest mark above. Needs the " ..
 		"Nameplates page enabled."])
-	GreyUnless(questIcon, function(db) return db.handlePlates and db.questMobsShow ~= "mark" end)
+	GreyUnless(questIcon, function(db) return db.handlePlates and not db.questMobsMark end)
 	questStack:Add(questIcon, "check")
-	local questTarget = Check(content, "targetQuestIcon", L["Quest icon on your target frame"],
-		L["The same mark beside your target frame's health bar while your target is one of them. " ..
-		"In CineMode and out."], function(value)
-		ns.GetDB().targetQuestIcon = value
-		if ns.RefreshTargetQuestIcon then ns.RefreshTargetQuestIcon() end
-	end)
-	questStack:Add(questTarget, "check")
 	local questItem = Check(content, "questItemButton", L["Quest item button"],
 		L["Where your extra ability button goes (the extra abilities frame's place in Edit Mode), a big button " ..
 		"with the item the nearest tracked quest gives you to use, the one in the quest tracker. Click it or press its " ..
@@ -10904,12 +11528,6 @@ local function NameFree(name, old)
 	return true
 end
 
-StaticPopupDialogs.CINEMATIC_PROFILE_NEW = NamePopup(L["Name the new profile (it starts from your current settings):"],
-	function(name)
-		if not NameFree(name) then return true end
-		ns.NewProfile(name)
-		Refresh()
-	end)
 StaticPopupDialogs.CINEMATIC_PROFILE_RENAME = NamePopup(L["Rename the profile:"], function(name, old)
 	if not old or name == old then return end
 	if not NameFree(name, old) then return true end
@@ -11057,163 +11675,221 @@ local function CreateProfilesPanel()
 	local header = Header(content, L["Profiles"], perChar, -12)
 	header:SetPoint("TOPLEFT", perChar, "BOTTOMLEFT", 2, -12)
 
-	-- One icon per profile, its name under it and its description on
-	-- mouseover (built up as profiles come and go). Clicking one switches to
-	-- it; clicking yours when it's active picks its icon.
-	local ICON, CELL_W, CELL_H, PER_ROW = 40, 108, 72, 5
-	local active -- (the ticked one, or nil until a new player picks one)
+	-- Drawn as the welcome window is (Welcome.lua's flat look): a card per
+	-- profile (its icon, name and a line) and one to start a new one, a box
+	-- under them saying what the one pointed at does (a button's too, or else
+	-- the active profile's), the welcome window's Customize panel, then flat
+	-- buttons to manage and share. Clicking a card switches to it; clicking
+	-- yours when it's active picks its icon.
+	local S = ns.FlatStyle
+	local WIDTH, GAP, PER_ROW, CARD_H = 580, 10, 4, 124
+	local CARD_W = (WIDTH - (PER_ROW - 1) * GAP) / PER_ROW
+	local LEVELS = {} -- built-in profile -> its welcome level (the card's line)
+	for _, level in ipairs(ns.WELCOME_LEVELS) do LEVELS[level.profile] = level end
+	local active -- (the gold one, or nil until a new player picks one)
 	local cells = {}
+	local tips = {} -- (every button's, to size the box)
 	local Layout -- (below)
 	-- (Any icon the game has: IconBrowser.lua.)
 	local picker = ns.IconBrowser(canvas, function(name, file)
 		ns.SetProfileIcon(name, file)
 		Layout()
 	end)
+
+	local box = CreateFrame("Frame", nil, content, BackdropTemplateMixin and "BackdropTemplate")
+	box:SetSize(WIDTH, 56)
+	S.Flat(box, S.BG)
+	S.Skinnable(box)
+	local about = S.Text(box, "GameFontHighlightSmall", "", S.SOFT, WIDTH - 24)
+	about:SetPoint("TOPLEFT", 12, -10)
+	about:SetSpacing(2)
+	about.searchSkip = true -- (it changes with the mouse)
+
+	-- A profile's description, with what a click on its card does.
+	local function ProfileText(cell)
+		local hint = cell.name ~= active and L["Click to switch to it."]
+			or not ns.IsBuiltinProfile(cell.name) and L["Click to pick its icon."]
+		return "|cffffd100" .. ns.ProfileLabel(cell.name) .. "|r   " .. cell.tip
+			.. (hint and "\n|cff808080" .. hint .. "|r" or "")
+	end
+	-- What the box says: the card or button pointed at, else the active profile.
+	local function Describe(text)
+		if text then
+			about:SetText(text)
+			return
+		end
+		for _, cell in ipairs(cells) do
+			if cell:IsShown() and cell.name and cell.name == active then
+				about:SetText(ProfileText(cell))
+				return
+			end
+		end
+		about:SetText(L["Pick a profile to switch to it."])
+	end
+
+	local function Card()
+		local cell = CreateFrame("Button", nil, content, BackdropTemplateMixin and "BackdropTemplate")
+		cell:SetSize(CARD_W, CARD_H)
+		S.Flat(cell)
+		S.Skinnable(cell)
+		cell.icon = cell:CreateTexture(nil, "ARTWORK")
+		cell.icon:SetSize(40, 40)
+		cell.icon:SetPoint("TOP", 0, -14)
+		cell.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		S.Rounded(cell, cell.icon)
+		cell.label = S.Text(cell, "GameFontHighlightLarge", "", S.WHITE, CARD_W - 12)
+		cell.label:SetJustifyH("CENTER")
+		cell.label:SetWordWrap(false)
+		cell.label:SetPoint("TOP", cell.icon, "BOTTOM", 0, -7)
+		cell.line = S.Text(cell, "GameFontHighlightSmall", "", S.SOFT, CARD_W - 16)
+		cell.line:SetJustifyH("CENTER")
+		if cell.line.SetMaxLines then cell.line:SetMaxLines(3) end
+		cell.line:SetPoint("TOP", cell.label, "BOTTOM", 0, -4)
+		cell:SetScript("OnEnter", function(self)
+			if self.name ~= active then self:SetBackdropBorderColor(unpack(S.LIT)) end
+			Describe(self.name and ProfileText(self) or self.tip)
+		end)
+		cell:SetScript("OnLeave", function(self)
+			if self.name ~= active then self:SetBackdropBorderColor(unpack(S.EDGE)) end
+			Describe()
+		end)
+		return cell
+	end
+
+	-- The last card: a new profile of your own, from the settings you have now.
+	local newTip = L["A profile of your own, a copy of the active one as you have it now, named after it. " ..
+		"To copy another profile, switch to it first."]
+	local newCard = Card()
+	newCard.label:SetText(L["New profile"])
+	newCard.line:SetText(L["From your settings now"])
+	newCard.tip = newTip
+	newCard.searchTip = newTip
+	newCard.icon:Hide()
+	-- (a plus where the icon goes: two thin bars)
+	for _, size in ipairs({ { 20, 2 }, { 2, 20 } }) do
+		local bar = newCard:CreateTexture(nil, "ARTWORK")
+		bar:SetSize(size[1], size[2])
+		bar:SetPoint("CENTER", newCard.icon, "CENTER")
+		bar:SetColorTexture(unpack(S.DIM))
+	end
+	-- (Named after the one it starts from, no asking: My Cinema, or a copy of
+	-- yours with a number; Rename is there for another name.)
+	newCard:SetScript("OnClick", function()
+		local from = ns.ActiveProfile()
+		local base = ns.IsBuiltinProfile(from) and L["My %s"]:format(ns.ProfileLabel(from)) or from
+		local name, n = base, 1
+		while ns.ProfileExists(name) do
+			n = n + 1
+			name = base .. " " .. n
+		end
+		ns.NewProfile(name)
+		Refresh()
+	end)
+	tips[#tips + 1] = newTip
+
 	local function GetCell(i)
 		if cells[i] then return cells[i] end
-		local cell = CreateFrame("Button", nil, content)
-		cell:SetSize(CELL_W, CELL_H)
-		local square = CreateFrame("Frame", nil, cell)
-		square:SetSize(ICON, ICON)
-		square:SetPoint("TOP", 0, 0)
-		cell.border = square:CreateTexture(nil, "BACKGROUND")
-		cell.border:SetAllPoints()
-		local bg = square:CreateTexture(nil, "BORDER")
-		bg:SetPoint("TOPLEFT", 1, -1)
-		bg:SetPoint("BOTTOMRIGHT", -1, 1)
-		bg:SetColorTexture(0.06, 0.05, 0.04, 0.95)
-		cell.icon = square:CreateTexture(nil, "ARTWORK")
-		cell.icon:SetPoint("TOPLEFT", 2, -2)
-		cell.icon:SetPoint("BOTTOMRIGHT", -2, 2)
-		cell.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-		local hl = cell:CreateTexture(nil, "HIGHLIGHT")
-		hl:SetAllPoints(cell.icon)
-		hl:SetColorTexture(1, 1, 1, 0.15)
-		cell.label = Label(cell, "GameFontHighlightSmall")
-		cell.label:SetPoint("TOP", square, "BOTTOM", 0, -4)
-		cell.label:SetWidth(CELL_W - 6)
-		cell.label:SetJustifyH("CENTER")
-		if cell.label.SetMaxLines then cell.label:SetMaxLines(2) end
-		cell.square = square
+		local cell = Card()
+		-- (a built-in that's been changed: a quiet tag in its corner)
+		cell.changed = S.Text(cell, "GameFontHighlightSmall", L["(changed)"], S.DIM)
+		cell.changed:SetPoint("TOPRIGHT", -6, -6)
+		cell.changed.searchSkip = true
 		cell:SetScript("OnClick", function(self)
-			GameTooltip:Hide()
 			if self.name ~= active then
 				picker:Hide()
 				ns.SetProfile(self.name)
 				ns.PreviewProfile(self.name)
+				-- (Cinema: Vitals Vision's screen edges for a moment, as on the
+				-- welcome window. Another profile ends that look at once.)
+				if ns.StopVitalsFlash then ns.StopVitalsFlash() end
+				local level = LEVELS[self.name]
+				if level and level.flash == "vitals" and ns.FlashVitals then ns.FlashVitals(2) end
 				Refresh()
 			elseif not ns.IsBuiltinProfile(self.name) then
 				picker:Open(self, self.name, ns.ProfileIcon(self.name))
 			end
+			Describe(ProfileText(self))
 		end)
-		cell:SetScript("OnEnter", function(self)
-			GameTooltip:SetOwner(self.square, "ANCHOR_RIGHT")
-			GameTooltip:SetText(ns.ProfileLabel(self.name), 1, 0.82, 0)
-			GameTooltip:AddLine(self.tip, 1, 1, 1, true)
-			local hint = self.name ~= active and L["Click to switch to it."]
-				or not ns.IsBuiltinProfile(self.name) and L["Click to pick its icon."]
-			if hint then GameTooltip:AddLine(hint, 0.5, 0.5, 0.5, true) end
-			GameTooltip:Show()
-		end)
-		cell:SetScript("OnLeave", function() GameTooltip:Hide() end)
 		cells[i] = cell
 		return cell
 	end
 
+	-- The welcome window's Customize panel (Welcome.lua): one part of the
+	-- active profile at a time. A change to a built-in starts My setup.
+	local customizeHeader = Header(content, L["Customize"], box, -18)
+	customizeHeader:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -18)
+	local customize = ns.CustomizePanel(content, WIDTH, function() Refresh() end, true)
+	customize:SetPoint("TOPLEFT", customizeHeader, "BOTTOMLEFT", 0, -10)
+	-- (The part's own settings page, for everything else it has.)
+	local more = S.Button(customize, L["Open its settings page"] .. " >", nil, function()
+		local page = customize:SettingsPage()
+		if page then ns.OpenOptions(page) end
+	end)
+	more:SetPoint("TOPRIGHT", customize, "BOTTOMRIGHT", 0, -4)
+
+	local manageHeader = Header(content, L["Manage and share"], more, -14)
+	manageHeader:SetPoint("TOPLEFT", customize, "BOTTOMLEFT", 0, -32)
 	local buttons = CreateFrame("Frame", nil, content)
-	buttons:SetSize(540, 22)
-	local function Button(text, width, tip, onClick)
-		local button = ns.PanelButton(buttons)
-		button:SetSize(width, 22)
+	buttons:SetSize(WIDTH, 28)
+	buttons:SetPoint("TOPLEFT", manageHeader, "BOTTOMLEFT", 0, -10)
+	-- (The menu look's own buttons, HD or SD. Its tip goes in the box, not a
+	-- tooltip, as on the welcome window.)
+	local function Button(parent, text, width, tip, onClick)
+		local button = ns.PanelButton(parent)
+		button:SetSize(width, 26)
 		button:SetText(text)
-		Tooltip(button, tip)
 		button:SetScript("OnClick", onClick)
+		button.searchTip = tip
+		button:HookScript("OnEnter", function() Describe(tip) end)
+		button:HookScript("OnLeave", function() Describe() end)
+		tips[#tips + 1] = tip
 		return button
 	end
-	local new = Button(L["New profile"], 120, L["A profile of your own, starting from your current settings. " ..
-		"To copy another profile, switch to it first."], function()
-		StaticPopup_Show("CINEMATIC_PROFILE_NEW")
-	end)
-	new:SetPoint("LEFT", buttons, "LEFT", 0, 0)
-	local rename = Button(L["Rename"], 100, L["Rename the active profile (your own ones only)."], function()
+	local rename = Button(buttons, L["Rename"], 90, L["Rename the active profile (your own ones only)."], function()
 		local name = ns.ActiveProfile()
 		StaticPopup_Show("CINEMATIC_PROFILE_RENAME", nil, nil, name)
 	end)
-	rename:SetPoint("LEFT", new, "RIGHT", 8, 0)
-	local note = Button(L["Description"], 110, L["Write what the active profile is for, shown when you point " ..
+	rename:SetPoint("LEFT", buttons, "LEFT", 0, 0)
+	local note = Button(buttons, L["Description"], 96, L["Write what the active profile is for, shown when you point " ..
 		"at its icon (your own ones only)."], function()
 		local name = ns.ActiveProfile()
 		StaticPopup_Show("CINEMATIC_PROFILE_NOTE", nil, nil, name)
 	end)
 	note:SetPoint("LEFT", rename, "RIGHT", 8, 0)
-	local delete = Button(L["Delete"], 100, L["Delete the active profile (your own ones only), switching to %s."]:format(
+	local delete = Button(buttons, L["Delete"], 84, L["Delete the active profile (your own ones only), switching to %s."]:format(
 		ns.ProfileLabel(ns.DEFAULT_PROFILE)), function()
 		local name = ns.ActiveProfile()
 		StaticPopup_Show("CINEMATIC_PROFILE_DELETE", name, nil, name)
 	end)
 	delete:SetPoint("LEFT", note, "RIGHT", 8, 0)
-	local reset = Button(L["Reset profile"], 120, L["Put the active built-in profile back to its own values (your own " ..
+	local reset = Button(buttons, L["Reset profile"], 100, L["Put the active built-in profile back to its own values (your own " ..
 		"profiles keep your changes as you go)."], function()
 		StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ProfileLabel(ns.ActiveProfile()))
 	end)
 	reset:SetPoint("LEFT", delete, "RIGHT", 8, 0)
-
 	-- Sharing (Share.lua): the active profile as text, or one pasted in.
-	local share = CreateFrame("Frame", nil, buttons)
-	share:SetSize(540, 22)
-	share:SetPoint("TOPLEFT", buttons, "BOTTOMLEFT", 0, -10)
-	local export = Button(L["Export"], 120, L["The active profile as a line of text to copy and paste " ..
-		"wherever your friends will see it, so they can import it (your own ones only: everyone has the built-in ones)."], function()
-		ns.ShowExport()
-	end)
-	export:SetParent(share)
-	export:SetPoint("LEFT", share, "LEFT", 0, 0)
-	local import = Button(L["Import"], 100, L["Add a profile someone shared with you, from the text they " ..
+	local import = Button(buttons, L["Import"], 84, L["Add a profile someone shared with you, from the text they " ..
 		"gave you. Your own profiles stay as they are."], function()
 		ns.ShowImport()
 	end)
-	import:SetParent(share)
-	import:SetPoint("LEFT", export, "RIGHT", 8, 0)
-	local shareNote = Label(share, "GameFontHighlightSmall", L["Share a profile with friends."])
-	shareNote:SetPoint("LEFT", import, "RIGHT", 12, 0)
+	import:SetPoint("RIGHT", buttons, "RIGHT", 0, 0)
+	local export = Button(buttons, L["Export"], 84, L["The active profile as a line of text to copy and paste " ..
+		"wherever your friends will see it, so they can import it (your own ones only: everyone has the built-in ones)."], function()
+		ns.ShowExport()
+	end)
+	export:SetPoint("RIGHT", import, "LEFT", -8, 0)
 
-	-- The active profile's Edit Mode layout (Layouts.lua), switched to when
-	-- it's picked and on logging in.
-	if C_EditMode and C_EditMode.GetLayouts then
-		local layoutRow = CreateFrame("Frame", nil, buttons)
-		layoutRow:SetSize(540, 26)
-		layoutRow:SetPoint("TOPLEFT", share, "BOTTOMLEFT", 0, -12)
-		local layoutLabel = Label(layoutRow, "GameFontNormal", L["Edit Mode layout:"])
-		layoutLabel:SetPoint("LEFT", layoutRow, "LEFT", 0, 0)
-		local layoutMenu = Dropdown(layoutRow, "editModeLayout", function() return ns.LayoutChoices() end, 280,
-			function() ns.SwitchProfileLayout() end)
-		if layoutMenu then
-			layoutMenu:SetPoint("LEFT", layoutLabel, "RIGHT", 10, 0)
-			Tooltip(layoutMenu, L["The Edit Mode layout the active profile puts you on when you pick it and " ..
-				"each time you log in, on any character using it. Pick another layout in Edit Mode itself and " ..
-				"the profile takes that one. Your own: Cinematic leaves the layout to you."])
-			-- (Cinematic's own layouts only: they're made from the addon's code.)
-			local regenerate = ns.PanelButton(layoutRow)
-			regenerate:SetSize(110, 22)
-			regenerate:SetText(L["Regenerate"])
-			regenerate:SetPoint("LEFT", layoutMenu, "RIGHT", 8, 0)
-			Tooltip(regenerate, L["Make this layout again as Cinematic has it, undoing any changes you made " ..
-				"to it in Edit Mode, and switch to it. Your own layouts stay as they are."])
-			regenerate:SetScript("OnClick", function()
-				ns.RegenerateLayout(ns.GetDB().editModeLayout)
-				Refresh()
-			end)
-			regenerate.Refresh = function(self)
-				local db = ns.GetDB()
-				self:SetShown(db ~= nil and ns.EDIT_MODE_LAYOUTS[db.editModeLayout or ""] ~= nil)
-			end
-			controls[#controls + 1] = regenerate
-		end
+	-- A card's place in the grid.
+	local function Place(cell, i)
+		cell:ClearAllPoints()
+		cell:SetPoint("TOPLEFT", header, "BOTTOMLEFT", ((i - 1) % PER_ROW) * (CARD_W + GAP),
+			-10 - math.floor((i - 1) / PER_ROW) * (CARD_H + GAP))
+		cell:Show()
 	end
 
 	function Layout()
 		if not ns.GetDB() then return end
-		-- (None ticked until a new player picks one; Cinematic does nothing till then.)
+		-- (None gold until a new player picks one; Cinematic does nothing till then.)
 		active = ns.ProfileChosen() and ns.ActiveProfile() or nil
 		local names = ns.ProfileNames()
 		for i, name in ipairs(names) do
@@ -11223,31 +11899,38 @@ local function CreateProfilesPanel()
 			for _, profile in ipairs(ns.BUILTIN_PROFILES) do
 				if profile.name == name then builtin = profile end
 			end
-			local text = ns.ProfileLabel(name)
+			cell.label:SetText(ns.ProfileLabel(name))
 			-- (Only a built-in's: one of yours saves as you go, so there's nothing to go back to.)
-			if name == active and builtin and ns.ProfileChanged() then
-				text = text .. " |cff808080(changed)|r"
-			end
-			cell.label:SetText(text)
-			-- (Gold for the active one, and round its icon.)
-			if name == active then
-				cell.label:SetTextColor(1, 0.82, 0)
-				cell.border:SetColorTexture(1, 0.82, 0, 1)
-			else
-				cell.label:SetTextColor(1, 1, 1)
-				cell.border:SetColorTexture(0.45, 0.38, 0.2, 1)
-			end
-			cell.tip = builtin and builtin.tip or ns.ProfileNote(name)
+			cell.changed:SetShown(name == active and builtin ~= nil and ns.ProfileChanged())
+			local written = ns.ProfileNote(name)
+			cell.line:SetText(LEVELS[name] and LEVELS[name].line or written or L["Your own profile"])
+			cell.tip = builtin and builtin.tip or written
 				or L["Your own profile. Pick it, then Description to say what it's for."]
+			-- (Gold for the active one, its name and edge.)
+			S.Color(cell.label, name == active and S.GOLD or S.WHITE)
+			cell:SetBackdropBorderColor(unpack(name == active and S.GOLD or S.EDGE))
 			cell.icon:SetTexture(ns.ProfileIcon(name))
-			cell:ClearAllPoints()
-			cell:SetPoint("TOPLEFT", header, "BOTTOMLEFT", ((i - 1) % PER_ROW) * CELL_W,
-				-10 - math.floor((i - 1) / PER_ROW) * CELL_H)
-			cell:Show()
+			Place(cell, i)
 		end
 		for i = #names + 1, #cells do cells[i]:Hide() end
-		buttons:ClearAllPoints()
-		buttons:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -10 - math.ceil(#names / PER_ROW) * CELL_H - 8)
+		Place(newCard, #names + 1)
+		-- (The box as tall as the longest it can say, in this language, so
+		-- what's under it doesn't move with the mouse.)
+		local tallest = 0
+		for i = 1, #names do
+			about:SetText(ProfileText(cells[i]))
+			tallest = math.max(tallest, about:GetStringHeight())
+		end
+		for _, tip in ipairs(tips) do
+			about:SetText(tip)
+			tallest = math.max(tallest, about:GetStringHeight())
+		end
+		box:SetHeight(math.max(56, math.ceil(tallest) + 20))
+		Describe()
+		local rows = math.ceil((#names + 1) / PER_ROW)
+		box:ClearAllPoints()
+		box:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -10 - rows * (CARD_H + GAP))
+		customize:Refresh()
 		local own = active ~= nil and not ns.IsBuiltinProfile(active)
 		rename:SetEnabled(own)
 		note:SetEnabled(own)
@@ -11992,17 +12675,14 @@ ns.lowHealthKit = { CreateScrollPage = CreateScrollPage, Label = Label, PageShow
 ns.OnLanguage(function()
 	PVP_TIP, ZOOM_TIP, INPUT_PAUSE_TIP = L[PVP_TIP], L[ZOOM_TIP], L[INPUT_PAUSE_TIP]
 	ns.TranslateFields(PLACES, 2)
-	for _, choices in ipairs({ EVENT_CAMERAS, FLIGHT_CAMERAS, WALK_CAMERAS, RUN_CAMERAS, DEATH_CAMERAS,
-		QUEST_CAMERAS, TELE_CAMERAS, QUEST_SIDES }) do
-		ns.TranslateFields(choices, "text")
-	end
+	ns.TranslateFields(QUEST_SIDES, "text")
 	for key, tip in pairs(EVENT_TIPS) do
 		EVENT_TIPS[key] = L[tip]
 	end
 	ns.TranslateFields(FRAME_COLUMNS, 1, 5)
 	ns.TranslateFields(THIRD_PARTY_COLUMNS, 1) -- (the rest are FRAME_COLUMNS' own)
 	ns.TranslateFields(KEYBINDS, "label", "tip")
-	for _, popup in ipairs({ "CINEMATIC_RESET_PAGE", "CINEMATIC_PROFILE_NEW", "CINEMATIC_PROFILE_RENAME",
+	for _, popup in ipairs({ "CINEMATIC_RESET_PAGE", "CINEMATIC_PROFILE_RENAME",
 		"CINEMATIC_PROFILE_NOTE", "CINEMATIC_PROFILE_DELETE", "CINEMATIC_PROFILE_RESET",
 		"CINEMATIC_ADDON_RESET" }) do
 		StaticPopupDialogs[popup].text = L[StaticPopupDialogs[popup].text]
@@ -12059,26 +12739,25 @@ ns.OnLanguage(function()
 	if ns.CreateWindGuidePanel then -- (WindGuide.lua: the dev copy only, CinematicDev.toc)
 		ns.CreateWindGuidePanel(ns.lowHealthKit)
 	end
-	if ns.CreateWheelsPanels then -- (WheelsPage.lua; its hub listed after Visions)
-		ns.CreateWheelsPanels(ns.lowHealthKit)
-	end
 	CreateBuffsPanel()
 	CreatePlatesPanel()
 	CreateChatPanel()
 	CreateBubblesPanel()
-	CreateFishingPanel()
-	CreateQualityPanel()
+	-- (their hub, Style, listed after Visions)
+	CreateNameStylePanel()
+	CreateTargetArrowPanel()
 	CreateEffectsPanel()
 	CreateTintPanel()
 	CreateGraphicsPanel()
-	-- (their hub, Style, listed after Visual Effects)
-	CreateNameStylePanel()
-	CreateTargetArrowPanel()
 	CreateAudioPanel()
-	CreateCameraPanel()
-	CreateEventsPanel()
+	CreateCamerasPanel()
 	-- Each camera's own settings, in a section apiece.
 	CreateCameraSettingsPanel()
+	if ns.CreateWheelsPanels then -- (WheelsPage.lua; its hub listed after Camera)
+		ns.CreateWheelsPanels(ns.lowHealthKit)
+	end
+	CreateFishingPanel()
+	CreateQualityPanel()
 	CreateKeybindsPanel()
 	-- Community, last (WhatsNew.lua, with the helpers it shares from here).
 	if ns.CreateWhatsNewPanels then
@@ -12088,14 +12767,6 @@ ns.OnLanguage(function()
 	-- The dev build's own pages, at the very end (ModuleEditor.lua, Layouts.lua).
 	if ns.isDev and ns.CreateModuleEditor then
 		ns.CreateModuleEditor({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
-			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
-	end
-	if ns.isDev and ns.CreateProfilesDemo then
-		ns.CreateProfilesDemo({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
-			RegisterSubpage = RegisterSubpage })
-	end
-	if ns.isDev and ns.CreateGridDemo then
-		ns.CreateGridDemo({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
 	end
 	GuardGamepadClose()

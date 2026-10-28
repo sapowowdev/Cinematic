@@ -209,7 +209,7 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
 <script>
 (function () {
   // The areas and choices as players see them in Customize. levels: the levels that use the choice, per game version.
-  // (In Customize's order. A level with no pick of its own has the area's starting choice; on WoW Forever that's All together for the bars.)
+  // (In Customize's order. A level with no pick of its own has the area's starting choice; on WoW Forever that's Action Bars (Classic Group) for the bars.)
   var ALL = ["Subtle", "Balanced", "Cinema"];
   var AREAS = [
     { name: "Interface", q: "When does your UI fade?", choices: [
@@ -218,17 +218,16 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
       { l: "Almost always", d: "As little UI as possible, even in fights", levels: { both: ["Cinema"] } },
       { l: "Never", d: "Your UI stays as the game has it", levels: { both: ["Subtle"] } },
       { l: "Softly", d: "Between fights, with the minimap and group plates as usual", levels: { both: ["Balanced"] } } ] },
-    { name: "Action bars", q: "How do your action bars come back?", choices: [
-      { l: "All together", d: "Point at one and the bars, menus and XP bar come up", levels: { forever: ["Subtle", "Balanced"] } },
-      { l: "Each on its own", d: "Point at the bars, the menus or the XP bar" },
-      { l: "Cooldown Manager", d: "The Cooldown Manager in fights, pet and stance bars too" },
-      { l: "Cooldown Manager only", d: "In fights just the Cooldown Manager: no bars or menus", levels: { both: ["Cinema"] } },
-      { l: "Retail's own", d: "Each on its own, the micro menu up in fights", only: "retail", levels: { retail: ["Subtle", "Balanced"] } } ] },
+    { name: "Action bars", q: "Hide/Show Action Bars in Combat", choices: [
+      { l: "Always Show", d: "Your action bars stay up all through CineMode" },
+      { l: "Action Bars (Classic Group)", d: "Point at one and the bars, menus and XP bar come up", levels: { forever: ["Subtle", "Balanced"] } },
+      { l: "Action Bars (Retail Group)", d: "Point at the bars, the menus or the XP bar", levels: { retail: ["Subtle", "Balanced"] } },
+      { l: "Cooldown Manager", d: "In fights just the Cooldown Manager: no bars or menus", levels: { both: ["Cinema"] } } ] },
     { name: "Layout", q: "Where should your bars and menus sit?", choices: [
+      { l: "Retail Inspired", d: "Action bars centered along the bottom, menus in the corner. Cinematic makes it for you", only: "forever" },
+      { l: "Personal Resource Centered", d: "Your resources in the middle, the Cooldown Manager above. Cinematic makes it for you", only: "retail", levels: { retail: ["Cinema"] } },
       { l: "Your own", d: "Cinematic leaves your Edit Mode layout as it is", levels: { retail: ["Subtle", "Balanced"] } },
-      { l: "WoW Forever's", d: "The game's own layout", only: "forever", levels: { forever: ALL } },
-      { l: "Like retail", d: "Action bars centered along the bottom, menus in the corner. Cinematic makes it for you", only: "forever" },
-      { l: "Resources in the middle", d: "Your resources in the middle, the Cooldown Manager above. Cinematic makes it for you", only: "retail", levels: { retail: ["Cinema"] } } ] },
+      { l: "WoW Forever's", d: "The game's own layout", only: "forever", levels: { forever: ALL } } ] },
     { name: "Camera", q: "When does the camera move on its own?", choices: [
       { l: "All the time", d: "Every camera, standing still too, and none waits after a fight", levels: { both: ["Cinema"] } },
       { l: "Often", d: "Flights, campfires, vistas, fishing, quests, going AFK and more" },

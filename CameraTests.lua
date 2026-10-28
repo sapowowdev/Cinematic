@@ -80,7 +80,7 @@ tests["Quest Cam"] = {
 		if ns.QuestCamTest(true) then
 			return true
 		end
-		ns.Print(ns.L["The quest camera can't start now: it's off (Camera Triggers page), you're " ..
+		ns.Print(ns.L["The quest camera can't start now: it's off (Cameras page), you're " ..
 			"moving or in a fight, or it's turned off where you are."])
 		return false
 	end,

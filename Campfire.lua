@@ -132,7 +132,7 @@ local function Sit()
 		pcall(DoEmote, token)
 	end
 	ns.Log("campfire", "button clicked: " .. token)
-	-- (Its own Camera Triggers row, cozy by default, rather than the emote's.)
+	-- (Its own Cameras page row, cozy by default, rather than the emote's.)
 	if ns.SatByButton then ns.SatByButton() end
 end
 

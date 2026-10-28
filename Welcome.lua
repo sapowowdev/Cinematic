@@ -33,7 +33,6 @@ local LEVELS = ns.WELCOME_LEVELS
 -- The Customize pages: a slot's (its question and choices), or just a question.
 -- (the profile of your own a change on a built-in starts: in your language here)
 local OWN_PROFILE = "My setup"
-ns.OWN_PROFILE = OWN_PROFILE
 local SECTIONS = {}
 local VISIONS = { label = "Visions", page = "Vision", question = "Which Visions do you want?",
 	visions = true }
@@ -69,10 +68,68 @@ local function Color(s, c)
 	s:SetVertexColor(c[1], c[2], c[3])
 end
 
+local FLAT = { bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 }
 local function Flat(frame, bg, edge)
-	frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+	frame:SetBackdrop(FLAT)
 	frame:SetBackdropColor(unpack(bg or RAISED))
 	frame:SetBackdropBorderColor(unpack(edge or EDGE))
+end
+
+-- SD (the menu look, Skin.lua), for the Profiles settings page: a Flat frame
+-- with the game's tooltip edge and background instead, the colours given for
+-- the flat look standing in for the game's: gold stays gold, a lit edge is
+-- white, any other a soft grey. plain: no edge (a list's row: the one shown
+-- tinted gold). The welcome window itself is always flat.
+local SD_EDGED = { bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+	edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 14,
+	insets = { left = 3, right = 3, top = 3, bottom = 3 } }
+local SD_PLAIN = { bgFile = "Interface\\Tooltips\\UI-Tooltip-Background" }
+local function Is(c, r, g, b) return c[1] == r and c[2] == g and c[3] == b end
+local function Skinnable(frame, plain)
+	local SetBg, SetEdge = frame.SetBackdropColor, frame.SetBackdropBorderColor
+	local bg, edge = { frame:GetBackdropColor() }, { frame:GetBackdropBorderColor() }
+	local sd, applying
+	-- (Applying a backdrop, the game sets its colours white through these:
+	-- not ours, so they're passed by, and ours put back after.)
+	local Apply = frame.ApplyBackdrop
+	if Apply then
+		function frame:ApplyBackdrop(...)
+			applying = true
+			Apply(self, ...)
+			applying = false
+			self:SetBackdropColor(unpack(bg))
+			self:SetBackdropBorderColor(unpack(edge))
+		end
+	end
+	function frame:SetBackdropColor(r, g, b, a)
+		if applying then return end
+		bg = { r, g, b, a or 1 }
+		if not sd then
+			SetBg(self, r, g, b, a or 1)
+		elseif Is(RAISED, r, g, b) then
+			SetBg(self, unpack(plain and { GOLD[1], GOLD[2], GOLD[3], 0.18 } or { 0.1, 0.1, 0.1, 0.85 }))
+		else
+			SetBg(self, 0, 0, 0, plain and 0 or 0.55)
+		end
+	end
+	function frame:SetBackdropBorderColor(r, g, b, a)
+		if applying then return end
+		edge = { r, g, b, a or 1 }
+		if not sd then
+			SetEdge(self, r, g, b, a or 1)
+		elseif Is(GOLD, r, g, b) or Is(LIT, r, g, b) then
+			SetEdge(self, unpack(Is(GOLD, r, g, b) and GOLD or WHITE))
+		else
+			SetEdge(self, 0.6, 0.6, 0.6)
+		end
+	end
+	ns.OnMenuSkin(frame, function(self, skin)
+		sd = skin ~= "HD"
+		self:SetBackdrop(not sd and FLAT or plain and SD_PLAIN or SD_EDGED)
+		self:SetBackdropColor(unpack(bg))
+		self:SetBackdropBorderColor(unpack(edge))
+	end)
+	return frame
 end
 
 local function Text(parent, font, text, color, width)
@@ -111,10 +168,12 @@ local function FlatButton(parent, text, style, onClick)
 		b:SetSize(120, 30)
 		Flat(b, RAISED, EDGE)
 		b:SetScript("OnEnter", function()
+			if not b:IsEnabled() then return end
 			b:SetBackdropBorderColor(unpack(LIT))
 			Color(s, WHITE)
 		end)
 		b:SetScript("OnLeave", function()
+			if not b:IsEnabled() then return end
 			b:SetBackdropBorderColor(unpack(EDGE))
 			Color(s, SOFT)
 		end)
@@ -131,9 +190,11 @@ local function FlatButton(parent, text, style, onClick)
 	return b
 end
 
--- (The Profiles demo page draws with these too: ProfilesDemo.lua.)
-ns.DemoUI = { Flat = Flat, Text = Text, Color = Color, Rounded = Rounded, FlatButton = FlatButton,
-	BG = BG, RAISED = RAISED, EDGE = EDGE, LIT = LIT, GOLD = GOLD, WHITE = WHITE, SOFT = SOFT, DIM = DIM }
+-- The same look for the Profiles settings page (Options.lua).
+ns.FlatStyle = {
+	Flat = Flat, Skinnable = Skinnable, Text = Text, Color = Color, Rounded = Rounded, Button = FlatButton,
+	BG = BG, RAISED = RAISED, EDGE = EDGE, LIT = LIT, GOLD = GOLD, WHITE = WHITE, SOFT = SOFT, DIM = DIM,
+}
 
 -- The close X, two thin lines.
 local function CloseX(parent)
@@ -282,23 +343,28 @@ local function BuildLevels(page)
 	page.height = 380 + boxH - 56
 end
 
--- Page 2: Customize, a list of parts on the left and the one shown on the right.
-local function BuildCustomize(page)
-	local title = Text(page, "GameFontNormalHuge", L["Customize"], GOLD)
-	title:SetPoint("TOPLEFT")
-	local sub = Text(page, "GameFontHighlight", L["Change one part of your level. Each change shows straight away."],
-		SOFT)
-	sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-
+-- The Customize panel: a list of parts on the left and the one shown on the
+-- right, width wide. The welcome window's Customize page has it, and so does
+-- the Profiles settings page (Options.lua). onChange runs when the player
+-- changes something or shows another part. Its frame has :Refresh() (the
+-- choices as the live settings have them now), :Next() (the part after this
+-- one, false on the last), :IsLast() and :SettingsPage(). skinned: in the
+-- menu look, SD too (the Profiles page; Skinnable above).
+function ns.CustomizePanel(parent, width, onChange, skinned)
 	local NAV_W, PANEL_H = 140, 300
+	local holder = CreateFrame("Frame", nil, parent)
+	holder:SetSize(width, PANEL_H)
 	local rows, question, soon, saved, panel
 	local options = {} -- the choices shown, as rows
-	local panelW = WIDTH - 2 * PAD - NAV_W - GAP
+	local panelW = width - NAV_W - GAP
 	local shown -- (the section shown)
+	local function Changed() if onChange then onChange() end end
 
 	-- Gold edge on the choice the live settings match (none: your own mix),
 	-- or on each Vision that's on, and which profile a change goes in.
 	local function UpdateChoices()
+		-- (built before the settings load, at the language: the page's refresh comes later)
+		if not ns.db then return end
 		local any = shown.visions
 		for _, option in ipairs(options) do
 			local vision = option.choice and option.choice.vision
@@ -323,11 +389,22 @@ local function BuildCustomize(page)
 		end
 	end
 
+	-- The Edit Mode layout of Cinematic's a choice switches to (its layout
+	-- module's), nil for none.
+	local function MadeLayout(choice)
+		for _, key in ipairs(choice.modules or {}) do
+			if type(key) == "table" then key = key[ns.CLIENT] end
+			local module = key and ns.GetModule(key)
+			if module and ns.EDIT_MODE_LAYOUTS[module.editMode or ""] then return module.editMode end
+		end
+	end
+
 	-- A choice's row: an icon, its name and a line, gold when it's the live one.
 	local function Option(i)
 		local option = CreateFrame("Button", nil, panel, BackdropTemplateMixin and "BackdropTemplate")
 		option:SetSize(panelW - 28, 40)
 		Flat(option, BG)
+		if skinned then Skinnable(option) end
 		option.icon = option:CreateTexture(nil, "ARTWORK")
 		option.icon:SetSize(28, 28)
 		option.icon:SetPoint("LEFT", 8, 0)
@@ -336,11 +413,32 @@ local function BuildCustomize(page)
 		option.name = Text(option, "GameFontHighlight", "")
 		option.name:SetPoint("TOPLEFT", 10, -6)
 		-- (a layout Cinematic makes for you: a gold tag beside its name)
-		option.tag = Text(option, "GameFontHighlightSmall", L["Cinematic makes it for you"], GOLD)
+		option.tag = Text(option, "GameFontHighlightSmall", "Cinematic", GOLD)
 		option.tag:SetPoint("LEFT", option.name, "RIGHT", 8, 0)
 		option.line = Text(option, "GameFontHighlightSmall", "", SOFT, panelW - 28 - 60)
 		option.line:SetPoint("TOPLEFT", option.name, "BOTTOMLEFT", 0, -3)
 		option.line:SetWordWrap(false)
+		-- (and once it's in Edit Mode, Regenerate: made again from the code,
+		-- Edit Mode then back on the profile's layout if this isn't it)
+		option.regenerate = FlatButton(option, L["Regenerate"], "box", function()
+			local name = option.layout
+			if not (name and ns.RegenerateLayout(name)) then return end
+			if (ns.db.editModeLayout or "") ~= name then
+				ns.chardb.layoutPending = nil
+				ns.ApplyProfileLayout()
+			end
+			Changed()
+		end)
+		option.regenerate:SetSize(96, 24)
+		option.regenerate:SetPoint("RIGHT", -8, 0)
+		if skinned then Skinnable(option.regenerate) end
+		option.regenerate:HookScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:SetText(L["Make this layout again as Cinematic has it, undoing any changes you " ..
+				"made to it in Edit Mode."], 1, 1, 1, 1, true)
+			GameTooltip:Show()
+		end)
+		option.regenerate:HookScript("OnLeave", function() GameTooltip:Hide() end)
 		option:SetScript("OnEnter", function(self)
 			if not self.active then self:SetBackdropBorderColor(unpack(LIT)) end
 		end)
@@ -355,19 +453,20 @@ local function BuildCustomize(page)
 				ns.ToggleVision(vision, true)
 				ns.SaveProfile()
 				UpdateChoices()
+				Changed()
 				return
 			end
 			if self.active then return end -- (already so: no profile of your own for nothing)
 			if not ns.db.enabled then ns.SetEnabled(true) end
 			ns.ApplyPart(shown.slot, self.choice.part, OWN_PROFILE)
 			UpdateChoices()
-			if page.OnShow then page.OnShow() end -- (a profile's picked now: Done, not Decide later)
+			Changed() -- (a profile's picked now: Done, not Decide later)
 		end)
 		options[i] = option
 		return option
 	end
 
-	local function Show(i)
+	local function Show(i, quiet)
 		for j, row in ipairs(rows) do
 			row.on = i == j
 			row:SetBackdropColor(unpack(row.on and RAISED or BG))
@@ -398,30 +497,33 @@ local function BuildCustomize(page)
 			option.name:SetPoint("TOPLEFT", choice.icon and 46 or 10, -6)
 			option.name:SetText(choice.label)
 			option.tag:SetShown(choice.made == true)
-			option.line:SetWidth(panelW - 28 - (choice.icon and 56 or 20))
+			option.layout = choice.made and MadeLayout(choice) or nil
+			local regenerate = option.layout ~= nil and ns.LayoutState(option.layout) ~= nil
+			option.regenerate:SetShown(regenerate)
+			option.line:SetWidth(panelW - 28 - (choice.icon and 56 or 20) - (regenerate and 104 or 0))
 			option.line:SetText(choice.line)
 			option:Show()
 		end
 		for j = #choices + 1, #options do options[j]:Hide() end
 		UpdateChoices()
-		if page.OnShow then page.OnShow() end
+		if not quiet then Changed() end
 	end
-	page.Refresh = function() if shown then Show(shown.index) end end
-	-- (Next: the part after this one, false on the last.)
-	page.Next = function()
+	function holder:Refresh() if shown then Show(shown.index, true) end end
+	function holder:Next()
 		if shown.index >= #SECTIONS then return false end
 		Show(shown.index + 1)
 		return true
 	end
-	page.IsLast = function() return shown.index >= #SECTIONS end
-	page.settingsPage = function() return shown and shown.page end
+	function holder:IsLast() return shown.index >= #SECTIONS end
+	function holder:SettingsPage() return shown and shown.page end
 	rows = {}
 	for i, section in ipairs(SECTIONS) do
 		section.index = i
-		local row = CreateFrame("Button", nil, page, BackdropTemplateMixin and "BackdropTemplate")
+		local row = CreateFrame("Button", nil, holder, BackdropTemplateMixin and "BackdropTemplate")
 		row:SetSize(NAV_W, 26)
-		row:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -18 - (i - 1) * 28)
+		row:SetPoint("TOPLEFT", 0, -(i - 1) * 28)
 		Flat(row, BG, BG)
+		if skinned then Skinnable(row, true) end
 		row.text = Text(row, "GameFontHighlight", section.label, SOFT)
 		row.text:SetPoint("LEFT", 10, 0)
 		row:SetScript("OnEnter", function() if not row.on then Color(row.text, WHITE) end end)
@@ -430,17 +532,39 @@ local function BuildCustomize(page)
 		rows[i] = row
 	end
 
-	panel = CreateFrame("Frame", nil, page, BackdropTemplateMixin and "BackdropTemplate")
-	panel:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", NAV_W + GAP, -18)
+	panel = CreateFrame("Frame", nil, holder, BackdropTemplateMixin and "BackdropTemplate")
+	panel:SetPoint("TOPLEFT", NAV_W + GAP, 0)
 	panel:SetSize(panelW, PANEL_H)
 	Flat(panel)
+	if skinned then Skinnable(panel) end
 	question = Text(panel, "GameFontHighlightLarge", "", WHITE, panelW - 28)
 	question:SetPoint("TOPLEFT", 14, -14)
 	soon = Text(panel, "GameFontHighlightSmall", L["Its choices come next."], DIM)
 	soon:SetPoint("TOPLEFT", question, "BOTTOMLEFT", 0, -8)
 	saved = Text(panel, "GameFontHighlightSmall", "", DIM, panelW - 28)
 	saved:SetPoint("BOTTOMLEFT", 14, 12)
-	Show(1)
+	Show(1, true)
+	return holder
+end
+
+-- Page 2: Customize, the panel above.
+local function BuildCustomize(page)
+	local title = Text(page, "GameFontNormalHuge", L["Customize"], GOLD)
+	title:SetPoint("TOPLEFT")
+	local sub = Text(page, "GameFontHighlight", L["Change one part of your level. Each change shows straight away."],
+		SOFT)
+	sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+	local panel = ns.CustomizePanel(page, WIDTH - 2 * PAD, function()
+		if page.OnShow then page.OnShow() end
+	end)
+	panel:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -18)
+	page.Refresh = function()
+		panel:Refresh()
+		if page.OnShow then page.OnShow() end
+	end
+	page.Next = function() return panel:Next() end
+	page.IsLast = function() return panel:IsLast() end
+	page.settingsPage = function() return panel:SettingsPage() end
 	page.height = 476
 end
 

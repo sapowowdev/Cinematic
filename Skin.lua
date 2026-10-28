@@ -10,12 +10,11 @@ local _, ns = ...
 
 local skinned = setmetatable({}, { __mode = "k" }) -- (thing -> its function putting it in a look)
 local applied -- (the look they're in)
-local preview -- (the Grid Demo's switch: a look to try, not saved)
 
 -- The look things are in now (or will be, made now). Worked out once, not
 -- for each thing made; ns.ApplyMenuSkin looks again.
 function ns.CurrentMenuSkin()
-	applied = applied or preview or ns.MenuSkin()
+	applied = applied or ns.MenuSkin()
 	return applied
 end
 
@@ -32,21 +31,21 @@ end
 
 -- Every skinned thing in the look, when it's changed (force: all the same).
 function ns.ApplyMenuSkin(force)
-	local skin = preview or ns.MenuSkin()
+	local skin = ns.MenuSkin()
 	if skin == applied and not force then return end
 	applied = skin
 	for thing, apply in pairs(skinned) do Apply(thing, apply, skin) end
 end
 
--- A look to try everywhere till it's cleared (nil): not saved.
-function ns.PreviewMenuSkin(skin)
-	preview = skin
-	ns.ApplyMenuSkin()
-end
-
 local function Register(thing, apply)
 	skinned[thing] = apply
 	Apply(thing, apply, ns.CurrentMenuSkin())
+end
+
+-- Something a page draws its own way in both looks: apply(thing, skin) now,
+-- and again each time the look changes.
+function ns.OnMenuSkin(thing, apply)
+	Register(thing, apply)
 end
 
 -- Whether a control's usable (some clients' sliders can't say: then it is).

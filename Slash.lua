@@ -91,6 +91,7 @@ local function PrintDebugHelp()
 	print("  /cine debug modes - print each camera mode change to chat (again to stop)")
 	print("  /cine debug tab - every log line, as it's logged, in a chat tab named Cinematic (make the tab yourself)")
 	print("  /cine debug emote - the last emote the game passed, and whether cozy or vista took it")
+	print("  /cine debug cameras - each trigger's rows on the Cameras page, the one it goes by here and its camera")
 	print("  /cine debug tent [seen|cozy [left|right]|clear] - whether a Camp Tent's been moused over near here (seen fakes one on that side of the screen, cozy also starts the cozy camera)")
 	print("  /cine debug fishing - the last red error message, and whether it paused right-click casting")
 	print("  /cine debug weapon - what the game says about your weapon, and the cozy weapon trigger")
@@ -100,7 +101,9 @@ local function PrintDebugHelp()
 	print("  /cine debug turn - turn handling while walking (8 seconds)")
 	print("  /cine debug unitframes - log every part of the player, pet, target and focus frames (names, textures, sizes, held hidden) to the saved log")
 	print("  /cine debug plates - nameplate settings, and how the plates (and your target) are sorted")
+	print("  /cine debug cdm - each Cooldown Manager spell: its cooldown, charges, what it costs and in which resource (run in and out of combat)")
 	print("  /cine debug range - what the game says about how far your target and units with name-only plates are")
+	print("  /cine debug platedebuffs - whether auras are secret now, and your debuffs on your target as the game reads them")
 	print("  /cine debug platefight [spell] [seconds] - enemy plates' range and rank, plain or secret; shrinks non-elites and fades far ones for 5 seconds or the seconds given, e.g. 30 (go in and out of a fight)")
 	print("  /cine debug names - log players' plate names as they show and hide (again to stop, /reload to save)")
 	print("  /cine debug marks - the Target Indicator's marks on the plates now, and why each sits where it does")
@@ -523,6 +526,13 @@ local function HandleSlash(msg)
 		else
 			ns.Print("no right-click seen since login")
 		end
+	elseif cmd == "debug" and arg == "cameras" then
+		-- Each trigger's rows (Cameras page), the one it goes by here and now, and
+		-- what that goes by: where you are, a fight, the page's switch.
+		ns.Print(("cameras: page %s, place %s, takeoff in city %s, combat %s, event now %s"):format(
+			ns.db.cameraModes == false and "off" or "on", tostring(ns.GetPlaceType()), tostring(ns.db.takeoffInCity),
+			tostring(InCombatLockdown()), tostring((ns.ActiveEvent()))))
+		for _, line in ipairs(ns.DescribeCameraRows()) do ns.Print(line) end
 	elseif cmd == "eventtest" then
 		-- Records which game events fire over the next 8 seconds (sit in a chair
 		-- meanwhile), leaving out the constant background ones, then lists them.
@@ -851,6 +861,10 @@ local function HandleSlash(msg)
 		ns.PrintPlatesDebug()
 	elseif cmd == "debug" and arg == "range" then
 		ns.PrintRangeDebug()
+	elseif cmd == "debug" and arg == "cdm" then
+		ns.PrintCooldownManagerDebug()
+	elseif cmd == "debug" and arg == "platedebuffs" then
+		ns.PrintPlateDebuffsDebug()
 	elseif cmd == "debug" and arg:find("^platefight") then
 		ns.PlateFightDebug(arg:match("^platefight%s+(.+)"))
 	elseif cmd == "debug" and arg == "readycheck" then

@@ -436,14 +436,17 @@ local function DrawName(text, name, unit)
 			end)
 		end
 	end
-	-- (Kept, for your target's color going in and out over it: see TintTarget.)
+	-- (Kept, for your target's color going in and out over it: see TintTarget.
+	-- A colour read back secret, as the game's can be when it redraws its name
+	-- on mouseover, keeps the last one: blending nothing in showed the plain
+	-- name for a frame, a flash.)
 	local okColour, r, g, b = pcall(text.GetTextColor, text)
 	if okColour and type(r) == "number" and Known(r) and Known(g) and Known(b) then
 		text.baseR, text.baseG, text.baseB = r, g, b
-		local tint = tints[text:GetParent()]
-		if tint and tint.name then
-			text:SetTextColor(Blend(r, g, b, tint, "name"))
-		end
+	end
+	local targetTint = tints[text:GetParent()]
+	if targetTint and targetTint.name and text.baseR then
+		text:SetTextColor(Blend(text.baseR, text.baseG, text.baseB, targetTint, "name"))
 	end
 	text:SetAlpha(alpha)
 	-- Retail's plates grow as their units come nearer: undone, for one size.
@@ -927,6 +930,67 @@ local function PlaceQuestIcon(icon, plate, body, kept, shown, mark)
 	end
 end
 
+-- Whether the game's own icon shows over the unit: soft targeting's (speech
+-- bubbles over someone to talk to, a gear...), on the plate's SoftTargetFrame
+-- or, for the soft interact pick with its icon setting on, drawn in the world.
+-- Our mark steps aside for it. Unreadable counts as no. (The frame stays
+-- shown on every plate: it's its Icon the game shows or hides.)
+-- (Retail's speech bubbles over a campaign NPC with something to say for a
+-- quest can't be read, from the plate or the cursor (tested): both show.)
+local function GameIconShows(plate, unit)
+	local frame = plate.UnitFrame and plate.UnitFrame.SoftTargetFrame
+	if type(frame) == "table" and not (frame.IsForbidden and frame:IsForbidden()) then
+		frame = type(frame.Icon) == "table" and frame.Icon or frame
+	end
+	if type(frame) == "table" and frame.IsVisible and not (frame.IsForbidden and frame:IsForbidden()) then
+		local okShown, shown = pcall(frame.IsVisible, frame)
+		local okAlpha, alpha = pcall(frame.GetEffectiveAlpha, frame)
+		if okShown and Known(shown) and shown and okAlpha and type(alpha) == "number" and Known(alpha)
+			and alpha > 0.05 then
+			return true
+		end
+	end
+	if not (UnitIsUnit and Ask(UnitIsUnit, unit, "softinteract")) or GetCVar("SoftTargetIconInteract") ~= "1" then
+		return false
+	end
+	local mode = tonumber(GetCVar("SoftTargetInteract")) or 0
+	local pad = ns.IsGamePadOn and ns.IsGamePadOn() or false
+	return mode == 3 or (mode == 1 and pad) or (mode == 2 and not pad)
+end
+
+-- For /cine debug questmob: what GameIconShows sees on the unit's plate.
+function ns.DescribeGameIcon(unit)
+	local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, unit)
+	if not (ok and plate) then
+		return "game icon: no plate"
+	end
+	local function State(frame)
+		if type(frame) ~= "table" or (frame.IsForbidden and frame:IsForbidden()) then
+			return tostring(frame and "forbidden" or nil)
+		end
+		local okS, shown = pcall(frame.IsShown, frame)
+		local okV, visible = pcall(frame.IsVisible, frame)
+		local okA, alpha = pcall(frame.GetEffectiveAlpha, frame)
+		local okT, atlas = pcall(function() return frame.GetAtlas and frame:GetAtlas() end)
+		local okF, file = pcall(function() return frame.GetTexture and frame:GetTexture() end)
+		local function V(good, value)
+			return good and Known(value) and tostring(value) or (good and "secret" or "err")
+		end
+		return ("shown=%s visible=%s alpha=%s atlas=%s file=%s"):format(V(okS, shown), V(okV, visible),
+			V(okA, alpha), V(okT, atlas), V(okF, file))
+	end
+	local frame = plate.UnitFrame and plate.UnitFrame.SoftTargetFrame
+	local icon = type(frame) == "table" and not (frame.IsForbidden and frame:IsForbidden()) and frame.Icon
+	local icons = questIcons[plate]
+	return ("game icon: shows=%s | SoftTargetFrame %s | its Icon %s | softinteract=%s softfriend=%s"
+		.. " | SoftTargetInteract=%s SoftTargetIconInteract=%s SoftTargetIconFriend=%s | our mark shown=%s alpha=%s"):format(
+		tostring(GameIconShows(plate, unit)), State(frame), State(icon),
+		tostring(Ask(UnitIsUnit, unit, "softinteract")), tostring(Ask(UnitIsUnit, unit, "softfriend")),
+		tostring(GetCVar("SoftTargetInteract")), tostring(GetCVar("SoftTargetIconInteract")),
+		tostring(GetCVar("SoftTargetIconFriend")), tostring(icons and icons:IsShown()),
+		tostring(icons and icons:GetAlpha()))
+end
+
 function RefreshQuestIcon(plate)
 	if not plate or (plate.IsForbidden and plate:IsForbidden()) then
 		return
@@ -942,7 +1006,7 @@ function RefreshQuestIcon(plate)
 	local unit
 	if level > 0 and plate ~= PersonalPlate() then
 		unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
-		if not (unit and ns.IsQuestMob(unit)) then
+		if not (unit and ns.IsQuestMob(unit)) or GameIconShows(plate, unit) then
 			level = 0
 		end
 	end
@@ -1373,6 +1437,21 @@ do
 			end
 			Paint(self, first[4], first[5], first[6], first[7])
 		end)
+		-- (Retail's name went white for a frame or two as the mouse came onto
+		-- your target, logged, with no SetTextColor: a new font or vertex color
+		-- resets a text's. Ours goes back over those too, as they happen.)
+		if region:GetObjectType() == "FontString" then
+			for _, other in ipairs({ "SetVertexColor", "SetFontObject", "SetFont" }) do
+				if region[other] then
+					hooksecurefunc(region, other, function(self)
+						local first = saved[self]
+						if not painting and first and tints[first[6]] then
+							Paint(self, first[4], first[5], first[6], first[7])
+						end
+					end)
+				end
+			end
+		end
 	end
 
 	function Paint(region, getter, setter, unitFrame, part)
@@ -1380,14 +1459,21 @@ do
 			return
 		end
 		local r, g, b, a = ReadColour(region, getter)
-		if not r then
-			return
-		end
 		local first = saved[region]
-		if not first then
-			first = { r, g, b, getter, setter, unitFrame, part }
+		if not r then
+			-- (Read back secret, as retail's name is after the game paints it on
+			-- mouseover: ours goes over it all the same, at its last alpha known;
+			-- leaving it showed the game's white name till it painted again.)
+			if not first then
+				return
+			end
+			a = first[8]
+		elseif not first then
+			first = { r, g, b, getter, setter, unitFrame, part, a }
 			saved[region] = first
 			Hook(region, setter)
+		elseif a then
+			first[8] = a
 		end
 		local tint = tints[unitFrame]
 		if not (tint and tint[part]) then
@@ -1514,39 +1600,40 @@ local function OnYou(unit)
 		and Ask(UnitIsUnit, unit .. "target", "player")
 end
 
--- The aggro rows, on any enemy plate in a fight: aggro (Aggro on you: it's
--- after you), aggroother (Aggro on not you: it's fighting someone friendly
--- that isn't you, a group member, a pet or another player: its target) and
--- aggrononank (Aggro on non-tank: who it's after, you or its target, is a
--- player whose role isn't tank; none set counts as not a tank).
-local function AggroFits(kind, unit)
+-- The aggro rows, on any enemy plate in a fight, by their letters (Core's
+-- MARK_AGGRO_FLAGS): who it's after, y you (aggro: Aggro on you) or o someone
+-- friendly that isn't you (a group member, a pet or another player: its
+-- target), and that one's role, t tank, h healer or d DPS (a player with
+-- none set: DPS; a pet just with all three ticked).
+local function AggroFits(flags, unit)
 	if not (unit and Ask(UnitCanAttack, "player", unit)) then
 		return false
 	end
-	local onYou = OnYou(unit)
-	if kind == "aggro" then
-		return onYou
-	end
-	local victim = onYou and "player" or nil
-	if not victim and Ask(UnitAffectingCombat, unit) then
+	local victim = OnYou(unit) and "player" or nil
+	if not victim and flags:find("o", 1, true) and Ask(UnitAffectingCombat, unit) then
 		local target = unit .. "target"
 		if Ask(UnitExists, target) and Ask(UnitIsFriend, "player", target) and not Ask(UnitIsUnit, target, "player") then
 			victim = target
 		end
 	end
-	if kind == "aggroother" then
-		return victim ~= nil and victim ~= "player"
+	if not victim or not flags:find(victim == "player" and "y" or "o", 1, true) then
+		return false
 	end
+	if flags:find("t", 1, true) and flags:find("h", 1, true) and flags:find("d", 1, true) then
+		return true
+	end
+	local role
 	if victim == "player" then
-		return ns.PlayerRole() ~= "TANK"
+		role = ns.PlayerRole()
+	elseif Ask(UnitIsPlayer, victim) then
+		local ok, assigned = pcall(UnitGroupRolesAssigned, victim)
+		role = ok and Known(assigned) and assigned or nil
+	else
+		return false -- (a pet)
 	end
-	if not (victim and Ask(UnitIsPlayer, victim)) then
-		return false -- (a pet tanking: fine)
-	end
-	local ok, role = pcall(UnitGroupRolesAssigned, victim)
-	return not (ok and Known(role) and role == "TANK")
+	return flags:find(role == "TANK" and "t" or role == "HEALER" and "h" or "d", 1, true) ~= nil
 end
-local AGGRO_ROWS = { aggro = true, aggroother = true, aggrononank = true }
+local AGGRO_ROWS = ns.MARK_AGGRO_FLAGS
 
 -- Whether a plate is a unit's (pcall: a token a client lacks).
 local function PlateOf(token, plate)
@@ -1650,7 +1737,8 @@ local function OthersOn(kind)
 	return ArrowSetting("Show", kind) and (ArrowSetting("Style", kind) ~= "none"
 		or AlsoOn("ColorName", kind) or AlsoOn("ColorBar", kind)
 		or (ArrowSetting("Alpha", kind) or 1) < 1
-		or ns.isRetail and math.abs((ArrowSetting("Scale", kind) or 1) - 1) > 0.001) and true or false
+		or ns.isRetail and (math.abs((ArrowSetting("PlateWidth", kind) or 1) - 1) > 0.001
+			or math.abs((ArrowSetting("PlateHeight", kind) or 1) - 1) > 0.001)) and true or false
 end
 
 -- How a unit stands with you, for the rows added for one reaction: "Enemy",
@@ -1673,9 +1761,9 @@ end
 -- fitting: Default's while it's changed from the game's (a mark, an Also
 -- color or an opacity); else nil, the game's look.
 local mouseoverPlate -- (the plate with the mouseover mark: see mouseoverWatch)
-local NPC_RANKS = { npc = "normal", elite = "elite", npcs = true }
-local PLATE_KIND_ROWS = { Enemies = { "players", "Enemy" }, Friends = { "players", "Friendly" },
-	EnemyMinions = { "minions", "Enemy" }, FriendlyMinions = { "minions", "Friendly" } }
+local RANK_LETTERS = { normal = "n", elite = "e" }
+local PLATE_KIND_ROWS = { Enemies = { "p", "Enemy" }, Friends = { "p", "Friendly" },
+	EnemyMinions = { "m", "Enemy" }, FriendlyMinions = { "m", "Friendly" } }
 -- (From the row at start on, for the rows below one: returns the row and
 -- its place in the order, none for Default's own.)
 local function FittingRow(plate, unit, start)
@@ -1687,23 +1775,31 @@ local function FittingRow(plate, unit, start)
 		if whenNow[kind] ~= false and ArrowSetting("Show", kind) then
 			local fits
 			if AGGRO_ROWS[base] then
-				fits = AggroFits(base, unit)
+				fits = AggroFits(AGGRO_ROWS[base], unit)
 			elseif base == "others" then
 				fits = OthersOn(kind)
-			elseif NPC_RANKS[base] then
-				if not rankAsked then
-					rank, rankAsked = ns.NPCRank and ns.NPCRank(unit), true
-				end
-				fits = rank ~= nil and (NPC_RANKS[base] == true or rank == NPC_RANKS[base])
-			elseif base == "players" or base == "minions" then
-				if not kindAsked then
-					plateKind, kindAsked = unit and ns.PlateKindOf and ns.PlateKindOf(unit), true
-				end
-				local sort = PLATE_KIND_ROWS[plateKind or ""]
-				fits = sort ~= nil and sort[1] == base and (not reaction or sort[2] == reaction)
-				reaction = nil -- (friend or foe as the Nameplates page has it, just now)
 			elseif base == "all" then
 				fits = unit ~= nil
+			elseif ns.MARK_UNIT_FLAGS[base] then
+				-- (Living NPCs by rank, players and minions as the Nameplates
+				-- page sorts them: friend or foe as it has them, just now.)
+				local flags = ns.MARK_UNIT_FLAGS[base]
+				fits = false
+				if flags:find("[ne]") then
+					if not rankAsked then
+						rank, rankAsked = ns.NPCRank and ns.NPCRank(unit), true
+					end
+					fits = rank ~= nil and flags:find(RANK_LETTERS[rank] or "-", 1, true) ~= nil
+				end
+				if not fits and flags:find("[pm]") then
+					if not kindAsked then
+						plateKind, kindAsked = unit and ns.PlateKindOf and ns.PlateKindOf(unit), true
+					end
+					local sort = PLATE_KIND_ROWS[plateKind or ""]
+					fits = sort ~= nil and flags:find(sort[1], 1, true) ~= nil
+						and (not reaction or reaction:find(sort[2], 1, true) ~= nil)
+					if fits then reaction = nil end
+				end
 			else
 				fits = PlateOf(base, plate)
 			end
@@ -1711,7 +1807,7 @@ local function FittingRow(plate, unit, start)
 				if not asked then
 					standing, asked = UnitStanding(unit), true
 				end
-				fits = reaction == standing
+				fits = standing ~= nil and reaction:find(standing, 1, true) ~= nil
 			end
 			if fits and distance then
 				fits = unit ~= nil and ns.UnitInBand and ns.UnitInBand(unit, distance) == true
@@ -1740,7 +1836,7 @@ local function PlateLook(plate, unit)
 	end
 	local mark = ArrowSetting("Style", kind) ~= "none" and kind or nil
 	local alpha = ArrowSetting("Alpha", kind) or 1
-	local scale = ArrowSetting("Scale", kind) or 1
+	local width, height = ArrowSetting("PlateWidth", kind) or 1, ArrowSetting("PlateHeight", kind) or 1
 	local colorRow = kind
 	while colorRow do
 		local tintKind = TintKind(colorRow)
@@ -1759,7 +1855,7 @@ local function PlateLook(plate, unit)
 		colorRow, at = FittingRow(plate, unit, at + 1)
 	end
 	return mark, partKinds, ns.MarkRowBase(kind) == "mouseover", alpha < 1 and alpha or nil,
-		math.abs(scale - 1) > 0.001 and scale or nil
+		(math.abs(width - 1) > 0.001 or math.abs(height - 1) > 0.001) and { width = width, height = height } or nil
 end
 
 -- Each plate's opacity from its rows (below 1 only), for Effects' plate
@@ -1802,43 +1898,135 @@ local function DistanceRowsOn()
 	end
 	return false
 end
--- Each plate's size from its rows (retail: Forever's plates don't scale):
--- its unit frame's own scale times the row's, eased in with the level, and
--- its own put back after. [unit frame] = its own scale while ours is on.
-local ownScales = {}
-local function SetPlateScale(plate, scale, level)
+-- Each plate's health bar size from its rows (retail: Forever's plates
+-- don't size): its own width and height times the row's Width and Height,
+-- about its own middle, and its own anchors put back after. [bar] = { its
+-- points, width, height, middle from the unit frame's } while ours is on;
+-- nows.width/height[plate] = ours on it now (nil: its own).
+local ownSizes, nows = {}, { width = {}, height = {} }
+local function Number(ok, value)
+	return ok and type(value) == "number" and Known(value) and value or nil
+end
+local function ApplySize(plate)
 	local unitFrame = plate and plate.UnitFrame
-	if not (ns.isRetail and Usable(unitFrame)) then
+	local bar = unitFrame and (unitFrame.HealthBarsContainer or unitFrame.healthBar)
+	if not (Usable(unitFrame) and Usable(bar)) then
 		return
 	end
-	scale = scale and level > 0 and 1 - level * (1 - scale) or nil
-	if scale and math.abs(scale - 1) < 0.001 then
-		scale = nil
-	end
-	local own = ownScales[unitFrame]
-	if not scale then
+	local width, height = nows.width[plate] or 1, nows.height[plate] or 1
+	local own = ownSizes[bar]
+	if math.abs(width - 1) < 0.001 and math.abs(height - 1) < 0.001 then
+		nows.width[plate], nows.height[plate] = nil, nil
 		if own then
-			pcall(unitFrame.SetScale, unitFrame, own)
-			ownScales[unitFrame] = nil
+			ownSizes[bar] = nil
+			pcall(bar.ClearAllPoints, bar)
+			for _, point in ipairs(own.points) do
+				pcall(bar.SetPoint, bar, unpack(point, 1, 5))
+			end
+			pcall(bar.SetSize, bar, own.width, own.height)
 		end
 		return
 	end
 	if not own then
-		local ok, now = pcall(unitFrame.GetScale, unitFrame)
-		own = ok and type(now) == "number" and Known(now) and now or 1
-		ownScales[unitFrame] = own
+		-- (Not laid out yet, or the game won't say: left as it is, tried
+		-- again on the next look.)
+		local ownWidth, ownHeight = Number(pcall(bar.GetWidth, bar)), Number(pcall(bar.GetHeight, bar))
+		local okBar, x, y = pcall(bar.GetCenter, bar)
+		local okFrame, frameX, frameY = pcall(unitFrame.GetCenter, unitFrame)
+		x, y, frameX, frameY = Number(okBar, x), Number(okBar, y), Number(okFrame, frameX), Number(okFrame, frameY)
+		local count = Number(pcall(bar.GetNumPoints, bar))
+		if not (ownWidth and ownHeight and ownWidth > 0 and ownHeight > 0 and x and y and frameX and frameY
+			and count) then
+			return
+		end
+		own = { points = {}, width = ownWidth, height = ownHeight, x = x - frameX, y = y - frameY }
+		for i = 1, count do
+			local point = { pcall(bar.GetPoint, bar, i) }
+			if not point[1] then
+				return
+			end
+			own.points[i] = { unpack(point, 2, 6) }
+		end
+		ownSizes[bar] = own
 	end
-	pcall(unitFrame.SetScale, unitFrame, own * scale)
+	pcall(bar.ClearAllPoints, bar)
+	pcall(bar.SetPoint, bar, "CENTER", unitFrame, "CENTER", own.x, own.y)
+	pcall(bar.SetSize, bar, own.width * width, own.height * height)
 end
-local function SetPlateOpacity(plate, opacity, level)
-	opacity = opacity and level > 0 and 1 - level * (1 - opacity) or nil
-	if opacity and opacity >= 1 then
+local function ApplyOpacity(plate, opacity)
+	if opacity and opacity >= 0.999 then
 		opacity = nil
 	end
 	if opacities[plate] ~= opacity then
 		opacities[plate] = opacity
 		if ns.RefreshPlateAlpha then ns.RefreshPlateAlpha(plate) end
 	end
+end
+
+-- A plate's opacity and size don't jump to a new row's: they move toward
+-- it, a whole 100% in the page's Change time (plateStyleFadeTime), turning
+-- back from wherever they are if it changes again (the elite rules, a
+-- camera turned from the elite and back). A plate just come starts at its
+-- own (settled: [plate] = true once it has).
+local goals = { opacity = {}, width = {}, height = {} }
+local settled = {}
+local easer = CreateFrame("Frame")
+easer:Hide()
+easer:SetScript("OnUpdate", function(self, elapsed)
+	local time = Style("plateStyleFadeTime") or 1.5
+	local step = time > 0 and elapsed / time or 1
+	for plate, goal in pairs(goals.opacity) do
+		local now = opacities[plate] or 1
+		local value = now < goal and math.min(goal, now + step) or math.max(goal, now - step)
+		ApplyOpacity(plate, value)
+		if value == goal then goals.opacity[plate] = nil end
+	end
+	for what, list in pairs(nows) do
+		for plate, goal in pairs(goals[what]) do
+			local now = list[plate] or 1
+			local value = now < goal and math.min(goal, now + step) or math.max(goal, now - step)
+			list[plate] = value
+			ApplySize(plate)
+			if value == goal then goals[what][plate] = nil end
+		end
+	end
+	if not (next(goals.opacity) or next(goals.width) or next(goals.height)) then
+		self:Hide()
+	end
+end)
+-- (What, its value now and the goal, 1 for none; jump: there at once.)
+local function MoveTo(what, plate, now, goal, jump)
+	if jump or math.abs(now - goal) < 0.001 then
+		goals[what][plate] = nil
+		if what == "opacity" then
+			ApplyOpacity(plate, goal)
+		else
+			nows[what][plate] = goal
+			ApplySize(plate)
+		end
+		return
+	end
+	goals[what][plate] = goal
+	easer:Show()
+end
+local function SetPlateSize(plate, size, level, jump)
+	if not ns.isRetail then
+		return
+	end
+	for what, list in pairs(nows) do
+		local goal = size and size[what]
+		MoveTo(what, plate, list[plate] or 1, goal and level > 0 and 1 - level * (1 - goal) or 1, jump)
+	end
+end
+local function SetPlateOpacity(plate, opacity, level, jump)
+	MoveTo("opacity", plate, opacities[plate] or 1, opacity and level > 0 and 1 - level * (1 - opacity) or 1, jump)
+end
+-- (A plate gone: its own size back, nothing left moving.)
+local function ForgetPlateLook(plate)
+	goals.opacity[plate], goals.width[plate], goals.height[plate], settled[plate] = nil, nil, nil, nil
+	nows.width[plate], nows.height[plate] = nil, nil
+	ApplySize(plate)
+	opacities[plate] = nil
 end
 
 -- The mouse leaving a unit has no event: while a plate has the mouseover
@@ -1855,12 +2043,14 @@ local function RefreshTargetArrow(plate)
 	local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
 	-- (None while the Style hub's Nameplates page is switched off.)
 	local level = plate ~= PersonalPlate() and Style("handlePlateStyle") and levels.TargetArrow or 0
-	local kind, kinds, hovered, opacity, scale
+	local kind, kinds, hovered, opacity, size
 	if level > 0 then
-		kind, kinds, hovered, opacity, scale = PlateLook(plate, unit)
+		kind, kinds, hovered, opacity, size = PlateLook(plate, unit)
 	end
-	SetPlateOpacity(plate, opacity, level)
-	SetPlateScale(plate, scale, level)
+	local jump = not settled[plate]
+	settled[plate] = true
+	SetPlateOpacity(plate, opacity, level, jump)
+	SetPlateSize(plate, size, level, jump)
 	if hovered then
 		mouseoverPlate = plate
 		mouseoverWatch:Show()
@@ -1903,6 +2093,12 @@ function ns.ReportTargetMarks()
 		ns.isRetail and "retail" or "forever", tostring(InCombatLockdown()),
 		Style("handlePlateStyle") and "on" or "off", Num(levels.TargetArrow),
 		tostring(Style("targetArrowY")), tostring(Style("targetArrowBareY")), tostring(UnitExists("target"))))
+	-- (The game's Show Offscreen Nameplates: the elite rules see only plates.)
+	local on, off = ns.OFFSCREEN_PLATE_CVARS, ns.NO_OFFSCREEN_PLATE_CVARS
+	ns.Print(("  offscreen plates: game setting %s, held by CineMode %s, page tick %s, yours saved %s"):format(
+		tostring(GetCVar("nameplateShowOffscreen")),
+		on and on.active and "on" or off and off.active and "off" or "no", tostring(Style("plateShowOffscreen")),
+		tostring(ns.db.savedCVars and ns.db.savedCVars.nameplateShowOffscreen)))
 	-- (Each row's When now, top to bottom.)
 	local when = {}
 	for _, kind in ipairs(MarkOrder()) do
@@ -1959,22 +2155,29 @@ function ns.ReportTargetMarks()
 	if not any then
 		ns.Print("  no mark showing: target, focus or hover a unit first")
 	end
-	-- (Each plate's size: the row it goes by and its Size, and the unit
-	-- frame's scale now against its own.)
+	-- (Each plate's health bar size: the row it goes by and its Width and
+	-- Height, the bar's size now, its own, and how many points it has now:
+	-- more than 1 while ours is on, the game's anchored it again.)
 	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
 		local unitFrame = plate.UnitFrame
 		local unit = plate.namePlateUnitToken or (unitFrame and unitFrame.unit)
 		local row = (levels.TargetArrow or 0) > 0 and unit and FittingRow(plate, unit)
-		local okScale, scale = pcall(unitFrame and unitFrame.GetScale or error, unitFrame)
-		ns.Print(("  size %s: row %s, its Size %s; unit frame scale %s, own %s%s"):format(tostring(unit),
-			tostring(row), row and Num(ArrowSetting("Scale", row)) or "-", okScale and Num(scale) or "error",
-			Num(unitFrame and ownScales[unitFrame]), ns.isRetail and "" or " (Forever: not sized)"))
+		local bar = unitFrame and (unitFrame.HealthBarsContainer or unitFrame.healthBar)
+		local own = bar and ownSizes[bar]
+		local width, height = Number(pcall(bar and bar.GetWidth or error, bar)), Number(pcall(bar and bar.GetHeight or error, bar))
+		local points = Number(pcall(bar and bar.GetNumPoints or error, bar))
+		ns.Print(("  size %s: row %s, its Width %s Height %s; bar %sx%s, own %s, ours %s/%s, points %s%s"):format(
+			tostring(unit), tostring(row), row and Num(ArrowSetting("PlateWidth", row)) or "-",
+			row and Num(ArrowSetting("PlateHeight", row)) or "-", Num(width), Num(height),
+			own and (Num(own.width) .. "x" .. Num(own.height) .. " (" .. #own.points .. " points)") or "-",
+			Num(nows.width[plate]), Num(nows.height[plate]), Num(points),
+			ns.isRetail and "" or " (Forever: not sized)"))
 	end
 end
 
 -- Every plate's mark looked at again (a new target, focus or mouseover).
 local function RefreshMarks()
-	if (levels.TargetArrow or 0) > 0 or next(arrows) or next(tints) or next(opacities) or next(ownScales) then
+	if (levels.TargetArrow or 0) > 0 or next(arrows) or next(tints) or next(opacities) or next(ownSizes) then
 		for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
 			RefreshTargetArrow(plate)
 		end
@@ -2123,16 +2326,17 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 			arrows[plate].styled = false
 		end
 		TintTarget(plate, 0)
-		SetPlateScale(plate, nil, 0)
-		opacities[plate] = nil
+		ForgetPlateLook(plate)
 		return
 	end
 	plateClass[plate], plateRole[plate] = nil, nil
 	if AnyClassIcons() or icons[plate] or roleIcons[plate] or questIcons[plate] or arrows[plate]
-		or opacities[plate] or ownScales[plate.UnitFrame or plate]
+		or opacities[plate] or nows.width[plate] or nows.height[plate]
 		or ((levels.TargetArrow or 0) > 0 and (OthersOn() or TypeRowsOn())) then
 		ns.RefreshClassIcon(plate)
 	end
+	-- (Looked at or not, a plate's settled now: from here on it moves.)
+	settled[plate] = true
 	if event == "NAME_PLATE_UNIT_ADDED" and AnyFaded() then
 		ApplyPlate(plate, PersonalPlate())
 	end
@@ -2247,13 +2451,78 @@ end
 -- when it changes, to see why a name blinks on and off.
 local namesTicker
 local namesLast = {}
+-- (And every frame, your target's name colors, logged as they change: a
+-- flash of the wrong color lasts a frame or so, under the ticker's 0.1 s.)
+local namesColours = CreateFrame("Frame")
+namesColours:Hide()
+namesColours:SetScript("OnUpdate", function()
+	local function Colour(region)
+		if not region then return "none" end
+		local ok, r, g, b, a = pcall(region.GetTextColor, region)
+		if not ok then return "error" end
+		if not (Known(r) and Known(g) and Known(b)) then return "secret" end
+		local okAlpha, alpha = pcall(region.GetAlpha, region)
+		-- (Retail's vertex color tints a text on top of its own: white there too?)
+		local okVertex, vr, vg, vb = pcall(region.GetVertexColor, region)
+		local vertex = okVertex and type(vr) == "number" and (Known(vr) and Known(vg) and Known(vb)
+			and ("%.2f/%.2f/%.2f"):format(vr, vg, vb) or "secret") or "none"
+		return ("%.2f/%.2f/%.2f a%s vertex %s alpha %s shown %s"):format(r, g, b,
+			Known(a) and ("%.2f"):format(a or -1) or "secret", vertex,
+			okAlpha and Known(alpha) and ("%.2f"):format(alpha) or "secret", tostring(Seen(region)))
+	end
+	-- (Every other text showing on the plate, with its words: a second name
+	-- the game shows on mouseover would be the white one.)
+	local function Others(unitFrame)
+		local found = {}
+		local function Scan(frame, depth)
+			for _, region in ipairs({ frame:GetRegions() }) do
+				if region ~= unitFrame.name and region ~= texts[unitFrame] and region:GetObjectType() == "FontString"
+					and Seen(region) ~= false then
+					local okText, words = pcall(region.GetText, region)
+					words = okText and Known(words) and words or "?"
+					if words ~= "" and words ~= "?" then
+						local okName, name = pcall(region.GetDebugName, region)
+						found[#found + 1] = ("%s '%s' %s"):format(okName and tostring(name) or "?", words, Colour(region))
+					end
+				end
+			end
+			if depth < 3 then
+				for _, child in ipairs({ frame:GetChildren() }) do
+					if not (child.IsForbidden and child:IsForbidden()) and Seen(child) ~= false then
+						Scan(child, depth + 1)
+					end
+				end
+			end
+		end
+		pcall(Scan, unitFrame, 0)
+		return #found > 0 and table.concat(found, "; ") or "none"
+	end
+	local plate = C_NamePlate.GetNamePlateForUnit("target")
+	local unitFrame = plate and plate.UnitFrame
+	local line = "no target plate"
+	if unitFrame then
+		local tint = tints[unitFrame]
+		local okOver, over = pcall(UnitIsUnit, "mouseover", "target")
+		line = ("target colours: game's %s | ours %s | other texts %s | tint %s | mouseover %s"):format(
+			Colour(Usable(unitFrame.name) and unitFrame.name or nil), Colour(texts[unitFrame]), Others(unitFrame),
+			tint and (("level %.2f name %s"):format(tint.level or -1,
+				tint.name and ("%.2f/%.2f/%.2f"):format(tint.name[1], tint.name[2], tint.name[3]) or "game's")) or "none",
+			okOver and Known(over) and (over and "on target" or (UnitExists("mouseover") and "other" or "none")) or "?")
+	end
+	if namesLast.colours ~= line then
+		namesLast.colours = line
+		ns.Log("names", line)
+	end
+end)
 function ns.ToggleNamesDebug()
 	if namesTicker then
 		namesTicker:Cancel()
 		namesTicker = nil
+		namesColours:Hide()
 		wipe(namesLast)
 		return false
 	end
+	namesColours:Show()
 	namesTicker = C_Timer.NewTicker(0.1, function()
 		-- (A target with no plate at all says so.)
 		local targetLine = UnitExists("target") and not C_NamePlate.GetNamePlateForUnit("target")
@@ -2563,5 +2832,40 @@ function ns.PrintRangeDebug()
 			local okName, name = pcall(UnitName, unit)
 			ns.Print(unit .. " " .. Answer(okName, name) .. ": " .. Describe(unit))
 		end
+	end
+end
+
+-- /cine debug platedebuffs: whether the game keeps auras secret now, and
+-- your debuffs on your target as each read answers (name, spell ID and
+-- whether the game's plate shows it; secret or error). In fights on retail
+-- an addon can't read them at all (tested 2026-10-28), so which debuffs a
+-- plate shows is the game's alone.
+function ns.PrintPlateDebuffsDebug()
+	local secrets, secret = _G.C_Secrets, "no such check"
+	if secrets and secrets.ShouldAurasBeSecret then
+		secret = Answer(pcall(secrets.ShouldAurasBeSecret))
+	end
+	ns.Print(("client: %s; in combat: %s; auras secret: %s"):format(ns.isRetail and "retail" or "Forever",
+		tostring(InCombatLockdown() and true or false), secret))
+	if not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then
+		ns.Print("C_UnitAuras.GetAuraDataByIndex: missing on this client")
+		return
+	elseif not UnitExists("target") then
+		ns.Print("no target: target an enemy with your debuffs on it")
+		return
+	end
+	for i = 1, 40 do
+		local ok, aura = pcall(C_UnitAuras.GetAuraDataByIndex, "target", i, "HARMFUL|PLAYER")
+		if not ok then
+			ns.Print(("debuff %d: error %s"):format(i, tostring(aura)))
+			return
+		elseif type(aura) ~= "table" then
+			if i == 1 then
+				ns.Print("none of your debuffs on it")
+			end
+			return
+		end
+		ns.Print(("debuff %d: %s (%s), shows on game plate: %s"):format(i, Answer(true, aura.name),
+			Answer(true, aura.spellId), Answer(true, aura.nameplateShowPersonal)))
 	end
 end

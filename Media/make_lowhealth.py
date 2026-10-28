@@ -21,11 +21,11 @@ through cracks, a fire's ember rim, a glow), tinted on its own.
   Wind   streaks sweeping along the edges
   SunMoon  sunlight streaming in from the left (the body), a crescent moon's
          cold light on the right (the glow): tinted gold and silver
-Sprites: Effects.tga, 8x4 cells of 128, 31 used (see CELLS below;
-LowHealthThemes.lua lists them in the same order), plus Drip.tga and
-Icicle.tga (32x256, running down).
-Also writes LowHealthArt.lua: where each material's top and bottom edges come
-to, for the drips.
+Sprites: Effects.tga, 8x4 cells of 128 (see CELLS below). Vitals Vision no
+longer shows them; make_wind_guide.py copies them for the Wind Guide, and the
+release leaves the file out (.pkgmeta). Bolt.tga (256 square), Star.tga
+(128) and Mote.tga (64): the few it still shows, each on its own; Gas.tga
+(256): a soft wisp, for gas.
 Our own, made from scratch here; usage: make_lowhealth.py (from the addon folder)"""
 import math
 import os
@@ -113,22 +113,6 @@ def inward(px, py):
     return -px * 2 / d, -py / d
 
 
-tops, bottoms = {}, {}
-
-
-def record_top(name, alpha):
-    """The share of the height from the top (and from the bottom) to the first
-    mostly clear pixel, at 33 points across (0 where a column's all material:
-    a corner)."""
-    h, w = alpha.shape
-    down, up = [], []
-    for i in range(33):
-        column = alpha[:, int(i / 32 * (w - 1))]
-        down.append(np.argmax(column < 0.35) / (h - 1))
-        up.append(np.argmax(column[::-1] < 0.35) / (h - 1))
-    tops[name], bottoms[name] = down, up
-
-
 def along_and_depth(x, y, line):
     """Coordinates that follow the edge: along it (0-1 round the screen) and
     how far past the line (in its units)."""
@@ -152,7 +136,6 @@ def soak():
     alpha = body * (0.55 + 0.4 * depth ** 0.6)
     save("Soak", grey, alpha, 32)
     save("SoakGlow", np.ones_like(x), rim * 0.7)
-    record_top("Soak", alpha)
 
 
 # --- Crack: a battered plate, cracked in from its edge ------------------------
@@ -201,7 +184,6 @@ def crack_plate():
     glow = np.asarray(Image.fromarray((lines * 255).astype(np.uint8)).filter(
         ImageFilter.GaussianBlur(3)), dtype=np.float64) / 255
     save("CrackGlow", np.ones_like(x), np.clip(lines * 0.9 + glow * 1.4, 0, 1))
-    record_top("Crack", alpha)
 
 
 # --- Frost: crystals growing in from the edge ---------------------------------
@@ -243,7 +225,6 @@ def frost():
     save("Frost", grey, alpha, 32)
     soft = mask_from(Image.fromarray((crystals * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(4)))
     save("FrostGlow", np.ones_like(x), np.clip(soft * 1.2, 0, 1) * 0.6)
-    record_top("Frost", alpha)
 
 
 # --- Smoke: billowing in from the edges ---------------------------------------
@@ -262,7 +243,6 @@ def smoke():
     grey = 0.35 + (puffs - 0.5) * 0.6
     alpha = body * (0.55 + 0.45 * puffs) * smoothstep(-0.05, 0.25, inside) ** 0.5
     save("Smoke", grey, alpha, 32)
-    record_top("Smoke", alpha)
 
 
 # --- Flame: flames licking in from a charred edge -----------------------------
@@ -291,7 +271,6 @@ def flame():
     ember = smoothstep(0.05, 0.0, inside) * smoothstep(-0.05, 0.0, inside)
     ember = np.maximum(ember, body * smoothstep(0.08, 0.0, inside) * (0.4 + 0.6 * char))
     save("FlameGlow", np.ones_like(x), np.clip(ember * 1.1, 0, 1))
-    record_top("Flame", alpha)
 
 
 # --- Glow: no body, a soft glow round the edges -------------------------------
@@ -302,7 +281,6 @@ def glow():
     shimmer = fbm(x, y, 6, 4, 80)
     alpha = smoothstep(0.5, 1.08, r + (shimmer - 0.5) * 0.12) ** 1.6
     save("GlowGlow", np.ones_like(x), alpha * 0.95)
-    record_top("Glow", alpha)
 
 
 # --- Fur: a thick pelt, its strands pointing in -------------------------------
@@ -325,7 +303,6 @@ def fur():
     grey = 0.3 + 0.5 * strands + (fbm(x, y, 20, 3, 125) - 0.5) * 0.2
     alpha = np.maximum(base * 0.9, np.clip(strands * 1.4, 0, 1) * 0.9)
     save("Fur", grey, alpha, 32)
-    record_top("Fur", alpha)
 
 
 # --- Scales: a dragon's scales in rows round the edge, their rims glowing -----
@@ -346,7 +323,6 @@ def scales():
     alpha = np.maximum(scale, rim) * smoothstep(-0.01, 0.01, depth)
     save("Scales", shade, alpha * 0.95, 32)
     save("ScalesGlow", np.ones_like(x), rim * smoothstep(-0.01, 0.01, depth) * 0.8)
-    record_top("Scales", alpha)
 
 
 # --- Leaves: a thick border of leaves, thinning toward the line ---------------
@@ -383,7 +359,6 @@ def leaves():
     tone = mask_from(shade.resize((w, h), Image.LANCZOS))
     grey = 0.35 + 0.55 * tone + (fbm(x, y, 40, 2, 143) - 0.5) * 0.1
     save("Leaves", grey, cover * 0.95, 32)
-    record_top("Leaves", cover)
 
 
 # --- Wind: streaks sweeping along the edges ------------------------------------
@@ -409,7 +384,6 @@ def wind():
     alpha = body * (0.12 + 0.7 * streaks)
     save("Wind", 0.75 + 0.25 * streaks, alpha, 32)
     save("WindGlow", np.ones_like(x), body * streaks * 0.7)
-    record_top("Wind", alpha)
 
 
 # --- Sun and moon: sunlight streaming in from the left, moonlight on the right
@@ -435,7 +409,6 @@ def sun_moon():
     right = smoothstep(-0.35, 0.2, x)
     moon = np.clip(crescent + halo + edge ** 1.8 * right * 0.4, 0, 1)
     save("SunMoonGlow", np.ones_like(x), moon)
-    record_top("SunMoon", np.maximum(sun * left, moon))
 
 
 # --- Vines: tendrils reaching in (veins, briars, roots) -----------------------
@@ -484,7 +457,6 @@ def vines():
     save("Vines", grey, alpha, 32)
     soft = mask_from(Image.fromarray((lines * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(5)))
     save("VinesGlow", np.ones_like(x), np.clip(soft * 1.3, 0, 1) * 0.7)
-    record_top("Vines", alpha)
 
 
 # --- Runes: a dark band of glowing runes ---------------------------------------
@@ -515,7 +487,6 @@ def runes():
     save("Runes", grey, band * 0.75, 32)
     soft = mask_from(Image.fromarray((marks * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(4)))
     save("RunesGlow", np.ones_like(x), np.clip(marks + soft * 1.2, 0, 1))
-    record_top("Runes", band * 0.75)
 
 
 # --- Sprites ------------------------------------------------------------------
@@ -721,25 +692,28 @@ def sprites():
         row, col = divmod(i, 8)
         atlas[row * CELL:(row + 1) * CELL, col * CELL:(col + 1) * CELL] = mask_from(small)
     save("Effects", np.ones_like(atlas), atlas)
+    # The few Vitals Vision still shows, each on its own: the lightning
+    # bigger (it's drawn big), the stars and motes small.
+    for name, size in (("Bolt", 256), ("Star", 128), ("Mote", 64)):
+        alone = Image.fromarray((np.clip(cells[name], 0, 1) * 255).astype(np.uint8)).resize(
+            (size, size), Image.LANCZOS)
+        save(name, np.ones((size, size)), mask_from(alone))
 
 
-def running():
-    """Drip: a streak, wide at the top and thinning, with a bead at the
-    bottom. Icicle: tapering to a point, glassy down one side. LowHealth.lua
-    shows their bottom part, longer as they run."""
-    w, h = 32, 256
-    u = np.linspace(-1, 1, w)[None, :].repeat(h, 0)
-    v = np.linspace(0, 1, h)[:, None].repeat(w, 1)
-    width = 0.55 - 0.25 * v ** 0.6
-    streak = smoothstep(width, width * 0.6, np.abs(u)) * (v < 0.93)
-    bead = smoothstep(0.95, 0.75, np.hypot(u, (v - 0.92) / 0.08 * 0.95 * (w / h) * 8))
-    cover = np.maximum(streak, bead)
-    shade = 0.56 + 0.19 * smoothstep(0.5, 0.0, np.abs(u + 0.3)) * cover
-    save("Drip", shade / 0.75, cover * 0.9)
-    width = 0.8 * (1 - v) ** 0.9 + 0.02
-    ice = smoothstep(width, width * 0.7, np.abs(u))
-    shade = 0.7 + 0.3 * smoothstep(0.6, 0.0, np.abs(u + 0.35))
-    save("Icicle", shade, ice * 0.85)
+def gas():
+    """Gas.tga (256 square): a soft wisp of gas for Vitals Vision, with no
+    hard edges: wispy noise inside a smooth round falloff, so it melts into
+    the edges it drifts over."""
+    w = 256
+    x, y = grid(w, w)
+    r = np.hypot(x, y * 1.15)
+    # (A wide, flat falloff and a faint body: puffs overlap into a haze
+    # rather than each showing as a bright clump.)
+    falloff = smoothstep(1.0, 0.0, r) ** 0.8
+    wisps = fbm(x * 1.3, y * 1.3, 3, 4, 77)
+    wisps = smoothstep(0.25, 0.85, wisps)
+    alpha = falloff * (0.45 + 0.55 * wisps) * 0.45
+    save("Gas", np.ones_like(x), alpha)
 
 
 soak()
@@ -756,20 +730,4 @@ leaves()
 wind()
 sun_moon()
 sprites()
-running()
-
-with open("LowHealthArt.lua", "w", newline="\n") as f:
-    f.write("-- Made by Media/make_lowhealth.py (don't edit: run it again). Where each\n"
-            "-- low-health edge material's top edge comes down to, at 33 points across\n"
-            "-- its texture: the share of its height (0 where a corner's all material).\n"
-            "-- Drips start there, so they come out of it. BOTTOMS: the same from\n"
-            "-- the bottom, for drips running up.\n")
-    f.write("local _, ns = ...\n\nns.LOW_HEALTH_TOPS = {\n")
-    for name in sorted(tops):
-        values = ", ".join("%.3f" % v for v in tops[name])
-        f.write("\t%s = { %s },\n" % (name, values))
-    f.write("}\n\nns.LOW_HEALTH_BOTTOMS = {\n")
-    for name in sorted(bottoms):
-        values = ", ".join("%.3f" % v for v in bottoms[name])
-        f.write("\t%s = { %s },\n" % (name, values))
-    f.write("}\n")
+gas()

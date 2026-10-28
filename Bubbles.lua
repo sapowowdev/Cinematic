@@ -266,6 +266,15 @@ function ns.IsBubbleOnScreen(text)
 	return false
 end
 
+-- How many bubbles the game keeps from addons (in instances, on retail): their
+-- text can't be read, but one turning up just after a line is most likely its.
+function ns.UnreadableBubbles()
+	if not (C_ChatBubbles and C_ChatBubbles.GetAllChatBubbles) then
+		return 0
+	end
+	return #C_ChatBubbles.GetAllChatBubbles(true) - #C_ChatBubbles.GetAllChatBubbles(false)
+end
+
 -- A bubble appears a frame or so after its chat message: the bubbles are
 -- looked at for a short while after each one.
 local BUBBLE_EVENTS = {

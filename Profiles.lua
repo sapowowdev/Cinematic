@@ -33,6 +33,7 @@ local PROFILE_TABLES = {
 	"frameRules", -- (none in any built-in profile: each starts with no Custom Visibility Rules)
 	"tankHide", "healerHide", "damageHide",
 	"markNames", -- (the Nameplates page's rows' own names)
+	"cameraRows", -- (the Cameras page's rows: CameraRows.lua)
 }
 ns.PROFILE_TABLES = PROFILE_TABLES
 ns.IS_PROFILE_TABLE = {}

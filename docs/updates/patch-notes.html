@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cinematic Patch Notes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="What's new in Cinematic, release by release: the new features, and every change.">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js" defer></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus+SC&family=Barlow:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a letterboxed opening frame, then one reading column of releases, newest first: each its
+   new features as cards, then every change in a list that opens. Filled in by the script below. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --fg: #1b2129; --muted: #58626e; --line: #d2d8df;
+  --accent: #8a6400; --accent-soft: #f2e6c2;
+  --bar: #0b0d10; --bar-fg: #e9e4d8; --gold: #e2b53f;
+  --font-display: "Marcellus SC", Georgia, serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171c; --surface: #1b2026; --fg: #e3e6ea; --muted: #9aa3ad; --line: #2e353d;
+  --accent: #e2b53f; --accent-soft: #3a3120; --bar: #050607; color-scheme: dark }
+* { box-sizing: border-box }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px) }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.6 var(--font-body) }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.col { max-width: 760px; margin: 0 auto; display: grid; gap: 48px; padding-block: 44px 24px }
+.col > * { min-width: 0 }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.05; letter-spacing: .01em }
+h2 { font-size: 28px; line-height: 1.2 }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 0 }
+p { margin: 0 }
+a { color: var(--accent) }
+.muted { color: var(--muted) }
+.eyebrow { font: 600 13px/1 var(--font-body); letter-spacing: .14em; text-transform: uppercase; color: var(--accent) }
+
+.hero { background: var(--bar); color: var(--bar-fg) }
+.hero .band { height: clamp(28px, 6vw, 56px); background: #000 }
+.hero .frame { padding-block: clamp(36px, 7vw, 72px); background:
+  radial-gradient(120% 90% at 50% 40%, #2b3240 0%, #151a22 55%, #0b0d10 100%) }
+.hero .inner { max-width: 760px; margin: 0 auto; display: grid; gap: 14px }
+.hero .eyebrow { color: var(--gold) }
+.hero p { font-size: 19px; max-width: 58ch; color: #cfcabe }
+
+/* Filters */
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface) }
+.seg button { font: 500 15px var(--font-body); background: transparent; color: var(--muted); border: 0; padding: 6px 12px; cursor: pointer }
+.seg button + button { border-left: 1px solid var(--line) }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--fg) }
+button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+/* A release */
+.release { display: grid; gap: 14px; scroll-margin-top: 16px }
+.rhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; border-bottom: 1px solid var(--line); padding-bottom: 8px }
+.rhead .date { color: var(--muted); font-size: 15px }
+.rhead .soon { font: 600 12px/1 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--accent);
+  border: 1px solid currentColor; padding: 4px 7px; border-radius: 4px; align-self: center }
+.feats { display: grid; gap: 10px }
+.feat { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: 12px 16px; display: grid; gap: 4px }
+.feat .meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 14px; color: var(--muted) }
+.tag { font: 600 12px/1 var(--font-body); letter-spacing: .04em; border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; white-space: nowrap }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 8px }
+summary { cursor: pointer; padding: 10px 16px; font-weight: 600; color: var(--muted) }
+summary:hover { color: var(--fg) }
+.changes { margin: 0; padding: 0 16px 12px 34px; display: grid; gap: 6px; font-size: 15.5px }
+.changes .area { font-weight: 600 }
+.none { color: var(--muted); font-size: 15.5px }
+.status { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; color: var(--muted) }
+.more { justify-self: start; font: 600 15px var(--font-body); color: var(--accent); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 16px; cursor: pointer }
+.more:hover { border-color: var(--accent) }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="band"></div>
+  <div class="frame gutter">
+    <div class="inner">
+      <div class="eyebrow">What's new</div>
+      <h1>Patch notes</h1>
+      <p>Every release of Cinematic, newest first: the new features worth knowing about, and the full list of changes. The same notes are in the game under What's new.</p>
+    </div>
+  </div>
+  <div class="band"></div>
+</header>
+
+<main class="gutter">
+  <div class="col">
+    <div class="filters" role="group" aria-label="Show features for">
+      <span class="muted">Features for</span>
+      <div class="seg" id="client">
+        <button type="button" data-client="" aria-pressed="true">Both</button>
+        <button type="button" data-client="forever" aria-pressed="false">WoW Forever</button>
+        <button type="button" data-client="retail" aria-pressed="false">Retail</button>
+      </div>
+    </div>
+    <p class="status" id="status" role="status">Loading the notes…</p>
+    <div id="releases" class="col" style="padding:0"></div>
+    <button type="button" class="more" id="more" hidden>Show older releases</button>
+  </div>
+</main>
+
+<script>
+// The notes come straight from the repository, so the page needs no updating:
+//   features  Changelog.lua's ns.CHANGELOG_FEATURES (the in-game New features page)
+//   changes   the commits on main, cut into releases at the v* tags (as Tools/commits.sh does)
+// A feature goes under the first release made on or after its date; anything newer than
+// the last tag is "Next update". If GitHub's API is out of reach, features show by date alone.
+(function () {
+  var REPO = "sapowowdev/Cinematic";
+  var RAW = "https://raw.githubusercontent.com/" + REPO + "/main/";
+  var API = "https://api.github.com/repos/" + REPO + "/";
+  var SHOW = 12; // releases shown at first, and added per "Show older"
+  var CLIENTS = { forever: "WoW Forever only", retail: "Retail only" };
+
+  var statusEl = document.getElementById("status");
+  var listEl = document.getElementById("releases");
+  var moreEl = document.getElementById("more");
+  var client = "";
+  try { client = localStorage.getItem("cine-notes-client") || ""; } catch (e) { /* no storage */ }
+  var releases = [], shown = SHOW;
+
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === "text") n.textContent = attrs[k]; else n.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (k) { if (k) n.appendChild(typeof k === "string" ? document.createTextNode(k) : k); });
+    return n;
+  }
+
+  // Changelog.lua's table: a list of { key = "string" .. "string", ... } entries. Only strings,
+  // nil and the .. joining them appear in it, so a small reader is enough.
+  function readFeatures(src) {
+    var at = src.indexOf("ns.CHANGELOG_FEATURES");
+    if (at < 0) return [];
+    var i = src.indexOf("{", at) + 1, out = [], entry = null, key = null, depth = 1;
+    while (i < src.length && depth > 0) {
+      var c = src[i];
+      if (c === "-" && src[i + 1] === "-") { i = src.indexOf("\n", i); if (i < 0) break; continue; }
+      if (c === "{") { depth++; entry = {}; i++; continue; }
+      if (c === "}") { depth--; if (entry && depth === 1) { out.push(entry); entry = null; } i++; continue; }
+      if (c === "\"" || c === "'") {
+        var s = "", j = i + 1;
+        while (j < src.length && src[j] !== c) {
+          if (src[j] === "\\") { j++; s += src[j] === "n" ? "\n" : src[j]; } else s += src[j];
+          j++;
+        }
+        if (entry && key) entry[key] = (entry[key] || "") + s;
+        i = j + 1; continue;
+      }
+      var m = /^([A-Za-z_]\w*)\s*=/.exec(src.slice(i, i + 40));
+      if (m) { key = m[1]; i += m[0].length; continue; }
+      i++;
+    }
+    return out;
+  }
+
+  function getJSON(url) {
+    return fetch(url, { headers: { Accept: "application/vnd.github+json" } }).then(function (r) {
+      if (!r.ok) throw new Error(r.status === 403 ? "GitHub's limit" : "HTTP " + r.status);
+      return r.json();
+    });
+  }
+  function allPages(path) {
+    var got = [];
+    function page(n) {
+      return getJSON(API + path + (path.indexOf("?") < 0 ? "?" : "&") + "per_page=100&page=" + n).then(function (rows) {
+        got = got.concat(rows);
+        return rows.length === 100 ? page(n + 1) : got;
+      });
+    }
+    return page(1);
+  }
+  // Kept for the visit, so going back and forth doesn't spend GitHub's hourly allowance.
+  function cached(name, make) {
+    try { var hit = sessionStorage.getItem(name); if (hit) return Promise.resolve(JSON.parse(hit)); } catch (e) { /* none */ }
+    return make().then(function (v) { try { sessionStorage.setItem(name, JSON.stringify(v)); } catch (e) { /* none */ } return v; });
+  }
+
+  // Releases newest first, each { version, date, changes: [{ date, subject }] }, from the commits
+  // (newest first) and the tags. Commits up to the newest tag's belong to it, and so on down.
+  function cutReleases(commits, tags) {
+    var tagAt = {};
+    tags.forEach(function (t) { if (/^v\d/.test(t.name)) tagAt[t.commit.sha] = t.name.slice(1); });
+    var out = [], cur = { version: null, date: null, changes: [] };
+    commits.forEach(function (c) {
+      var v = tagAt[c.sha];
+      var day = (c.commit.committer.date || c.commit.author.date).slice(0, 10);
+      if (v) { if (cur.changes.length || cur.version) out.push(cur); cur = { version: v, date: day, changes: [] }; }
+      if (c.parents && c.parents.length > 1) return; // merges, as commits.sh leaves them out
+      cur.changes.push({ date: day, subject: c.commit.message.split("\n")[0] });
+    });
+    if (cur.changes.length || cur.version) out.push(cur);
+    return out;
+  }
+
+  function placeFeatures(rels, feats) {
+    feats.forEach(function (f) {
+      // the oldest release made on or after the feature's date; none = not out yet
+      var home = null;
+      rels.forEach(function (r) { if (r.version && r.date >= f.date) home = r; });
+      if (!home) home = rels[0] && !rels[0].version ? rels[0] : null;
+      if (!home) { home = { version: null, date: null, changes: [] }; rels.unshift(home); }
+      (home.features = home.features || []).push(f);
+    });
+  }
+
+  function niceDate(d) {
+    if (!d) return "";
+    var p = d.split("-");
+    return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  }
+
+  function featureCard(f) {
+    var meta = el("div", { "class": "meta" }, [
+      f.page ? el("span", { text: "On the " + f.page + " page" }) : null,
+      CLIENTS[f.client] ? el("span", { "class": "tag", text: CLIENTS[f.client] }) : null
+    ]);
+    return el("article", { "class": "feat" }, [el("h3", { text: f.title }), el("p", { text: f.text }), meta.childNodes.length ? meta : null]);
+  }
+
+  // "Area: what changed" subjects show their area in bold, as in the game.
+  function change(c) {
+    var m = /^([^:]{1,40}): (.+)$/.exec(c.subject);
+    return el("li", {}, m ? [el("span", { "class": "area", text: m[1] + ": " }), m[2]] : [c.subject]);
+  }
+
+  function render() {
+    listEl.textContent = "";
+    var list = releases.slice(0, shown);
+    list.forEach(function (r) {
+      var feats = (r.features || []).filter(function (f) { return !client || !f.client || f.client === client; });
+      feats.sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
+      var head = el("div", { "class": "rhead" }, [
+        el("h2", { text: r.version ? "Version " + r.version : r.byDate ? niceDate(r.byDate) : "Next update" }),
+        r.version ? el("span", { "class": "date", text: niceDate(r.date) }) : null,
+        !r.version && !r.byDate ? el("span", { "class": "soon", text: "Not out yet" }) : null
+      ]);
+      var kids = [head];
+      if (feats.length) kids.push(el("div", { "class": "feats" }, feats.map(featureCard)));
+      if (r.changes.length) {
+        kids.push(el("details", {}, [
+          el("summary", { text: (feats.length ? "Every change" : "Changes") + " (" + r.changes.length + ")" }),
+          el("ul", { "class": "changes" }, r.changes.map(change))
+        ]));
+      } else if (!feats.length) kids.push(el("p", { "class": "none", text: "No changes listed." }));
+      listEl.appendChild(el("section", { "class": "release", id: r.version ? "v" + r.version : r.byDate || "next" }, kids));
+    });
+    moreEl.hidden = shown >= releases.length;
+  }
+
+  var seg = document.getElementById("client");
+  Array.prototype.forEach.call(seg.querySelectorAll("button"), function (b) {
+    b.setAttribute("aria-pressed", String(b.getAttribute("data-client") === client));
+    b.addEventListener("click", function () {
+      client = b.getAttribute("data-client");
+      try { localStorage.setItem("cine-notes-client", client); } catch (e) { /* no storage */ }
+      Array.prototype.forEach.call(seg.querySelectorAll("button"), function (o) { o.setAttribute("aria-pressed", String(o === b)); });
+      render();
+    });
+  });
+  moreEl.addEventListener("click", function () { shown += SHOW; render(); });
+
+  var feats = fetch(RAW + "Changelog.lua").then(function (r) {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.text();
+  }).then(readFeatures);
+  var history = cached("cine-notes-history", function () {
+    return Promise.all([allPages("commits?sha=main"), allPages("tags")]).then(function (got) {
+      // only what the page uses, to keep the cache small
+      return {
+        commits: got[0].map(function (c) {
+          return { sha: c.sha, parents: c.parents.map(function () { return 1; }),
+            commit: { message: c.commit.message.split("\n")[0], committer: { date: c.commit.committer.date }, author: { date: c.commit.author.date } } };
+        }),
+        tags: got[1].map(function (t) { return { name: t.name, commit: { sha: t.commit.sha } }; })
+      };
+    });
+  });
+
+  feats.then(function (fs) {
+    return history.then(function (h) {
+      releases = cutReleases(h.commits, h.tags);
+      placeFeatures(releases, fs);
+      statusEl.hidden = true;
+    }, function (err) {
+      // No commit history: the features alone, a section per day.
+      var days = {};
+      fs.forEach(function (f) { (days[f.date] = days[f.date] || { byDate: f.date, changes: [], features: [] }).features.push(f); });
+      releases = Object.keys(days).sort().reverse().map(function (d) { return days[d]; });
+      statusEl.textContent = "Couldn't load the release list from GitHub (" + err.message + "), so these are the new features by date. Try again in a while for every change.";
+    });
+  }).then(render, function (err) {
+    statusEl.textContent = "Couldn't load the notes (" + err.message + "). They're also in the game, under What's new.";
+  });
+})();
+</script>
+</body>
+</html>

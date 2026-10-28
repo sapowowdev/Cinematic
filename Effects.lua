@@ -213,7 +213,7 @@ local PLATE_CVARS = {
 
 -- Floating combat text (damage and healing numbers, like "+10" from a heal or
 -- regen): off in cinematic mode while you're out of combat; back for fights.
--- CVars this client doesn't have are skipped.
+-- CVars this client doesn't have are skipped (retail's end in _v2).
 local COMBAT_TEXT_CVARS = {
 	playerWins = true,
 	values = {
@@ -224,6 +224,12 @@ local COMBAT_TEXT_CVARS = {
 		floatingCombatTextCombatHealingAbsorbTarget = "0",
 		floatingCombatTextPetMeleeDamage = "0",
 		floatingCombatTextPetSpellDamage = "0",
+		floatingCombatTextCombatHealing_v2 = "0",
+		floatingCombatTextCombatDamage_v2 = "0",
+		floatingCombatTextCombatHealingAbsorbSelf_v2 = "0",
+		floatingCombatTextCombatHealingAbsorbTarget_v2 = "0",
+		floatingCombatTextPetMeleeDamage_v2 = "0",
+		floatingCombatTextPetSpellDamage_v2 = "0",
 	},
 }
 
@@ -480,22 +486,23 @@ function ns.StopMusicNow()
 end
 
 -- Music for standing still (not flagged AFK): Stand still's switch, or with
--- that event set to no camera (its switch greyed out) Go AFK's.
+-- that event set to no camera (its switch greyed out) Go AFK's. (Each as the
+-- row it goes by now on the Cameras page has it.)
 local function StillMusicOn()
-	if ns.db.eventStillCamera == "none" then
-		return ns.db.eventAFKMusic
+	if not ns.TriggerHasCamera("Still") then
+		return ns.TriggerSetting("AFK", "music")
 	end
-	return ns.db.eventStillMusic
+	return ns.TriggerSetting("Still", "music")
 end
 
 -- Standing still or AFK, as far as music goes: the AFK camera, the wait for it
 -- (standing still with the UI faded) or being flagged AFK. With that one's
--- music off (Camera Triggers page: Go AFK's while flagged AFK, otherwise
+-- music off (Cameras page: Go AFK's while flagged AFK, otherwise
 -- StillMusicOn's), none of these brings music back from the move-on pause;
 -- music already playing carries on.
 local function QuietForAFK()
 	if ns.Flag(UnitIsAFK("player")) then
-		return not ns.db.eventAFKMusic
+		return not ns.TriggerSetting("AFK", "music")
 	end
 	local mode = ns.CameraMode and ns.CameraMode()
 	return (mode == "idle" or (mode == nil and ns.stillSince ~= nil)) and not StillMusicOn()
@@ -681,12 +688,12 @@ local deathSong = { file = nil, playing = false }
 -- Music starts with a camera: as one starts with its music switch on, and
 -- music fatigue allows. The flight, RP walk and auto-run cameras each have a
 -- switch; the cozy, vista and fish cameras follow the event that started them
--- (the Camera Triggers page's Music column, event<key>Music). The AFK camera's
+-- (the Cameras page's Music column, event<key>Music). The AFK camera's
 -- is Go AFK's (eventAFKMusic) while flagged AFK, Stand still's (eventStillMusic)
 -- when standing still started it; the quest camera's its own event's
 -- (eventQuestMusic, or eventQuestGossipMusic talking about a quest). Music
 -- already playing just carries on: no camera swaps in a new song.
-local MUSIC_CAM = { flight = "musicCamFlight", walk = "musicCamWalk", run = "musicCamRun" }
+local MUSIC_CAM = { flight = "Flight", walk = "Walk", run = "Run" } -- (their triggers)
 local EVENT_MUSIC_CAMS = { cozy = true, vista = true, fish = true }
 
 local function CameraMusicOn(mode)
@@ -698,17 +705,17 @@ local function CameraMusicOn(mode)
 	end
 	if mode == "idle" then
 		if ns.Flag(UnitIsAFK("player")) then
-			return ns.db.eventAFKMusic or false
+			return ns.TriggerSetting("AFK", "music") or false
 		end
 		return StillMusicOn() or false
 	end
 	if EVENT_MUSIC_CAMS[mode] then
-		return key ~= nil and ns.db["event" .. key .. "Music"] or false
+		return key ~= nil and ns.TriggerSetting(key, "music") or false
 	end
 	if mode == "quest" then
-		return ns.db["event" .. (ns.QuestCamEvent and ns.QuestCamEvent() or "Quest") .. "Music"] or false
+		return ns.TriggerSetting(ns.QuestCamEvent and ns.QuestCamEvent() or "Quest", "music") or false
 	end
-	return MUSIC_CAM[mode] ~= nil and ns.db[MUSIC_CAM[mode]] or false
+	return MUSIC_CAM[mode] ~= nil and ns.TriggerSetting(MUSIC_CAM[mode], "music") or false
 end
 
 -- The camera running ("flight", "walk"... or "quest"), and whether its start
@@ -733,7 +740,8 @@ function ns.SetDeathSong(on)
 	-- With CineMode music off (musicInCinematic), music is never switched on:
 	-- the song plays only if your game music is on already.
 	local musicOn = GetCVar("Sound_EnableMusic") == "1"
-	deathSong.file = on and ns.db.deathSong and (musicOn or ns.db.musicInCinematic) and ns.PickDeathSong() or nil
+	deathSong.file = on and ns.TriggerSetting("Death", "music") and (musicOn or ns.db.musicInCinematic)
+		and ns.PickDeathSong() or nil
 	if on and ns.DeathTestLog then
 		ns.DeathTestLog(("death song: %s (song option %s, game music %s)"):format(
 			tostring(deathSong.file), tostring(ns.db.deathSong),
@@ -1415,13 +1423,13 @@ end
 ns.PlateRowWanted = UnitRowWanted -- (the Plate Parts rows go by the same columns: see PlateParts)
 
 -- Whether a unit row has anyone to show now (your target's has its own fade, below).
--- Quest mobs (questMobsShow, the Vision page's Quest Vision): units that count
--- for a quest objective you haven't finished, everywhere in CineMode, fights
--- included. Their plates, or (Name) just the names on them, or (! only) a
+-- Quest mobs (ns.QuestMobsShow, the Vision page's Quest Vision): units that
+-- count for a quest objective you haven't finished, everywhere in CineMode,
+-- fights included. Their plates, and/or (Name) the names on them, and/or a
 -- quest mark: see PlateAlphas.
 local function UnitRowActive(row)
 	if row == "QuestMobs" then
-		return ns.QuestMobsShow() ~= nil
+		return ns.QuestMobsShow()
 	end
 	if not UnitRowWanted(row) then
 		return false
@@ -1452,7 +1460,7 @@ local unitRowLevel = { MyPet = 0, GroupMembers = 0, GroupMinions = 0, QuestMobs 
 
 local function UnitRowAlpha(unit, kind)
 	local alpha = 0
-	local questPlates = ns.QuestMobsShow() == "plate"
+	local questPlates = ns.QuestMobsShow("plate")
 	for row, level in pairs(unitRowLevel) do
 		if level > alpha and (questPlates or row ~= "QuestMobs") and InUnitRow(row, unit, kind) then
 			alpha = level
@@ -2319,9 +2327,9 @@ local function GameNameShown(unit)
 	return false
 end
 
--- How far Quest Vision's ! only shows quest marks (0 to 1), for PlateParts.
+-- How far Quest Vision's Quest mark shows quest marks (0 to 1), for PlateParts.
 function ns.QuestMarkLevel()
-	return ns.QuestMobsShow() == "mark" and unitRowLevel.QuestMobs or 0
+	return ns.QuestMobsShow("mark") and unitRowLevel.QuestMobs or 0
 end
 
 -- The plate's alpha with its name kept (see nameLevel), and how much of that
@@ -2341,16 +2349,17 @@ local function PlateAlphas(unit, plate)
 			name = nameLevel[targetRow]
 		end
 	end
-	-- Quest Vision's Name: a quest mob's name kept on its plate. Its ! only:
-	-- the plate kept up for a quest mark.
+	-- Quest Vision's Name: a quest mob's name kept on its plate. Its Quest
+	-- mark: the plate kept up for a quest mark.
 	local mark = 0
-	local quest = unitRowLevel.QuestMobs > 0 and unit and plate ~= PersonalPlate() and ns.QuestMobsShow()
-	if quest == "name" or quest == "mark" then
-		local kind = PlateKind(unit)
+	if unitRowLevel.QuestMobs > 0 and unit and plate ~= PersonalPlate() then
+		local questName, questMark = ns.QuestMobsShow("name"), ns.QuestMobsShow("mark")
+		local kind = (questName or questMark) and PlateKind(unit)
 		if kind and InUnitRow("QuestMobs", unit, kind) then
-			if quest == "name" then
+			if questName then
 				name = math.max(name, unitRowLevel.QuestMobs)
-			else
+			end
+			if questMark then
 				mark = unitRowLevel.QuestMobs
 			end
 		end
@@ -2962,6 +2971,14 @@ for _, cvars in pairs(PLATE_KIND_CVARS) do
 	end
 end
 
+-- The game's Show Offscreen Nameplates in CineMode as the Nameplates page's
+-- tick says (plateShowOffscreen): on, plates for units out of view stay,
+-- pinned to the screen's edge, so rows and rules that look for plates (the
+-- elite words) still find an elite behind you; off, they go. Yours back
+-- after. Clients without it are left alone.
+ns.OFFSCREEN_PLATE_CVARS = { secure = true, playerWins = true, values = { nameplateShowOffscreen = "1" } }
+ns.NO_OFFSCREEN_PLATE_CVARS = { secure = true, playerWins = true, values = { nameplateShowOffscreen = "0" } }
+
 -- Invisible plates still take clicks, so while every plate of a side
 -- (friendly or enemy) is faded out, that side's plates are made unclickable
 -- (their click area shrunk to nothing): clicks reach the world behind them.
@@ -3081,6 +3098,8 @@ end
 -- again. Tried each tick until done (settings can't change in a fight).
 local platesReleased = false
 local function ReleasePlates()
+	ns.ApplyCVarSet(ns.OFFSCREEN_PLATE_CVARS, false)
+	ns.ApplyCVarSet(ns.NO_OFFSCREEN_PLATE_CVARS, false)
 	platesActive = false
 	platesForced = false
 	ns.ApplyCVarSet(FORCED_PLATE_CVARS, false)
@@ -3104,6 +3123,7 @@ local function ReleasePlates()
 		locked = locked or set.active or false
 	end
 	platesReleased = not ns.plates.off and not locked and not duels.on and not FORCED_PLATE_CVARS.active
+		and not ns.OFFSCREEN_PLATE_CVARS.active and not ns.NO_OFFSCREEN_PLATE_CVARS.active
 		and not (ns.db.savedPlateClicks and next(ns.db.savedPlateClicks))
 end
 
@@ -3117,6 +3137,12 @@ function ns.UpdatePlates(cinematic, elapsed)
 	end
 	platesReleased = false
 	platesActive = cinematic and true or false
+	-- (The one let go first, so yours is what the other saves.)
+	local offscreen = cinematic and ns.db.plateShowOffscreen and true or false
+	local noOffscreen = cinematic and not ns.db.plateShowOffscreen or false
+	ns.ApplyCVarSet(offscreen and ns.NO_OFFSCREEN_PLATE_CVARS or ns.OFFSCREEN_PLATE_CVARS, false)
+	ns.ApplyCVarSet(ns.OFFSCREEN_PLATE_CVARS, offscreen)
+	ns.ApplyCVarSet(ns.NO_OFFSCREEN_PLATE_CVARS, noOffscreen)
 	placeSuffix = ns.PlateSuffix()
 	platesForced = ns.PlatesForcedHere(cinematic)
 	-- (Let go before the other plate switches take hold, and taken up after

@@ -2281,6 +2281,7 @@ function ns.IsCamShowOn(key) return IsListOn("camShow", key, NO_DEFAULTS) end
 local tickTables = {
 	hovered = {}, triggered = {}, pinged = {}, mouseRows = {}, mouseGroups = {}, events = {},
 	combatShown = {}, placeLists = {}, auraOnly = {}, cooldownBarUp = {},
+	partsHovered = {}, partsHeldUntil = {},
 }
 
 -- "group:<group>", a group's key in the shown lists, made once for each
@@ -4417,6 +4418,9 @@ local CooldownLength = ns.CooldownLength
 -- one does when it hasn't been set on its own: the group's settings
 -- (db.cooldownGroupDefaults[group]), else these.
 ns.COOLDOWN_GROUP_MODES = { utility = "recharge" }
+-- The bars whose spells with no cooldown go by Smart Set (ns.SmartCooldownMode)
+-- until their group's mode is set.
+ns.COOLDOWN_SMART_GROUPS = { essential = true, utility = true }
 ns.COOLDOWN_BAR_GROUPS = { EssentialCooldownViewer = "essential", UtilityCooldownViewer = "utility" }
 -- Its tracked buffs and bars: groups of their own, with modes of their own
 -- (ns.CooldownBuffMode), and not counted for recharging.
@@ -4453,6 +4457,16 @@ function ns.CooldownSpellMode(id, group)
 		return "proc", true
 	elseif db.cooldownAlwaysShow[id] then
 		return "always", true
+	end
+	-- (Its group's mode not set: the Smart Set pick, if it has one.)
+	local set = db.cooldownGroupDefaults[group or "other"]
+	if not (set and set.mode) and ns.COOLDOWN_SMART_GROUPS[group] then
+		local pick = ns.SmartCooldownMode(id)
+		if pick == "power" then
+			return "ready", false, true, true, set and set.early
+		elseif pick == "proc" then
+			return "proc", false
+		end
 	end
 	local mode, power, early = ns.CooldownGroupSettings(group or "other")
 	return mode, false, power, true, early
@@ -4536,6 +4550,62 @@ function ns.SpellHasPower(id)
 	return true
 end
 
+-- The Cooldown Manager page's Smart Set: what a spell with no cooldown is
+-- best as. "power" (When Ready with Resources) when it costs a resource you
+-- build up, like Maelstrom; "proc" when it costs nothing or only one that's
+-- always there (mana, rage, energy, focus: an instant Lightning Bolt). nil
+-- for a spell with a cooldown or charges, or when the game won't say.
+-- It's also what those spells are by default (ns.CooldownSpellMode), until
+-- you set their group's mode.
+do
+	local EVERYDAY_POWER = {}
+	for _, name in ipairs({ "Mana", "Rage", "Energy", "Focus" }) do
+		local number = Enum and Enum.PowerType and Enum.PowerType[name]
+		if number then EVERYDAY_POWER[number] = true end
+	end
+
+	-- (Its pick, and whether the game said for sure: a secret answer isn't kept.)
+	local function Pick(id)
+		local ok, base = pcall(GetSpellBaseCooldown or error, id)
+		if not ok or Secret(base) then return nil, false end
+		if type(base) ~= "number" or base > 0 then return nil, true end
+		if C_Spell and C_Spell.GetSpellCharges then
+			local okCharges, charges = pcall(C_Spell.GetSpellCharges, id)
+			if not okCharges or Secret(charges) then return nil, false end
+			if type(charges) == "table" then return nil, true end
+		end
+		local GetCosts = (C_Spell and C_Spell.GetSpellPowerCost) or _G.GetSpellPowerCost
+		if not GetCosts then return nil, true end
+		local okCosts, costs = pcall(GetCosts, id)
+		if not okCosts or Secret(costs) then return nil, false end
+		for _, cost in ipairs(type(costs) == "table" and costs or {}) do
+			local kind, need = cost.type, cost.minCost
+			if type(need) == "nil" then need = cost.cost end
+			if Secret(kind, need) then return nil, false end
+			if type(kind) == "number" and not EVERYDAY_POWER[kind] and type(need) == "number" and need > 0 then
+				return "power", true
+			end
+		end
+		return "proc", true
+	end
+
+	-- (Asked a few times a second for each icon: kept until your spells or talents change.)
+	local picks = {} -- spell ID -> its pick, or false for none
+	local watcher = CreateFrame("Frame")
+	for _, event in ipairs({ "SPELLS_CHANGED", "PLAYER_TALENT_UPDATE", "TRAIT_CONFIG_UPDATED",
+		"PLAYER_SPECIALIZATION_CHANGED" }) do
+		pcall(watcher.RegisterEvent, watcher, event)
+	end
+	watcher:SetScript("OnEvent", function() wipe(picks) end)
+
+	function ns.SmartCooldownMode(id)
+		if picks[id] ~= nil then return picks[id] or nil end
+		local pick, sure = Pick(id)
+		if sure then picks[id] = pick or false end
+		return pick
+	end
+end
+
 -- Whether a When Ready spell's icon shows: in fights, once it's nearly ready
 -- (or when it can't tell), and with Resources ticked once you can pay for it.
 local function IconShows(icon, id, now, power, earlyOn, seconds)
@@ -4602,6 +4672,87 @@ do
 			return a.seen < b.seen
 		end)
 		return found
+	end
+end
+
+-- /cine debug cdm: what the game says about each Cooldown Manager spell -
+-- its cooldown (base, charges, now), what it costs and in which resource,
+-- and whether you can pay - plain, secret or missing. Run in and out of fights.
+do
+	local function Show(ok, value)
+		if not ok then return "error" end
+		if Secret(value) then return "secret" end
+		return tostring(value)
+	end
+
+	local POWER_NAMES = {}
+	for name, number in pairs(Enum and Enum.PowerType or {}) do
+		POWER_NAMES[number] = name
+	end
+
+	local function Costs(id)
+		local GetCosts = (C_Spell and C_Spell.GetSpellPowerCost) or _G.GetSpellPowerCost
+		if not GetCosts then return "no cost check here" end
+		local ok, costs = pcall(GetCosts, id)
+		if not ok then return "error" end
+		if Secret(costs) then return "secret" end
+		if type(costs) ~= "table" or #costs == 0 then return "none" end
+		local parts = {}
+		for _, cost in ipairs(costs) do
+			local kind = cost.type
+			local name = (not Secret(kind) and POWER_NAMES[kind]) or Show(true, cost.name)
+			parts[#parts + 1] = ("%s (type %s) %s, min %s, %s%%%s"):format(name, Show(true, kind),
+				Show(true, cost.cost), Show(true, cost.minCost), Show(true, cost.costPercent),
+				type(cost.requiredAuraID) == "number" and not Secret(cost.requiredAuraID) and cost.requiredAuraID > 0
+					and (", needs aura " .. Show(true, cost.requiredAuraID)) or "")
+		end
+		return table.concat(parts, " + ")
+	end
+
+	local function Charges(id)
+		if not (C_Spell and C_Spell.GetSpellCharges) then return "no check" end
+		local ok, info = pcall(C_Spell.GetSpellCharges, id)
+		if not ok then return "error" end
+		if Secret(info) then return "secret" end
+		if type(info) ~= "table" then return "none" end
+		return Show(true, info.currentCharges) .. "/" .. Show(true, info.maxCharges)
+	end
+
+	local function CooldownNow(id)
+		if not (C_Spell and C_Spell.GetSpellCooldown) then return "no check" end
+		local ok, info = pcall(C_Spell.GetSpellCooldown, id)
+		if not ok then return "error" end
+		if Secret(info) then return "secret" end
+		if type(info) ~= "table" then return "none" end
+		return ("start %s, %s s"):format(Show(true, info.startTime), Show(true, info.duration))
+	end
+
+	function ns.PrintCooldownManagerDebug()
+		local power = { pcall(UnitPowerType, "player") }
+		local secrets, secret = _G.C_Secrets, "no such check"
+		ns.Print(("client: %s; in combat: %s; your power: %s (type %s)"):format(
+			ns.isRetail and "retail" or "Forever", tostring(InCombatLockdown() and true or false),
+			Show(power[1], power[3]), Show(power[1], power[2])))
+		local spells = ns.CooldownManagerSpells()
+		if #spells == 0 then
+			ns.Print("no spells found in the Cooldown Manager (is it on, in Edit Mode or Options > Gameplay?)")
+			return
+		end
+		local GetName = (C_Spell and C_Spell.GetSpellName) or _G.GetSpellInfo
+		local IsUsable = (C_Spell and C_Spell.IsSpellUsable) or _G.IsUsableSpell
+		for _, spell in ipairs(spells) do
+			local id = spell.id
+			local okName, name = pcall(GetName, id)
+			local okBase, base = pcall(GetSpellBaseCooldown or error, id)
+			if secrets and secrets.ShouldSpellCooldownBeSecret then
+				secret = Show(pcall(secrets.ShouldSpellCooldownBeSecret, id))
+			end
+			ns.Print(("%s %s (%s): base cd %s ms, charges %s, now %s, cd secret: %s"):format(spell.group,
+				Show(okName, name), id, Show(okBase, base), Charges(id), CooldownNow(id), secret))
+			local usable = IsUsable and { pcall(IsUsable, id) } or { false }
+			ns.Print(("  costs: %s; usable %s, short of power %s"):format(Costs(id),
+				Show(usable[1], usable[2]), Show(usable[1], usable[3])))
+		end
 	end
 end
 
@@ -6036,6 +6187,27 @@ function ns.UpdateFrames(cinematic, elapsed)
 			end
 		end
 	end
+	-- Mouseover wins over the Unit Frames page: a unit frame up for the mouse
+	-- (or with its Mouseover groups) fades in the parts that page hides. Out
+	-- of CineMode, the frame under the mouse, held as long (the fade out counted).
+	if ns.SetUnitPartsHovered then
+		local partsHovered, partsHeldUntil = wipe(tickTables.partsHovered), tickTables.partsHeldUntil
+		for _, entry in ipairs(ns.db.mouseover and ns.managed or NO_DEFAULTS) do
+			local name = entry.name
+			if name and ns.UNIT_PART_FRAME_NAMES[name] then
+				if cinematic then
+					entry.row = entry.row or ns.HoverRowFor(entry)
+					partsHovered[name] = hovered[ownPartyRows and entry.rspGroup or entry.row]
+				else
+					if ns.IsEntryHovered(entry) then
+						partsHeldUntil[name] = now + math.max(0, ns.HoldTime("mouseoverHold") - ns.FadeOutTime())
+					end
+					partsHovered[name] = (partsHeldUntil[name] or 0) > now
+				end
+			end
+		end
+		ns.SetUnitPartsHovered(partsHovered, elapsed)
+	end
 	local events = tickTables.events
 	events.chat, events.whisper, events.typing = dockPeek, whisperUnread, typingWindows
 	-- (The Minimap, Quest tracker, Buffs/debuffs and Cooldown Manager pages'
@@ -6949,9 +7121,8 @@ end
 
 -- Unit frame parts (Unit Frames page): pieces of the player, pet, target,
 -- focus and target of target frames hidden, CineMode or not, for those who
--- only want the bars. A grid per frame, a column per part: your frame's and
--- your pet's a row each, the others a row per kind of unit (you, then enemy,
--- neutral and friendly players and NPCs), going by the unit they show. One texture (FrameTexture) draws the portrait ring, the name box and
+-- only want the bars. A section per frame, a Standard Frames row per part
+-- (FRAMES.Hidden). One texture (FrameTexture) draws the portrait ring, the name box and
 -- the bars' borders, so the frame art goes as a whole. Frames laid out as
 -- retail's (and WoW Forever's) only: others haven't these fields.
 do
@@ -6959,6 +7130,16 @@ do
 		Portrait = { "PlayerFrameContainer.PlayerPortrait" },
 		Level = { "PlayerFrameContent.PlayerFrameContentMain.LevelBackgroundCircle", "_G.PlayerLevelText" },
 		Name = { "_G.PlayerName" },
+		-- The health and power bars (the containers retail and WoW Forever
+		-- hold them in; healthbar and manabar: the keys the game keeps them on,
+		-- every client).
+		Health = { "PlayerFrameContent.PlayerFrameContentMain.HealthBarsContainer", "healthbar" },
+		Power = { "PlayerFrameContent.PlayerFrameContentMain.ManaBarArea", "manabar" },
+		-- Their numbers (percent, value), on the bars: hidden with a bar too.
+		-- (The class's second power bar's as well, druid mana and the like.)
+		Numbers = { "healthbar.TextString", "healthbar.LeftText", "healthbar.RightText",
+			"manabar.TextString", "manabar.LeftText", "manabar.RightText",
+			"_G.AlternatePowerBar.TextString", "_G.AlternatePowerBar.LeftText", "_G.AlternatePowerBar.RightText" },
 		-- (Each frame art the game swaps in: vehicle, class resource bar.)
 		Art = { "PlayerFrameContainer.FrameTexture", "PlayerFrameContainer.AlternatePowerFrameTexture",
 			"PlayerFrameContainer.VehicleFrameTexture", "PlayerFrameContainer.FrameFlash",
@@ -7023,6 +7204,10 @@ do
 		-- (The coloured strip behind it with it.)
 		Name = { "TargetFrameContent.TargetFrameContentMain.Name",
 			"TargetFrameContent.TargetFrameContentMain.ReputationColor" },
+		Health = { "TargetFrameContent.TargetFrameContentMain.HealthBarsContainer", "healthbar" },
+		Power = { "TargetFrameContent.TargetFrameContentMain.ManaBar", "manabar" },
+		Numbers = { "healthbar.TextString", "healthbar.LeftText", "healthbar.RightText",
+			"manabar.TextString", "manabar.LeftText", "manabar.RightText" },
 		Art = { "TargetFrameContainer.FrameTexture", "TargetFrameContainer.Flash",
 			"TargetFrameContainer.BossPortraitFrameTexture", "threatIndicator" },
 		-- (PvpBackgroundIcon: the flag WoW Forever shows by the level, tested.)
@@ -7031,11 +7216,13 @@ do
 			"TargetFrameContent.TargetFrameContentContextual.PrestigePortrait",
 			"TargetFrameContent.TargetFrameContentContextual.PrestigeBadge" },
 		-- (The group leader's crown, the quest and pet battle icons, and the
-		-- raid target marker: skull, moon...)
+		-- raid target marker: skull, moon... BossIcon: retail's quest "!" and
+		-- rare star by the bars.)
 		Icons = { "TargetFrameContent.TargetFrameContentContextual.LeaderIcon",
 			"TargetFrameContent.TargetFrameContentContextual.RaidTargetIcon",
 			"TargetFrameContent.TargetFrameContentContextual.GuideIcon",
 			"TargetFrameContent.TargetFrameContentContextual.QuestIcon",
+			"TargetFrameContent.TargetFrameContentContextual.BossIcon",
 			"TargetFrameContent.TargetFrameContentContextual.PetBattleIcon" },
 	}) do
 		TARGET[part] = paths
@@ -7045,6 +7232,10 @@ do
 	local PET = {
 		Portrait = { "portrait", "_G.PetPortrait" },
 		Name = { "name", "_G.PetName" },
+		Health = { "healthbar" },
+		Power = { "manabar" },
+		Numbers = { "healthbar.TextString", "healthbar.LeftText", "healthbar.RightText",
+			"manabar.TextString", "manabar.LeftText", "manabar.RightText" },
 		-- (The aggro glow and the attack pulse, the red ring in a fight: by
 		-- their keys too, for clients that don't name them.)
 		Art = { "_G.PetFrameTexture", "_G.PetFrameFlash", "_G.PetAttackModeTexture", "threatIndicator",
@@ -7053,9 +7244,10 @@ do
 		Icons = _G.PetFrameHappiness and { "_G.PetFrameHappiness" } or nil,
 	}
 	-- The target of target frames (the target's and the focus's): a portrait,
-	-- a name and the frame art, and on older frames numbered debuffs
+	-- a name, the bars and the frame art, and on older frames numbered debuffs
 	-- (TargetFrameToTDebuff1...). (In ns, not a local: see the cap above.)
-	ns.UNIT_PARTS_TOT = { Portrait = { "Portrait" }, Name = { "Name" }, Art = { "FrameTexture" } }
+	ns.UNIT_PARTS_TOT = { Portrait = { "Portrait" }, Name = { "Name" }, Art = { "FrameTexture" },
+		Health = { "HealthBar", "healthbar" }, Power = { "ManaBar", "manabar" } }
 	if _G.TargetFrameToTDebuff1 then
 		ns.UNIT_PARTS_TOT.Auras = function(frame)
 			local list, name = {}, frame.GetName and frame:GetName()
@@ -7078,21 +7270,21 @@ do
 		return type(bar) == "table" and bar.SetAlpha and { bar } or {}
 	end
 	ns.UNIT_PARTS_PLAYER, ns.UNIT_PARTS_PET, ns.UNIT_PARTS_TARGET = PLAYER, PET, TARGET
-	-- Each frame: its parts, the unit it shows, and its grid row when always
-	-- the same. The focus and target of target ones: the setting that has
-	-- them go by the target's grid, and the grid of their own otherwise.
+	-- Each frame: its parts, the unit it shows and its section (unitPart<section><part>).
+	-- The focus and target of target ones: the setting that has them go by
+	-- the target's section, and their own otherwise.
 	local FRAMES = {
 		{ "PlayerFrame", PLAYER, "player", "Player" },
-		{ "TargetFrame", TARGET, "target" },
-		{ "FocusFrame", TARGET, "focus", nil, "unitPartsFocusSame", "Focus" },
-		{ "TargetFrameToT", ns.UNIT_PARTS_TOT, "targettarget", nil, "unitPartsToTSame", "ToT" },
-		{ "FocusFrameToT", ns.UNIT_PARTS_TOT, "focustarget", nil, "unitPartsFocusToTSame", "FocusToT" },
+		{ "TargetFrame", TARGET, "target", "Target" },
+		{ "FocusFrame", TARGET, "focus", "Focus", "unitPartsFocusSame" },
+		{ "TargetFrameToT", ns.UNIT_PARTS_TOT, "targettarget", "ToT", "unitPartsToTSame" },
+		{ "FocusFrameToT", ns.UNIT_PARTS_TOT, "focustarget", "FocusToT", "unitPartsFocusToTSame" },
 		{ "PetFrame", PET, "pet", "Pet" },
 	}
-	-- The setting for a frame's part, for the unit it shows (nil: none shown).
-	function FRAMES.Key(entry, row, part)
-		local own = entry[5] and ns.db[entry[5]] == false
-		return row and "unitPart" .. (own and entry[6] or "") .. row .. part
+	-- The setting for a frame's part.
+	function FRAMES.Key(entry, part)
+		local same = entry[5] and ns.db[entry[5]] ~= false
+		return "unitPart" .. (same and "Target" or entry[4]) .. part
 	end
 
 	-- A field on a frame (_G. for a global of its own).
@@ -7120,49 +7312,18 @@ do
 		return value
 	end
 
-	-- The grid row a unit goes by: Self, or Enemy, Neutral or Friendly then
-	-- Player or NPC, as the Target Nameplate grid splits them (Enemy: those
-	-- you can attack; Neutral: NPCs the game calls neutral, and the other
-	-- faction's players you can't attack). nil when the game won't say.
-	local function Row(unit)
-		if unit == "player" or Ask(UnitIsUnit, unit, "player") then
-			return "Self"
-		end
-		local enemy = ns.IsEnemyUnit(unit)
-		if enemy == nil then
-			return nil
-		end
-		-- (WoW Forever: after you buff a player, UnitIsPlayer can say no for
-		-- them, tested; their GUID still says Player.)
-		local who = "Player"
-		if not Ask(UnitIsPlayer, unit) then
-			local guid = Ask(UnitGUID, unit)
-			if not (type(guid) == "string" and guid:find("^Player%-")) then
-				who = "NPC"
-			end
-		end
-		if not enemy then
-			return "Friendly" .. who
-		end
-		local neutral
-		if who == "Player" then
-			neutral = not Ask(UnitCanAttack, "player", unit)
-		else
-			neutral = Ask(UnitReaction, unit, "player") == 4
-		end
-		return (neutral and "Neutral" or "Enemy") .. who
-	end
-
 	-- [region] = the alpha to put back. While hidden, the game setting the
 	-- alpha (the rest glow pulses) is undone.
 	local hidden, hooked = {}, {}
 	-- (For /cine debug unitframes: which regions are held hidden.)
 	ns.unitPartsHidden = hidden
 	local setting = false
+	-- (Held at none, or as far as the mouse has faded its frame back in:
+	-- FRAMES.show, below.)
 	local function KeepHidden(region)
 		if hidden[region] and not setting then
 			setting = true
-			region:SetAlpha(0)
+			region:SetAlpha(hidden[region] * (FRAMES.show[FRAMES.owner[region]] or 0))
 			setting = false
 		end
 	end
@@ -7207,43 +7368,76 @@ do
 		return _G.PlayerFrame ~= nil and Field(_G.PlayerFrame, PLAYER.Portrait[1]) ~= nil
 	end
 
-	-- (Settings unitPart<grid><row><part>, ticked = shown: see ns.UNIT_PART_KINDS.)
-	-- A part with a rule (Rules section, keyed by the same setting) goes by it instead.
+	-- (Settings unitPart<frame><part>, ticked = shown: see ns.UNIT_PART_FRAMES.)
+	-- Each part a Standard Frames row (the setting: its Always), keyed by the
+	-- setting: shown as that row is now (its rule, if it has one). One that
+	-- isn't simply always shown has the frames applied again as things change
+	-- (FRAMES.dynamic: the watcher below).
 	function FRAMES.Hidden(key)
 		if not key then
 			return false
 		end
-		local test = ns.RuleTest(key)
-		if test then
-			return not test(ns.RuleFactsNow())
+		local db = ns.db
+		if not (db[key] == false or ns.RuleTest(key) or (db.tankHide and db.tankHide[key])
+			or (db.healerHide and db.healerHide[key]) or (db.damageHide and db.damageHide[key])) then
+			return false -- (Always, no rule or roles: shown, without working out the rest)
 		end
-		return ns.db[key] == false
+		FRAMES.dynamic = true
+		return not ns.RowOnNow(key, db[key] ~= false, true)
 	end
 	-- A region in two parts (the target's aggro glow: frame art and threat)
 	-- is hidden while either says so: gathered first in want, then set.
 	FRAMES.want = {}
+	-- Frames the mouse brings up (UpdateFrames, each tick): their hidden parts
+	-- fade in with them at the fade in time, and out at the fade out time.
+	-- (show[frame name]: 0 to 1, how far in; owner[region]: its frame's name.)
+	FRAMES.show, FRAMES.owner = {}, {}
+	ns.UNIT_PART_FRAME_NAMES = {}
+	for _, entry in ipairs(FRAMES) do
+		ns.UNIT_PART_FRAME_NAMES[entry[1]] = true
+	end
+	function ns.SetUnitPartsHovered(names, elapsed)
+		local changed = false
+		for name in pairs(ns.UNIT_PART_FRAME_NAMES) do
+			local was = FRAMES.show[name] or 0
+			local goal = names[name] and 1 or 0
+			if was ~= goal then
+				local time = goal > was and ns.FadeInTime() or ns.FadeOutTime()
+				local step = time > 0 and (elapsed or 0) / time or 1
+				FRAMES.show[name] = goal > was and math.min(goal, was + step) or math.max(goal, was - step)
+				changed = true
+			end
+		end
+		if changed then
+			for region in pairs(hidden) do
+				KeepHidden(region)
+			end
+		end
+	end
 	function ns.ApplyUnitFrameParts()
 		if not ns.db then
 			return
 		end
 		local want = FRAMES.want
+		FRAMES.dynamic = false
 		for _, entry in ipairs(FRAMES) do
 			local frame = _G[entry[1]]
 			if frame then
-				local row = entry[4] or Ask(UnitExists, entry[3]) and Row(entry[3])
 				for _, part in ipairs(ns.UNIT_PARTS) do
-					local key = FRAMES.Key(entry, row, part)
+					local key = FRAMES.Key(entry, part)
 					local hide = ns.db.handleUnitFrames ~= false and FRAMES.Hidden(key)
 					local paths = entry[2][part]
 					if type(paths) == "function" then
 						for _, region in ipairs(paths(frame)) do
 							want[region] = want[region] or hide
+							FRAMES.owner[region] = FRAMES.owner[region] or entry[1]
 						end
 					else
 						for _, path in ipairs(paths or {}) do
 							local region = Field(frame, path)
 							if region then
 								want[region] = want[region] or hide
+								FRAMES.owner[region] = FRAMES.owner[region] or entry[1]
 							end
 						end
 					end
@@ -7287,11 +7481,10 @@ do
 			local frame = _G[entry[1]]
 			local paths = frame and entry[2][part]
 			if type(paths) == "function" then
-				local row = entry[4] or Ask(UnitExists, entry[3]) and Row(entry[3])
-				local key = FRAMES.Key(entry, row, part)
+				local key = FRAMES.Key(entry, part)
 				for _, region in ipairs(paths(frame)) do
-					lines[#lines + 1] = ("%s %s: row %s, %s = %s, rule %s, hide %s, held %s, alpha %s"):format(
-						entry[1], part, tostring(row), tostring(key), tostring(key and ns.db[key]),
+					lines[#lines + 1] = ("%s %s: %s = %s, rule %s, hide %s, held %s, alpha %s"):format(
+						entry[1], part, tostring(key), tostring(key and ns.db[key]),
 						tostring(key and ns.RuleTest(key) ~= nil), tostring(FRAMES.Hidden(key)),
 						tostring(hidden[region]), tostring(Ask(region.GetAlpha, region)))
 				end
@@ -7310,7 +7503,7 @@ do
 		end
 		for _, entry in ipairs(FRAMES) do
 			if _G[entry[1]] == frame and entry[2].Auras then
-				local key = FRAMES.Key(entry, Ask(UnitExists, entry[3]) and Row(entry[3]), "Auras")
+				local key = FRAMES.Key(entry, "Auras")
 				local hide = FRAMES.Hidden(key)
 				for _, region in ipairs(entry[2].Auras(frame)) do
 					SetHidden(region, hide)
@@ -7420,8 +7613,9 @@ do
 			C_Timer.After(0, ns.ApplyUnitFrameParts)
 		end
 	end)
-	-- Parts with rules: applied again when what the rules know changes (a
-	-- fight, a place, a group...), checked 4 times a second.
+	-- Parts shown by more than Always (FRAMES.dynamic, as last applied):
+	-- applied again when what their rows know changes (a fight, a place, a
+	-- group...), checked 4 times a second.
 	local lastFacts, since = {}, 0
 	watcher:SetScript("OnUpdate", function(_, elapsed)
 		since = since + elapsed
@@ -7429,14 +7623,7 @@ do
 			return
 		end
 		since = 0
-		local any = false
-		for key in pairs(ns.db.frameRules or NO_DEFAULTS) do
-			if key:find("^unitPart") then
-				any = true
-				break
-			end
-		end
-		if not any then
+		if not FRAMES.dynamic then
 			return
 		end
 		local changed = false

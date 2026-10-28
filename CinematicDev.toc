@@ -71,10 +71,10 @@ PlateParts.lua
 PlateGuild.lua
 Camera.lua
 QuestCam.lua
+CameraRows.lua
 QuestTalk.lua
 CameraTests.lua
 Tint.lua
-LowHealthArt.lua
 LowHealthThemes.lua
 LowHealth.lua
 PersonalResources.lua
@@ -91,8 +91,6 @@ Share.lua
 Welcome.lua
 Layouts.lua
 ModuleEditor.lua
-ProfilesDemo.lua
-GridDemo.lua
 Options.lua
 Changelog.lua
 ChangelogCommits.lua

@@ -275,7 +275,7 @@ local DEFAULTS = {
 	idleOrbit = true,         -- also rotate it after standing still for a while
 	idleOrbitDelay = 120,     -- seconds of standing still before it starts
 	-- Cozy camera: swings round to face you and sways in front, when an event
-	-- picks it (Camera Triggers page: ns.EVENTS in Camera.lua has their defaults).
+	-- picks it (Cameras page: ns.EVENTS in Camera.lua has their defaults).
 	cozyOrbit = true,         -- sway in front of you
 	cozyZoom = true,          -- with a close, gentle zoom
 	cozyBuffs = "Welcoming Campfire", -- the campfire event's buffs: names or spell IDs, comma-separated
@@ -327,7 +327,7 @@ local DEFAULTS = {
 	idleOpeningDrift = 5,     -- random/behind modes: seconds of slow drift before the first move
 	taxiInputPause = 15,      -- seconds the flight camera waits after the player moves the camera
 	idleInputPause = 15,      -- ...and the AFK camera
-	-- Quest cam (eventQuestCamera on the Camera Triggers page): talking to a quest giver, zoom in and swing behind you
+	-- Quest cam (eventQuestCamera on the Cameras page): talking to a quest giver, zoom in and swing behind you
 	questCamDelay = 3,        -- ...seconds the window is open before it starts (picked up and gone sooner: no camera)
 	questCamGossipDelay = 3,  -- ...the same for an NPC with only "(Quest)" options (eventQuestGossipCamera)
 	questCamDistance = 4,     -- ...yards it zooms in to (if you're further out)
@@ -492,7 +492,7 @@ DEFAULTS.deathSong = true          -- play a song of its own meanwhile
 -- GhostMusic03 (the ghost world's music), Gloomy02, Haunted02, Haunted01,
 -- Mystery01, Undercity01, KelThuzad1A.
 DEFAULTS.deathSongFiles = "53519, 53232, 53235, 53234, 53240, 53216, 53602"
--- Each camera mode's "Turn off in" grid (Camera Modes page): <cam>OffIn<where>,
+-- Each camera mode's "Turn off in" grid (Cameras page): <cam>OffIn<where>,
 -- for the cameras in ns.CAMERA_OFF_CAMS and the places in ns.CAMERA_OFF_WHERE
 -- (capital cities; instances: dungeons, scenarios and raids; battlegrounds and
 -- arenas; the open world), but not those in ns.CAMERA_OFF_NEVER (no flight from there).
@@ -535,7 +535,7 @@ DEFAULTS.weatherOffInCombat = false
 -- ones you'd walk or run off into after one (RP walking, auto-running), the
 -- tele camera and the quest camera; the rest start straight away. Not the death camera: you die in a fight.
 ns.CALM_WAIT_NEVER = { death = true }
--- The Camera Modes and Camera Triggers pages' Enable page switch: off, no
+-- The Cameras page's Enable page switch: off, no
 -- camera mode starts (ns.IsCameraOffHere).
 DEFAULTS.cameraModes = true
 local CALM_WAIT_DEFAULT = { walk = true, run = true, tele = true, quest = true }
@@ -559,7 +559,7 @@ end
 -- No auto-run camera in capital cities or instances. RP walking is
 -- deliberate, so its camera runs everywhere.
 -- RP walk and auto-run start their cameras by themselves: "none" turns one
--- off everywhere (Camera Triggers page), as the events' "No camera" does.
+-- off everywhere (Cameras page), as the events' "No camera" does.
 DEFAULTS.walkCamera = "walk"
 DEFAULTS.runCamera = "run"
 -- Seconds of auto-walking or auto-running before its camera starts (and its
@@ -648,7 +648,7 @@ DEFAULTS.targetArrowStyle = "arrow"
 -- mark's color, while the row shows (<kind>ColorName, ColorBar, ColorBorder).
 -- Your target's and your focus's names and bars to start with.
 for _, kind in ipairs({ "target", "aggro", "focus", "mouseover", "others", "aggroother", "aggrononank",
-	"npc", "elite", "npcs", "players", "minions", "all" }) do
+	"aggrohealer", "npc", "elite", "npcs", "players", "minions", "all" }) do
 	local colored = kind == "target" or kind == "focus"
 	DEFAULTS[kind .. "ColorName"] = colored
 	DEFAULTS[kind .. "ColorBar"] = colored
@@ -669,7 +669,8 @@ DEFAULTS.targetArrowBob = true -- the arrow and chevron bob, the brackets close 
 -- Which row a plate goes by when more than one fits (your target that's
 -- your focus too, say): the first in this order, every row but Default's
 -- own (always last) taken off or added again from the page. A row's id is
--- its kind, then a Who for just those units (Enemy, Neutral, Friendly),
+-- its kind, then a Who for just those units (Enemy, Neutral, Friendly, or
+-- two of them: EnemyNeutral),
 -- then a Distance for just units that far (MARK_DISTANCES), then a number
 -- from 2 for another row of the same: "target", "targetEnemy", "npcEnemy3",
 -- "allPast40", "npcEnemyIn282" (MarkRowBase). Its settings are keyed by its
@@ -680,41 +681,91 @@ DEFAULTS.markOrder = "target,mouseover,focus,aggro"
 ns.MARK_REACTIONS = { "Enemy", "Neutral", "Friendly" }
 ns.MARK_COPIES = 5 -- (rows of one kind and Who at most)
 -- The kinds of row, and the Whos each takes (none: just Any). Aggro on not
--- you (aggroother) and Aggro on non-tank (aggrononank): any enemy in a fight
--- that's after someone friendly other than you, or after a player who isn't
--- a tank (you too). Normal NPC (npc) and Elite NPC (elite): living NPCs by
+-- you (aggroother), Aggro on non-tank (aggrononank) and Aggro on a healer
+-- (aggrohealer): any enemy in a fight that's after someone friendly other
+-- than you, after a player who isn't a tank (you too), or after a healer
+-- (you too); other mixes below (MARK_AGGRO_FLAGS). Normal NPC (npc) and Elite NPC (elite): living NPCs by
 -- rank (elite, rare elite and world boss; ns.NPCRank), NPC (npcs) any of
 -- them. Players and Minions (pets, totems, guardians): as the Nameplates page
 -- sorts them, friendly or enemy (no neutral players). Any unit (all): every
 -- plate.
 ns.MARK_ROW_KINDS = {
 	target = ns.MARK_REACTIONS, focus = ns.MARK_REACTIONS, mouseover = ns.MARK_REACTIONS,
-	aggro = {}, aggroother = {}, aggrononank = {},
+	aggro = {}, aggroother = {}, aggrononank = {}, aggrohealer = {},
 	npc = ns.MARK_REACTIONS, elite = ns.MARK_REACTIONS, npcs = ns.MARK_REACTIONS,
 	players = { "Enemy", "Friendly" }, minions = { "Enemy", "Friendly" },
 	all = ns.MARK_REACTIONS,
 	others = ns.MARK_REACTIONS,
 }
+-- The Units and Aggro rows' mixes: which units each fits, as letters. Units:
+-- n Normal NPC, e Elite NPC, p Players, m Minions (Neutral only with NPCs
+-- among them). Aggro: who the enemy's after, y you or o someone friendly
+-- other than you, and their role, t tank, h healer or d DPS (none set: DPS;
+-- a pet only with all three), at least one of each. The rows the page had
+-- before keep their names; any other mix is u (Units) or ag (Aggro) and its
+-- letters ("unp": Normal NPCs and players; "agoh": on healers not you).
+ns.MARK_UNIT_LETTERS = { "n", "e", "p", "m" }
+ns.MARK_UNIT_FLAGS = { npc = "n", elite = "e", npcs = "ne", players = "p", minions = "m", all = "nepm" }
+ns.MARK_AGGRO_LETTERS = { "y", "o", "t", "h", "d" }
+ns.MARK_AGGRO_FLAGS = { aggro = "ythd", aggroother = "othd", aggrononank = "yohd", aggrohealer = "yoh" }
+ns.MARK_MIXES = {} -- (the u and ag rows' kinds: [kind] = the named row whose look it starts with)
+local MIX_NAMED = {}
+local function Mixes(letters, named, prefix, look, Usable)
+	MIX_NAMED[prefix] = {}
+	for kind, flags in pairs(named) do MIX_NAMED[prefix][flags] = kind end
+	for mask = 1, 2 ^ #letters - 1 do
+		local flags = ""
+		for i, letter in ipairs(letters) do
+			if math.floor(mask / 2 ^ (i - 1)) % 2 == 1 then flags = flags .. letter end
+		end
+		if Usable(flags) and not MIX_NAMED[prefix][flags] then
+			named[prefix .. flags] = flags
+			ns.MARK_MIXES[prefix .. flags] = look
+			ns.MARK_ROW_KINDS[prefix .. flags] = ns.MARK_ROW_KINDS[look]
+		end
+	end
+end
+Mixes(ns.MARK_UNIT_LETTERS, ns.MARK_UNIT_FLAGS, "u", "all", function() return true end)
+for kind, flags in pairs(ns.MARK_UNIT_FLAGS) do
+	if not flags:find("[ne]") then ns.MARK_ROW_KINDS[kind] = ns.MARK_ROW_KINDS.players end
+end
+Mixes(ns.MARK_AGGRO_LETTERS, ns.MARK_AGGRO_FLAGS, "ag", "aggroother", function(flags)
+	return flags:find("[yo]") ~= nil and flags:find("[thd]") ~= nil
+end)
+-- (The Units or Aggro row kind for some letters, in any order; nil for none
+-- that can be.)
+local function MixKind(letters, prefix, flags)
+	local sorted = ""
+	for _, letter in ipairs(letters) do
+		if flags:find(letter, 1, true) then sorted = sorted .. letter end
+	end
+	local kind = MIX_NAMED[prefix][sorted] or prefix .. sorted
+	return ns.MARK_ROW_KINDS[kind] and kind or nil
+end
+function ns.MarkUnitKind(flags) return MixKind(ns.MARK_UNIT_LETTERS, "u", flags) end
+function ns.MarkAggroKind(flags) return MixKind(ns.MARK_AGGRO_LETTERS, "ag", flags) end
 -- Every kind's mark opacity (Opacity: the mark's own; Alpha is the whole
--- plate's), plate size (Scale: retail, Forever's plates don't scale) and
--- plate color (PlateColor: "-" none, the next fitting row's; "game" the
+-- plate's), health bar size (PlateWidth, PlateHeight: retail, Forever's
+-- plates don't size) and plate color (PlateColor: "-" none, the next fitting row's; "game" the
 -- game's; "same" its mark's; "gold", "reaction", "class" or "custom", PlateR,
 -- G, B), the parts it colors its Also color ticks. The rows for one unit
 -- (and aggro) their mark's to start with, the kinds of plate none.
-local PLATE_SAME = { target = true, focus = true, mouseover = true, aggro = true, aggroother = true,
-	aggrononank = true }
+local PLATE_SAME = { target = true, focus = true, mouseover = true }
+for kind in pairs(ns.MARK_AGGRO_FLAGS) do PLATE_SAME[kind] = true end
 for kind in pairs(ns.MARK_ROW_KINDS) do
 	local prefix = kind == "target" and "targetArrow" or kind .. "Mark"
 	DEFAULTS[prefix .. "Opacity"] = 1
-	DEFAULTS[prefix .. "Scale"] = 1
+	DEFAULTS[prefix .. "PlateWidth"] = 1
+	DEFAULTS[prefix .. "PlateHeight"] = 1
 	DEFAULTS[prefix .. "PlateColor"] = PLATE_SAME[kind] and "same" or "-"
 	DEFAULTS[prefix .. "PlateR"], DEFAULTS[prefix .. "PlateG"], DEFAULTS[prefix .. "PlateB"] = 1, 1, 1
 end
 -- A row's Distance, any kind's: its unit within about 11, 28 or 40 yards of
 -- you, or past 28 or 40 (ns.UnitInBand). 40 asks a 40-yard spell on your bars.
 ns.MARK_DISTANCES = { "In11", "In28", "In40", "Past28", "Past40" }
--- A row's kind, Who (nil: all its units), number (nil: the first) and
--- Distance (nil: any): "npcEnemyPast403": "npc", "Enemy", 3, "Past40".
+-- A row's kind, Who (nil: all its units; one or more, in MARK_REACTIONS'
+-- order: "EnemyNeutral"), number (nil: the first) and Distance (nil: any):
+-- "npcEnemyPast403": "npc", "Enemy", 3, "Past40".
 -- (An id that won't read: itself, no kind.)
 function ns.MarkRowBase(id)
 	id = tostring(id)
@@ -722,10 +773,11 @@ function ns.MarkRowBase(id)
 	if not base then
 		return id, nil, nil, nil
 	end
-	local reaction, distance
+	local reaction, distance = ""
 	for _, who in ipairs(ns.MARK_REACTIONS) do
-		if rest:sub(1, #who) == who then reaction, rest = who, rest:sub(#who + 1) break end
+		if rest:sub(1, #who) == who then reaction, rest = reaction .. who, rest:sub(#who + 1) end
 	end
+	if reaction == "" then reaction = nil end
 	for _, band in ipairs(ns.MARK_DISTANCES) do
 		if rest:sub(1, #band) == band then distance, rest = band, rest:sub(#band + 1) break end
 	end
@@ -741,11 +793,10 @@ function ns.MarkRowValid(id)
 	if not whos or id == "others" or (copy and (copy < 2 or copy > ns.MARK_COPIES)) then
 		return false
 	end
-	if reaction then
-		for _, who in ipairs(whos) do
-			if who == reaction then return true end
-		end
-		return false
+	for picked in (reaction or ""):gmatch("%u%l+") do
+		local known = false
+		for _, who in ipairs(whos) do known = known or who == picked end
+		if not known then return false end
 	end
 	return true
 end
@@ -777,9 +828,10 @@ DEFAULTS.aggroMarkAlsoSame = false
 DEFAULTS.aggroMarkR, DEFAULTS.aggroMarkG, DEFAULTS.aggroMarkB = 1, 0.19, 0.19
 DEFAULTS.aggroMarkSize = 1
 DEFAULTS.aggroMarkBob = true
--- (Aggro on not you and Aggro on non-tank: a glow behind the bar to start
--- with, orange and red.)
-for kind, rgb in pairs({ aggroother = { 1, 0.55, 0 }, aggrononank = { 1, 0.15, 0.15 } }) do
+-- (Aggro on not you, Aggro on non-tank and Aggro on a healer: a glow behind
+-- the bar to start with, orange, red and green.)
+for kind, rgb in pairs({ aggroother = { 1, 0.55, 0 }, aggrononank = { 1, 0.15, 0.15 },
+	aggrohealer = { 0.2, 1, 0.4 } }) do
 	DEFAULTS[kind .. "MarkShow"] = true
 	DEFAULTS[kind .. "MarkStyle"] = "glow"
 	DEFAULTS[kind .. "MarkColor"] = "custom"
@@ -814,9 +866,23 @@ end
 -- Each row's Opacity: the whole plate's, times CineMode's own fade (Effects'
 -- PlateAlphas); a plate takes the first fitting row's below 100%.
 DEFAULTS.targetArrowAlpha = 1
+-- How long a plate takes to change its opacity or size a whole 100% when
+-- its row changes, in seconds (0: at once; PlateParts eases it).
+DEFAULTS.plateStyleFadeTime = 1.5
+-- The game's Show Offscreen Nameplates on in CineMode (Effects'
+-- OFFSCREEN_PLATE_CVARS): plates for units out of view stay, so the elite
+-- rules find an elite behind you. Yours back after.
+DEFAULTS.plateShowOffscreen = true
 for _, kind in ipairs({ "aggro", "focus", "mouseover", "others", "npc", "elite", "npcs", "players", "minions",
 	"all" }) do
 	DEFAULTS[kind .. "MarkAlpha"] = 1
+end
+-- (The mixed Units and Aggro rows' look: Any unit's, Aggro on not you's.)
+for kind, look in pairs(ns.MARK_MIXES) do
+	for _, key in ipairs({ "Show", "Style", "Color", "R", "G", "B", "Size", "Bob", "Alpha" }) do
+		DEFAULTS[kind .. "Mark" .. key] = DEFAULTS[look .. "Mark" .. key]
+	end
+	DEFAULTS[kind .. "ColorName"], DEFAULTS[kind .. "ColorBar"], DEFAULTS[kind .. "ColorBorder"] = false, false, false
 end
 -- (Normal NPC - Enemy: the adds faded to 40% while an elite's near, below.)
 DEFAULTS.npcEnemyMarkAlpha = 0.4
@@ -862,11 +928,13 @@ DEFAULTS.plateNameShadowX = 1
 DEFAULTS.plateNameShadowY = -1
 DEFAULTS.plateNameShadowAlpha = 1
 DEFAULTS.questVision = true -- the Quest Vision page's switch: off, none of the four below works
--- What units for a quest objective you haven't finished show in CineMode (see
--- Effects): "plate" (their nameplates), "name" (just their names, on their
--- plates), "mark" (a quest mark: added to a plate or name the Nameplates page
--- shows, else alone) or "none" (as the Nameplates page's rows say).
-DEFAULTS.questMobsShow = "mark"
+-- What of units for a quest objective you haven't finished shows in CineMode
+-- (see Effects), any of: their nameplates, just their names (on their plates),
+-- a quest mark (added to a plate or name shown, else alone). None ticked: as
+-- the Nameplates page's rows say.
+DEFAULTS.questMobsPlate = false
+DEFAULTS.questMobsName = false
+DEFAULTS.questMobsMark = true
 DEFAULTS.targetQuestIcon = true -- a quest icon on the target frame while your target is one of them (see QuestMobs)
 -- The nearest tracked quest's item to use on a big button at the extra ability button's spot (see QuestItemButton)
 DEFAULTS.questItemButton = true
@@ -1113,35 +1181,24 @@ for _, list in ipairs({ ns.PLATE_PARTS, ns.PLATE_MARKER_PARTS }) do
 		end
 	end
 end
--- The Unit Frames page's Unit frame parts grids (see Frames), a column per
--- part: your own frame and your pet's (keys unitPartPlayer<part>,
--- unitPartPet<part>), then the target, focus and target of target frames, a
--- row per kind of unit they show (keys unitPart<kind><part> for the target,
--- unitPartFocus<kind><part>, unitPartToT<kind><part> and unitPartFocusToT<kind><part>).
--- The focus and the targets of target go as the target's grid says until their "Same as target"
--- is unticked. All shown to start with, as the game has them. Some parts
--- only on some rows (UNIT_PART_ONLY): the hit text on your and your pet's
--- portraits, and threat on NPCs you can fight. (The cast bar: the target's
--- and focus's only, the frames that have one.)
-ns.UNIT_PART_KINDS = { "Self", "EnemyPlayer", "EnemyNPC", "NeutralPlayer", "NeutralNPC", "FriendlyPlayer",
-	"FriendlyNPC" }
-ns.UNIT_PARTS = { "Portrait", "Name", "Level", "Art", "PvP", "Icons", "Auras", "CombatText", "Threat", "CastBar" }
+-- The Unit Frames page's Unit frame parts (see Frames): a section per frame,
+-- a Standard Frames row per part, its Always the setting
+-- unitPart<frame><part> (frames: UNIT_PART_FRAMES). The focus and the targets
+-- of target go as the target's section says until their "Same as target" is
+-- unticked. All shown to start with, as the game has them. The hit text only
+-- on your and your pet's portraits (UNIT_PART_ONLY). (The cast bar: the
+-- target's and focus's only, the frames that have one.)
+ns.UNIT_PART_FRAMES = { "Player", "Pet", "Target", "ToT", "Focus", "FocusToT" }
+ns.UNIT_PARTS = { "Portrait", "Name", "Level", "Health", "Power", "Numbers", "Art", "PvP", "Icons", "Auras", "CombatText",
+	"Threat", "CastBar" }
 ns.UNIT_PART_ONLY = {
 	CombatText = { Player = true, Pet = true },
-	Threat = { EnemyNPC = true, NeutralNPC = true },
 }
 for _, part in ipairs(ns.UNIT_PARTS) do
 	local only = ns.UNIT_PART_ONLY[part]
-	for _, row in ipairs({ "Player", "Pet" }) do
-		if not only or only[row] then
-			DEFAULTS["unitPart" .. row .. part] = true
-		end
-	end
-	for _, kind in ipairs(ns.UNIT_PART_KINDS) do
-		if not only or only[kind] then
-			for _, prefix in ipairs({ "", "Focus", "ToT", "FocusToT" }) do
-				DEFAULTS["unitPart" .. prefix .. kind .. part] = true
-			end
+	for _, frame in ipairs(ns.UNIT_PART_FRAMES) do
+		if not only or only[frame] then
+			DEFAULTS["unitPart" .. frame .. part] = true
 		end
 	end
 end
@@ -1172,10 +1229,17 @@ function ns.QuestVisionSetting(key)
 	return ns.Setting("questVision") and ns.Setting(key) or false
 end
 
--- What Quest Vision shows of quest mobs now: "plate", "name", "mark" or nil.
-function ns.QuestMobsShow()
-	local show = ns.QuestVisionSetting("questMobsShow")
-	return (show == "plate" or show == "name" or show == "mark") and show or nil
+-- Whether Quest Vision shows that of quest mobs now ("plate", "name" or
+-- "mark"), or with none given, any of them.
+local QUEST_MOBS_SHOW = { plate = "questMobsPlate", name = "questMobsName", mark = "questMobsMark" }
+function ns.QuestMobsShow(what)
+	if what then
+		return ns.QuestVisionSetting(QUEST_MOBS_SHOW[what]) and true or false
+	end
+	for _, key in pairs(QUEST_MOBS_SHOW) do
+		if ns.QuestVisionSetting(key) then return true end
+	end
+	return false
 end
 DEFAULTS.unitPartsFocusSame = true
 DEFAULTS.unitPartsToTSame = true
@@ -1888,7 +1952,6 @@ function ns.EffectPlace()
 	return CAMERA_OFF_PLACE[ns.GetPlaceType()] or "World"
 end
 local SWITCHED_CAMS = { walk = "walkCamera", run = "runCamera" }
-local CAM_ROWS = {} -- (their Show in rows' keys, made once)
 -- When this auto-walk and auto-run started, for their cameras' delays: noted
 -- every frame by the orbit (ns.NoteTravel), and on first asking.
 ns.travelSince = {}
@@ -1908,9 +1971,6 @@ function ns.IsCameraOffHere(cam)
 		or (cam == "death" and GetTime() < (ns.deathTestUntil or 0)) then
 		return false
 	end
-	if SWITCHED_CAMS[cam] and db[SWITCHED_CAMS[cam]] == "none" then
-		return true
-	end
 	-- Not auto-walking or auto-running long enough yet (the delay sliders).
 	if SWITCHED_CAMS[cam] and (db[cam .. "CameraDelay"] or 0) > 0 then
 		local since = ns.travelSince[cam] or GetTime()
@@ -1919,15 +1979,10 @@ function ns.IsCameraOffHere(cam)
 			return true
 		end
 	end
-	-- Its Show in row (cam:<cam>, Camera Modes page). A flight: where it
-	-- took off, a capital city or the open world, its rule aside.
-	local key = CAM_ROWS[cam] or ("cam:" .. cam)
-	CAM_ROWS[cam] = key
-	if cam == "flight" and ns.OnTaxi() and not ns.RuleTest(key) then
-		if db["camAlways" .. cam] then return false end
-		return not ns.IsPlaceShowOn(db.takeoffInCity and "cityShow" or "worldShow", key)
-	end
-	return not ns.RowOnNow(key, db["camAlways" .. cam], true)
+	-- The row its trigger goes by now (Cameras page) not set to it: a
+	-- flight's, auto-walk's, dying's... (The cameras events start go by the
+	-- event's row as it picks one: CameraRows.lua.)
+	return ns.CameraRowsOff(cam)
 end
 ns.IsCameraOffHere = ns.Profiled("IsCameraOffHere", ns.IsCameraOffHere)
 
@@ -2273,8 +2328,10 @@ do
 	-- back, and one stuck at the lowest our moves step from (as that clash
 	-- left yours: the game's own settings don't go near it) gets the game's
 	-- default. Your mouse held on the camera counts as camera input too.
+	-- Zoom speed counts as stuck lower down: the quest camera's zoom crawls
+	-- at 0.3-0.5 yards a second, and 0.5 left behind made your zoom a crawl.
 	local SPEEDS = { cameraYawMoveSpeed = 180, cameraPitchMoveSpeed = 90, cameraZoomSpeed = 20 }
-	local STUCK_SPEED = 10
+	local STUCK_SPEED = { cameraYawMoveSpeed = 10, cameraPitchMoveSpeed = 10, cameraZoomSpeed = 1 }
 	local FREE_WAIT = 1
 	local WATCH_EVERY = 0.25
 	local freeSince, watched, mouseWas = nil, 0, false
@@ -2309,7 +2366,7 @@ do
 				ns.RestoreCVar(cvar)
 			end
 			local value = tonumber(GetCVar(cvar))
-			if value and value < STUCK_SPEED and cvar ~= "cameraZoomSpeed" then
+			if value and value < STUCK_SPEED[cvar] then
 				ns.Log("cvar", ("%s was %s (left over from a camera move): back to %d"):format(cvar, tostring(value), default))
 				SetCVar(cvar, default)
 			end
@@ -2822,6 +2879,7 @@ function ns.EnsureTables()
 	ns.db.cineShow = ns.db.cineShow or {} -- Standard Frames row -> true: shown all through CineMode
 	ns.db.frameRules = ns.db.frameRules or {} -- row key -> rule text (Custom Visibility Rules, Advanced Frames page)
 	ns.db.markNames = ns.db.markNames or {} -- Nameplates page row id -> a name of your own for it
+	ns.db.cameraRows = ns.db.cameraRows or {} -- the Cameras page's rows (CameraRows.lua)
 	-- Row key -> true: kept hidden in CineMode while you're that role (a frames grid row's roles button).
 	ns.db.tankHide = ns.db.tankHide or {}
 	ns.db.healerHide = ns.db.healerHide or {}
@@ -3086,7 +3144,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		end
 		ns.db.musicOffOnLogout = nil
 		-- "No music while AFK" (Audio page) is now Go AFK's Music column on the
-		-- Camera Triggers page, the other way round.
+		-- Cameras page, the other way round.
 		if ns.db.noMusicWhenAFK == false and ns.db.eventAFKMusic == nil then
 			ns.db.eventAFKMusic = true
 		end
@@ -3847,6 +3905,49 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then CarryPlayerParts(saved) end
 			end
 			ns.db.unitPartPlayerV1 = true
+		end
+		-- The target, focus and target of target frames' parts went from a row
+		-- per kind of unit (unitPart<prefix><kind><part>) to one setting each
+		-- (unitPart<frame><part>): hidden where every kind had it hidden; on
+		-- the target frame, shown for just some kinds, a rule naming those
+		-- (the rules' words for your target); elsewhere, shown. The live
+		-- settings and each saved profile alike. Once.
+		if not ns.db.unitPartFramesV1 then
+			local KIND_WORDS = { Self = "targetself", EnemyPlayer = "enemyplayer", EnemyNPC = "hostilenpc",
+				NeutralPlayer = "neutralplayer", NeutralNPC = "neutralnpc", FriendlyPlayer = "friendlyplayer",
+				FriendlyNPC = "friendlynpc" }
+			local KINDS = { "Self", "EnemyPlayer", "EnemyNPC", "NeutralPlayer", "NeutralNPC", "FriendlyPlayer", "FriendlyNPC" }
+			local function CarryFrameParts(settings)
+				for _, frame in ipairs({ { "Target", "" }, { "ToT", "ToT" }, { "Focus", "Focus" }, { "FocusToT", "FocusToT" } }) do
+					for _, part in ipairs(ns.UNIT_PARTS) do
+						local key = "unitPart" .. frame[1] .. part
+						if DEFAULTS[key] ~= nil and settings[key] == nil then
+							-- (Threat was only ever on NPCs you can fight.)
+							local kinds = part == "Threat" and { "EnemyNPC", "NeutralNPC" } or KINDS
+							local shown = {}
+							for _, kind in ipairs(kinds) do
+								if settings["unitPart" .. frame[2] .. kind .. part] ~= false then
+									shown[#shown + 1] = KIND_WORDS[kind]
+								end
+							end
+							if #shown == 0 then
+								settings[key] = false
+							elseif #shown < #kinds and frame[1] == "Target" then
+								settings.frameRules = settings.frameRules or {}
+								if not settings.frameRules[key] then
+									settings[key] = false
+									settings.frameRules[key] = table.concat(shown, " or ")
+								end
+							end
+						end
+					end
+				end
+			end
+			CarryFrameParts(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then CarryFrameParts(saved) end
+			end
+			ns.db.unitPartFramesV1 = true
 		end
 		-- Friendly plates in dungeons and raids got a setting of their own
 		-- (plateInstance<kind>): each starts as the grids left it there, grouped
@@ -4857,17 +4958,52 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		for _, profile in pairs(ns.db.profiles or {}) do
 			MarkersJoined(profile)
 		end
-		-- Quest Vision's "Always show their nameplates" tick is now a choice of
-		-- Nameplate, Name or No action (questMobsShow): unticked is No action.
+		-- Quest Vision's "Always show their nameplates" tick became a choice of
+		-- Nameplate, Name, Quest mark or No action (questMobsShow), now ticks of
+		-- their own (questMobsPlate, Name, Mark): unticked or No action is none.
 		local function QuestMobsChoice(settings)
-			if settings.plateQuestMobs == false and settings.questMobsShow == nil then
-				settings.questMobsShow = "none"
+			local show = settings.questMobsShow
+			if settings.plateQuestMobs == false and show == nil then
+				show = "none"
 			end
-			settings.plateQuestMobs = nil
+			if type(show) == "string" then
+				settings.questMobsPlate = show == "plate"
+				settings.questMobsName = show == "name"
+				settings.questMobsMark = show == "mark"
+			end
+			settings.plateQuestMobs, settings.questMobsShow = nil, nil
 		end
 		QuestMobsChoice(ns.db)
 		for _, saved in pairs(ns.db.profiles or {}) do
 			if type(saved) == "table" then QuestMobsChoice(saved) end
+		end
+		-- A row's plate Size (Scale, the whole plate) is now its health bar's
+		-- Width and Height, both from it.
+		local function PlateSizeSplit(saved)
+			local sizes = {}
+			for key, value in pairs(saved) do
+				local prefix = type(key) == "string" and (key:match("^(.-Mark)Scale$") or key:match("^(targetArrow)Scale$"))
+				if prefix then sizes[prefix] = value end
+			end
+			for prefix, value in pairs(sizes) do
+				if type(value) == "number" then
+					saved[prefix .. "PlateWidth"], saved[prefix .. "PlateHeight"] = value, value
+				end
+				saved[prefix .. "Scale"] = nil
+			end
+		end
+		PlateSizeSplit(ns.db)
+		for _, saved in pairs(ns.db.profiles or {}) do
+			if type(saved) == "table" then PlateSizeSplit(saved) end
+		end
+		-- Cinematic's Edit Mode layouts got new names (Layouts.lua): the
+		-- profiles on one under its old name, on the new.
+		local function LayoutRenamed(saved)
+			saved.editModeLayout = ns.LAYOUT_RENAMED[saved.editModeLayout or ""] or saved.editModeLayout
+		end
+		LayoutRenamed(ns.db)
+		for _, saved in pairs(ns.db.profiles or {}) do
+			if type(saved) == "table" then LayoutRenamed(saved) end
 		end
 		-- Settings from removed or renamed features, now that the migrations
 		-- above have read what they need.
@@ -4897,7 +5033,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			"cameraInputPause", "questCamRandomSide", "questCamLeft", "lastMusicStartedAt",
 			"musicCamIdle", "musicWhenAFK", "noMusicWhenAFK", -- (now eventAFKMusic)
 			"musicPauseOnLanding", "musicPauseFadeTime", -- (leaving the flight camera; the music fade time)
-			"musicOffOnFlights", -- (the flight camera's Music switch, Camera Triggers page)
+			"musicOffOnFlights", -- (the flight camera's Music switch, Cameras page)
 			"trackingHideWhenIdle", -- (now flightHideMinimap, idleHideMinimap)
 			"tintWhen", -- (now tintMoving, tintStill, tintFlight)
 			"plateTargetEnemyFadeIn", "plateTargetEnemyFadeOut", "plateTargetFriendlyFadeIn",

@@ -13,7 +13,7 @@ ignore:
   - WindGuide.lua
   - WindGuideStyles.lua
   - Textures/WindGuide
-  # (Grid Demo: the grids done with dropdowns and rules, in the dev copy only)
-  - GridDemo.lua
   # (Chat Cam: a prototype, in the dev copy only)
   - ChatCam.lua
+  # (Vitals Vision's old sprites: only make_wind_guide.py reads them now)
+  - Textures/LowHealth/Effects.tga

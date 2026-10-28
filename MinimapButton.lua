@@ -319,18 +319,19 @@ local function Create()
 
 	local background = button:CreateTexture(nil, "BACKGROUND")
 	background:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
-	background:SetSize(20, 20)
-	background:SetPoint("TOPLEFT", 7, -5)
+	background:SetSize(24, 24)
+	background:SetPoint("CENTER")
 
+	-- (Centred in the button: at 50 the border's ring centres on it too.)
 	button.icon = button:CreateTexture(nil, "ARTWORK")
 	button.icon:SetTexture(ICON)
-	button.icon:SetSize(17, 17)
-	button.icon:SetPoint("TOPLEFT", 7, -6)
+	button.icon:SetSize(18, 18)
+	button.icon:SetPoint("CENTER")
 	button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
 	local border = button:CreateTexture(nil, "OVERLAY")
 	border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
-	border:SetSize(53, 53)
+	border:SetSize(50, 50)
 	border:SetPoint("TOPLEFT")
 
 	-- The glow while a vision is in use: a pulsing light over the icon and

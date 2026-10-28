@@ -134,7 +134,7 @@ table.grid tr:last-child td { border-bottom: 0 }
   <section>
     <div class="eyebrow">Pick a camera</div>
     <h2>What starts each one</h2>
-    <p class="muted">Pick a camera to see what starts it, what ends it, and what it does. The gold tags are the events that pick it on the Camera Triggers page before you change anything.</p>
+    <p class="muted">Pick a camera to see what starts it, what ends it, and what it does. The gold tags are the triggers that pick it on the Cameras page before you change anything.</p>
 
     <div class="win" id="cams">
       <div class="win-top">
@@ -160,18 +160,16 @@ table.grid tr:last-child td { border-bottom: 0 }
   </section>
 
   <section>
-    <div class="eyebrow">Camera Triggers page</div>
+    <div class="eyebrow">Cameras page</div>
     <h2>Choose what starts what</h2>
-    <p>The <b>Camera Triggers</b> page has a row for each event and four columns:</p>
+    <p>The <b>Cameras</b> page has a row for each trigger: resting at a campfire, <code>/sit</code>, the Campfire button (not on retail), <code>/sleep</code>, <code>/dance</code>, <code>/kneel</code>, a chair, drawing your weapon, your Hearthstone, a teleport, logging out, <code>/stare</code>, Fishing, going AFK, standing still, a flight, a quest giver, auto-walking, auto-running and dying. Each row shows its camera, and small tags for anything set apart from the usual, like music or where it's turned off. Untick the box at the start of a row to turn it off for now (its settings stay). Click a row to open its settings:</p>
     <div class="cards">
-      <div class="card"><h3>Event</h3><p>Resting at a campfire, <code>/sit</code>, the Campfire button (not on retail), <code>/sleep</code>, <code>/dance</code>, <code>/kneel</code>, a chair, drawing your weapon, your Hearthstone, a teleport, logging out, <code>/stare</code>, Fishing, going AFK, standing still, a flight and a quest giver.</p></div>
-      <div class="card"><h3>Camera</h3><p>Which camera the event starts, or <b>No camera</b>. The emotes can pick the cozy, vista, fish or AFK camera; a flight only the flight camera or none.</p></div>
-      <div class="card"><h3>Music</h3><p>Whether that camera starts music as it starts. See <a href="music.html">Music and sound</a>.</p></div>
-      <div class="card"><h3>CineMode</h3><p>Only with <b>Start in CineMode</b> off: the camera brings CineMode on while it runs, and it ends with the camera.</p></div>
+      <div class="card"><h3>Camera</h3><p>Which camera the trigger starts, or <b>No camera</b>. The emotes can pick the cozy, vista, fish or AFK camera; a flight only the flight camera or none. Beside it, <b>Music</b>: whether that camera starts music as it starts (see <a href="music.html">Music and sound</a>), and <b>CineMode</b>: only with <b>Start in CineMode</b> off, the camera brings CineMode on while it runs, and it ends with the camera.</p></div>
+      <div class="card"><h3>When</h3><p>Where it can start: the open world, cities, dungeons, raids, PvP, grouped, or a rule of your own with <b>Edit</b>, and the roles it's for. Anywhere else it doesn't start, and stops if it's running; the UI stays faded with the camera left to you. For flights, Cities means taking off from one. <b>Wait for the Calm Timer</b>, in the Combat dropdown, holds the camera back until the Calm Timer has run out after a fight.</p></div>
+      <div class="card"><h3>What it needs</h3><p>Some triggers have one more line: the campfire buffs, the words that mark a seat, how long you stand still first (120 seconds to start with, up to 300; going AFK with the AFK camera skips the wait), or how long you auto-walk, auto-run or wait at a quest giver before the camera starts.</p></div>
     </div>
-    <p>When two things happen at once, a Hearthstone or teleport cast comes first, then logging out, going AFK, the latest emote, a drawn weapon, a campfire, and standing still last.</p>
-    <p><b>After standing still for</b> sets how long you stand still before the Stand still row's camera starts (120 seconds to start with, up to 300). Going AFK with the AFK camera skips the wait. Auto-walking, auto-running and dying have rows of their own below; auto-walk and auto-run each have their own wait too.</p>
-    <div class="note"><b>A screensaver.</b> Untick <b>Start in CineMode</b> on the main page, then tick the CineMode column for <b>Stand still</b> and <b>Go AFK</b>. You keep the normal UI while you play, and CineMode with the AFK camera takes over once you've been idle a while.</div>
+    <p>When two triggers happen at once, a Hearthstone or teleport cast comes first, then logging out, going AFK, the latest emote, a drawn weapon, a campfire, and standing still last.</p>
+    <div class="note"><b>A screensaver.</b> Untick <b>Start in CineMode</b> on the main page, then tick CineMode on the <b>Stand still</b> and <b>Go AFK</b> rows. You keep the normal UI while you play, and CineMode with the AFK camera takes over once you've been idle a while.</div>
   </section>
 
   <section>
@@ -183,11 +181,9 @@ table.grid tr:last-child td { border-bottom: 0 }
 
   <section>
     <div class="eyebrow">Tuning</div>
-    <h2>Camera Settings and Camera Modes</h2>
+    <h2>Camera Settings</h2>
     <p>Each camera's own settings are on the <b>Camera Settings</b> page: click a camera's name to open them. Most have the same groups: <b>Rotation</b> (how it sways or sweeps), <b>Zoom</b>, <b>Height</b> and <b>Depth of field</b>. Each camera has its own <b>Reset</b>, and a <b>Test</b> button that runs it for 30 seconds where you stand.</p>
-    <p>The <b>Camera Modes</b> page has what they share:</p>
     <ol class="steps">
-      <li><div><h3>Runs in</h3><p class="muted">A row per camera saying where it can start: the open world, cities, dungeons, raids, PvP and so on. Anywhere else it doesn't start, and stops if it's running; the UI stays faded with the camera left to you. For flights, Cities means taking off from one, and Open World taking off anywhere else. <b>Wait for the Calm Timer</b>, in each row's Combat dropdown, holds a camera back until the Calm Timer has run out after a fight.</p></div></li>
       <li><div><h3>Indoors</h3><p class="muted"><b>Limit the camera indoors</b>: inside buildings and caves the cameras zoom out less and swing less, so the camera doesn't keep pushing into walls and ceilings. You set how far they may zoom out and swing, and <b>No AFK camera sweep indoors</b> keeps the AFK camera from sweeping right round you in tight rooms.</p></div></li>
       <li><div><h3>Depth of field</h3><p class="muted">Each camera's <b>Edge haze</b> slider adds a soft haze around the edges of the screen, as if the camera had focused on you. It needs <b>Depth of field</b> on the Visual Effects page. The Tele Cam uses the Cozy Cam's.</p></div></li>
     </ol>
@@ -245,13 +241,13 @@ table.grid tr:last-child td { border-bottom: 0 }
 <script>
 (function () {
   // Each camera: what starts it (events, with "tag" for the events that pick it on the
-  // Camera Triggers page to start with), what ends it, and a line on what it does.
+  // Cameras page to start with), what ends it, and a line on what it does.
   var CAMS = [
     { name: "Flight", lead: "Swings round behind you as you take off, sways behind you on the way, and settles behind you before landing. Now and then a fly-by turns it round to look back past you.",
       starts: [{ l: "Take a flight", d: "Taking off on a flight path", tag: 1 }],
       ends: "Landing. Moving the camera yourself pauses it, and once you've moved it on a flight there are no more fly-bys on that flight." },
     { name: "AFK", lead: "Slowly pulls back, then sweeps around your character, pausing between sweeps and drifting in and out.",
-      starts: [{ l: "Go AFK", d: "Being flagged AFK (/afk, or away long enough)", tag: 1 }, { l: "Stand still", d: "Standing still for a while with nothing else going on. No camera to start with; the Cinema profile picks the AFK camera" }, { l: "Any emote you set to it", d: "On the Camera Triggers page" }, { l: "Keybind or camera wheel", d: "Start the AFK camera" }],
+      starts: [{ l: "Go AFK", d: "Being flagged AFK (/afk, or away long enough)", tag: 1 }, { l: "Stand still", d: "Standing still for a while with nothing else going on. No camera to start with; the Cinema profile picks the AFK camera" }, { l: "Any emote you set to it", d: "On the Cameras page" }, { l: "Keybind or camera wheel", d: "Start the AFK camera" }],
       ends: "Moving." },
     { name: "Cozy", lead: "Swings slowly round to face you, comes down low and in close, then sways gently from side to side in front of you.",
       starts: [{ l: "Resting with a listed buff (campfire)", d: "Standing or sitting still with a buff like Welcoming Campfire", tag: 1 },
@@ -311,7 +307,7 @@ table.grid tr:last-child td { border-bottom: 0 }
       li.appendChild(l); li.appendChild(d);
       if (s.tag) {
         var t = document.createElement("span"); t.className = "tags";
-        var x = document.createElement("span"); x.textContent = "Camera Triggers"; t.appendChild(x);
+        var x = document.createElement("span"); x.textContent = "Cameras page"; t.appendChild(x);
         li.appendChild(t);
       }
       startsEl.appendChild(li);

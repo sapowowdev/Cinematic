@@ -30,7 +30,7 @@ ns.CLIENT = ns.isRetail and "retail" or "forever"
 -- Settings whose address isn't where Options.lua records them: on no page,
 -- or on one that's somewhere else's.
 local KEY_ADDRESSES = {
-	editModeLayout = "Profiles/Edit Mode layout", -- (its dropdown sits under the profiles)
+	editModeLayout = "Profiles/Edit Mode layout", -- (set by the Layout choices in Customize, on the Profiles page)
 	cooldownManagerOn = "Cooldown Manager/top", -- (the game's own switch: no box of ours)
 	chatPeekChannelList = "Chat/Other",
 	-- (with the rows as dropdowns, what rows without a Calm Timer of their own go by)
@@ -43,7 +43,7 @@ local KEY_ADDRESSES = {
 local ROW_RULE_LISTS = { frameRules = true, tankHide = true, healerHide = true, damageHide = true }
 
 -- Switches cameras off: an event's camera to none, or (for the ones no
--- event starts) its row of the Camera Modes page's "Turn off in" grid.
+-- event starts) its row of the Cameras page's "Turn off in" grid.
 local EVENT_CAMS = { flight = true, idle = true, cozy = true, tele = true, vista = true, fish = true,
 	quest = true }
 local function CamsOff(set, cams)
@@ -153,12 +153,12 @@ ns.PROFILE_MODULES = {
 	Layout("layout-preset", "Game's own layout", ns.LAYOUT_PRESET, "forever",
 		"The game's own layout (Modern or Classic), which the fades and mouseover groups are made for, " ..
 		"not one the player's moved things in."),
-	Layout("layout-retail", "Retail-style layout", "CINE_FOREVER_RETAIL_LAYOUT", "forever",
+	Layout("layout-retail", "Retail Inspired layout", "Retail Inspired", "forever",
 		"Action bars centred along the bottom, the micro menu and bags in the corner, the XP bars under them, " ..
 		"as on retail."),
 	Layout("layout-forever", "Forever-style layout", "CINE_RETAIL_FOREVER_LAYOUT", "retail",
 		"Retail laid out like WoW Forever's default."),
-	Layout("layout-pure", "Pure Cinema layout", "CINE_PURE_CINEMA_LAYOUT", "retail",
+	Layout("layout-pure", "Personal Resource Centered layout", "Personal Resource Centered", "retail",
 		"The personal resource display in the middle, the Cooldown Manager above it."),
 
 	-- What fades, and when
@@ -222,6 +222,17 @@ ns.PROFILE_MODULES = {
 				for _, row in ipairs({ "cooldowns", "pet", "stance", "totems" }) do rows[row] = true end
 				set(list, rows)
 			end
+		end },
+
+	{ key = "bars-always", name = "Action bars always up",
+		scope = { "Standard Frames/Action bars", "Standard Frames/Extra action bars" },
+		tip = "Action bars 1 to 8, and the pet, stance, totem and extra action bars, shown all through CineMode.",
+		apply = function(set)
+			local rows = {}
+			for _, item in ipairs(ns.COMBAT_SHOW) do
+				if item.page == "bars" or item.page == "extrabars" then rows[item.key] = true end
+			end
+			set("cineShow", rows)
 		end },
 
 	-- Pure Cinema's, page by page
@@ -310,6 +321,7 @@ ns.PROFILE_MODULES = {
 			set("aggroMarkStyle", "none")
 			-- Every unit by distance, in fights: no mark, just fainter.
 			for id, alpha in pairs({ allPast40 = 0.5, allPast28 = 0.8, allIn11 = 0.95 }) do
+				set(id .. "MarkShow", true)
 				set(id .. "MarkStyle", "none")
 				set(id .. "MarkAlpha", alpha)
 				set(id .. "When", false)
@@ -317,7 +329,7 @@ ns.PROFILE_MODULES = {
 			end
 			set("allPast40MarkColor", "custom")
 			-- Normal NPCs faint while an elite's within 40 yards, in fights.
-			set("npcMarkAlpha", 0.35)
+			set("npcMarkAlpha", 0.5)
 			set("npcWhen", false)
 			set("npcWhenCombat", true)
 			set("frameRules", { npcWhen = "combat and elite40" })
@@ -371,24 +383,24 @@ ns.PROFILE_MODULES = {
 		end },
 
 	-- Cameras
-	{ key = "walk-run-music", name = "Music on walks and runs", scope = { "Camera Triggers/Event" },
+	{ key = "walk-run-music", name = "Music on walks and runs", scope = { "Cameras/Triggers" },
 		tip = "Auto-walking and auto-running can start music.",
 		apply = function(set)
 			set("musicCamWalk", true)
 			set("musicCamRun", true)
 		end },
-	{ key = "lite-cameras", name = "Just a few cameras", scope = { "Camera Triggers/Event", "Camera Modes/Runs in" },
+	{ key = "lite-cameras", name = "Just a few cameras", scope = { "Cameras/Triggers" },
 		tip = "Just flights (and fly-bys), AFK, and your Hearthstone and teleports: no cozy, vista, fish, " ..
 		"RP walk, auto-run, death or quest cameras.",
 		apply = function(set)
 			CamsOff(set, { "cozy", "vista", "fish", "walk", "run", "death", "quest" })
 		end },
-	{ key = "no-cameras", name = "No cameras", scope = { "Camera Triggers/Event", "Camera Modes" },
+	{ key = "no-cameras", name = "No cameras", scope = { "Cameras" },
 		tip = "No camera moves on its own.",
 		apply = function(set)
 			CamsOff(set, { "flight", "idle", "cozy", "tele", "vista", "fish", "walk", "run", "death", "quest" })
 		end },
-	{ key = "cameras-bring-cinemode", name = "Cameras bring CineMode", scope = { "Camera Triggers/Event",
+	{ key = "cameras-bring-cinemode", name = "Cameras bring CineMode", scope = { "Cameras/Triggers",
 		"Camera Settings/Death Cam" },
 		tip = "Every camera brings CineMode on, standing still starts the AFK camera, every camera can start " ..
 		"music, and no death screen.",
@@ -408,8 +420,7 @@ ns.PROFILE_MODULES = {
 			set("musicCamWalk", true)
 			set("musicCamRun", true)
 		end },
-	{ key = "pure-cameras", name = "Pure: cameras", scope = { "Camera Triggers/Event", "Camera Modes/Runs in",
-		"Camera Settings/Chat Cam" },
+	{ key = "pure-cameras", name = "Pure: cameras", scope = { "Cameras/Triggers", "Camera Settings/Chat Cam" },
 		tip = "Standing still starts the AFK camera and every event's camera can start music; the cameras " ..
 		"don't wait for things to calm down after a fight, auto-run carries on in cities and instances (as RP " ..
 		"walk always does), and the death camera runs in instances too. NPCs chatting nearby bring the chat " ..
@@ -569,13 +580,18 @@ function ns.GetChoice(slot, part)
 	end
 end
 
+-- Whether a choice is hidden on a client (hidden: true, or that client's name).
+function ns.ChoiceHidden(choice, client)
+	return choice.hidden == true or choice.hidden == client
+end
+
 -- A slot's choices players are offered on this client (not hidden), or nil
 -- with fewer than two.
 function ns.SlotChoices(slot)
 	local list = {}
 	local info = ns.SLOT_CHOICES and ns.SLOT_CHOICES[slot]
 	for _, choice in ipairs(info and info.choices or {}) do
-		if not choice.hidden and (not choice.client or choice.client == ns.CLIENT) then
+		if not ns.ChoiceHidden(choice, ns.CLIENT) and (not choice.client or choice.client == ns.CLIENT) then
 			list[#list + 1] = ns.GetChoice(slot, choice.part)
 		end
 	end
@@ -1055,7 +1071,7 @@ function ns.CheckModules(client, profiles)
 					end
 					table.sort(all)
 					local same = table.concat(all, ";")
-					if seen[same] and not choice.hidden and not seen[same].hidden then
+					if seen[same] and not ns.ChoiceHidden(choice, client) and not ns.ChoiceHidden(seen[same], client) then
 						notes[#notes + 1] = ("choices %s.%s and %s.%s change the same settings"):format(slot.key,
 							seen[same].part, slot.key, choice.part)
 					end

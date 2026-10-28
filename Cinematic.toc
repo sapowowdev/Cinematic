@@ -79,10 +79,10 @@ PlateParts.lua
 PlateGuild.lua
 Camera.lua
 QuestCam.lua
+CameraRows.lua
 QuestTalk.lua
 CameraTests.lua
 Tint.lua
-LowHealthArt.lua
 LowHealthThemes.lua
 LowHealth.lua
 PersonalResources.lua

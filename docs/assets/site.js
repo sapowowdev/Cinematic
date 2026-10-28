@@ -8,6 +8,7 @@
 (function () {
   var SECTIONS = [
     { id: "start", name: "Start here", line: "New to Cinematic? Begin with these." },
+    { id: "updates", name: "Updates", line: "What's changed, release by release." },
     { id: "guides", name: "Guides", line: "How Cinematic's features work, for players." },
     { id: "reference", name: "Reference", line: "Commands, keybinds and every settings page, to look things up." },
     { id: "help", name: "Help", line: "When something's not right." },
@@ -17,12 +18,14 @@
   var PAGES = [
     { section: "start", path: "start/getting-started.html", title: "Getting started",
       line: "Installing, the welcome window, and turning CineMode on and off." },
+    { section: "updates", path: "updates/patch-notes.html", title: "Patch notes",
+      line: "Every release's new features and full list of changes, newest first." },
     { section: "guides", path: "guides/profiles.html", title: "Profiles",
       line: "Pick a level, then make it yours: the three levels, Customize's areas, and where your changes are kept." },
     { section: "guides", path: "guides/cinemode.html", title: "CineMode and fading",
       line: "What fades and when, smart reveals, mouseover groups, fights, and where it turns itself off." },
     { section: "guides", path: "guides/cameras.html", title: "The cameras",
-      line: "Every camera, what starts it, the Camera Triggers page and depth of field." },
+      line: "Every camera, what starts it, the Cameras page and depth of field." },
     { section: "guides", path: "guides/flight-cam.html", title: "Flight Cam",
       line: "Takeoff, sway, fly-bys and landing, and how each route is timed." },
     { section: "guides", path: "guides/look.html", title: "Look and mood",

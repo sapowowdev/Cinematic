@@ -70,7 +70,7 @@ local ZONE_MOODS = {
 	autumn = { { 1, 0.88, 0.76 }, L["Autumn"] },    -- rust and amber, red rock and turning leaves
 	summer = { { 0.95, 0.97, 0.96 }, L["Summer"] }, -- clear and fresh, tames red ground, keeps blue skies
 	fel = { { 0.84, 1, 0.76 }, L["Fel"] },          -- sickly bright green, demon-scorched land
-	void = { { 0.84, 0.76, 0.96 }, L["Void"] },     -- deeper violet than twilight
+	void = { { 0.7, 0.64, 0.9 }, L["Void"] },       -- dark twilight violet, dimmer than deep twilight
 }
 -- Zones by area ID, so names match in any client language. IDs a client
 -- doesn't have are skipped, so retail's zones sit here too. Matching is by
@@ -929,7 +929,7 @@ local function CorpseRunLevel(elapsed)
 		corpse.walked, corpse.fakeX, corpse.fakeAt = nil, nil, nil
 	end
 	corpse.level = nil
-	if not (ghost and db.enabled and db.deathScreen and db.deathOrbit and not ns.IsCameraOffHere("death")) then
+	if not (ghost and db.enabled and db.deathScreen and not ns.IsCameraOffHere("death")) then
 		return nil
 	end
 	local wave = WaveLevel(GetTime())

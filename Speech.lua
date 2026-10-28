@@ -206,8 +206,34 @@ end
 
 -- A line whose speaker comes into view (the camera swings round to them) has
 -- its own bubble on screen now: it fades out, so the words don't show twice.
+-- So does one the talking head (the portrait box) is saying.
 local BUBBLE_CHECK = 0.2 -- seconds between looks at the bubbles
 local sinceBubbleCheck = 0
+
+local function Plain(value)
+	return type(value) == "string" and not (issecretvalue and issecretvalue(value))
+end
+
+local function Trim(text)
+	return (text:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function TalkingHeadSays(text)
+	local frame = _G.TalkingHeadFrame
+	if not (frame and ns.Flag(frame:IsVisible())) then
+		return false
+	end
+	local said
+	if C_TalkingHead and C_TalkingHead.GetCurrentLineInfo then
+		local ok, _, _, _, _, _, _, _, headText = pcall(C_TalkingHead.GetCurrentLineInfo)
+		said = ok and headText
+	end
+	if not Plain(said) then
+		local shown = frame.TextFrame and frame.TextFrame.Text
+		said = shown and shown:GetText()
+	end
+	return Plain(said) and Plain(text) and Trim(said) == Trim(text)
+end
 
 local function OnUpdate(_, elapsed)
 	local now = GetTime()
@@ -219,7 +245,8 @@ local function OnUpdate(_, elapsed)
 	end
 	for i = #lines, 1, -1 do
 		local line = lines[i]
-		if lookForBubbles and not line.fading and line.said and ns.IsBubbleOnScreen(line.said) then
+		if lookForBubbles and not line.fading and line.said
+				and (ns.IsBubbleOnScreen(line.said) or TalkingHeadSays(line.said)) then
 			line.bubbled = true
 		end
 		if now >= line.born + line.life or i > MAX_LINES or line.bubbled then
@@ -391,6 +418,9 @@ function ns.ShowSpeechBehind(event, author, text, guid)
 	recent[key] = now
 	for seen, when in pairs(recent) do
 		if now - when >= SAME_LINE then recent[seen] = nil end
+	end
+	if TalkingHeadSays(text) then
+		return
 	end
 
 	local chatType = event:gsub("^CHAT_MSG_", "")
