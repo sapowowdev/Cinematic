@@ -684,10 +684,9 @@ local deathSong = { file = nil, playing = false }
 -- (the Camera Triggers page's Music column, event<key>Music). The AFK camera's
 -- is Go AFK's (eventAFKMusic) while flagged AFK, Stand still's (eventStillMusic)
 -- when standing still started it; the quest camera's its own event's
--- (eventQuestMusic). Music already playing just carries on: no camera swaps
--- in a new song.
-local MUSIC_CAM = { flight = "musicCamFlight", walk = "musicCamWalk", run = "musicCamRun",
-	quest = "eventQuestMusic" }
+-- (eventQuestMusic, or eventQuestGossipMusic talking about a quest). Music
+-- already playing just carries on: no camera swaps in a new song.
+local MUSIC_CAM = { flight = "musicCamFlight", walk = "musicCamWalk", run = "musicCamRun" }
 local EVENT_MUSIC_CAMS = { cozy = true, vista = true, fish = true }
 
 local function CameraMusicOn(mode)
@@ -705,6 +704,9 @@ local function CameraMusicOn(mode)
 	end
 	if EVENT_MUSIC_CAMS[mode] then
 		return key ~= nil and ns.db["event" .. key .. "Music"] or false
+	end
+	if mode == "quest" then
+		return ns.db["event" .. (ns.QuestCamEvent and ns.QuestCamEvent() or "Quest") .. "Music"] or false
 	end
 	return MUSIC_CAM[mode] ~= nil and ns.db[MUSIC_CAM[mode]] or false
 end

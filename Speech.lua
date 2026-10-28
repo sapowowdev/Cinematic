@@ -10,7 +10,6 @@
 local _, ns = ...
 
 local MAX_LINES = 3
-local WIDTH = 720
 local GAP = 4 -- between lines
 local PAD_X, PAD_Y = 18, 12 -- round the text, in a bubble
 local TAIL_SPACE = 12 -- under a bubble, for its tail
@@ -48,11 +47,11 @@ local function Look()
 end
 
 -- How these lines tell they're from behind you (the Chat bubbles page's
--- Behind you; its defaults while that page is off): rising up from below the
+-- Behind you, which works with that page off too): rising up from below the
 -- screen, quieter than a bubble overhead (smaller, fainter), and a bubble's
 -- tail on top, pointing up, if ticked.
 local function Behind()
-	local db = ns.db.handleBubbles and ns.db or ns.DEFAULTS
+	local db = ns.db
 	return db.speechBehindRise, tonumber(db.speechBehindScale) or 1, tonumber(db.speechBehindAlpha) or 1,
 		db.speechBehindTailTop
 end
@@ -112,12 +111,26 @@ end
 
 local OUTLINE_FLAGS = { "OUTLINE", "THICKOUTLINE", "THICKOUTLINE" }
 
+-- The Chat bubbles page's Max width (db.speechBehindWidth) and Align
+-- (db.speechBehindAlign: "LEFT", "CENTER", "RIGHT", or "auto": by which side
+-- of the screen the Move box is on).
+local function MaxWidth()
+	return math.max(200, tonumber(ns.db.speechBehindWidth) or 480)
+end
+
+local function Align()
+	local align = ns.db.speechBehindAlign
+	return ANCHOR[align] and align or side
+end
+
 local function SetLook(line, words)
 	local boxed, outline, scale = Look()
 	scale = scale * select(2, Behind())
 	local text, font = line.text, Font()
 	local file, size = font:GetFont()
-	text:SetWidth(WIDTH)
+	local most = MaxWidth()
+	line.frame:SetWidth(most)
+	text:SetWidth(most)
 	text:SetText(words)
 	if ns.SetPlateNameFont and file then
 		-- (A font family, so every alphabet's letters show; it sets the words again.)
@@ -133,10 +146,15 @@ local function SetLook(line, words)
 		text:SetShadowColor(font:GetShadowColor())
 		text:SetShadowOffset(font:GetShadowOffset())
 	end
-	-- (Only as wide as its words, so a bubble fits them.)
+	-- (Only as wide as its words, so a bubble fits them; past Max width, into
+	-- rows of about even length, not a long one and a word left over. The
+	-- slack: words don't break exactly at the even width.)
 	local wide = text.GetUnboundedStringWidth and text:GetUnboundedStringWidth() or text:GetStringWidth()
-	if type(wide) == "number" and wide < WIDTH then
+	if type(wide) == "number" and wide < most then
 		text:SetWidth(math.ceil(wide) + 2)
+	elseif type(wide) == "number" then
+		local rows = math.ceil(wide / most)
+		text:SetWidth(math.min(most, math.ceil(wide / rows) + 40))
 	end
 	if boxed and not line.bubble then
 		line.bubble = Bubble(line.frame) or false
@@ -145,9 +163,10 @@ local function SetLook(line, words)
 	local tailTop = select(4, Behind())
 	-- (The tail's room is under the bubble, or over it with the tail on top.)
 	-- (Lined up with the Move box's side; a bubble's edge, not its words', on it.)
-	local point = ANCHOR[side]
-	local inset = side == "LEFT" and PAD_X or side == "RIGHT" and -PAD_X or 0
-	text:SetJustifyH(side)
+	local align = Align()
+	local point = ANCHOR[align]
+	local inset = align == "LEFT" and PAD_X or align == "RIGHT" and -PAD_X or 0
+	text:SetJustifyH(align)
 	text:ClearAllPoints()
 	text:SetPoint(point, line.frame, point, line.boxed and inset or 0,
 		line.boxed and PAD_Y + (tailTop and 0 or TAIL_SPACE) or 0)
@@ -167,7 +186,7 @@ local function NewLine()
 		return line
 	end
 	local frame = CreateFrame("Frame", nil, holder)
-	frame:SetSize(WIDTH, 1)
+	frame:SetSize(MaxWidth(), 1)
 	-- (Its words on a frame of their own, over the bubble's.)
 	local words = CreateFrame("Frame", nil, frame)
 	words:SetAllPoints(frame)
@@ -185,12 +204,25 @@ local function Drop(i)
 	spare[#spare + 1] = line
 end
 
+-- A line whose speaker comes into view (the camera swings round to them) has
+-- its own bubble on screen now: it fades out, so the words don't show twice.
+local BUBBLE_CHECK = 0.2 -- seconds between looks at the bubbles
+local sinceBubbleCheck = 0
+
 local function OnUpdate(_, elapsed)
 	local now = GetTime()
 	local y = 0
+	sinceBubbleCheck = sinceBubbleCheck + elapsed
+	local lookForBubbles = sinceBubbleCheck >= BUBBLE_CHECK and ns.IsBubbleOnScreen
+	if lookForBubbles then
+		sinceBubbleCheck = 0
+	end
 	for i = #lines, 1, -1 do
 		local line = lines[i]
-		if now >= line.born + line.life or i > MAX_LINES then
+		if lookForBubbles and not line.fading and line.said and ns.IsBubbleOnScreen(line.said) then
+			line.bubbled = true
+		end
+		if now >= line.born + line.life or i > MAX_LINES or line.bubbled then
 			-- (Pushed out or done: fades out where it is.)
 			line.fading = line.fading or now
 			local alpha = 1 - (now - line.fading) / FADE_OUT
@@ -275,7 +307,7 @@ local function Holder()
 	return holder
 end
 
--- The Chat page's Move button: a box standing in for the lines, dragged to
+-- The Chat bubbles page's Move button: a box standing in for the lines, dragged to
 -- where they should show (saved as it's let go). A left click sets it there
 -- and closes it, a line showing there to see; right-click puts it back.
 local mover
@@ -383,7 +415,7 @@ function ns.ShowSpeechBehind(event, author, text, guid)
 	local line = NewLine()
 	local rise, _, most = Behind()
 	line.born, line.life, line.fading = now, math.min(MOST_TIME, BASE_TIME + #text * PER_LETTER), nil
-	line.most = most
+	line.most, line.said, line.bubbled = most, text, nil
 	-- (Rising: it starts below the screen's bottom edge and slides up into place.)
 	line.y = rise and -(spotBottom + RISE_FROM) or 0
 	local info = _G.ChatTypeInfo and _G.ChatTypeInfo[chatType]

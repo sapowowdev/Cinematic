@@ -178,8 +178,9 @@ end
 -- Tries a grid of points over the minimap as it is now. Each name heard goes
 -- to found[name] = { points, gray, list } (gray: a dot in a cave; list: the
 -- points' offsets from the minimap's centre, x, y pairs); stop(name), when
--- given, ends the sweep at the first name it says yes to.
-local function Probe(step, found, stop)
+-- given, ends the sweep at the first name it says yes to. radius, when given:
+-- only that far from the middle (minimap units).
+local function Probe(step, found, stop, radius)
 	local left, bottom = Minimap:GetLeft(), Minimap:GetBottom()
 	local scale, width = Minimap:GetEffectiveScale(), Minimap:GetWidth()
 	if not (left and bottom and scale and width) or width <= 0 then return nil, "the minimap has no place" end
@@ -187,9 +188,10 @@ local function Probe(step, found, stop)
 	local ok, err = pcall(function()
 		Minimap:SetUsingSoftCursor(true)
 		local half = width / 2
-		for dx = -half, half, step do
-			for dy = -half, half, step do
-				if dx * dx + dy * dy <= half * half then
+		local reach = math.min(radius or half, half)
+		for dx = -reach, reach, step do
+			for dy = -reach, reach, step do
+				if dx * dx + dy * dy <= reach * reach then
 					probes = probes + 1
 					Minimap:UpdateMouseoverAtPoint((left + half + dx) * scale, (bottom + half + dy) * scale)
 					local data = C_TooltipInfo.GetMinimapMouseover()
@@ -241,8 +243,9 @@ end
 
 -- One sweep: found (name -> { points, gray }), points tried, and whether the
 -- faded minimap was grown for it (grow); or nil and why not. (refresh: has
--- the game place its dots first, Minimap:UpdateBlips, for /cine debug nodes update.)
-function ns.SweepMinimap(step, grow, stop, refresh)
+-- the game place its dots first, Minimap:UpdateBlips, for /cine debug nodes
+-- update; radius: only that far from the middle, as Probe.)
+function ns.SweepMinimap(step, grow, stop, refresh, radius)
 	if not ns.CanSweepMinimap() then
 		return nil, "this client can't move a pretend mouse over the minimap"
 	end
@@ -259,7 +262,7 @@ function ns.SweepMinimap(step, grow, stop, refresh)
 		putBack = result
 	end
 	if refresh and Minimap.UpdateBlips then pcall(Minimap.UpdateBlips, Minimap) end
-	local found, probes = Probe(step or STEP, {}, stop)
+	local found, probes = Probe(step or STEP, {}, stop, radius)
 	if putBack then
 		local ok, err = pcall(putBack)
 		if not ok then ns.Log("nodes", "couldn't put the minimap back: " .. tostring(err)) end
@@ -522,6 +525,27 @@ local function PingNodes(found)
 		end
 	end
 	nodes = now
+end
+
+-- Quest cam (QuestCam.lua): whether a quest giver's mark (or a quest of yours
+-- to hand in) is on the minimap within yards of you, not counting one named
+-- skip; nil when it can't tell (retail, in combat, the mouse on the minimap,
+-- no scale). Only the points that near the middle are tried, close together:
+-- a mark heard there is near enough (one just beyond, heard at its edge, keeps
+-- the old wait, nothing worse).
+local NEAR_STEP = 3 -- minimap units between points
+local GIVER_KINDS = { other = true, turnin = true }
+function ns.QuestGiverNear(yards, skip)
+	local perUnit = View()
+	if not perUnit then return nil end
+	local found = ns.SweepMinimap(NEAR_STEP, true, function(name)
+		return name ~= skip and GIVER_KINDS[ns.NodeKind(name)] == true
+	end, nil, yards / perUnit)
+	if not found then return nil end
+	for name in pairs(found) do
+		if name ~= skip and GIVER_KINDS[ns.NodeKind(name)] then return true end
+	end
+	return false
 end
 
 function ns.IsMinimapRevealed(now)

@@ -1233,9 +1233,10 @@ do
 			{ "Hunter", "Interface\\Icons\\INV_Weapon_Bow_07" },
 		} },
 		-- (WhatsNew.lua's pages, after Keybinds)
-		{ name = "What's new", pages = {
+		{ name = "Community", pages = {
 			{ "New features", "Interface\\Icons\\INV_Misc_Gift_01" },
 			{ "All changes", "Interface\\Icons\\INV_Misc_Book_11" },
+			{ "Socials", "Interface\\Icons\\INV_Letter_15" },
 			{ "Thanks", "Interface\\Icons\\INV_ValentinesCard02" },
 		} },
 	}
@@ -2450,6 +2451,8 @@ local EVENT_TIPS = {
 		"the whole flight."],
 	Quest = L["Talking to a quest giver (a quest to pick up or hand in). Works whether or not " ..
 		"CineMode is on."],
+	QuestGossip = L["Talking to an NPC with a \"(Quest)\" line to pick but no quest to pick up or " ..
+		"hand in: a quest step done by talking to them. Works whether or not CineMode is on."],
 }
 local function CreateEventsPanel()
 	local canvas, content = CreateScrollPage()
@@ -2538,7 +2541,8 @@ local function CreateEventsPanel()
 		hover:EnableMouse(true)
 		Tooltip(hover, EVENT_TIPS[event.key])
 
-		local choices = (event.key == "Flight" and FLIGHT_CAMERAS) or (event.key == "Quest" and QUEST_CAMERAS)
+		local choices = (event.key == "Flight" and FLIGHT_CAMERAS)
+			or ((event.key == "Quest" or event.key == "QuestGossip") and QUEST_CAMERAS)
 			or ((event.key == "Hearth" or event.key == "Teleport") and TELE_CAMERAS) or EVENT_CAMERAS
 		local camera = CameraChoice(key .. "Camera", choices)
 		camera:SetPoint("LEFT", label, "LEFT", CAMERA_X, 0)
@@ -2577,11 +2581,19 @@ local function CreateEventsPanel()
 			note:SetPoint("TOPLEFT", seatBox, "BOTTOMLEFT", -4, -4)
 			previous, dx = note, -22
 		elseif event.key == "Still" then
-			local delay = Slider(content, "idleOrbitDelay", L["After standing still for"], 5, 120, 5, L["%d sec"])
+			local delay = Slider(content, "idleOrbitDelay", L["After standing still for"], 5, 300, 5, L["%d sec"])
 			delay:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 30, -24)
 			Tooltip(delay, L["How long you stand still before this row's camera starts (an event set to " ..
 				"the AFK camera, like going AFK, skips the wait). Also used by the other options that " ..
 				"mention standing still (tint, tracking, music, tooltips)."])
+			previous, dx = delay, -30
+		elseif event.key == "Quest" or event.key == "QuestGossip" then
+			local delay = Slider(content, event.key == "Quest" and "questCamDelay" or "questCamGossipDelay",
+				L["Wait before starting"], 0, 10, 0.5, L["%.1f sec"])
+			delay:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 30, -24)
+			Tooltip(delay, L["The camera waits this long on the window before starting. Close it " ..
+				"sooner, and it doesn't move at all. 0 starts at once."])
+			GreyUnless(delay, function(db) return db[key .. "Camera"] ~= "none" end)
 			previous, dx = delay, -30
 		end
 	end
@@ -3048,24 +3060,27 @@ local function CreateQuestPanel()
 	local subtitle = PageIntro(content, title, L["Talking to a quest giver, the " ..
 		"camera zooms in and swings round behind you, looking past you at them. It goes back " ..
 		"once you close the window or move off (your zoom stays if you zoomed yourself meanwhile). Works " ..
-		"whether or not CineMode is on. The \"Talk to a quest giver\" event on the Events " ..
-		"page can also turn it off or make it wait a moment."], top)
-	local function IfOn(db) return db.eventQuestCamera ~= "none" end
+		"whether or not CineMode is on. The \"Talk to a quest giver\" and \"Talk about a quest\" " ..
+		"events on the Camera Triggers page can also turn it off or make it wait a moment."], top)
+	local function IfOn(db) return db.eventQuestCamera ~= "none" or db.eventQuestGossipCamera ~= "none" end
 
 	local stack = Stack(subtitle, "label")
 	stack:Header(content, L["Starting"])
 	local on = stack:Add(Check(content, "eventQuestCamera", L["Use the quest camera"],
-		L["Same as setting the \"Talk to a quest giver\" event to the quest camera (on) or no " ..
-		"camera (off) on the Camera Triggers page."],
+		L["Same as setting both the \"Talk to a quest giver\" and \"Talk about a quest\" events to " ..
+		"the quest camera (on) or no camera (off) on the Camera Triggers page, where each can be set apart."],
 		function(value)
-			ns.GetDB().eventQuestCamera = value and "quest" or "none"
+			local db = ns.GetDB()
+			db.eventQuestCamera = value and "quest" or "none"
+			db.eventQuestGossipCamera = db.eventQuestCamera
 			Refresh()
 		end), "check")
-	on.Refresh = function(self) self:SetChecked(ns.GetDB().eventQuestCamera ~= "none") end
+	on.Refresh = function(self) self:SetChecked(IfOn(ns.GetDB())) end
 	local gossip = stack:Add(Check(content, "questCamAllGossip", L["Every NPC you talk to"],
-		L["Also for NPCs with nothing to say about quests (innkeepers, guards...). Off: only when " ..
-		"they have a quest to offer or take in."]), "check")
-	GreyUnless(gossip, IfOn)
+		L["Also for NPCs with nothing to say about quests (innkeepers, guards...), as the \"Talk " ..
+		"to a quest giver\" event. Off: only when they have a quest to offer or take in, or a " ..
+		"\"(Quest)\" line (the \"Talk about a quest\" event)."]), "check")
+	GreyUnless(gossip, function(db) return db.eventQuestCamera ~= "none" end)
 	local mounted = stack:Add(Check(content, "questCamNotMounted", L["Not while mounted"],
 		L["Talking to a quest giver from your mount, the camera stays as it is."]), "check")
 	GreyUnless(mounted, IfOn)
@@ -3073,7 +3088,7 @@ local function CreateQuestPanel()
 	Tooltip(delay, L["The camera waits this long on a quest window before starting. Accept a quest and go " ..
 		"sooner, and it doesn't move at all; stay to read, and it starts. Clicking through several " ..
 		"quests, each new window adds a second to the wait. 0 starts at once."])
-	GreyUnless(delay, IfOn)
+	GreyUnless(delay, function(db) return db.eventQuestCamera ~= "none" end)
 
 	-- Left column: rotation, height, over the shoulder
 	local rotationHeader = stack:Header(content, L["Rotation"])
@@ -5075,30 +5090,93 @@ local function CreateBubblesPanel()
 	Tooltip(size, L["How big the bubbles' text is. (Not in instances on retail.)"])
 	stack:Note(content, L["Bubbles already showing change with the next thing said."])
 
-	-- Speech from behind you (the Chat page's option): how it tells it's
-	-- from behind.
+	-- Speech from behind you (Speech.lua): says and yells with no bubble on
+	-- screen, shown low on the screen. It works with the page off too, so
+	-- this section doesn't grey out with the page switch (pageSwitch = false).
 	stack:Header(content, L["Behind you"])
-	stack:Help(content, L["Speech from behind you (on the Chat page) shows low on the screen, looking like " ..
-		"the bubbles above. These make it feel like it's coming from behind."])
-	-- (Grey while the Chat page's option is off.)
+	stack:Help(content, L["Says and yells with no bubble on your screen (the speaker is behind you, or out of " ..
+		"view) can show low on the screen, looking like the bubbles above, instead of bringing up chat. " ..
+		"This works with the page off too. It needs the Chat page's Show chat when a message arrives and " ..
+		"Hide speech you can see as a bubble."])
+	local behindControls = {}
+	local function Behind(control)
+		behindControls[#behindControls + 1] = control
+		return control
+	end
+	local speechBehind = stack:Add(Behind(Check(content, "chatSpeechBehind", L["Show speech from behind you at the bottom"],
+		L["Says and yells with no bubble on your screen (the speaker is behind you, or out of view) show as " ..
+		"a line of text low on the screen, with the speaker's name, instead of bringing up chat. " ..
+		"It uses the outline and text size above while this page is on."])), "check")
+	GreyUnless(speechBehind, function(db) return db.chatPeek and db.chatHideBubbled end)
+	local moveSpeech = Behind(ns.PanelButton(content))
+	moveSpeech:SetSize(70, 20)
+	moveSpeech:SetPoint("LEFT", speechBehind.Text or speechBehind.text, "RIGHT", 10, 0)
+	moveSpeech:SetText(L["Move"])
+	Tooltip(moveSpeech, L["Shows a box where speech from behind you appears: drag it where you want the lines."])
+	moveSpeech:SetScript("OnClick", function() ns.MoveSpeechBehind() end)
+	moveSpeech.Refresh = function() end
+	controls[#controls + 1] = moveSpeech
+	-- (Grey while it's off.)
 	local function IfSpeechBehind(db) return db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind end
-	local rise = stack:Add(Check(content, "speechBehindRise", L["Rise up from below the screen"],
+	GreyUnless(moveSpeech, IfSpeechBehind)
+	speechBehind:HookScript("OnClick", Refresh) -- grey out / enable the choices under it
+
+	local speechName = stack:Add(Behind(Check(content, "speechBehindName", L["Show who said it"],
+		L["Speech from behind you starts with the speaker's name (\"Name says: ...\"). Unticked, just their words show."])),
+		"check", 24)
+	GreyUnless(speechName, IfSpeechBehind)
+	-- (On the same line as Show who said it.)
+	local speechClass = Behind(Check(content, "speechBehindClassColor", L["In class color"],
+		L["Players' names show in their class color, as in the chat window. NPCs' don't have one."]))
+	speechClass:SetPoint("LEFT", speechName.Text or speechName.text, "RIGHT", 16, 0)
+	GreyUnless(speechClass, function(db) return IfSpeechBehind(db) and db.speechBehindName end)
+	speechName:HookScript("OnClick", Refresh) -- grey out / enable the class colour
+	local speechChatShown = stack:Add(Behind(Check(content, "speechBehindChatShown", L["Also while chat is showing"],
+		L["Speech from behind you shows low on the screen even while the chat window is up (when you hover " ..
+		"it, type, or a message brought it up). Unticked, it shows only while chat is faded, and goes to chat otherwise."])),
+		"check", 24)
+	GreyUnless(speechChatShown, IfSpeechBehind)
+
+	local rise = stack:Add(Behind(Check(content, "speechBehindRise", L["Rise up from below the screen"],
 		L["Each line slides up from below the bottom of the screen, as if from behind the camera, " ..
-		"instead of just fading in."]), "check")
+		"instead of just fading in."])), "check")
 	GreyUnless(rise, IfSpeechBehind)
-	local behindSize = stack:Add(Slider(content, "speechBehindScale", L["Size"], 50, 100, 5, "%d%%", 100),
+	local behindSize = stack:Add(Behind(Slider(content, "speechBehindScale", L["Size"], 50, 100, 5, "%d%%", 100)),
 		"slider")
 	Tooltip(behindSize, L["How big speech from behind you is, next to a bubble overhead: smaller sounds " ..
 		"further away."])
 	GreyUnless(behindSize, IfSpeechBehind)
-	local behindAlpha = stack:Add(Slider(content, "speechBehindAlpha", L["Opacity"], 30, 100, 5, "%d%%", 100),
+	local behindAlpha = stack:Add(Behind(Slider(content, "speechBehindAlpha", L["Opacity"], 30, 100, 5, "%d%%", 100)),
 		"slider")
 	Tooltip(behindAlpha, L["How solid speech from behind you is: fainter sounds muffled, out of view."])
 	GreyUnless(behindAlpha, IfSpeechBehind)
-	local tailTop = stack:Add(Check(content, "speechBehindTailTop", L["Tail on top"],
+	local tailTop = stack:Add(Behind(Check(content, "speechBehindTailTop", L["Tail on top"],
 		L["The bubble's tail sits on top, pointing up, instead of under it pointing down. (In a bubble only: " ..
-		"not with Text only.)"]), "check")
-	GreyUnless(tailTop, function(db) return IfSpeechBehind(db) and not db.bubblesTextOnly end)
+		"not with Text only.)"])), "check")
+	GreyUnless(tailTop, function(db) return IfSpeechBehind(db) and not (db.handleBubbles and db.bubblesTextOnly) end)
+
+	-- How wide a line gets before it wraps, and which way the lines line up.
+	local speechWidth = stack:Add(Behind(Slider(content, "speechBehindWidth", L["Max width"], 200, 1000, 20, "%d")),
+		"slider")
+	Tooltip(speechWidth, L["How wide a line of speech from behind you can get. A longer one wraps into rows " ..
+		"of about the same length."])
+	GreyUnless(speechWidth, IfSpeechBehind)
+	local speechAlign = Dropdown(content, "speechBehindAlign", {
+		{ value = "auto", text = L["By where it's moved to"] },
+		{ value = "LEFT", text = L["Left"] },
+		{ value = "CENTER", text = L["Center"] },
+		{ value = "RIGHT", text = L["Right"] },
+	}, 200)
+	if speechAlign then
+		stack:Add(Label(content, "GameFontHighlight", L["Align"]), "label")
+		stack:Add(Behind(speechAlign), "dropdown")
+		Tooltip(speechAlign, L["Which way the lines line up: their left edges, their middles or their right " ..
+			"edges. By where it's moved to: by which side of the screen the Move box is on."])
+		GreyUnless(speechAlign, IfSpeechBehind)
+	end
+	for _, control in ipairs(behindControls) do
+		control.pageSwitch = false -- (not greyed with the page off)
+	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -7358,45 +7436,8 @@ do
 		hideBubbled:SetPoint("TOPLEFT", hideOwn, "BOTTOMLEFT", 0, -2)
 		GreyUnless(hideBubbled, IfPeek)
 
-		local speechBehind = Check(chatPanel, "chatSpeechBehind", L["Show speech from behind you at the bottom"],
-			L["Says and yells with no bubble on your screen (the speaker is behind you, or out of view) show as " ..
-			"a line of text low in the middle of the screen, with the speaker's name, instead of bringing up chat. " ..
-			"It uses the Chat bubbles page's outline and text size."])
-		speechBehind:SetPoint("TOPLEFT", hideBubbled, "BOTTOMLEFT", 16, -2)
-		GreyUnless(speechBehind, function(db) return db.chatPeek and db.chatHideBubbled end)
-		local moveSpeech = ns.PanelButton(chatPanel)
-		moveSpeech:SetSize(70, 20)
-		moveSpeech:SetPoint("LEFT", speechBehind.Text or speechBehind.text, "RIGHT", 10, 0)
-		moveSpeech:SetText(L["Move"])
-		Tooltip(moveSpeech, L["Shows a box where speech from behind you appears: drag it where you want the lines."])
-		moveSpeech:SetScript("OnClick", function() ns.MoveSpeechBehind() end)
-		moveSpeech.Refresh = function() end
-		controls[#controls + 1] = moveSpeech
-		local function IfSpeechBehind(db) return db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind end
-		GreyUnless(moveSpeech, IfSpeechBehind)
-		-- (Ticking either greys out / enables the choices under them.)
+		-- (Ticking it greys out / enables the Chat bubbles page's Behind you.)
 		hideBubbled:HookScript("OnClick", Refresh)
-		speechBehind:HookScript("OnClick", Refresh)
-
-		local speechName = Check(chatPanel, "speechBehindName", L["Show who said it"],
-			L["Speech from behind you starts with the speaker's name (\"Name says: ...\"). Unticked, just their words show."])
-		speechName:SetPoint("TOPLEFT", speechBehind, "BOTTOMLEFT", 16, -2)
-		GreyUnless(speechName, IfSpeechBehind)
-
-		-- (On the same line as Show who said it.)
-		local speechClass = Check(chatPanel, "speechBehindClassColor", L["In class color"],
-			L["Players' names show in their class color, as in the chat window. NPCs' don't have one."])
-		speechClass:SetPoint("LEFT", speechName.Text or speechName.text, "RIGHT", 16, 0)
-		GreyUnless(speechClass, function(db)
-			return db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind and db.speechBehindName
-		end)
-		speechName:HookScript("OnClick", Refresh) -- grey out / enable the class colour
-
-		local speechChatShown = Check(chatPanel, "speechBehindChatShown", L["Also while chat is showing"],
-			L["Speech from behind you shows low on the screen even while the chat window is up (when you hover " ..
-			"it, type, or a message brought it up). Unticked, it shows only while chat is faded, and goes to chat otherwise."])
-		speechChatShown:SetPoint("TOPLEFT", speechName, "BOTTOMLEFT", 0, -2)
-		GreyUnless(speechChatShown, IfSpeechBehind)
 
 		-- The sections, each a band that opens and closes with a click and its
 		-- body under it (all open to start with). A setting found by search in a
@@ -7404,7 +7445,7 @@ do
 		local sections = {}
 		local top = CreateFrame("Frame", nil, chatPanel)
 		top:SetSize(1, 1)
-		top:SetPoint("TOPLEFT", speechChatShown, "BOTTOMLEFT", -30, -16) -- (back to the column edge)
+		top:SetPoint("TOPLEFT", hideBubbled, "BOTTOMLEFT", 2, -16) -- (back to the column edge)
 		local function LayoutNow()
 			local above
 			for _, section in ipairs(sections) do
@@ -8888,19 +8929,11 @@ local function CreateVisionPanel()
 		local column = CreateFrame("Frame", nil, content)
 		column:SetSize(1, 1)
 		column:SetPoint("TOPLEFT", placeLabel, "TOPLEFT", 260, 0)
-		local byPlace = { head = {}, opposite = {} }
+		local byPlace = { head = {} }
 		local function Own(mode, control)
 			byPlace[mode][#byPlace[mode] + 1] = control
 			return control
 		end
-		-- Opposite Clicked.
-		local oppositeStack = Stack(column, "label")
-		local middle = Own("opposite", oppositeStack:Add(Slider(content, "questTalkMiddle", L["Middle of the screen"], 0, 50, 1,
-			"%d%%", 100, ApplyTalk), "slider"))
-		Tooltip(middle, L["Opposite Clicked: a click on an NPC within this band round the middle of the screen " ..
-			"(a share of its width, half either side) counts as the middle, and the bubble stays where you put " ..
-			"it. Only a click further out on its half moves it to the other half."])
-		GreyUnless(middle, TalkOn)
 		-- Over the head.
 		local headStack = Stack(column, "label")
 		local topGap = Own("head", headStack:Add(Slider(content, "questTalkTopGap", L["Space above the bubble"], 0, 30, 1,
@@ -8915,6 +8948,30 @@ local function CreateVisionPanel()
 				ns.GetDB().questTalkStill = value
 			end), "check"))
 		GreyUnless(still, TalkOn)
+		local TURNS = {
+			{ value = "follow", text = L["Follow"] },
+			{ value = "fade", text = L["Fade out"] },
+			{ value = "dim", text = L["Dim"] },
+			{ value = "wait", text = L["Wait to the side"] },
+		}
+		local TURN_TIP = L["What the bubble and card do while the camera moves: the quest camera's swing, zoom " ..
+			"and turn (its drift is Hold the camera still's), or you turning it. Follow: they stay over the " ..
+			"NPC's nameplate, sliding with it. Fade out: they fade out, and back in over the NPC once it's " ..
+			"still. Dim: they fade down, still readable. Wait to the side: they stay still where Fixed would " ..
+			"put them, and fade over to the NPC once the camera's still."]
+		Own("head", headStack:Add(Label(content, "GameFontHighlight", L["While the camera moves"]), "label"))
+		local turning = Dropdown(content, "questTalkCamMove", TURNS, 200, ApplyTalk)
+		if turning then
+			Own("head", headStack:Add(turning, "dropdown"))
+			Tooltip(turning, TURN_TIP)
+			GreyUnless(turning, TalkOn)
+		else
+			for _, choice in ipairs(TURNS) do
+				local check = Own("head", headStack:Add(Choice(content, "questTalkCamMove", choice.value, choice.text,
+					TURN_TIP), "check"))
+				GreyUnless(check, TalkOn)
+			end
+		end
 		-- (Shown as the position is: refreshed with the page, so picking
 		-- another in the dropdown swaps them.)
 		controls[#controls + 1] = {
@@ -11431,7 +11488,7 @@ ns.OnLanguage(function()
 	-- Each camera's own settings, in a section apiece.
 	CreateCameraSettingsPanel()
 	CreateKeybindsPanel()
-	-- What's new, last (WhatsNew.lua, with the helpers it shares from here).
+	-- Community, last (WhatsNew.lua, with the helpers it shares from here).
 	if ns.CreateWhatsNewPanels then
 		ns.CreateWhatsNewPanels({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })

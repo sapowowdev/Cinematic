@@ -39,7 +39,9 @@
 -- The zoom back out waits until you're ZOOM_OUT_DISTANCE yards from where you
 -- started talking (quest givers often stand together: talk to another and
 -- that's the new spot, the zoom back out still to come), or you take a
--- flight. Then it goes at its
+-- flight; at once if no other quest giver's mark is on the minimap within
+-- GIVER_NEAR yards (where the minimap can be swept). Leaving the conversation
+-- (Escape, Goodbye) ends it at once too, not after CLOSE_GRACE. Then it goes at its
 -- own speed (questCamZoomOutSpeed), but takes ZOOM_HURRY at most. Either
 -- zoom takes questCamZoomMaxTime at most: from far out, quicker than its speed.
 -- It isn't queued behind the turn back (walking, the RP walk and auto-run
@@ -82,6 +84,8 @@ local ZOOM_HURRY = 3       -- seconds the zoom back out takes once you've walked
 local ZOOM_HURRY_RAMP = 1.5 -- seconds it takes to speed up to that (all at once, it lurched)
 local ZOOM_OUT_DISTANCE = 10 -- yards from where you started talking before it zooms back out
 local ZOOM_OUT_WALK_TIME = 1.5 -- ...or, where the game won't say where you are, seconds of walking
+local GIVER_NEAR = 28 -- ...unless no quest giver's mark is on the minimap within this many yards: at once
+local LEAVE_WINDOW = 2 -- seconds: a window closing this long after no step on (accept, pick a quest...) is you leaving
 local FOLLOW_GAP = 0.5 -- seconds between the swing handing camera follow back and the turn starting
 local STEP_GAP = 0.6   -- seconds between one move stopping and the next starting (on neighbouring frames, it
                        -- snapped; and clear of the speed setting coming back, SPEED_RESTORE_DELAY after)
@@ -126,6 +130,22 @@ local function GossipHasQuests()
 	return false
 end
 
+-- A gossip window with a "(Quest)" option (its QuestLabelPrepend flag): a quest
+-- step talked through, with no quest to pick up or hand in (the "Talk about a
+-- quest" event).
+local function GossipHasQuestOptions()
+	local info, flags = C_GossipInfo, Enum and Enum.GossipOptionRecFlags
+	if not (info and info.GetOptions and flags and flags.QuestLabelPrepend) then
+		return false
+	end
+	for _, option in ipairs(info.GetOptions() or {}) do
+		if type(option.flags) == "number" and bit.band(option.flags, flags.QuestLabelPrepend) ~= 0 then
+			return true
+		end
+	end
+	return false
+end
+
 local function ShoulderAllowed()
 	return ns.db.questCamUncenter or GetCVar("CameraKeepCharacterCentered") ~= "1"
 end
@@ -158,7 +178,8 @@ end
 
 local function Send(name, amount)
 	cam.sending = true
-	ns.CallCameraFunction(name, amount)
+	-- (The zoom's the Chat Cam's while it borrows it: see ns.QuestCamZoomTo.)
+	ns.CameraCall(name:find("Zoom") and cam.zoomBy or "quest", name, amount)
 	cam.sending = false
 	if not name:find("Zoom") then
 		Note(amount and ("%s(%.3f)"):format(name, amount) or name)
@@ -204,8 +225,10 @@ local function StopMove(m)
 	m.moving, m.sent, m.stoppedAt = false, nil, GetTime()
 	-- (Put back a moment later, so the end of the move can't run at full speed.
 	-- Not between the drift's legs: your setting coming back just as the
-	-- camera came to rest jumped it.)
+	-- camera came to rest jumped it. Held till then: see the camera lock.)
+	cam.restoring = (cam.restoring or 0) + 1
 	C_Timer.After(SPEED_RESTORE_DELAY, function()
+		cam.restoring = cam.restoring - 1
 		if not m.moving and not (m == movers.yaw and Drifting()) then
 			RestoreSpeed(m.cvar)
 		end
@@ -433,6 +456,10 @@ end
 
 -- Where the path has the camera at t.
 local function ZoomPath(t)
+	if zoomer.easeOut then
+		local u = math.min(1, t / zoomer.T)
+		return zoomer.from + (zoomer.goal - zoomer.from) * (1 - (1 - u) * (1 - u))
+	end
 	return zoomer.from + (zoomer.goal - zoomer.from) * EaseProgress(t, zoomer.T, MOVE_EASE)
 end
 
@@ -443,13 +470,13 @@ local function ZoomTo(distance, T)
 	if math.abs(distance - now) < ZOOM_DONE then
 		return
 	end
-	zoomer.release = nil
+	zoomer.release, cam.zoomBy = nil, nil
 	ns.SaveCVar(ZOOM_CVAR)
 	Note(("zoom to %.2f"):format(distance))
 	zoomer.from, zoomer.goal, zoomer.t, zoomer.T = now, distance, 0, math.max(MOVE_MIN_TIME, T)
 	zoomer.cruise = math.abs(distance - now) / (zoomer.T * (1 - MOVE_EASE))
 	zoomer.last, zoomer.sentAt, zoomer.stillSince, zoomer.sent = now, 0, nil, nil
-	zoomer.rate, zoomer.rateGoal, zoomer.leaving = 1, 1, false
+	zoomer.rate, zoomer.rateGoal, zoomer.leaving, zoomer.easeOut = 1, 1, false, nil
 	zoomer.moving, zoomer.startedAt = true, GetTime()
 end
 
@@ -460,6 +487,24 @@ local function HurryZoom(T)
 	if zoomer.moving and zoomer.t < zoomer.T then
 		zoomer.rateGoal = math.max(zoomer.rateGoal, (zoomer.T - zoomer.t) / T)
 	end
+end
+
+-- Eases the zoom to a stop over T seconds, from where the camera is at the
+-- speed it's going (its path swapped for one that only slows down). Where
+-- it'll stop, or nil if it isn't zooming.
+local function EaseZoomStop(T)
+	if not zoomer.moving then
+		return nil
+	elseif zoomer.easeOut then
+		return zoomer.goal
+	end
+	local t = zoomer.t
+	local speed = t < zoomer.T and zoomer.cruise * EaseShape(t, zoomer.T, MOVE_EASE) * zoomer.rate or 0
+	local zoom = GetCameraZoom()
+	local sign = zoomer.goal > zoomer.from and 1 or -1
+	zoomer.from, zoomer.goal, zoomer.t, zoomer.T = zoom, zoom + sign * speed * T / 2, 0, T
+	zoomer.cruise, zoomer.easeOut, zoomer.rate, zoomer.rateGoal = speed, true, 1, 1
+	return zoomer.goal
 end
 
 local function StepZoom(elapsed)
@@ -495,7 +540,7 @@ local function StepZoom(elapsed)
 	-- The speed setting: just above the path's speed, then a crawl.
 	local speed = ZOOM_SETTLE_SPEED
 	if t < T then
-		local pathSpeed = zoomer.cruise * EaseShape(t, T, MOVE_EASE) * rate
+		local pathSpeed = zoomer.easeOut and zoomer.cruise * (1 - t / T) or zoomer.cruise * EaseShape(t, T, MOVE_EASE) * rate
 		speed = math.max(ZOOM_MIN_SPEED, pathSpeed * ZOOM_HEADROOM + ZOOM_SPEED_EXTRA)
 	end
 	SetZoomSpeed(speed)
@@ -542,6 +587,7 @@ local function StepSequence(now)
 			local target = math.max(0, ns.db.questCamAngle) + (cam.driftOut and half or -half)
 			local T = DRIFT_TIME * math.abs(target - movers.yaw.amount) / ns.db.questCamDrift
 			step = { "yaw", target, T, false, DRIFT_EASE }
+			cam.drifting = true -- (ns.QuestCamMoving: the drift doesn't count)
 			cam.steps[1] = step
 		end
 		if not step then
@@ -616,6 +662,19 @@ local function PlayerPosition()
 	end
 end
 
+-- Which way the camera comes round (yaw.left), for Start: picked as the
+-- conversation opens, so Quest talk's bubble can open on the other half of
+-- the screen from the quest giver straight away (ns.QuestCamSide).
+local function PickSide()
+	local side = ns.db.questCamSide
+	if side == "click" and cam.clickSide then
+		return cam.clickSide == "right"
+	elseif side == "random" or side == "click" then
+		return math.random() < 0.5
+	end
+	return side == "left"
+end
+
 local function Start()
 	local db = ns.db
 	cam.active, cam.closingAt, cam.handedOver = true, nil, false
@@ -672,18 +731,16 @@ local function Start()
 	-- it turns toward the side of the screen you clicked them on. (That's
 	-- yaw.left on a click on the right: the other way, it turned away.)
 	-- (Unless still turning back from the last one: it carries on that way.)
+	-- (Picked as the conversation opened, see PickSide.)
 	if movers.yaw.amount == 0 then
-		if db.questCamSide == "click" and cam.clickSide then
-			movers.yaw.left = cam.clickSide == "right"
-		elseif db.questCamSide == "random" or db.questCamSide == "click" then
-			movers.yaw.left = math.random() < 0.5
-		else
-			movers.yaw.left = db.questCamSide == "left"
+		if cam.left == nil then
+			cam.left = PickSide()
 		end
+		movers.yaw.left = cam.left
 		Note("side " .. (movers.yaw.left and "left" or "right") .. (cam.clickSide and " (clicked)" or ""))
 	end
 	cam.steps, cam.stepsAt = {}, cam.startedAt + swing + SWING_SETTLE
-	cam.driftOut, movers.yaw.lastGrowing = nil, nil
+	cam.driftOut, movers.yaw.lastGrowing, cam.drifting = nil, nil, nil
 	local turnTime = db.questCamAngle > 0 and db.questCamTurnTime or 0
 	if db.questCamAngle > 0 then
 		-- With nothing after it but the drift, the turn flows straight into it
@@ -727,9 +784,13 @@ local function Stop()
 	if cam.zoomedTo and cam.zoom and GetCameraZoom and ns.db.questCamZoomOutSpeed > 0
 		and not ns.PlayerZoomedSince(cam.startedAt)
 		and (zoomer.moving or math.abs(GetCameraZoom() - cam.zoomedTo) < ZOOM_YOURS) then
-		-- (Held until you've walked off: see OnUpdate.)
-		-- (A test from the Test button goes back out at once: now.)
-		zoomer.pending = { to = cam.zoom, x = cam.talkX, y = cam.talkY, since = GetTime(), walked = 0, now = cam.test }
+		-- (Held until you've walked off: see OnUpdate. Out at once (now) with no
+		-- other quest giver near to talk to next (the one you left doesn't
+		-- count), and from a test (the Test button).)
+		local alone = ns.QuestGiverNear and ns.QuestGiverNear(GIVER_NEAR, cam.leftNpc) == false
+		zoomer.pending = { to = cam.zoom, x = cam.talkX, y = cam.talkY, since = GetTime(), walked = 0,
+			now = cam.test or alone }
+		if alone then Note("no quest giver near: zoom out now") end
 		Note("zoom out held")
 	end
 	if not cam.handedOver then
@@ -744,10 +805,13 @@ local function Stop()
 	cam.zoom, cam.zoomedTo = nil, nil
 end
 
--- The quest giver event (Camera Triggers page): its camera isn't "none".
+-- The conversation's event (Camera Triggers page): its camera isn't "none".
+-- cam.event is "Quest" (a quest giver) or "QuestGossip" (only "(Quest)"
+-- options so far).
 local function Wanted()
 	local db = ns.db
-	return db and db.enabled and db.eventQuestCamera ~= "none" and not InCombatLockdown()
+	return db and db.enabled and db["event" .. (cam.event or "Quest") .. "Camera"] ~= "none"
+		and not InCombatLockdown()
 		and not cam.movie and not ns.OnTaxi() and not ns.IsCameraOffHere("quest")
 		and ns.CombatWaitOver("quest", GetTime())
 end
@@ -783,6 +847,25 @@ local OPENS = {
 	QUEST_GREETING = true, QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true,
 	GOSSIP_SHOW = true,
 }
+
+-- A step on in the conversation (picking a quest or option, accepting, handing
+-- in): its window closes for the next. A window closing with none of these
+-- just before is you leaving (Escape, Goodbye): the camera goes back at once.
+local steppedAt = -math.huge
+local function Stepped() steppedAt = GetTime() end
+for _, name in ipairs({ "AcceptQuest", "CompleteQuest", "GetQuestReward", "SelectAvailableQuest",
+	"SelectActiveQuest", "SelectGossipAvailableQuest", "SelectGossipActiveQuest", "SelectGossipOption" }) do
+	if _G[name] then hooksecurefunc(name, Stepped) end
+end
+for _, name in ipairs({ "SelectAvailableQuest", "SelectActiveQuest", "SelectOption", "SelectOptionByIndex" }) do
+	if C_GossipInfo and C_GossipInfo[name] then hooksecurefunc(C_GossipInfo, name, Stepped) end
+end
+
+-- The name of who you're talking to (nil if the game won't say).
+local function NpcName()
+	local name = UnitName("npc")
+	if type(name) == "string" and not (issecretvalue and issecretvalue(name)) then return name end
+end
 
 -- A movie or cinematic (a quest giver's "play the movie" option): the moves
 -- went on counting while it played, and the game's camera didn't follow the
@@ -845,9 +928,16 @@ local function OnEvent(_, event)
 	if MOVIE_EVENTS[event] ~= nil then
 		OnMovie(MOVIE_EVENTS[event])
 	elseif OPENS[event] then
-		if event == "GOSSIP_SHOW" and not cam.since and not (ns.db and ns.db.questCamAllGossip)
-			and not GossipHasQuests() then
-			return -- an innkeeper or the like: not a quest giver
+		-- Which event: a quest window or quests on offer, a quest giver's;
+		-- only "(Quest)" options, talking about a quest's; else none (an
+		-- innkeeper or the like), unless every NPC counts as a quest giver.
+		local which = "Quest"
+		if event == "GOSSIP_SHOW" and not GossipHasQuests() then
+			which = (GossipHasQuestOptions() and "QuestGossip")
+				or (ns.db and ns.db.questCamAllGossip and "Quest") or nil
+		end
+		if not which and not cam.since then
+			return
 		end
 		if not cam.since and not (ns.Flag(UnitExists("npc")) and not ns.Flag(UnitIsPlayer("npc"))) then
 			return -- shared by a player, or from an item: nobody to talk to
@@ -860,11 +950,19 @@ local function OnEvent(_, event)
 		-- through several quests' text, it doesn't start mid-way, but a few
 		-- clicks to get to one doesn't hold it off for long. (Windows opening
 		-- on the same frame count as one.)
-		local now, delay = GetTime(), ns.db and ns.db.questCamDelay or 0
+		-- (Talking about a quest first, a quest giver's window after: it's
+		-- theirs from then on.)
+		if not cam.since or which == "Quest" then
+			cam.event = which or cam.event
+		end
+		local delay = ns.db and ns.db[cam.event == "QuestGossip" and "questCamGossipDelay" or "questCamDelay"] or 0
+		local now = GetTime()
 		if not cam.since then
 			cam.since, cam.cancelled, cam.test = now, nil, false -- a new conversation
+			cam.npcName, cam.leftNpc = NpcName(), nil
 			-- Opened by clicking them (not an interact key): the side they were on.
 			cam.clickSide = cam.since - lastClick.at <= CLICK_WINDOW and lastClick.side or nil
+			cam.left = PickSide()
 			cam.startAt = now + delay
 		elseif not cam.active and now > (cam.windowAt or 0) then
 			local extra = math.min(WINDOW_EXTRA, delay)
@@ -894,6 +992,10 @@ local function OnEvent(_, event)
 			StopZoom(true)
 			ns.RestoreZoomLimit()
 		end
+	elseif cam.since and GetTime() - steppedAt > LEAVE_WINDOW then
+		Note("left the conversation")
+		cam.closingAt = 0 -- you left (Escape, Goodbye): ends now
+		cam.leftNpc = cam.npcName
 	elseif cam.since then
 		cam.closingAt = cam.closingAt or GetTime()
 	end
@@ -942,7 +1044,11 @@ local function OnUpdate(_, elapsed)
 			pending.walked = pending.walked + elapsed
 			far = pending.walked >= ZOOM_OUT_WALK_TIME
 		end
-		if far then
+		-- (Once the view's ours: another camera holding it lets go for this, see
+		-- the camera lock below.)
+		if far and not ns.ClaimCamera("quest") then
+			zoomer.wantsAt = now
+		elseif far then
 			zoomer.pending = nil
 			ZoomTo(pending.to, math.min(ns.db.questCamZoomMaxTime or math.huge,
 				math.abs(pending.to - GetCameraZoom()) / ns.db.questCamZoomOutSpeed))
@@ -969,7 +1075,7 @@ local function OnUpdate(_, elapsed)
 		Stop() -- walked off: back to normal, and no more until the next conversation
 		cam.cancelled = true
 	elseif not cam.active and not cam.closingAt and not cam.cancelled and not ns.playerMoving
-		and now >= cam.startAt and Wanted() then
+		and now >= cam.startAt and Wanted() and ns.ClaimCamera("quest") then
 		Start() -- (after the wait: a quest picked up and gone sooner gets no camera)
 	end
 end
@@ -1015,17 +1121,27 @@ function ns.QuestCamActive()
 	return cam.active and true or false
 end
 
+-- The Camera Triggers row it's running for ("Quest" or "QuestGossip"): its
+-- Music and CineMode columns.
+function ns.QuestCamEvent()
+	return cam.event or "Quest"
+end
+
 -- The Test button (CameraTests.lua): a conversation with nobody, as if a
 -- quest giver's window had opened and the wait were over, until it's
 -- stopped (then everything goes back, the zoom straight away). False if the
 -- quest camera can't start now.
 function ns.QuestCamTest(on)
 	if on then
+		if not cam.since then
+			cam.event = "Quest"
+		end
 		if not Wanted() or ns.playerMoving then
 			return false
 		end
 		local now = GetTime()
 		cam.since, cam.cancelled, cam.clickSide, cam.test = now, nil, nil, true
+		cam.left, cam.npcName, cam.leftNpc = PickSide(), nil, nil
 		cam.startAt, cam.windowAt, cam.closingAt = now, now, nil
 		return true
 	end
@@ -1038,6 +1154,62 @@ function ns.QuestCamTesting()
 	return cam.test and cam.since ~= nil and not cam.cancelled
 end
 
+-- Whether the quest cam is moving the camera now: the swing behind you, the
+-- zoom in, the turn and the tilt (not the drift after, nor once you've taken
+-- the camera). Quest talk's bubble over the NPC's head waits on it.
+function ns.QuestCamMoving()
+	if not cam.active or cam.handedOver then
+		return false
+	end
+	return GetTime() < (cam.stepsAt or 0) or zoomer.moving or #cam.steps > 0 or movers.pitch.moving
+		or (movers.yaw.moving and not cam.drifting)
+end
+
+-- Which half of the screen the quest giver ends up on ("left" or "right"),
+-- while the quest cam is running or about to for this conversation; nil
+-- otherwise. (The camera coming round to your left frames them on the left:
+-- with "Where you clicked them", a click on the right turns it toward the
+-- right, so they end up on the left.) Quest talk's Opposite Clicked goes on
+-- the other half when you didn't click them.
+function ns.QuestCamSide()
+	local left
+	if cam.active or (ns.QuestCamPending and ns.QuestCamPending()) then
+		-- (Still turning back from the last one: it carries on that way.)
+		if cam.active or movers.yaw.amount ~= 0 then
+			left = movers.yaw.left
+		else
+			left = cam.left
+		end
+	end
+	if left == nil then
+		return nil
+	end
+	return left and "left" or "right"
+end
+
+-- The camera lock (Core.lua): the quest cam holds the view from its start
+-- (and while about to) until its turns, tilt and zoom are done and your
+-- settings back; a zoom back out that's due takes it from whoever has it.
+-- Your camera input past INPUT_GRACE (sooner, it's the click that opened the
+-- window) hands it over at once.
+ns.RegisterCamera("quest", function()
+	return cam.active or #cam.steps > 0 or movers.yaw.moving or movers.pitch.moving
+		or ((zoomer.moving or zoomer.release ~= nil) and cam.zoomBy == nil) or (cam.restoring or 0) > 0
+		or GetTime() - (zoomer.wantsAt or -math.huge) < 0.5 or ns.QuestCamPending()
+end, function()
+	if not cam.handedOver and GetTime() > (cam.startedAt or 0) + INPUT_GRACE then
+		Note("you took the camera")
+		HandOver()
+	end
+end)
+
+-- Whether it's waiting to start (questCamDelay), and will unless the talk
+-- ends first or you move off.
+function ns.QuestCamPending()
+	return cam.since ~= nil and not cam.active and not cam.closingAt and not cam.cancelled
+		and not ns.playerMoving and Wanted() and true or false
+end
+
 -- Running, or still turning or tilting back (the Chat Cam waits for it).
 function ns.QuestCamBusy()
 	return cam.active or #cam.steps > 0 or movers.yaw.moving or movers.pitch.moving
@@ -1048,9 +1220,21 @@ end
 function ns.QuestCamZoomTo(distance, T)
 	ns.TakeOverZoom()
 	ZoomTo(distance, T)
+	cam.zoomBy = "chatcam"
+end
+-- Whose zoom is going ("chatcam" while it's borrowed; nil: the quest cam's),
+-- and whether it's still going or easing your speed setting back.
+function ns.QuestCamZoomBy()
+	return cam.zoomBy
+end
+function ns.QuestCamZoomHeld()
+	return zoomer.moving or zoomer.release ~= nil
 end
 function ns.QuestCamZooming()
 	return zoomer.moving
+end
+function ns.QuestCamEaseZoomStop(T)
+	return EaseZoomStop(T)
 end
 function ns.QuestCamStopZoom()
 	StopZoom(true)

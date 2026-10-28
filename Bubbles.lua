@@ -133,6 +133,94 @@ local function StyleBubbles()
 	end
 end
 
+-- Kept off the top of the screen: the game pins a bubble to the screen's top
+-- edge, under the letterbox bar. Its inside (the frame holding its background,
+-- tail and text) is moved down until its top is below the bar, or 10% from
+-- the top while the bars are off. The game places the bubble itself each
+-- frame, so this is looked at each frame while it shows. Bubbles the game
+-- keeps from addons (in instances, on retail) are left as they are.
+local TOP_MARGIN = 0.1
+local lifted = setmetatable({}, { __mode = "k" }) -- inside frame -> { points, by }
+
+local function Readable(value)
+	return type(value) == "number" and not (issecretvalue and issecretvalue(value))
+end
+
+-- The line, in screen pixels from the bottom, a bubble's top stays under.
+local function TopLine()
+	local height = UIParent:GetHeight()
+	local bar = 0
+	local letterbox = ns.letterbox
+	if letterbox and ns.Flag(letterbox:IsShown()) and letterbox:GetAlpha() > 0 then
+		bar = letterbox.top:GetHeight()
+	end
+	if bar < 1 then
+		bar = height * TOP_MARGIN
+	end
+	return (height - bar) * UIParent:GetEffectiveScale()
+end
+
+local function Place(inside, state, by)
+	state.moving = true
+	inside:ClearAllPoints()
+	for _, point in ipairs(state.points) do
+		inside:SetPoint(point[1], point[2], point[3], point[4], point[5] - by)
+	end
+	state.moving = false
+	state.by = by
+end
+
+local function Lift(inside)
+	local state = lifted[inside]
+	if not state then
+		state = { by = 0 }
+		lifted[inside] = state
+		-- (Something else placing it: that's where it goes from now.)
+		hooksecurefunc(inside, "SetPoint", function()
+			if not state.moving then
+				state.points, state.by = nil, 0
+			end
+		end)
+	end
+	local on = ns.db and ns.db.handleBubbles
+	if not on then
+		if state.by ~= 0 and state.points then Place(inside, state, 0) end
+		return
+	end
+	local top, scale = inside:GetTop(), inside:GetEffectiveScale()
+	if not (Readable(top) and Readable(scale)) or scale <= 0 then
+		return
+	end
+	if not state.points then
+		if inside:GetNumPoints() == 0 then return end
+		state.points = {}
+		for i = 1, inside:GetNumPoints() do
+			state.points[i] = { inside:GetPoint(i) }
+		end
+	end
+	local over = (top + state.by) - TopLine() / scale
+	local by = over > 0 and over or 0
+	if math.abs(by - state.by) > 0.5 or (by == 0 and state.by ~= 0) then
+		Place(inside, state, by)
+	end
+end
+
+local hooked = setmetatable({}, { __mode = "k" }) -- bubble -> true
+local function HookBubbles()
+	if not (C_ChatBubbles and C_ChatBubbles.GetAllChatBubbles) then
+		return
+	end
+	for _, bubble in ipairs(C_ChatBubbles.GetAllChatBubbles(false)) do
+		if not hooked[bubble] and not (bubble.IsForbidden and bubble:IsForbidden()) then
+			local inside = bubble:GetChildren()
+			if inside and not (inside.IsForbidden and inside:IsForbidden()) then
+				hooked[bubble] = true
+				bubble:HookScript("OnUpdate", function() Lift(inside) end)
+			end
+		end
+	end
+end
+
 -- Whether a bubble saying exactly this text is showing on screen (so its chat
 -- line needn't show the chat window). Bubbles the game keeps from addons can't
 -- be read, so those count as not showing.
@@ -190,6 +278,7 @@ local watchLeft = 0
 local watcher = CreateFrame("Frame")
 local function OnUpdate(self, elapsed)
 	StyleBubbles()
+	if ns.db and ns.db.handleBubbles then HookBubbles() end
 	watchLeft = watchLeft - elapsed
 	if watchLeft <= 0 then
 		self:SetScript("OnUpdate", nil)
@@ -219,6 +308,7 @@ function ns.ApplyBubbles()
 	end
 	wasOn = db.handleBubbles and true or false
 	StyleBubbles()
+	if db.handleBubbles then HookBubbles() end
 end
 
 watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -235,8 +325,8 @@ watcher:SetScript("OnEvent", ns.Profiled("chat bubbles event", function(self, ev
 		ns.ApplyBubbles()
 	-- (Also while any bubble is still styled from before: the game hides
 	-- bubbles and reuses them, and those only come back as they show again.)
-	elseif ns.db and (ns.db.handleBubbles and (ns.db.bubblesTextOnly or ns.db.bubblesTextScale ~= 1)
-		or next(hidden) or next(scaled) or next(outlined)) then
+	-- (And while the page is on at all, to keep new bubbles off the top.)
+	elseif ns.db and (ns.db.handleBubbles or next(hidden) or next(scaled) or next(outlined)) then
 		watchLeft = WATCH_FOR
 		self:SetScript("OnUpdate", OnUpdate)
 	end

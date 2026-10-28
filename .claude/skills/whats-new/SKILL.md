@@ -5,7 +5,7 @@ description: Run before every commit in the Cinematic repo. Reviews the changes 
 
 # What's new check (before each commit)
 
-Cinematic's settings end with a **What's new** hub of two pages:
+Cinematic's settings end with a **Community** hub; two of its pages matter here:
 
 - **New features** (`Changelog.lua`, `ns.CHANGELOG_FEATURES`): picked by hand,
   only with the user's OK. This skill is how entries get there.

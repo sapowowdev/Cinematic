@@ -236,6 +236,8 @@ local DEFAULTS = {
 	speechBehindName = true, -- ...with who said it ("Name says: ")
 	speechBehindClassColor = true, -- ...players' names in their class colour
 	speechBehindChatShown = false, -- ...also while the chat window is up
+	speechBehindWidth = 480, -- ...wrapping past this wide, into even rows
+	speechBehindAlign = "auto", -- ...lined up "LEFT", "CENTER", "RIGHT", or by where it's moved to
 	speechBehindRise = true, -- ...rising up from below the screen (Chat bubbles page)
 	speechBehindScale = 0.9, -- ...smaller than a bubble overhead
 	speechBehindAlpha = 0.8, -- ...and fainter
@@ -271,7 +273,7 @@ local DEFAULTS = {
 	zoneGapTime = 1.5,        -- seconds untinted between zone tints on the ground
 	zoneGapFlying = 6,        -- ...and in the air
 	idleOrbit = true,         -- also rotate it after standing still for a while
-	idleOrbitDelay = 60,      -- seconds of standing still before it starts
+	idleOrbitDelay = 120,     -- seconds of standing still before it starts
 	-- Cozy camera: swings round to face you and sways in front, when an event
 	-- picks it (Camera Triggers page: ns.EVENTS in Camera.lua has their defaults).
 	cozyOrbit = true,         -- sway in front of you
@@ -327,6 +329,7 @@ local DEFAULTS = {
 	idleInputPause = 15,      -- ...and the AFK camera
 	-- Quest cam (eventQuestCamera on the Camera Triggers page): talking to a quest giver, zoom in and swing behind you
 	questCamDelay = 3,        -- ...seconds the window is open before it starts (picked up and gone sooner: no camera)
+	questCamGossipDelay = 3,  -- ...the same for an NPC with only "(Quest)" options (eventQuestGossipCamera)
 	questCamDistance = 4,     -- ...yards it zooms in to (if you're further out)
 	questCamTime = 3,         -- ...seconds the swing behind you takes
 	questCamZoomSpeed = 0.5,  -- ...yards a second the zoom in goes
@@ -843,10 +846,10 @@ DEFAULTS.questTalk = true
 DEFAULTS.questTalkStyle = "parchment" -- or "bubble" (the game's chat bubble)
 -- Where the bubble goes: "head" (over their nameplate), "fixed" (where you
 -- drag it) or "opposite" (across the screen from where you clicked them).
-DEFAULTS.questTalkPlace = "head"
+DEFAULTS.questTalkPlace = "opposite"
 DEFAULTS.questTalkGameButton = false -- "Show the game's window" on the card
-DEFAULTS.questTalkMiddle = 0.1         -- Opposite Clicked: clicks this share of the screen's width round its middle count as the middle
 DEFAULTS.questTalkStill = true -- Over the head: the quest camera holds still (no drift) while it's up
+DEFAULTS.questTalkCamMove = "follow" -- Over the head, while the camera moves: "follow", "fade", "dim" or "wait" (see QuestTalk)
 DEFAULTS.questTalkKeys = true         -- 1-0 pick, Space turns the page / first button
 DEFAULTS.questTalkScale = 1
 DEFAULTS.questTalkTopGap = 0.03       -- the bubble kept this share of the screen down from its top (and the bar)
@@ -2162,6 +2165,127 @@ function ns.ApplyCVarSet(set, want)
 	end
 end
 
+-- One camera at a time. Our cameras that move the view on their own (Camera.lua's
+-- modes: the standing-still, travel, flight, fly-by, cozy, death... cameras; the
+-- quest cam; the Chat Cam) each move it by lowering your turn or zoom speed
+-- setting and stepping it, and keep yours in the one place (savedCVars) to put
+-- back. Two at once fight over the view, and over that setting: one put yours
+-- back while the other still had it lowered, the other then saved its own low
+-- setting as yours, and the mouse barely turned the camera after. So a camera
+-- claims the view before it starts a move (ns.ClaimCamera), and can't while
+-- another holds it: from its first move until it's done and your settings are
+-- back (each says, ns.RegisterCamera's busy). Nor while you're moving the
+-- camera yourself: you hold it then, and your input stops ours at once
+-- (ns.PlayerTookCamera; each puts your setting back as it stops). Worked out
+-- afresh from each camera's own state, so a camera that's stopped can't leave
+-- it held.
+do
+	local cameras = {} -- [who] = { busy = function, letGo = function }
+	local claims = {} -- [who] = when it last claimed: held CLAIM_HOLD after, whatever busy says
+	local CLAIM_HOLD = 0.5
+	local PLAYER_HOLD = 0.5 -- seconds after your camera input that none of ours starts a move
+	local playerAt = -math.huge
+	local waitedFor = {} -- [who] = the holder it was last logged waiting for
+
+	-- who: its name ("modes", "quest", "chatcam"). busy(): whether it's moving
+	-- the view, or has a speed setting still to put back. letGo(what): you
+	-- took the camera: stop at once (nothing put back that you'd fight).
+	function ns.RegisterCamera(who, busy, letGo)
+		cameras[who] = { busy = busy, letGo = letGo }
+	end
+
+	-- Who holds the view, other than `except`: one of ours, "you", or nil.
+	function ns.CameraHolder(except)
+		local now = GetTime()
+		if now - playerAt < PLAYER_HOLD or (ns.IsMouseOnCamera and ns.IsMouseOnCamera()) then
+			return "you"
+		end
+		for who, camera in pairs(cameras) do
+			if who ~= except and (now - (claims[who] or -math.huge) < CLAIM_HOLD or camera.busy()) then
+				return who
+			end
+		end
+	end
+
+	-- Whether `who` may move the view now; if so it's held for it.
+	function ns.ClaimCamera(who)
+		local holder = ns.CameraHolder(who)
+		if holder then
+			if holder ~= "you" and waitedFor[who] ~= holder then
+				ns.Log("state", ("%s camera waits: the %s camera has the view"):format(who, holder))
+			end
+			waitedFor[who] = holder
+			return false, holder
+		end
+		waitedFor[who] = nil
+		claims[who] = GetTime()
+		return true
+	end
+
+	-- You moved the camera (what: "zoom" for the wheel, "mouse" for a drag):
+	-- every camera of ours stops at once, and none starts a move again till
+	-- you've let go PLAYER_HOLD. (Your speed setting comes back as each stops:
+	-- put back here, one still stepping it for a frame, the fly-by say, would
+	-- find nothing to put back after and leave its own.)
+	function ns.PlayerTookCamera(what)
+		playerAt = GetTime()
+		for who, camera in pairs(cameras) do
+			claims[who] = nil
+			if camera.letGo and camera.busy() then
+				camera.letGo(what)
+			end
+		end
+	end
+
+	-- And a watch, should anything still slip through: once none of ours has
+	-- held the view for FREE_WAIT, a speed setting of ours still saved goes
+	-- back, and one stuck at the lowest our moves step from (as that clash
+	-- left yours: the game's own settings don't go near it) gets the game's
+	-- default. Your mouse held on the camera counts as camera input too.
+	local SPEEDS = { cameraYawMoveSpeed = 180, cameraPitchMoveSpeed = 90, cameraZoomSpeed = 20 }
+	local STUCK_SPEED = 10
+	local FREE_WAIT = 1
+	local WATCH_EVERY = 0.25
+	local freeSince, watched, mouseWas = nil, 0, false
+	local watch = CreateFrame("Frame")
+	watch:SetScript("OnUpdate", function(_, elapsed)
+		if not ns.db then
+			return
+		end
+		local mouse = ns.IsMouseOnCamera and ns.IsMouseOnCamera() or false
+		if mouse and not mouseWas then
+			ns.PlayerTookCamera("mouse")
+		end
+		mouseWas = mouse
+		watched = watched + elapsed
+		if watched < WATCH_EVERY then
+			return
+		end
+		watched = 0
+		local now = GetTime()
+		local holder = ns.CameraHolder()
+		if holder and holder ~= "you" then
+			freeSince = nil
+			return
+		end
+		freeSince = freeSince or now
+		if now - freeSince < FREE_WAIT then
+			return
+		end
+		for cvar, default in pairs(SPEEDS) do
+			if ns.db.savedCVars[cvar] ~= nil then
+				ns.Log("cvar", ("%s left over with no camera moving: put back"):format(cvar))
+				ns.RestoreCVar(cvar)
+			end
+			local value = tonumber(GetCVar(cvar))
+			if value and value < STUCK_SPEED and cvar ~= "cameraZoomSpeed" then
+				ns.Log("cvar", ("%s was %s (left over from a camera move): back to %d"):format(cvar, tostring(value), default))
+				SetCVar(cvar, default)
+			end
+		end
+	end)
+end
+
 -- Puts back anything left over from a session that ended without restoring.
 -- Plate and name settings can't change in combat: they wait for it to end.
 -- A set already on again (applied before login) keeps its saved values: put
@@ -2900,6 +3024,11 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		if not ns.db.stillDelayV2 then
 			if ns.db.idleOrbitDelay == 30 then ns.db.idleOrbitDelay = nil end
 			ns.db.stillDelayV2 = true
+		end
+		-- ...and 120 now (the slider up to 300), unless changed.
+		if not ns.db.stillDelayV3 then
+			if ns.db.idleOrbitDelay == 60 then ns.db.idleOrbitDelay = nil end
+			ns.db.stillDelayV3 = true
 		end
 		-- Friendly players' names on faded plates were first in class colours by
 		-- default; blue now, as the game's names over heads, so switch them once.
@@ -4292,6 +4421,21 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				if type(saved) == "table" then SkillOff(saved) end
 			end
 			ns.db.chatSkillOffV1 = true
+		end
+		-- NPC speech brings up chat again: Balanced and Cinema had it off, so
+		-- speech from behind you never showed NPCs (says and yells you can see
+		-- as a bubble still don't bring up chat). Once, in every profile.
+		if not ns.db.chatNpcOnV1 then
+			local function NpcOn(t)
+				if type(t.chatPeekTypes) == "table" then
+					t.chatPeekTypes.npc = nil -- (on by default)
+				end
+			end
+			NpcOn(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then NpcOn(saved) end
+			end
+			ns.db.chatNpcOnV1 = true
 		end
 		-- The grids' Open World no longer covers capital cities (they're Cities,
 		-- their own list): every row ticked Open World gets Cities ticked, and

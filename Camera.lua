@@ -53,12 +53,30 @@ ns.pitchAxis = NewAxis("MoveViewUpStart", "MoveViewUpStop",
 local drivingCamera = false
 local lastCameraInput = -math.huge
 
-local function CallCameraFunction(name, ...)
+-- (Ungated: the quest cam's view after a movie, and the test commands.)
+function ns.CallCameraFunction(name, ...)
 	drivingCamera = true
 	_G[name](...)
 	drivingCamera = false
 end
-ns.CallCameraFunction = CallCameraFunction -- (for the quest cam's tilt)
+
+-- A move started (or a zoom, or a set view) for one of our cameras (who):
+-- only with the view claimed for it (one camera at a time, and never while
+-- you're moving it yourself: ns.ClaimCamera, Core.lua). Stops always go.
+-- False if it didn't go.
+function ns.CameraCall(who, name, ...)
+	if (name:find("Start$") or name:find("^CameraZoom") or name:find("View$"))
+		and ns.ClaimCamera and not ns.ClaimCamera(who) then
+		return false
+	end
+	ns.CallCameraFunction(name, ...)
+	return true
+end
+
+-- This file's own cameras' moves (Camera.lua's modes).
+local function CallCameraFunction(name, ...)
+	return ns.CameraCall("modes", name, ...)
+end
 
 local idleZoom = { active = false, saved = nil }
 local turnKeys = { left = false, right = false }
@@ -89,8 +107,10 @@ ns.EVENTS = {
 	{ key = "Still", label = L["Stand still"], camera = "none" },
 	-- Not a standing-still camera: its choices are the flight camera or none.
 	{ key = "Flight", label = L["Take a flight"], camera = "flight" },
-	-- Nor this: the quest cam (QuestCam.lua) or none.
+	-- Nor these: the quest cam (QuestCam.lua) or none. QuestGossip: an NPC
+	-- with only "(Quest)" gossip options, no quest to pick up or hand in.
 	{ key = "Quest", label = L["Talk to a quest giver"], camera = "quest" },
+	{ key = "QuestGossip", label = L["Talk about a quest"], camera = "quest" },
 }
 ns.OnLanguage(function() ns.TranslateFields(ns.EVENTS, "label") end)
 -- Each event's Music column (event<key>Music): its camera can start music
@@ -106,6 +126,7 @@ for _, event in ipairs(ns.EVENTS) do
 end
 ns.DEFAULTS.eventAFKMusic = false
 ns.DEFAULTS.eventQuestMusic = false
+ns.DEFAULTS.eventQuestGossipMusic = false
 ns.DEFAULTS.eventStillMusic = false
 
 -- Each event's CineMode column (event<key>Cine, and walkCine/runCine/deathCine
@@ -127,7 +148,7 @@ function ns.TriggerStartsCine()
 	if ns.FlightCameraOn() and db.eventFlightCine then
 		return true
 	end
-	if db.eventQuestCine and ns.QuestCamActive and ns.QuestCamActive() then
+	if ns.QuestCamActive and ns.QuestCamActive() and db["event" .. ns.QuestCamEvent() .. "Cine"] then
 		return true
 	end
 	-- (Dead with the death camera on, CineMode stays: the release popup shows over it.)
@@ -714,6 +735,7 @@ local function OnPlayerCameraInput(what)
 	if not drivingCamera then
 		lastCameraInput = GetTime()
 		ns.lastCameraInputWhat = what -- (for the log: what took a flight over)
+		ns.PlayerTookCamera(what) -- (ours let go at once: Core.lua)
 	end
 end
 
@@ -962,6 +984,7 @@ local function IsMouseOnCamera()
 	end
 	return mouseCameraHeld and true or (IsMouselooking and IsMouselooking()) or false
 end
+ns.IsMouseOnCamera = IsMouseOnCamera -- (QuestTalk: the bubble while the camera moves)
 
 -- Turning left or right, by keys or mouse: the facing direction changing
 -- faster than TURN_RATE, or a turn key held (where facing is hidden).
@@ -1000,7 +1023,8 @@ local function StopAxis(axis)
 end
 
 local function MoveAxis(axis, degreesPerSecond, positive)
-	if degreesPerSecond <= 0 then
+	-- (Another camera has the view, or you have: still, not fighting it.)
+	if degreesPerSecond <= 0 or not ns.ClaimCamera("modes") then
 		StopAxis(axis)
 		return
 	end
@@ -2215,13 +2239,26 @@ local function StopDeathTilt()
 	end
 	StopAxis(ns.pitchAxis)
 	ns.orbit.tilting = false
-	-- (Put back a moment later, so the end of the tilt can't run at full speed.)
+	-- (Put back a moment later, so the end of the tilt can't run at full speed.
+	-- Held till then: see the camera lock below.)
+	ns.orbit.tiltRestoreAt = GetTime() + TILT_RESTORE_DELAY
 	C_Timer.After(TILT_RESTORE_DELAY, function()
 		if not ns.orbit.tilting then
 			ns.RestoreCVar(TILT_SPEED_CVAR)
 		end
 	end)
 end
+
+-- The camera lock (Core.lua): this file's cameras hold the view while an
+-- axis moves, the death tilt runs, or a fly-by or tilt still has your speed
+-- setting to put back; your camera input stops their moves at once.
+ns.RegisterCamera("modes", function()
+	return ns.yawAxis.moving or ns.pitchAxis.moving or ns.orbit.tilting or ns.flyByHoldsYawSpeed
+		or GetTime() < (ns.orbit.tiltRestoreAt or 0)
+end, function()
+	StopAxis(ns.yawAxis)
+	StopAxis(ns.pitchAxis)
+end)
 
 local function StartDeathTilt(delta, T)
 	StopDeathTilt()

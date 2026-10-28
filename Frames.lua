@@ -2275,7 +2275,7 @@ function ns.IsCamShowOn(key) return IsListOn("camShow", key, NO_DEFAULTS) end
 -- than made anew: making them 33 times a second was a lot of garbage.
 local tickTables = {
 	hovered = {}, triggered = {}, pinged = {}, mouseRows = {}, mouseGroups = {}, events = {},
-	combatShown = {}, placeLists = {}, auraOnly = {},
+	combatShown = {}, placeLists = {}, auraOnly = {}, cooldownBarUp = {},
 }
 
 -- "group:<group>", a group's key in the shown lists, made once for each
@@ -4362,6 +4362,9 @@ local CooldownLength = ns.CooldownLength
 -- (db.cooldownGroupDefaults[group]), else these.
 ns.COOLDOWN_GROUP_MODES = { utility = "recharge" }
 ns.COOLDOWN_BAR_GROUPS = { EssentialCooldownViewer = "essential", UtilityCooldownViewer = "utility" }
+-- (The Mouseover groups' cooldown bar rows, and whose Stay up while
+-- recharging brings each up.)
+ns.COOLDOWN_MEMBER_BAR = { cooldowns = "essential", ["addon:fecm"] = "essential", cooldownsutility = "utility" }
 -- The bars with Close the gaps on until it's set (below: CenterCooldownIcons).
 ns.COOLDOWN_GROUP_CENTER = { utility = true }
 
@@ -5938,23 +5941,30 @@ function ns.UpdateFrames(cinematic, elapsed)
 		or ns.IsMinimapRevealed(now))
 	events.quest, events.gamepad, events.roster = ns.PageOn("handleQuests") and questReveal, padReveal, rosterReveal
 	-- (Each bar's own Stay up while recharging: Essential's, with Enhanced
-	-- Cooldown Manager's bars, and Utility's.)
+	-- Cooldown Manager's bars, and Utility's. A bar comes up only for its own
+	-- cooldowns; anything else in the group, for either.)
 	local calm = now - lastCombatAt < ns.db.calmTime
-	events.cooldown = cinematic and ns.PageOn("handleCooldowns")
-		and ((ns.db.cooldownWhileRecharging and (calm or not ns.db.cooldownAfterCombat)
-				and AnyCooldownRecharging(now, "essential"))
-			or (ns.db.cooldownUtilityWhileRecharging and (calm or not ns.db.cooldownUtilityAfterCombat)
-				and AnyCooldownRecharging(now, "utility")))
+	local cooldownsOn = cinematic and ns.PageOn("handleCooldowns")
+	local barUp = tickTables.cooldownBarUp
+	barUp.essential = cooldownsOn and ns.db.cooldownWhileRecharging and (calm or not ns.db.cooldownAfterCombat)
+		and AnyCooldownRecharging(now, "essential") or false
+	barUp.utility = cooldownsOn and ns.db.cooldownUtilityWhileRecharging
+		and (calm or not ns.db.cooldownUtilityAfterCombat) and AnyCooldownRecharging(now, "utility") or false
+	events.cooldown = barUp.essential or barUp.utility
 	-- (auraOnly: rows brought up by a buff or debuff peek and nothing else.)
 	local auraOnly = wipe(tickTables.auraOnly)
 	for _, group in ipairs(hoverGroups) do
 		for key, on in pairs(not group.off and group.when ~= offWhen and group.triggers or NO_DEFAULTS) do
 			if on and events[key] then
 				for _, member in ipairs(group.members) do
-					if not triggered[member] then auraOnly[member] = key == "aura" or nil end
-					if key ~= "aura" then auraOnly[member] = nil end
-					triggered[member] = true
-					if key == "ping" then pinged[member] = true end
+					-- (A cooldown bar: only for its own bar's cooldowns.)
+					local bar = key == "cooldown" and ns.COOLDOWN_MEMBER_BAR[member]
+					if not bar or barUp[bar] then
+						if not triggered[member] then auraOnly[member] = key == "aura" or nil end
+						if key ~= "aura" then auraOnly[member] = nil end
+						triggered[member] = true
+						if key == "ping" then pinged[member] = true end
+					end
 				end
 			end
 		end

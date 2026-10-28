@@ -412,7 +412,7 @@ ns.PROFILE_MODULES = {
 			set("chatPeekChannelList", { General = true, Trade = true, LocalDefense = false, Services = false,
 				TradeLocal = false })
 		end },
-	{ key = "pure-chat", name = "Pure: chat", scope = { "Chat/Other", "Chat/top" },
+	{ key = "pure-chat", name = "Pure: chat", scope = { "Chat/Other", "Chat bubbles/Behind you" },
 		tip = "Chat doesn't peek for General or LocalDefense, and speech from behind you shows low on the screen.",
 		apply = function(set)
 			set("chatPeekChannelList", { General = false, LocalDefense = false })

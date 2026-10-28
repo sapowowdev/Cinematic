@@ -83,7 +83,7 @@ end
 local PLACE_MODES = { head = true, fixed = true, opposite = true }
 local function PlaceMode()
 	local mode = ns.db and ns.db.questTalkPlace
-	return PLACE_MODES[mode] and mode or "head"
+	return PLACE_MODES[mode] and mode or "opposite"
 end
 
 -- A game string, or ours where the client hasn't got it (Forever lacks some).
@@ -391,15 +391,66 @@ local function RoomAtTop(on)
 	insetSet = share ~= nil
 end
 
+-- While the camera moves (questTalkCamMove), over the head: anchored to the
+-- NPC's plate, the bubble slides with it, and on screen it goes by whole
+-- pixels, so a slow move (the quest cam's zoom and turn) shows as a stutter,
+-- and turning it yourself as a lurch (the plate runs a frame or two ahead of
+-- the world, and stops dead before it). "follow" leaves it so; "fade" fades
+-- it and the card out till the camera's still; "dim" fades them down to
+-- MOVE_DIM; "wait" puts them where Fixed would meanwhile, faded over to the
+-- NPC once it's still (and back off, if it moves again).
+local MOVE_MODES = { follow = true, fade = true, dim = true, wait = true }
+local function MoveMode()
+	local mode = ns.db and ns.db.questTalkCamMove
+	return MOVE_MODES[mode] and mode or "follow"
+end
+
+-- Whether the camera's moving: the quest cam's moves (not its drift), the
+-- mouse on the camera, or your facing changing faster than TURN_RATE (turn
+-- keys); still only once none has for MOVE_SETTLE. Kept up to date every
+-- frame (see the follower, below).
+local MOVE_SETTLE = 0.2
+local TURN_RATE = math.rad(20) -- radians per second
+local camMove = { alpha = 1, at = 0 }
+local function CameraMoving()
+	return GetTime() - camMove.at < MOVE_SETTLE
+end
+
+-- Opposite Clicked: which half of the screen to keep clear ("left" or
+-- "right"): the half you clicked them on; with no click, where the quest cam
+-- frames them while it's turning for this talk. nil: neither.
+local function NpcSide()
+	local x = talk.clickX
+	if x then
+		return x > 0.5 and "right" or "left"
+	end
+	return ns.QuestCamSide and ns.QuestCamSide()
+end
+
+-- Whether Opposite Clicked has someone to be opposite (else it's as Fixed).
+local function Opposite()
+	return PlaceMode() == "opposite" and (talk.clickX ~= nil or NpcSide() ~= nil)
+end
+
 local function Place()
 	bubble:ClearAllPoints()
 	local mode = PlaceMode()
 	local plate = mode == "head" and NpcPlate()
 	-- (follow: the card goes beside it, over their head or Opposite Clicked.)
 	bubble.free, bubble.side, bubble.follow = false, nil, true
+	-- (onPlate: the plate it's over. waiting: kept off it while the camera
+	-- moves, questTalkCamMove "wait".)
+	bubble.onPlate = nil
+	-- (Or about to: a quest giver's camera waits a moment before it starts.)
+	bubble.waiting = plate and MoveMode() == "wait"
+		and (CameraMoving() or ns.QuestCamPending and ns.QuestCamPending()) or nil
+	if bubble.waiting then
+		plate = nil
+	end
 	-- (bubble.under: room under it for the card, below it: no tail then.)
 	local under = bubble.under or 0
 	if plate and pcall(bubble.SetPoint, bubble, "BOTTOM", plate, "TOP", 0, OVER_PLATE + bubble.tailRoom + under) then
+		bubble.onPlate = plate
 		SetTail(under == 0)
 		RoomAtTop(bubble:IsShown())
 		return
@@ -416,15 +467,13 @@ local function Place()
 	if type(spot) == "table" and type(spot.x) == "number" and type(spot.bottom) == "number" then
 		x, bottom = spot.x, spot.bottom
 	end
-	-- Opposite Clicked: they stand where you clicked them, so the other half
-	-- of the screen is the clearer one. Clicked on the bubble's half, it opens
-	-- at the mirror of its spot on the other half instead; the card follows it,
-	-- on its outer side. A click near the middle (questTalkMiddle, a share of
-	-- the screen's width, half either side of it) barely favors a half: it
-	-- stays where you put it.
-	local opposite = mode == "opposite" and talk.clickX ~= nil
-	if opposite and math.abs(talk.clickX - 0.5) > (tonumber(ns.db.questTalkMiddle) or 0) / 2
-		and (x > 0.5) == (talk.clickX > 0.5) then
+	-- Opposite Clicked: the other half of the screen from the NPC (NpcSide)
+	-- is the clearer one. On their half, it opens at the mirror of its spot on
+	-- the other half instead; the card follows it, on its outer side. (Near
+	-- the middle, it stays where you put it.)
+	local opposite = Opposite()
+	local side = opposite and NpcSide()
+	if side and (x > 0.5) == (side == "right") then
 		x = 1 - x
 	end
 	bubble:SetPoint("BOTTOM", UIParent, "BOTTOMLEFT", x * width / scale, bottom * height / scale)
@@ -1699,7 +1748,7 @@ function Show(keepPage)
 	-- to suit.
 	local mode = PlaceMode()
 	talk.cardBelow = ns.db.questTalkCardSide == "below"
-		and (mode == "head" and NpcPlate() ~= nil or mode == "opposite" and talk.clickX ~= nil)
+		and (mode == "head" and NpcPlate() ~= nil or Opposite())
 	panelWidth = talk.cardBelow and TEXT_WIDTH + bubble.indent + PAD_X or PANEL_WIDTH
 	panel:SetWidth(panelWidth)
 	local look = LOOKS[ns.db.questTalkStyle] or LOOKS.parchment
@@ -1729,7 +1778,7 @@ function Show(keepPage)
 	SCREENS[talk.kind]()
 	-- On the bubble's right it's as tall as the bubble: more than fits there,
 	-- and the rewards' "also received" goes on a second page.
-	local beside = not talk.cardBelow and (mode == "head" and NpcPlate() ~= nil or mode == "opposite" and talk.clickX ~= nil)
+	local beside = not talk.cardBelow and (mode == "head" and NpcPlate() ~= nil or Opposite())
 	local limit = beside and FullHeight() + 12 + 4 + 14 + PAD_Y * 2 + (talk.title and 22 or 0)
 	if talk.canSplit and limit and cursor + 28 > limit then
 		talk.split = true
@@ -1942,6 +1991,57 @@ watcher:SetScript("OnUpdate", function(_, elapsed)
 	if talk.kind and not closeTimer and not TalkWindowOpen() then
 		ScheduleClose()
 	end
+end)
+
+-- While the camera moves (questTalkCamMove, see MoveMode), every frame: the
+-- bubble and the card beside it faded out or down, back once it's still;
+-- or, waiting, faded out, moved (off the plate, or back on), faded in.
+local MOVE_DIM = 0.35
+local FADE_OUT, FADE_IN = 0.15, 0.3 -- seconds, all the way
+local follower = CreateFrame("Frame")
+follower:SetScript("OnUpdate", function(_, elapsed)
+	local now = GetTime()
+	if (ns.QuestCamMoving and ns.QuestCamMoving()) or (ns.IsMouseOnCamera and ns.IsMouseOnCamera()) then
+		camMove.at = now
+	end
+	local ok, facing = pcall(GetPlayerFacing)
+	facing = ok and Plain(facing)
+	if type(facing) == "number" and camMove.facing and elapsed > 0 then
+		local delta = math.abs(facing - camMove.facing)
+		if delta > math.pi then
+			delta = 2 * math.pi - delta -- crossed north
+		end
+		if delta / elapsed > TURN_RATE then
+			camMove.at = now
+		end
+	end
+	camMove.facing = type(facing) == "number" and facing or nil
+	if not (bubble and panel) then
+		return
+	end
+	local up = Shown() and bubble:IsShown()
+	local mode, moving = MoveMode(), CameraMoving()
+	-- (Waiting: on the plate as it starts moving, or off it once it's still.)
+	local pending = mode == "wait" and ns.QuestCamPending and ns.QuestCamPending()
+	local move = up and mode == "wait"
+		and (bubble.waiting and not moving and not pending or bubble.onPlate ~= nil and moving)
+	local want = 1
+	if move then
+		want = 0
+	elseif up and bubble.onPlate and moving and (mode == "fade" or mode == "dim") then
+		want = mode == "fade" and 0 or MOVE_DIM
+	end
+	if camMove.alpha ~= want then
+		local step = elapsed / (want < camMove.alpha and FADE_OUT or FADE_IN)
+		camMove.alpha = want < camMove.alpha and math.max(want, camMove.alpha - step)
+			or math.min(want, camMove.alpha + step)
+	end
+	if move and camMove.alpha == 0 then
+		Place()
+		PlacePanel()
+	end
+	bubble:SetAlpha(camMove.alpha)
+	panel:SetAlpha((panel.following or mode == "wait") and camMove.alpha or 1)
 end)
 
 -- A plate came or went while ours show. A quest accepted refreshes the

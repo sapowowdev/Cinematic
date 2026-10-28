@@ -1,7 +1,8 @@
--- What's new, the last sub-page: a hub with New features (Changelog.lua,
--- picked by hand, newest first) and All changes (every commit, from
--- ChangelogCommits.lua). Options.lua calls ns.CreateWhatsNewPanels with the
--- page helpers it shares once the language is known.
+-- Community, the last sub-page: a hub with New features (Changelog.lua,
+-- picked by hand, newest first), All changes (every commit, from
+-- ChangelogCommits.lua), Socials and Thanks. Options.lua calls
+-- ns.CreateWhatsNewPanels with the page helpers it shares once the language
+-- is known.
 
 local _, ns = ...
 local L = ns.L
@@ -171,6 +172,71 @@ local function CreateCommitsPanel(kit)
 	kit.RegisterSubpage(canvas, "All changes")
 end
 
+-- Socials: where to find Cinematic outside the game. Addons can't open a
+-- browser or reach the clipboard, so each link sits selected in a box, ready
+-- for Ctrl+C.
+local SOCIALS = {
+	{ name = "Discord", url = "https://sapowowdev.github.io/Cinematic/discord.html", icon = "Interface\\Icons\\INV_Letter_15",
+		text = "Ideas, feedback and bug reports, and where new versions are announced." },
+	{ name = "YouTube", url = "https://www.youtube.com/@Sapo-ac", icon = "Interface\\Icons\\INV_Misc_Spyglass_03",
+		text = "Videos of Cinematic's cameras and features." },
+	{ name = "CurseForge", url = "https://www.curseforge.com/wow/addons/cinematic", icon = "Interface\\Icons\\INV_Box_01",
+		text = "Download and update Cinematic." },
+	{ name = "GitHub", url = "https://github.com/sapowowdev/Cinematic", icon = "Interface\\Icons\\Trade_Engineering",
+		text = "Cinematic's code, and a form to report bugs." },
+}
+
+local function CreateSocialsPanel(kit)
+	local canvas, content = kit.CreateScrollPage()
+	local last = Heading(kit, content, L["Socials"],
+		L["Where to find Cinematic outside the game. Click a link and press Ctrl+C to copy it, " ..
+		"then paste it into your browser."])
+
+	local ICON = 32
+	for i, social in ipairs(SOCIALS) do
+		local row = CreateFrame("Frame", nil, content)
+		row:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, i == 1 and -18 or -14)
+		row:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+		row:SetHeight(ICON + 26)
+
+		local icon = row:CreateTexture(nil, "ARTWORK")
+		icon:SetSize(ICON, ICON)
+		icon:SetPoint("TOPLEFT")
+		icon:SetTexture(social.icon)
+		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+
+		local title = kit.Label(row, "GameFontHighlight", social.name)
+		title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 10, -1)
+		local text = kit.Label(row, "GameFontHighlightSmall", L[social.text])
+		text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+		text:SetPoint("RIGHT", row, "RIGHT")
+		text:SetTextColor(0.8, 0.8, 0.8)
+
+		-- Read-only: any typing puts the link back; a click selects all of it.
+		local box = ns.SkinEditBox(CreateFrame("EditBox", nil, row, "InputBoxTemplate"))
+		box:SetSize(340, 20)
+		box:SetPoint("TOPLEFT", icon, "BOTTOMLEFT", ICON + 16, -6)
+		box:SetAutoFocus(false)
+		box:SetText(social.url)
+		box:SetCursorPosition(0)
+		box:SetScript("OnTextChanged", function(self, user)
+			if user then
+				self:SetText(social.url)
+				self:HighlightText()
+			end
+		end)
+		box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+		box:SetScript("OnMouseUp", function(self) self:HighlightText() end)
+		box:SetScript("OnEditFocusLost", function(self) self:HighlightText(0, 0) end)
+		box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+		box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+		last = row
+	end
+
+	canvas:Hide()
+	kit.RegisterSubpage(canvas, "Socials")
+end
+
 -- Thanks: the people who helped make Cinematic, in the order they joined the
 -- list. Names as they gave them (not translated).
 local THANKS = {
@@ -203,6 +269,7 @@ end
 ns.CreateWhatsNewPanels = function(kit)
 	CreateFeaturesPanel(kit)
 	CreateCommitsPanel(kit)
+	CreateSocialsPanel(kit)
 	CreateThanksPanel(kit)
 end
 

@@ -129,6 +129,8 @@ local SEARCH_ACCEL = 30 -- ...speeding up and slowing down no harder than this (
 local AIM_EVERY = 0.25 -- seconds between looks for a new speaker's bubble
 local LET_GO_TIME = 0.3 -- seconds a move under way takes to stop as you move off (quick: it's yours)
 local ZOOM_MARGIN = 0.5 -- yards: already about this close, so no zoom in
+local ZOOM_EDGE = 0.7   -- the zoom in eases to a stop once the speaker's bubble middle is this near an edge (-1 to 1)
+local ZOOM_STOP_TIME = 0.8 -- ...over this many seconds
 local ZOOM_YOURS = 1.5  -- yards from where it zoomed to: you've zoomed yourself, so no zoom back out
 local CVAR, DEFAULT_SPEED = "cameraYawMoveSpeed", 180
 
@@ -229,20 +231,26 @@ local function DebugAdd(text)
 	end
 end
 
--- What it does, to chat (and so the log), with the seconds since the
--- conversation started: the frame log's own time, which also notes it.
-local function Say(text)
+-- What it does, to the log (a chat tab named Cinematic shows it live:
+-- Diagnostics.lua), with the seconds since the conversation started: the
+-- frame log's own time, which also notes it. toChat: printed too (the
+-- /cine chatcam commands' answers).
+local function Say(text, toChat)
 	if convo then
 		text = ("[%.1fs] %s"):format(GetTime() - convo.startedAt, text)
 	end
 	Note(text)
 	DebugAdd("SAY " .. text)
-	ns.Print("Chat Cam: " .. text)
+	if toChat then
+		ns.Print("Chat Cam: " .. text)
+	else
+		ns.Log("chatcam", text)
+	end
 end
 
 local function Send(name, amount)
 	frameLog.sending = true
-	ns.CallCameraFunction(name, amount)
+	ns.CameraCall("chatcam", name, amount)
 	frameLog.sending = false
 	Note(amount and ("%s(%.4f)"):format(name, amount) or name)
 end
@@ -256,9 +264,12 @@ local function StopMove()
 	end
 	turn.moving, turn.sent, turn.stopping, turn.stoppedAt = false, nil, nil, GetTime()
 	-- (Your setting back a moment later, so the end of the move can't run at
-	-- full speed; not if a new move has started, or someone else has changed it.)
+	-- full speed; not if a new move has started, or someone else has changed it.
+	-- Held till then: see the camera lock.)
 	local last = turn.setting
+	turn.restoring = (turn.restoring or 0) + 1
 	C_Timer.After(SPEED_RESTORE_DELAY, function()
+		turn.restoring = turn.restoring - 1
 		if not turn.moving and last and tonumber(GetCVar(CVAR)) == tonumber(("%.2f"):format(last)) then
 			ns.RestoreCVar(CVAR)
 		end
@@ -864,6 +875,8 @@ local function TakenOver()
 		return "off"
 	elseif ns.QuestCamBusy and ns.QuestCamBusy() then
 		return "quest cam"
+	elseif ns.CameraHolder("chatcam") and ns.CameraHolder("chatcam") ~= "you" then
+		return "the " .. ns.CameraHolder("chatcam") .. " camera has the view"
 	elseif not fake and ns.IsCameraOffHere("chatcam") then
 		return "turned off here (Camera Modes page)"
 	elseif ns.CameraMode() then
@@ -876,7 +889,7 @@ end
 -- (not if you're zooming yourself, or already close). Talking again on the
 -- zoom back out: in again from wherever it's got to, not on out to your
 -- distance mid-conversation.
-local function ZoomIn(now)
+local function ZoomIn(now, sx, sy)
 	convo.zoomChecked = true
 	local db = ns.db
 	if not (GetCameraZoom and ns.QuestCamZoomTo) then
@@ -884,9 +897,11 @@ local function ZoomIn(now)
 	end
 	if ns.PlayerZoomedSince(now - (ns.PLAYER_ZOOM_WAIT or 1)) then
 		Say("you're zooming: no zoom in")
+	elseif (sy >= ZOOM_EDGE or math.abs(sx) >= ZOOM_EDGE) and not ns.QuestCamZooming() then
+		Say(("bubble near the edge already (x %+.2f y %+.2f): no zoom in"):format(sx, sy))
 	elseif GetCameraZoom() > db.chatCamDistance + ZOOM_MARGIN or ns.QuestCamZooming() then
 		convo.zoom = convo.zoom or (ns.PlayerZoom and ns.PlayerZoom()) or GetCameraZoom()
-		convo.zoomedTo = db.chatCamDistance
+		convo.zoomedTo, convo.zoomingIn = db.chatCamDistance, true
 		Say(("zooming in to %.1f yards"):format(db.chatCamDistance))
 		ns.QuestCamZoomTo(db.chatCamDistance, math.min(db.chatCamZoomMaxTime,
 			math.abs(GetCameraZoom() - db.chatCamDistance) / db.chatCamZoomSpeed))
@@ -963,7 +978,7 @@ local function Aim(now, drifting)
 	-- Zoomed in only once a bubble's on screen: after walking off, say, the
 	-- speaker may be behind you or out of sight, and a close-up shows nothing.
 	if not convo.zoomChecked then
-		ZoomIn(now)
+		ZoomIn(now, sx, sy)
 		zooming = ns.QuestCamZooming and ns.QuestCamZooming()
 	end
 	local good, reading = BubbleReading(sy, others, how)
@@ -1084,6 +1099,21 @@ local function OnUpdate(_, elapsed)
 				convo.turnedAt = convo.turnedAt or now
 			end
 			local zooming = ns.QuestCamZooming and ns.QuestCamZooming()
+			-- (Zooming in, their head rises up the screen and out to the side: the
+			-- zoom eases to a stop before their bubble's pushed off the edge.)
+			if zooming and convo.zoomingIn and convo.speaker and now >= (convo.edgeAt or 0) then
+				convo.edgeAt = now + AIM_EVERY / 2
+				local _, sx, sy = BubbleAngle(convo.speaker.text)
+				if sx and (sy >= ZOOM_EDGE or math.abs(sx) >= ZOOM_EDGE) then
+					convo.zoomingIn = nil
+					local goal = ns.QuestCamEaseZoomStop and ns.QuestCamEaseZoomStop(ZOOM_STOP_TIME)
+					if goal then
+						convo.zoomedTo = goal
+						Say(("%s's bubble near the edge (x %+.2f y %+.2f): zoom stopping at %.1f yards"):format(
+							convo.speaker.name, sx, sy, goal))
+					end
+				end
+			end
 			local check = convo.check
 			if check and not turn.moving then
 				convo.check = nil
@@ -1365,6 +1395,17 @@ for _, name in ipairs({ "MoveViewLeftStart", "MoveViewLeftStop", "MoveViewRightS
 	end
 end
 
+-- The camera lock (Core.lua): the Chat Cam holds the view while it's turned
+-- or zoomed (in a conversation, or turning back after), and until your speed
+-- setting's back; your camera input lets it go at once.
+ns.RegisterCamera("chatcam", function()
+	return turn.moving or (turn.restoring or 0) > 0 or (convo ~= nil and (Turned() or convo.zoomedTo ~= nil))
+		or leaving ~= nil or zoomingOut ~= nil
+		or (ns.QuestCamZoomBy and ns.QuestCamZoomBy() == "chatcam" and ns.QuestCamZoomHeld())
+end, function()
+	HandOver("you moved the camera")
+end)
+
 -- Whether a conversation has the camera now (the Minimap page hides the
 -- minimap by it: ns.activeCam, Camera.lua).
 function ns.ChatCamActive()
@@ -1391,27 +1432,27 @@ function ns.ChatCamCommand(arg)
 	elseif arg == "debug" then
 		ns.db.chatCamDebugOff = not ns.db.chatCamDebugOff or nil
 		Say("debug log of bubbles, plates and the camera: " .. (ns.db.chatCamDebugOff and "off" or "on")
-			.. " (/reload afterwards to save it)")
+			.. " (/reload afterwards to save it)", true)
 		return
 	elseif arg == "flip" then
 		ns.db.chatCamSwap = not ns.db.chatCamSwap
-		Say("turn directions " .. (ns.db.chatCamSwap and "swapped" or "as tested"))
+		Say("turn directions " .. (ns.db.chatCamSwap and "swapped" or "as tested"), true)
 		return
 	elseif arg == "steady" then
 		ns.db.chatCamSteady = not ns.db.chatCamSteady
-		Say("swings " .. (ns.db.chatCamSteady and "at a steady speed (no easing; a comparison)" or "eased"))
+		Say("swings " .. (ns.db.chatCamSteady and "at a steady speed (no easing; a comparison)" or "eased"), true)
 		return
 	elseif arg == "log" then
 		frameLog.on = not frameLog.on
 		Say("log every frame of the next conversations: " .. (frameLog.on and "on" or "off")
-			.. " (/reload afterwards to save it)")
+			.. " (/reload afterwards to save it)", true)
 		return
 	end
 	-- (Both Camera Triggers rows together, NPCs you talk to and chatting nearby.)
 	local value = On() and "none" or "chat"
 	ns.db.chatCamera, ns.db.chatNearbyCamera = value, value
 	Say("(prototype) " .. (On() and "on" or "off") .. (ns.db.enabled and "" or " (Cinematic is off)")
-		.. ". If it turns away from whoever's talking: /cine chatcam flip")
+		.. ". If it turns away from whoever's talking: /cine chatcam flip", true)
 end
 
 local loader = CreateFrame("Frame")

@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-28", page = "Socials", title = "Socials",
+		text = "A new page in the Community hub with links to the Discord, YouTube, CurseForge and GitHub, " ..
+		"ready to copy." },
 	{ date = "2026-10-27", page = "Nameplate Style", title = "Nameplate marks",
 		text = "Marks and colors for your focus, the unit under the mouse and a target that's attacking you, " ..
 		"not just your target, each with its own look, when it shows, and rows for just enemies or friends. " ..

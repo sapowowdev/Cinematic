@@ -770,7 +770,9 @@ function ns.GridRow(kit, parent, labelWidth, layout, spec)
 		ruleText:SetPoint("LEFT", 0, 0)
 		local function Target()
 			local before = Rule()
-			local start = before or (rule.grid and ns.GridRule(AlwaysOn(), rule.words()) or "")
+			-- (No rule yet: its dropdowns' or ticks' words to start from.)
+			local start = before or (rule.grid and ns.GridRule(AlwaysOn(), rule.words()))
+				or (spec.liveRule and spec.liveRule()) or ""
 			return { label = rule.label(), grid = rule.grid,
 				Text = function() return start end,
 				SetText = function(typed) SetRule(typed) Refresh() end,
@@ -781,6 +783,8 @@ function ns.GridRow(kit, parent, labelWidth, layout, spec)
 						-- (Unchanged and never a rule: nothing to write.)
 						if before or typed ~= start then rule.apply(isAlways, ticked) end
 						SetRule(nil)
+					elseif not before and typed == start then
+						SetRule(nil) -- (its ticks' words, untouched: the ticks keep deciding)
 					else
 						SetRule(typed:find("%S") and typed or nil)
 					end
@@ -829,6 +833,8 @@ function ns.GridRow(kit, parent, labelWidth, layout, spec)
 				GameTooltip:SetText(L["Edit as a rule"], 1, 1, 1)
 				if rule.grid then
 					GameTooltip:AddLine(ns.ColoredRule(ns.GridRule(AlwaysOn(), rule.words())), 1, 1, 1, true)
+				elseif spec.liveRule then
+					GameTooltip:AddLine(ns.ColoredRule(spec.liveRule()), 1, 1, 1, true)
 				end
 				GameTooltip:AddLine(L["Opens the rule editor, for AND, NOT and more places and situations " ..
 					"than the dropdowns have."], 0.8, 0.8, 0.8, true)
