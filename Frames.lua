@@ -2502,12 +2502,15 @@ do
 			return answer == true or answer == 1
 		end
 	end
-	local function UnitWithin40(unit, enemyOnly)
+	local function LookForRangeSpells()
 		local now = GetTime()
 		if now - rangeLookAt >= RANGE_LOOK_EVERY then
 			rangeLookAt = now
 			FindRangeSpells()
 		end
+	end
+	local function UnitWithin40(unit, enemyOnly)
+		LookForRangeSpells()
 		local answer = SpellReaches(rangeSpells.harmful, unit)
 		if answer == nil and not enemyOnly then
 			answer = SpellReaches(rangeSpells.helpful, unit)
@@ -2516,6 +2519,44 @@ do
 	end
 	local function TargetWithin40()
 		return UnitWithin40("target")
+	end
+	-- Whether a unit's that far from you, for the Nameplates page's rows with
+	-- a Distance (Core's MARK_DISTANCES): In11, In28 and In40 within about 11,
+	-- 28 or 40 yards, Past28 and Past40 further. True or false; nil when
+	-- nothing can say (40: no 40-yard spell on your bars that can).
+	local function Within(unit, index)
+		local ok, near = pcall(CheckInteractDistance, unit, index)
+		if ok and near ~= nil and not (issecretvalue and issecretvalue(near)) then
+			return near and true or false
+		end
+	end
+	local function Within40(unit)
+		if Within(unit, 4) then
+			return true
+		end
+		LookForRangeSpells()
+		local answer = SpellReaches(rangeSpells.harmful, unit)
+		if answer == nil then
+			answer = SpellReaches(rangeSpells.helpful, unit)
+		end
+		return answer
+	end
+	function ns.UnitInBand(unit, band)
+		local within
+		if band == "In11" then
+			within = Within(unit, 2)
+		elseif band == "In28" or band == "Past28" then
+			within = Within(unit, 4)
+		else
+			within = Within40(unit)
+		end
+		if within == nil then
+			return nil
+		end
+		if band == "Past28" or band == "Past40" then
+			return not within
+		end
+		return within
 	end
 
 	-- A unit's rank, for the rules' elite words and the Nameplates page's

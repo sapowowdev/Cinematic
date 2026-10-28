@@ -648,7 +648,7 @@ DEFAULTS.targetArrowStyle = "arrow"
 -- mark's color, while the row shows (<kind>ColorName, ColorBar, ColorBorder).
 -- Your target's and your focus's names and bars to start with.
 for _, kind in ipairs({ "target", "aggro", "focus", "mouseover", "others", "aggroother", "aggrononank",
-	"npc", "elite", "players", "minions" }) do
+	"npc", "elite", "npcs", "players", "minions", "all" }) do
 	local colored = kind == "target" or kind == "focus"
 	DEFAULTS[kind .. "ColorName"] = colored
 	DEFAULTS[kind .. "ColorBar"] = colored
@@ -670,10 +670,12 @@ DEFAULTS.targetArrowBob = true -- the arrow and chevron bob, the brackets close 
 -- your focus too, say): the first in this order, every row but Default's
 -- own (always last) taken off or added again from the page. A row's id is
 -- its kind, then a Who for just those units (Enemy, Neutral, Friendly),
--- then a number from 2 for another row of the same: "target", "targetEnemy",
--- "npcEnemy3" (MarkRowBase). Its settings are keyed by its id in its kind's
--- place; one it hasn't got, the same row's without the number, then its kind's.
--- Default's added rows last, before Default's own.
+-- then a Distance for just units that far (MARK_DISTANCES), then a number
+-- from 2 for another row of the same: "target", "targetEnemy", "npcEnemy3",
+-- "allPast40", "npcEnemyIn282" (MarkRowBase). Its settings are keyed by its
+-- id in its kind's place; one it hasn't got, the same row's without the
+-- number, then without the Distance, then its kind's. Default's added rows
+-- last, before Default's own.
 DEFAULTS.markOrder = "target,mouseover,focus,aggro"
 ns.MARK_REACTIONS = { "Enemy", "Neutral", "Friendly" }
 ns.MARK_COPIES = 5 -- (rows of one kind and Who at most)
@@ -681,28 +683,56 @@ ns.MARK_COPIES = 5 -- (rows of one kind and Who at most)
 -- you (aggroother) and Aggro on non-tank (aggrononank): any enemy in a fight
 -- that's after someone friendly other than you, or after a player who isn't
 -- a tank (you too). Normal NPC (npc) and Elite NPC (elite): living NPCs by
--- rank (elite, rare elite and world boss; ns.NPCRank). Players and Minions
--- (pets, totems, guardians): as the Nameplates page sorts them, friendly or
--- enemy (no neutral players).
+-- rank (elite, rare elite and world boss; ns.NPCRank), NPC (npcs) any of
+-- them. Players and Minions (pets, totems, guardians): as the Nameplates page
+-- sorts them, friendly or enemy (no neutral players). Any unit (all): every
+-- plate.
 ns.MARK_ROW_KINDS = {
 	target = ns.MARK_REACTIONS, focus = ns.MARK_REACTIONS, mouseover = ns.MARK_REACTIONS,
 	aggro = {}, aggroother = {}, aggrononank = {},
-	npc = ns.MARK_REACTIONS, elite = ns.MARK_REACTIONS,
+	npc = ns.MARK_REACTIONS, elite = ns.MARK_REACTIONS, npcs = ns.MARK_REACTIONS,
 	players = { "Enemy", "Friendly" }, minions = { "Enemy", "Friendly" },
+	all = ns.MARK_REACTIONS,
 	others = ns.MARK_REACTIONS,
 }
--- A row's kind, Who (nil: all its units) and number (nil: the first):
--- "npcEnemy3": "npc", "Enemy", 3.
+-- Every kind's mark opacity (Opacity: the mark's own; Alpha is the whole
+-- plate's), plate size (Scale: retail, Forever's plates don't scale) and
+-- plate color (PlateColor: "-" none, the next fitting row's; "game" the
+-- game's; "same" its mark's; "gold", "reaction", "class" or "custom", PlateR,
+-- G, B), the parts it colors its Also color ticks. The rows for one unit
+-- (and aggro) their mark's to start with, the kinds of plate none.
+local PLATE_SAME = { target = true, focus = true, mouseover = true, aggro = true, aggroother = true,
+	aggrononank = true }
+for kind in pairs(ns.MARK_ROW_KINDS) do
+	local prefix = kind == "target" and "targetArrow" or kind .. "Mark"
+	DEFAULTS[prefix .. "Opacity"] = 1
+	DEFAULTS[prefix .. "Scale"] = 1
+	DEFAULTS[prefix .. "PlateColor"] = PLATE_SAME[kind] and "same" or "-"
+	DEFAULTS[prefix .. "PlateR"], DEFAULTS[prefix .. "PlateG"], DEFAULTS[prefix .. "PlateB"] = 1, 1, 1
+end
+-- A row's Distance, any kind's: its unit within about 11, 28 or 40 yards of
+-- you, or past 28 or 40 (ns.UnitInBand). 40 asks a 40-yard spell on your bars.
+ns.MARK_DISTANCES = { "In11", "In28", "In40", "Past28", "Past40" }
+-- A row's kind, Who (nil: all its units), number (nil: the first) and
+-- Distance (nil: any): "npcEnemyPast403": "npc", "Enemy", 3, "Past40".
+-- (An id that won't read: itself, no kind.)
 function ns.MarkRowBase(id)
-	local base, rest = tostring(id):match("^(%l+)(.*)$")
+	id = tostring(id)
+	local base, rest = id:match("^(%l+)(.*)$")
 	if not base then
-		return id, nil, nil
+		return id, nil, nil, nil
 	end
-	local reaction, copy = rest:match("^(%u%l+)(%d*)$")
-	if not reaction then
-		copy = rest:match("^(%d*)$")
+	local reaction, distance
+	for _, who in ipairs(ns.MARK_REACTIONS) do
+		if rest:sub(1, #who) == who then reaction, rest = who, rest:sub(#who + 1) break end
 	end
-	return base, reaction, tonumber(copy or "")
+	for _, band in ipairs(ns.MARK_DISTANCES) do
+		if rest:sub(1, #band) == band then distance, rest = band, rest:sub(#band + 1) break end
+	end
+	if not rest:find("^%d*$") then
+		return id, nil, nil, nil
+	end
+	return base, reaction, tonumber(rest), distance
 end
 -- Whether an id names a row the grid can have (Default's own aside: always there).
 function ns.MarkRowValid(id)
@@ -727,9 +757,9 @@ function ns.MarkRowDefault(key)
 	if type(key) ~= "string" or DEFAULTS[key] ~= nil then
 		return nil
 	end
-	local id, rest = key:match("^(%l+%u?%l*%d*)(Mark%u%a*)$")
-	if not id then id, rest = key:match("^(%l+%u?%l*%d*)(Color%u%a*)$") end
-	if not id then id, rest = key:match("^(%l+%u?%l*%d*)(When%a*)$") end
+	local id, rest = key:match("^(%l[%a%d]-)(Mark%u%a*)$")
+	if not id then id, rest = key:match("^(%l[%a%d]-)(Color%u%a*)$") end
+	if not id then id, rest = key:match("^(%l[%a%d]-)(When%a*)$") end
 	if not id or not ns.MarkRowValid(id) then
 		return nil
 	end
@@ -773,7 +803,7 @@ DEFAULTS.mouseoverMarkBob = false
 -- Default (others, after all of them in the order): every other plate,
 -- the game's own look (no mark, no Also color) until you change it. The
 -- kinds of plate likewise: no mark, the game's colors.
-for _, kind in ipairs({ "others", "npc", "elite", "players", "minions" }) do
+for _, kind in ipairs({ "others", "npc", "elite", "npcs", "players", "minions", "all" }) do
 	DEFAULTS[kind .. "MarkShow"] = true
 	DEFAULTS[kind .. "MarkStyle"] = "none"
 	DEFAULTS[kind .. "MarkColor"] = "reaction"
@@ -784,7 +814,8 @@ end
 -- Each row's Opacity: the whole plate's, times CineMode's own fade (Effects'
 -- PlateAlphas); a plate takes the first fitting row's below 100%.
 DEFAULTS.targetArrowAlpha = 1
-for _, kind in ipairs({ "aggro", "focus", "mouseover", "others", "npc", "elite", "players", "minions" }) do
+for _, kind in ipairs({ "aggro", "focus", "mouseover", "others", "npc", "elite", "npcs", "players", "minions",
+	"all" }) do
 	DEFAULTS[kind .. "MarkAlpha"] = 1
 end
 -- (Normal NPC - Enemy: the adds faded to 40% while an elite's near, below.)
@@ -2790,6 +2821,7 @@ function ns.EnsureTables()
 	ns.db.tooltipCineMode = nil -- (a test build's: the Tooltips page's master switch decides now)
 	ns.db.cineShow = ns.db.cineShow or {} -- Standard Frames row -> true: shown all through CineMode
 	ns.db.frameRules = ns.db.frameRules or {} -- row key -> rule text (Custom Visibility Rules, Advanced Frames page)
+	ns.db.markNames = ns.db.markNames or {} -- Nameplates page row id -> a name of your own for it
 	-- Row key -> true: kept hidden in CineMode while you're that role (a frames grid row's roles button).
 	ns.db.tankHide = ns.db.tankHide or {}
 	ns.db.healerHide = ns.db.healerHide or {}
@@ -4441,6 +4473,27 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		-- The grids' Open World no longer covers capital cities (they're Cities,
 		-- their own list): every row ticked Open World gets Cities ticked, and
 		-- rules' world (the same, now) is world or city. Once, in every profile.
+		-- Nameplates page rows' Also color went with the mark's color; now the
+		-- plate has its own (PlateColor). A row with any part ticked keeps its
+		-- look on its mark's ("same"). Once, in every profile.
+		if not ns.db.plateColorV1 then
+			local function PlateColor(t)
+				local ids = {}
+				for kind in pairs(ns.MARK_ROW_KINDS) do ids[#ids + 1] = kind end
+				for id in tostring(t.markOrder or ""):gmatch("[^,]+") do ids[#ids + 1] = id end
+				for _, id in ipairs(ids) do
+					local key = id == "target" and "targetArrowPlateColor" or id .. "MarkPlateColor"
+					if t[key] == nil and (t[id .. "ColorName"] or t[id .. "ColorBar"] or t[id .. "ColorBorder"]) then
+						t[key] = "same"
+					end
+				end
+			end
+			PlateColor(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then PlateColor(saved) end
+			end
+			ns.db.plateColorV1 = true
+		end
 		if not ns.db.citiesApartV1 then
 			local function CitiesApart(t)
 				if type(t.worldShow) == "table" then

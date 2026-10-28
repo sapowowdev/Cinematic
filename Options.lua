@@ -6374,7 +6374,9 @@ do
 		{ "others", L["Default"], L["Every other plate, when no row above fits it: the game's own look " ..
 			"to start with (no mark, its own colors). Give it a mark or an Also color to change them all."] },
 	}
+	-- (- first: no mark.)
 	local MARK_STYLES = {
+		{ value = "none", text = "-" },
 		{ value = "arrow", text = L["Arrow"] },
 		{ value = "chevron", text = L["Chevron"] },
 		{ value = "diamond", text = L["Diamond"] },
@@ -6383,23 +6385,19 @@ do
 		{ value = "carets", text = L["Carets"] },
 		{ value = "corners", text = L["Corners"] },
 		{ value = "underline", text = L["Underline"] },
-		{ value = "none", text = L["None"] },
 	}
 	-- (The unit under the mouse: just the marks over its plate. Round it or
 	-- under it, they hang in the air where its plate is hidden.)
 	local MOUSEOVER_STYLES = {
+		{ value = "none", text = "-" },
 		{ value = "arrow", text = L["Arrow"] },
 		{ value = "chevron", text = L["Chevron"] },
 		{ value = "diamond", text = L["Diamond"] },
-		{ value = "none", text = L["None"] },
 	}
-	local AGGRO_STYLES = { { value = "same", text = L["Your target's"] } }
-	for _, choice in ipairs(MARK_STYLES) do AGGRO_STYLES[#AGGRO_STYLES + 1] = choice end
-	-- (Default: no mark is the game's look, so said so.)
-	local OTHERS_STYLES = { { value = "none", text = L["The game's"] } }
-	for _, choice in ipairs(MARK_STYLES) do
-		if choice.value ~= "none" then OTHERS_STYLES[#OTHERS_STYLES + 1] = choice end
-	end
+	-- (Aggro: -, then Your target's, then the rest.)
+	local AGGRO_STYLES = { MARK_STYLES[1], { value = "same", text = L["Your target's"] } }
+	for i = 2, #MARK_STYLES do AGGRO_STYLES[#AGGRO_STYLES + 1] = MARK_STYLES[i] end
+	local OTHERS_STYLES = MARK_STYLES
 	local MARK_COLORS = {
 		{ value = "gold", text = L["Gold"] },
 		{ value = "reaction", text = L["By reaction"] },
@@ -6408,16 +6406,20 @@ do
 	}
 	local AGGRO_COLORS = { { value = "same", text = L["Your target's"] } }
 	for _, choice in ipairs(MARK_COLORS) do AGGRO_COLORS[#AGGRO_COLORS + 1] = choice end
+	-- (A plate's: - none, the next row's; the game's; the mark's; then as the mark's.)
+	local PLATE_COLORS = { { value = "-", text = "-" }, { value = "game", text = L["The game's"] },
+		{ value = "same", text = L["Mark's"] } }
+	for _, choice in ipairs(MARK_COLORS) do PLATE_COLORS[#PLATE_COLORS + 1] = choice end
 	-- The setting for a kind's cell (see Core's DEFAULTS).
 	local function MarkKey(kind, key)
 		return kind == "target" and "targetArrow" .. key or kind .. "Mark" .. key
 	end
 	-- A row's line: where its parts start, from its left, and its size; its
-	-- drawer under it, in from the left, three lines (Mark, Plate, When).
+	-- drawer under it, in from the left, a line each (Row, Name, Mark, Color,
+	-- Plate, When; Default's own no Row: it's always there).
 	local SHOW_X, PREVIEW_X, NAME_X, CHIPS_X = 16, 44, 92, 290
 	local ROW_W, NAME_W, CHIPS_W = 590, 192, 236
 	local DRAWER_X, LINE_H, LABEL_W = 44, 34, 48
-	local DRAWER_H = LINE_H * 3 + 8
 	-- The Also color column's parts: setting (<kind>Color<part>), name, tip,
 	-- and (targetOnly) whether only your target's plate has one: the game's
 	-- border, round your target's health bar alone.
@@ -6440,8 +6442,10 @@ do
 			"health bar or border in its mark's color (the row's Also color). When they show is the Target Indicator row's, on " ..
 			"the Nameplates page's Cinematic Plate Parts grid. Changes show at once, here and on the plates."])
 
+		local preview -- (below: drawn again as each setting changes)
 		local function Changed()
 			if ns.RefreshTargetArrows then ns.RefreshTargetArrows() end
+			if preview then preview:Refresh() end
 		end
 		-- (Its switch: the marks and their colors on the plates, or none at all.)
 		local switch = PageSwitch(content, "handlePlateStyle", L["Enable page"],
@@ -6449,6 +6453,151 @@ do
 			"Indicator row says. Off: none of them do. Each setting keeps its value for when you turn this " ..
 			"back on."], subtitle, Changed)
 		local stack = Stack(switch, "check")
+
+		-- The preview: one plate, large, with the look of the row last picked
+		-- (clicked, or added; Default to start with): its mark, its name and
+		-- health bar in their colors or its Also color's, the game's border
+		-- round your target's bar, at its opacity.
+		local previewed = "others"
+		preview = CreateFrame("Frame", nil, content)
+		preview:SetSize(560, 160)
+		stack:Add(preview, "label")
+		local ground = preview:CreateTexture(nil, "BACKGROUND")
+		ground:SetAllPoints()
+		ground:SetColorTexture(0.11, 0.14, 0.18, 0.95)
+		local caption = Label(preview, "GameFontNormal", "")
+		caption:SetPoint("TOPLEFT", 8, -7)
+		caption.searchSkip = true
+		local holder = CreateFrame("Frame", nil, preview)
+		holder:SetSize(240, 80)
+		holder:SetScale(1.6)
+		holder:SetPoint("CENTER", preview, "CENTER", 0, -6)
+		local bar = CreateFrame("Frame", nil, holder)
+		bar:SetSize(150, 11)
+		bar:SetPoint("CENTER", holder, "CENTER", 0, -6)
+		bar:SetFrameLevel(holder:GetFrameLevel() + 2)
+		local barEdge = bar:CreateTexture(nil, "BORDER")
+		barEdge:SetPoint("TOPLEFT", -1, 1)
+		barEdge:SetPoint("BOTTOMRIGHT", 1, -1)
+		barEdge:SetColorTexture(0, 0, 0, 1)
+		local barFill = bar:CreateTexture(nil, "ARTWORK")
+		barFill:SetAllPoints()
+		-- (The game's border round your target's bar: 2 pixels, just outside its black edge.)
+		local border = {}
+		for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
+			local edge = bar:CreateTexture(nil, "BORDER", nil, 1)
+			if side == "TOP" or side == "BOTTOM" then
+				edge:SetPoint(side .. "LEFT", barEdge, side .. "LEFT", -2, side == "TOP" and 2 or -2)
+				edge:SetPoint(side .. "RIGHT", barEdge, side .. "RIGHT", 2, side == "TOP" and 2 or -2)
+				edge:SetHeight(2)
+			else
+				edge:SetPoint("TOP" .. side, barEdge, "TOP" .. side, side == "LEFT" and -2 or 2, 0)
+				edge:SetPoint("BOTTOM" .. side, barEdge, "BOTTOM" .. side, side == "LEFT" and -2 or 2, 0)
+				edge:SetWidth(2)
+			end
+			border[#border + 1] = edge
+		end
+		local unitName = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+		unitName:SetPoint("BOTTOM", bar, "TOP", 0, 3)
+		unitName.searchSkip = true
+		-- (The rest of a plate, just for the look: your debuffs over its name,
+		-- a buff of its own at their right, and a cast under its bar.)
+		local function AuraIcon(icon, size)
+			local frame = CreateFrame("Frame", nil, bar)
+			frame:SetSize(size, size)
+			local edge = frame:CreateTexture(nil, "BACKGROUND")
+			edge:SetPoint("TOPLEFT", -1, 1)
+			edge:SetPoint("BOTTOMRIGHT", 1, -1)
+			edge:SetColorTexture(0, 0, 0, 1)
+			local art = frame:CreateTexture(nil, "ARTWORK")
+			art:SetAllPoints()
+			art:SetTexture("Interface\\Icons\\" .. icon)
+			art:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+			return frame
+		end
+		local DEBUFF_ICONS = { "Spell_Shadow_ShadowWordPain", "Spell_Fire_Immolation", "Spell_Nature_Slow",
+			"Spell_Frost_FrostNova", "Spell_Shadow_CurseOfTounges" }
+		for i, icon in ipairs(DEBUFF_ICONS) do
+			AuraIcon(icon, 13):SetPoint("BOTTOMLEFT", bar, "TOPLEFT", (i - 1) * 15, 16)
+		end
+		AuraIcon("Spell_Holy_PowerWordShield", 13):SetPoint("BOTTOMRIGHT", bar, "TOPRIGHT", 0, 16)
+		local cast = CreateFrame("Frame", nil, bar)
+		cast:SetSize(150, 7)
+		cast:SetPoint("TOP", bar, "BOTTOM", 0, -3)
+		local castEdge = cast:CreateTexture(nil, "BACKGROUND")
+		castEdge:SetPoint("TOPLEFT", -1, 1)
+		castEdge:SetPoint("BOTTOMRIGHT", 1, -1)
+		castEdge:SetColorTexture(0, 0, 0, 1)
+		local castBack = cast:CreateTexture(nil, "BORDER")
+		castBack:SetAllPoints()
+		castBack:SetColorTexture(0.2, 0.2, 0.2, 1)
+		local castFill = cast:CreateTexture(nil, "ARTWORK")
+		castFill:SetPoint("TOPLEFT")
+		castFill:SetPoint("BOTTOMLEFT")
+		castFill:SetWidth(150 * 0.4)
+		castFill:SetColorTexture(1, 0.7, 0, 1)
+		local castIcon = cast:CreateTexture(nil, "ARTWORK")
+		castIcon:SetSize(10, 10)
+		castIcon:SetPoint("TOPLEFT", cast, "BOTTOMLEFT", 0, -2)
+		castIcon:SetTexture("Interface\\Icons\\Spell_Fire_FlameBolt")
+		castIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		local spellName = cast:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		spellName:SetPoint("LEFT", castIcon, "RIGHT", 3, 0)
+		spellName:SetText(L["Spell Name"])
+		spellName.searchSkip = true
+		-- (The unit shown: red for enemies, yellow neutral, green friends;
+		-- players and minions named as such.)
+		local WHO_COLORS = { Enemy = { 1, 0.2, 0.2, 0.75, 0.1, 0.1 }, Neutral = { 1, 1, 0, 0.85, 0.75, 0 },
+			Friendly = { 0.1, 1, 0.1, 0, 0.6, 0.1 } }
+		local PREVIEW_NAMES = { players = L["Player"], minions = L["Minion"], elite = L["Elite NPC"] }
+		-- Picks a row to preview (one taken off: back to Default).
+		function preview:Pick(id)
+			previewed = id or "others"
+			self:Refresh()
+		end
+		function preview:Refresh()
+			if not ns.MakeTargetArrow then return end
+			local onGrid = previewed == "others"
+			for _, id in ipairs(ns.TargetMarkOrder()) do onGrid = onGrid or id == previewed end
+			if not onGrid then previewed = "others" end
+			local kind = previewed
+			local base, reaction = ns.MarkRowBase(kind)
+			local info = self.RowInfo and self.RowInfo(kind)
+			caption:SetText((L["Previewing - %s"]):format(info and info.full or L["Default"]))
+			local shown = ns.TargetMarkSetting("Show", kind) and true or false
+			self.arrow = self.arrow or ns.MakeTargetArrow(holder, bar)
+			ns.StyleTargetArrow(self.arrow, nil, kind)
+			self.arrow:SetShown(shown and ns.TargetMarkSetting("Style", kind) ~= "none")
+			self.arrow:SetAlpha(ns.TargetMarkSetting("Opacity", kind) or 1)
+			local colors = WHO_COLORS[reaction or ""] or WHO_COLORS.Enemy
+			local tintKind = ns.TargetMarkTintKind(kind)
+			local r, g, b = ns.TargetPlateColour(nil, tintKind)
+			if shown and ns.TargetMarkAlso("ColorName", tintKind) then
+				unitName:SetTextColor(r, g, b)
+			else
+				unitName:SetTextColor(colors[1], colors[2], colors[3])
+			end
+			if shown and ns.TargetMarkAlso("ColorBar", tintKind) then
+				barFill:SetColorTexture(r, g, b, 1)
+			else
+				barFill:SetColorTexture(colors[4], colors[5], colors[6], 1)
+			end
+			-- (The border: your target's own, white unless its Also color takes it.)
+			local targeted = base == "target" or base == "aggro"
+			for _, edge in ipairs(border) do
+				edge:SetShown(targeted)
+				if shown and ns.TargetMarkAlso("ColorBorder", tintKind) then
+					edge:SetColorTexture(r, g, b, 1)
+				else
+					edge:SetColorTexture(1, 1, 1, 1)
+				end
+			end
+			unitName:SetText(PREVIEW_NAMES[base] or L["Unit Name"])
+			holder:SetAlpha(shown and (ns.TargetMarkSetting("Alpha", kind) or 1) or 0.35)
+			-- (Its plate size, on retail: Forever's plates don't change size.)
+			holder:SetScale(1.6 * (shown and ns.isRetail and ns.TargetMarkSetting("Scale", kind) or 1))
+		end
+		controls[#controls + 1] = preview
 
 		-- A choice from a list: a dropdown, or on a client without the modern
 		-- one a button that steps through them.
@@ -6487,9 +6636,11 @@ do
 		stack:Help(content, L["A plate takes its whole look (mark, colors, opacity) from the first row that " ..
 			"fits it, top to bottom; the rows below aren't looked at. Click a row to open its settings: its " ..
 			"mark, the plate's colors and opacity, and When it fits. The chips beside its name show what's set " ..
-			"apart from the usual. Move a row with its arrows, take it off with its x. Add more under the grid: " ..
-			"a Kind, for Aggro and Units which of them, and Who for just its enemies, neutral units or friends; " ..
-			"the same again makes another row of it (Target (2)), say with a different When for raids. Put a " ..
+			"apart from the usual. Move a row with its arrows, take it off with its x. Add row puts a new one at " ..
+			"the end; its Row line says what it's for: a Kind, for Aggro and Units which of them, Who for just its " ..
+			"enemies, neutral units or friends, and Distance for just those within or past 11, 28 or 40 yards (Any " ..
+			"unit past 40 yards fades far plates). The same kind again is another row of it (Target (2)), say with " ..
+			"a different When for raids. Put a " ..
 			"row for just some units above its kind's own row, so it comes first for them. Default, always " ..
 			"last, is for plates no row fits: the game's look unless you change it."])
 		local grid = CreateFrame("Frame", nil, content)
@@ -6511,9 +6662,11 @@ do
 				"too). Normal NPC - Enemy starts faded to 40% while an elite enemy is within about 28 yards (its " ..
 				"When rule: elite28), so in a pull the elites stand out."] },
 			{ "elite", L["Elite NPC"], L["Living elite, rare elite and boss NPCs."] },
+			{ "npcs", L["NPC"], L["Any living NPC, normal or elite."] },
 			{ "players", L["Players"], L["Players, friendly or enemy as the Nameplates page has them (the other " ..
 				"faction's are enemies)."] },
 			{ "minions", L["Minions"], L["Anything a player controls: pets, totems and guardians."] },
+			{ "all", L["Any unit"], L["Every plate: NPCs, players and minions."] },
 			{ "others", L["Default"], MARK_KINDS[5][3] },
 		}
 		local KIND_INFO = {}
@@ -6522,18 +6675,48 @@ do
 		local REACTION_TIPS = { Enemy = L["This row: just the enemies among them."],
 			Neutral = L["This row: just the neutral ones among them."],
 			Friendly = L["This row: just the friendly ones among them."] }
+		-- (A Distance's name in the Distance dropdown, short beside a row's
+		-- name, and its tip.)
+		local DISTANCE_NAMES = { In11 = L["Within 11 yards"], In28 = L["Within 28 yards"],
+			In40 = L["Within 40 yards"], Past28 = L["Past 28 yards"], Past40 = L["Past 40 yards"] }
+		local DISTANCE_SHORT = { In11 = L["in 11 yd"], In28 = L["in 28 yd"], In40 = L["in 40 yd"],
+			Past28 = L["past 28 yd"], Past40 = L["past 40 yd"] }
+		local DISTANCE_TIP = L["This row: just those about that far from you. 11 and 28 yards are the " ..
+			"game's interact distances; 40 asks a 40-yard spell on your action bars (harmful for enemies, " ..
+			"helpful for friends), and with none there the row fits no unit past 28 yards."]
 		-- A row's names and tip from its id: its kind's name (label), what's
-		-- under it (sub: its Who and number), all in one line (full).
+		-- under it (sub: its Who, Distance and number), all in one line (full);
+		-- a name of your own (markNames) for label and full instead, its own
+		-- in auto and its tip.
+		local AutoRowInfo
 		local function RowInfo(id)
-			local base, reaction, copy = ns.MarkRowBase(id)
+			local info = AutoRowInfo(id)
+			local db = ns.GetDB() -- (nil while the page is first made, at load)
+			local own = db and db.markNames
+			own = type(own) == "table" and own[id]
+			info.auto = info.full
+			if type(own) == "string" and own:find("%S") then
+				info.label, info.sub, info.full = own, nil, own
+				info.tip = "|cffffd100" .. info.auto .. "|r\n" .. info.tip
+			end
+			return info
+		end
+		function AutoRowInfo(id)
+			local base, reaction, copy, distance = ns.MarkRowBase(id)
 			local kind = KIND_INFO[base] or KINDS[1]
 			local who = reaction and REACTION_NAMES[reaction]
+			local far = distance and DISTANCE_SHORT[distance]
 			local number = copy and "(" .. copy .. ")"
-			local sub = who and number and who .. " " .. number or who or number
-			return { id = id, base = base, reaction = reaction, label = kind[2], sub = sub,
-				full = kind[2] .. (who and " - " .. who or "") .. (number and " " .. number or ""),
-				tip = kind[3] .. (reaction and " " .. REACTION_TIPS[reaction] or "") }
+			local scope = who and far and who .. ", " .. far or who or far
+			local sub = scope and number and scope .. " " .. number or scope or number
+			local fullScope = (who or "") .. (who and distance and ", " or "")
+				.. (distance and DISTANCE_NAMES[distance] or "")
+			return { id = id, base = base, reaction = reaction, distance = distance, label = kind[2], sub = sub,
+				full = kind[2] .. (fullScope ~= "" and " - " .. fullScope or "") .. (number and " " .. number or ""),
+				tip = kind[3] .. (reaction and " " .. REACTION_TIPS[reaction] or "")
+					.. (distance and " " .. DISTANCE_TIP or "") }
 		end
+		preview.RowInfo = RowInfo
 
 		-- When each row fits, in its drawer (as the Standard Frames page's rows:
 		-- Always, the dropdowns, roles, a rule: Core's MARK_WHEN_WORDS).
@@ -6578,13 +6761,21 @@ do
 			else
 				local parts = {}
 				for _, part in ipairs(ALSO_PARTS) do
-					if ns.TargetMarkOwn("Color" .. part[1], kind) then parts[#parts + 1] = ALSO_SHORT[part[1]] end
+					if ns.TargetMarkAlso("Color" .. part[1], kind) then parts[#parts + 1] = ALSO_SHORT[part[1]] end
 				end
 				if #parts > 0 then list[#list + 1] = { table.concat(parts, ", ") } end
 			end
 			local size = ns.TargetMarkSetting("Size", kind) or 1
 			if math.abs(size - 1) > 0.001 and ns.TargetMarkSetting("Style", kind) ~= "none" then
 				list[#list + 1] = { (L["Size %d%%"]):format(size * 100 + 0.5) }
+			end
+			local markAlpha = ns.TargetMarkSetting("Opacity", kind) or 1
+			if markAlpha < 1 and ns.TargetMarkSetting("Style", kind) ~= "none" then
+				list[#list + 1] = { (L["Mark %d%%"]):format(markAlpha * 100 + 0.5), "fade" }
+			end
+			local scale = ns.TargetMarkSetting("Scale", kind) or 1
+			if ns.isRetail and math.abs(scale - 1) > 0.001 then
+				list[#list + 1] = { (L["Plate size %d%%"]):format(scale * 100 + 0.5) }
 			end
 			return list
 		end
@@ -6628,13 +6819,15 @@ do
 					moves[id].up:SetShown(i > 1 and Group(list[i - 1]) == Group(id))
 					moves[id].down:SetShown(i < #list - 1 and Group(list[i + 1]) == Group(id))
 				end
-				-- (A row for some units under a row of its kind for all of
-				-- them: that one sets first. Its Who in orange.)
-				local base, reaction = ns.MarkRowBase(id)
+				-- (A row for some units under a row of its kind for more of
+				-- them: that one sets first. Its Who and Distance in orange.)
+				local base, reaction, _, distance = ns.MarkRowBase(id)
 				local below = false
 				for j = 1, i - 1 do
-					local otherBase, otherReaction = ns.MarkRowBase(list[j])
-					if reaction and otherBase == base and not otherReaction and base ~= "others" then
+					local otherBase, otherReaction, _, otherDistance = ns.MarkRowBase(list[j])
+					if otherBase == base and base ~= "others" and (not otherReaction or otherReaction == reaction)
+						and (not otherDistance or otherDistance == distance)
+						and (otherReaction ~= reaction or otherDistance ~= distance) then
 						below = true
 					end
 				end
@@ -6649,7 +6842,7 @@ do
 					drawer:ClearAllPoints()
 					drawer:SetPoint("TOPLEFT", grid, "TOPLEFT", DRAWER_X, -y)
 					drawer:Show()
-					y = y + DRAWER_H + 4
+					y = y + drawer:GetHeight() + 4
 				else
 					drawer:Hide()
 				end
@@ -6661,6 +6854,7 @@ do
 		local function Toggle(id)
 			opened[id] = not opened[id]
 			grid:Refresh()
+			preview:Pick(id)
 		end
 		local function SetOrder(order)
 			ns.GetDB().markOrder = table.concat(order, ",")
@@ -6695,34 +6889,48 @@ do
 			button:SetScript("OnClick", function() Move(kind, by) end)
 			return button
 		end
-		-- The next free row of a kind and Who: its own id while it isn't on
-		-- the grid (Default's always is), else the first number free; nil
-		-- with all of them taken.
-		local function FreeRow(base, reaction)
-			local first, on = base .. (reaction or ""), {}
+		-- The next free row of a kind, Who and Distance: its own id while it
+		-- isn't on the grid (Default's always is), else the first number
+		-- free; nil with all of them taken.
+		local function FreeRow(base, reaction, distance)
+			local first, on = base .. (reaction or "") .. (distance or ""), {}
 			for _, id in ipairs(ns.TargetMarkOrder()) do on[id] = true end
 			if first ~= "others" and not on[first] then return first end
 			for copy = 2, ns.MARK_COPIES do
 				if not on[first .. copy] then return first .. copy end
 			end
 		end
-		-- An added row, its look a copy of the first of its kind and Who (that
+		-- An added row, its look a copy of the first of its kind, Who and Distance (that
 		-- one itself: its own look if it had one, else its kind's or its own
 		-- to start with, as Normal NPC - Enemy's 40%), written out so its cells
 		-- show it; its When afresh: Always, or its kind's rule (Core's
 		-- MARK_ROW_RULES), every role. Just above the first row of its kind,
 		-- or after the rest.
-		local MARK_COPY = { "Show", "Style", "Color", "R", "G", "B", "Size", "Bob", "Alpha", "AlsoSame" }
-		local function AddRow(id)
+		local MARK_COPY = { "Show", "Style", "Color", "R", "G", "B", "Size", "Bob", "Alpha", "AlsoSame", "Opacity",
+			"Scale", "PlateColor", "PlateR", "PlateG", "PlateB" }
+		-- (Fresh: its kind's defaults instead, at the end of the grid, opened.)
+		local function AddRow(id, fresh)
 			local db = ns.GetDB()
-			local base, reaction = ns.MarkRowBase(id)
-			local first = base .. (reaction or "")
+			local base, reaction, _, distance = ns.MarkRowBase(id)
+			local first = base .. (reaction or "") .. (distance or "")
 			for _, key in ipairs(MARK_COPY) do
-				db[MarkKey(id, key)] = ns.TargetMarkOwn(key, first)
+				if fresh then
+					db[MarkKey(id, key)] = ns.DEFAULTS[MarkKey(base, key)]
+				else
+					db[MarkKey(id, key)] = ns.TargetMarkOwn(key, first)
+				end
 			end
 			for _, part in ipairs({ "Name", "Bar", "Border" }) do
-				db[id .. "Color" .. part] = ns.TargetMarkOwn("Color" .. part, first) and true or false
+				if fresh then
+					db[id .. "Color" .. part] = ns.DEFAULTS[base .. "Color" .. part] and true or false
+				else
+					db[id .. "Color" .. part] = ns.TargetMarkOwn("Color" .. part, first) and true or false
+				end
 			end
+			-- (Its plate color - to start with: it leaves the plate's colors to
+			-- the rows below till you pick one.)
+			db[MarkKey(id, "PlateColor")] = "-"
+			db[MarkKey(id, "AlsoSame")] = false
 			local rule = ns.MARK_ROW_RULES[first]
 			db[id .. "When"] = not rule
 			for _, word in ipairs(ns.MARK_WHEN_WORDS) do
@@ -6736,10 +6944,12 @@ do
 			local order = Order()
 			local at = #order + 1
 			for i, each in ipairs(order) do
-				if ns.MarkRowBase(each) == base then at = i break end
+				if not fresh and ns.MarkRowBase(each) == base then at = i break end
 			end
 			table.insert(order, at, id)
+			if fresh then opened[id] = true end
 			SetOrder(order)
+			preview:Pick(id)
 		end
 		local function RemoveRow(id)
 			local order = {}
@@ -6749,11 +6959,200 @@ do
 			SetOrder(order)
 		end
 
-		-- A row's slider setting: a row without one of its own reads its
-		-- kind's (as the plates do).
-		local function RowSetting(kind, key, dbKey)
-			return { get = function() return ns.TargetMarkSetting(key, kind) or 1 end,
-				set = function(value) ns.GetDB()[dbKey] = value end }
+		-- Picking a row: a Kind; for Aggro and Units a Type (which of them); a
+		-- Who (that kind's own: none for the aggro rows, no Neutral for players
+		-- and minions); a Distance (Core's MARK_DISTANCES). Under the grid for
+		-- adding one, and in each drawer (Default's own aside) for changing it.
+		-- A pick: { kind, type, who, distance }, Kind and Type naming a row
+		-- kind (Core's MARK_ROW_KINDS).
+		local ADD_KINDS = {
+			{ "target", L["Target"] }, { "focus", L["Focus"] }, { "mouseover", L["Mouseover"] },
+			{ "aggro", L["Aggro"], { { "aggro", L["On you"] }, { "aggroother", L["Not on you"] },
+				{ "aggrononank", L["On a non-tank"] } } },
+			{ "units", L["Units"], { { "all", L["Any unit"] }, { "npcs", L["NPC"] }, { "npc", L["Normal NPC"] },
+				{ "elite", L["Elite NPC"] }, { "players", L["Players"] }, { "minions", L["Minions"] } } },
+			{ "others", L["Default"] },
+		}
+		local function KindInfo(pick)
+			for _, kind in ipairs(ADD_KINDS) do
+				if kind[1] == pick.kind then return kind end
+			end
+			return ADD_KINDS[1]
+		end
+		-- (The row kind picked: Kind's own, or its Type's.)
+		local function PickedKind(pick)
+			local kind = KindInfo(pick)
+			return kind[3] and (pick.type or kind[3][1][1]) or kind[1]
+		end
+		local function KindChoices()
+			local list = {}
+			for _, kind in ipairs(ADD_KINDS) do list[#list + 1] = { value = kind[1], text = kind[2] } end
+			return list
+		end
+		local function TypeChoices(pick)
+			local list = {}
+			for _, kind in ipairs(KindInfo(pick)[3] or {}) do list[#list + 1] = { value = kind[1], text = kind[2] } end
+			return list
+		end
+		local function WhoChoices(pick)
+			local list = { { value = "Any", text = L["Any"] } }
+			for _, who in ipairs(ns.MARK_ROW_KINDS[PickedKind(pick)] or {}) do
+				list[#list + 1] = { value = who, text = REACTION_NAMES[who] }
+			end
+			return list
+		end
+		local function DistanceChoices()
+			local list = { { value = "Any", text = L["Any distance"] } }
+			for _, band in ipairs(ns.MARK_DISTANCES) do
+				list[#list + 1] = { value = band, text = DISTANCE_NAMES[band] }
+			end
+			return list
+		end
+		-- (A Who the row kind picked hasn't got: back to Any.)
+		local function KeepWho(pick)
+			local known = false
+			for _, choice in ipairs(WhoChoices(pick)) do known = known or choice.value == pick.who end
+			if not known then pick.who = "Any" end
+		end
+		-- (A row's own pick, from its id.)
+		local function PickOf(id)
+			local base, reaction, _, distance = ns.MarkRowBase(id)
+			local pick = { kind = base, who = reaction or "Any", distance = distance or "Any" }
+			for _, kind in ipairs(ADD_KINDS) do
+				for _, sub in ipairs(kind[3] or {}) do
+					if sub[1] == base then pick.kind, pick.type = kind[1], base end
+				end
+			end
+			return pick
+		end
+		-- (The row a pick names, without its number.)
+		local function PickedFirst(pick)
+			return PickedKind(pick) .. (pick.who ~= "Any" and pick.who or "") .. (pick.distance ~= "Any" and pick.distance or "")
+		end
+		local function Choice(parent, width, Choices, Get, Set)
+			local ok, dropdown = ns.MenuDropdown(parent)
+			if ok and dropdown and dropdown.SetupMenu then
+				dropdown:SetWidth(width)
+				dropdown:SetupMenu(function(_, root)
+					for _, choice in ipairs(Choices()) do
+						root:CreateRadio(choice.text, function() return Get() == choice.value end, function()
+							Set(choice.value)
+							Refresh()
+						end)
+					end
+				end)
+				dropdown.Refresh = function(self) self:GenerateMenu() end
+			else
+				dropdown = ns.PanelButton(parent)
+				dropdown:SetSize(width, 22)
+				dropdown:SetScript("OnClick", function()
+					local list, now = Choices(), 0
+					for i, choice in ipairs(list) do
+						if Get() == choice.value then now = i end
+					end
+					Set(list[now % #list + 1].value)
+					Refresh()
+				end)
+				dropdown.Refresh = function(self)
+					for _, choice in ipairs(Choices()) do
+						if Get() == choice.value then self:SetText(choice.text) end
+					end
+				end
+			end
+			dropdown.searchSkip = true
+			controls[#controls + 1] = dropdown
+			return dropdown
+		end
+		-- Kind, Type, Who and Distance dropdowns for a pick, in a line from
+		-- first's right (Type and Who only with a choice to make; the rest
+		-- close up to the left); changed: after each pick. Returns the Kind
+		-- dropdown and a fn placing them (and after, if given, after the last).
+		local function PickLine(parent, pick, widths, changed)
+			local kindPick = Choice(parent, widths[1], KindChoices, function() return pick.kind end, function(value)
+				pick.kind, pick.type = value, nil
+				KeepWho(pick)
+				changed()
+			end)
+			Tooltip(kindPick, L["The kind of plate the row is for: your target, focus or the unit under the " ..
+				"mouse; Aggro, enemies by who they're attacking; Units, by what they are; or Default, every other plate."])
+			local typePick = Choice(parent, widths[2], function() return TypeChoices(pick) end,
+				function() return PickedKind(pick) end, function(value)
+					pick.type = value
+					KeepWho(pick)
+					changed()
+				end)
+			Tooltip(typePick, L["Which of them: for Aggro, who the enemy's attacking; for Units, NPCs by rank or " ..
+				"any NPC, players, their pets, totems and guardians (minions), or any unit."])
+			local whoPick = Choice(parent, widths[3], function() return WhoChoices(pick) end,
+				function() return pick.who end, function(value)
+					pick.who = value
+					changed()
+				end)
+			Tooltip(whoPick, L["Any: all of that kind. Enemy, Neutral or Friendly: just those of them."])
+			local distancePick = Choice(parent, widths[4], DistanceChoices, function() return pick.distance end,
+				function(value)
+					pick.distance = value
+					changed()
+				end)
+			Tooltip(distancePick, L["Any distance: all of them, near or far. Within or past 11, 28 or 40 yards: just " ..
+				"those that far from you, say Any unit past 40 yards to fade the plates far off. 40 yards asks a " ..
+				"40-yard spell on your action bars; with none there, the row fits no unit past 28 yards."])
+			return kindPick, function(after)
+				typePick:SetShown(KindInfo(pick)[3] ~= nil)
+				whoPick:SetShown(#(ns.MARK_ROW_KINDS[PickedKind(pick)] or {}) > 0)
+				local last = kindPick
+				for _, each in ipairs({ typePick, whoPick, distancePick, after }) do
+					if each:IsShown() then
+						each:ClearAllPoints()
+						each:SetPoint("LEFT", last, "RIGHT", 6, 0)
+						last = each
+					end
+				end
+			end
+		end
+
+		-- A row made another kind, Who or Distance, in its place: its look,
+		-- When, roles and name go over to the new id (the next free of them),
+		-- the old id's back to its defaults. Nothing with five of them on the grid.
+		local MARK_PARTS = { "Name", "Bar", "Border" }
+		local function RetypeRow(id, pick)
+			local db = ns.GetDB()
+			local base, reaction, _, distance = ns.MarkRowBase(id)
+			if PickedFirst(pick) == base .. (reaction or "") .. (distance or "") then return end
+			local new = FreeRow(PickedKind(pick), pick.who ~= "Any" and pick.who or nil,
+				pick.distance ~= "Any" and pick.distance or nil)
+			if not new then return end
+			local keys = {}
+			for _, key in ipairs(MARK_COPY) do
+				db[MarkKey(new, key)] = ns.TargetMarkOwn(key, id)
+				keys[#keys + 1] = MarkKey(id, key)
+			end
+			for _, part in ipairs(MARK_PARTS) do
+				db[new .. "Color" .. part] = ns.TargetMarkOwn("Color" .. part, id) and true or false
+				keys[#keys + 1] = id .. "Color" .. part
+			end
+			db[new .. "When"] = db[id .. "When"]
+			keys[#keys + 1] = id .. "When"
+			for _, word in ipairs(ns.MARK_WHEN_WORDS) do
+				db[new .. "When" .. word[2]] = db[id .. "When" .. word[2]]
+				keys[#keys + 1] = id .. "When" .. word[2]
+			end
+			local profile = ns.ProfileBase()
+			for _, key in ipairs(keys) do db[key] = profile[key] end
+			for _, list in ipairs({ "frameRules", "tankHide", "healerHide", "damageHide" }) do
+				if type(db[list]) == "table" then
+					db[list][new .. "When"], db[list][id .. "When"] = db[list][id .. "When"], nil
+				end
+			end
+			db.markNames = db.markNames or {}
+			db.markNames[new], db.markNames[id] = db.markNames[id], nil
+			opened[new], opened[id] = opened[id], nil
+			local order = Order()
+			for i, each in ipairs(order) do
+				if each == id then order[i] = new end
+			end
+			SetOrder(order)
+			preview:Pick(new)
 		end
 
 		function MakeRow(id)
@@ -6801,13 +7200,15 @@ do
 			local previewBack = preview:CreateTexture(nil, "BACKGROUND")
 			previewBack:SetAllPoints()
 			previewBack:SetColorTexture(0, 0, 0, 0.45)
+			-- (Larger than the plate it stands for, a short bar low down: the
+			-- mark over it is what to see, and round it room for brackets.)
 			local holder = CreateFrame("Frame", nil, preview)
-			holder:SetSize(140, 73)
-			holder:SetScale(0.3)
+			holder:SetSize(94, 49)
+			holder:SetScale(0.45)
 			holder:SetPoint("CENTER")
 			local bar = CreateFrame("Frame", nil, holder)
-			bar:SetSize(84, 10)
-			bar:SetPoint("CENTER", holder, "CENTER", 0, -12)
+			bar:SetSize(60, 8)
+			bar:SetPoint("CENTER", holder, "CENTER", 0, -16)
 			bar:SetFrameLevel(holder:GetFrameLevel() + 2)
 			local barEdge = bar:CreateTexture(nil, "BORDER")
 			barEdge:SetPoint("TOPLEFT", -2, 2)
@@ -6821,9 +7222,10 @@ do
 				preview.arrow = preview.arrow or ns.MakeTargetArrow(holder, bar)
 				ns.StyleTargetArrow(preview.arrow, nil, kind)
 				preview.arrow:SetShown(shown and ns.TargetMarkSetting("Style", kind) ~= "none")
+				preview.arrow:SetAlpha(ns.TargetMarkSetting("Opacity", kind) or 1)
 				local tintKind = ns.TargetMarkTintKind(kind)
-				if shown and ns.TargetMarkSetting("ColorBar", tintKind) then
-					local r, g, b = ns.TargetArrowColour(nil, tintKind)
+				if shown and ns.TargetMarkAlso("ColorBar", tintKind) then
+					local r, g, b = ns.TargetPlateColour(nil, tintKind)
 					barFill:SetColorTexture(r, g, b, 1)
 				else
 					barFill:SetColorTexture(0.6, 0.12, 0.12, 1)
@@ -6839,6 +7241,7 @@ do
 			name:SetWordWrap(false)
 			name.searchSkip = true
 			function row:SetName()
+				info = RowInfo(kind) -- (its own name may have changed)
 				local sub = info.sub and ((self.below and " |cffff8c1a" or " |cff999999") .. info.sub .. "|r") or ""
 				name:SetText(info.label .. sub)
 				name:SetAlpha(Shown() and 1 or 0.5)
@@ -6915,11 +7318,20 @@ do
 				remove:SetScript("OnClick", function() RemoveRow(kind) end)
 			end
 
-			-- The drawer: Mark (style, color, size, movement), Plate (Also
-			-- color, opacity) and When. Page search finding something in it
-			-- opens it (openSection).
+			-- The drawer: Name (your own), Row (its kind, Who and Distance),
+			-- Mark (style, color, movement; size and opacity at the end),
+			-- Plate (color and the parts it colors; size and opacity at the
+			-- end) and When. Default's own no Row: it's always there. Page
+			-- search finding something in it opens it (openSection).
+			local LINES = { "Name", "Row", "Mark", "Plate", "When" }
+			if kind == "others" then table.remove(LINES, 2) end
+			local LINE_NAMES = { Row = L["Row"], Name = L["Name"], Mark = L["Mark"], Plate = L["Plate"],
+				When = L["When"] }
+			local lineAt = {}
+			for i, line in ipairs(LINES) do lineAt[line] = i end
 			local drawer = CreateFrame("Frame", nil, grid)
-			drawer:SetSize(ROW_W - DRAWER_X, DRAWER_H)
+			local DRAWER_W = ROW_W - DRAWER_X
+			drawer:SetSize(DRAWER_W, LINE_H * #LINES + 8)
 			drawer:Hide()
 			drawers[kind] = drawer
 			drawer.openSection = function()
@@ -6929,163 +7341,303 @@ do
 			local drawerBack = drawer:CreateTexture(nil, "BACKGROUND")
 			drawerBack:SetAllPoints()
 			drawerBack:SetColorTexture(0, 0, 0, 0.3)
-			local function At(lineNumber, control, x, dy)
-				control:SetPoint("LEFT", drawer, "TOPLEFT", x, -4 - LINE_H * (lineNumber - 0.5) + (dy or 0))
+			local function At(line, control, x, dy)
+				control:SetPoint("LEFT", drawer, "TOPLEFT", x, -4 - LINE_H * (lineAt[line] - 0.5) + (dy or 0))
 				return control
 			end
-			for lineNumber, text in ipairs({ L["Mark"], L["Plate"], L["When"] }) do
-				local label = At(lineNumber, Label(drawer, "GameFontNormalSmall", text), 6)
+			for _, line in ipairs(LINES) do
+				local label = At(line, Label(drawer, "GameFontNormalSmall", LINE_NAMES[line]), 6)
 				label.searchSkip = true
 			end
 
-			-- Mark: style, color and its custom color's swatch, size, movement.
-			local style = At(1, Pick(drawer, MarkKey(kind, "Style"), base == "aggro" and AGGRO_STYLES
+			-- A color's swatch: its R, G and B settings (keys), the color it
+			-- shows (Current), the setting a pick puts on Custom (colorKey),
+			-- shown while Visible says.
+			local function Swatch(line, x, keys, colorKey, Current, Visible, tip)
+				local swatch = At(line, CreateFrame("Button", nil, drawer), x)
+				swatch:SetSize(18, 18)
+				local swatchBorder = swatch:CreateTexture(nil, "BACKGROUND")
+				swatchBorder:SetAllPoints()
+				swatchBorder:SetColorTexture(0.6, 0.6, 0.6, 1)
+				local swatchColor = swatch:CreateTexture(nil, "ARTWORK")
+				swatchColor:SetPoint("TOPLEFT", 2, -2)
+				swatchColor:SetPoint("BOTTOMRIGHT", -2, 2)
+				Tooltip(swatch, tip)
+				swatch.Refresh = function(self)
+					local r, g, b = Current()
+					swatchColor:SetColorTexture(r, g, b, 1)
+					self:SetShown(Visible())
+					self:SetEnabled(Shown())
+					self:SetAlpha(Shown() and 1 or 0.4)
+				end
+				controls[#controls + 1] = swatch
+				for _, key in ipairs(keys) do RecordKey(content, key) end
+				swatch:SetScript("OnClick", function()
+					local db = ns.GetDB()
+					local r0, g0, b0 = Current()
+					OpenColorPicker(r0, g0, b0, function(r, g, b)
+						db[keys[1]], db[keys[2]], db[keys[3]] = r, g, b
+						if colorKey then db[colorKey] = "custom" end
+						Refresh()
+						Changed()
+					end)
+				end)
+				return swatch
+			end
+
+			-- A percent box at the end of a line (slot 1 the last, 2 before
+			-- it), for a row's setting (or its kind's) as a whole percent, low
+			-- to high: the mouse wheel steps it by 5, or type one and press
+			-- Enter. Its name to its left.
+			local function PercentBox(line, slot, key, low, high, name, tip)
+				local dbKey = MarkKey(kind, key)
+				RecordKey(content, dbKey)
+				local box = At(line, ns.SkinEditBox(CreateFrame("EditBox", nil, drawer, "InputBoxTemplate")),
+					DRAWER_W - 50 - (slot - 1) * 100)
+				box:SetSize(40, 20)
+				box:SetAutoFocus(false)
+				box:SetJustifyH("RIGHT")
+				box:SetMaxLetters(4)
+				box:EnableMouseWheel(true)
+				box.searchLabel = info.full .. " " .. name
+				local function Now()
+					return math.floor((ns.TargetMarkSetting(key, kind) or 1) * 100 + 0.5)
+				end
+				-- (Just this row's parts drawn again: the whole page's Refresh
+				-- on every wheel step hitched the game.)
+				local function Set(percent)
+					percent = math.max(low, math.min(high, math.floor(percent + 0.5)))
+					ns.GetDB()[dbKey] = percent / 100
+					-- (Typing in it: the bare number, still to edit.)
+					box:SetText(box:HasFocus() and tostring(Now()) or Now() .. "%")
+					box.edited = nil
+					chips.Refresh()
+					preview.Refresh()
+					Changed()
+				end
+				box:SetScript("OnMouseWheel", function(self, delta)
+					if self:IsEnabled() then Set(Now() + delta * 5) end
+				end)
+				box:SetScript("OnEditFocusGained", function(self)
+					self:SetText(Now())
+					self:HighlightText()
+					self.edited = nil
+				end)
+				-- (Only a number typed in it is saved on leaving it: the wheel's
+				-- steps are saved as they come.)
+				box:SetScript("OnTextChanged", function(self, typed)
+					if typed then self.edited = true end
+				end)
+				box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+				box:SetScript("OnEscapePressed", function(self)
+					self.cancelled = true
+					self:ClearFocus()
+				end)
+				box:SetScript("OnEditFocusLost", function(self)
+					local typed = tonumber((self:GetText():gsub("%%", "")))
+					if typed and self.edited and not self.cancelled then
+						Set(typed)
+					end
+					self.cancelled, self.edited = nil, nil
+					self:SetText(Now() .. "%")
+				end)
+				box.Refresh = function(self)
+					if not self:HasFocus() then self:SetText(Now() .. "%") end
+					if Shown() then self:Enable() else self:Disable() end
+					self:SetAlpha(Shown() and 1 or 0.5)
+				end
+				controls[#controls + 1] = box
+				Tooltip(box, tip .. " " .. L["Scroll the mouse wheel over it, or type a number and press Enter."])
+				local label = Label(drawer, "GameFontHighlightSmall", name)
+				label:SetPoint("RIGHT", box, "LEFT", -6, 0)
+				label.searchSkip = true
+				return box, label
+			end
+
+			-- Name: your own for the row, shown for it on the grid and the
+			-- preview (empty: its kind's, greyed in the box).
+			local nameBox = At("Name", ns.SkinEditBox(CreateFrame("EditBox", nil, drawer, "InputBoxTemplate")),
+				LABEL_W + 6)
+			nameBox:SetSize(220, 20)
+			nameBox:SetAutoFocus(false)
+			nameBox:SetMaxLetters(40)
+			nameBox.searchSkip = true
+			RecordKey(content, "markNames")
+			local nameHint = nameBox:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+			nameHint:SetPoint("LEFT", 2, 0)
+			nameHint:SetPoint("RIGHT", -2, 0)
+			nameHint:SetJustifyH("LEFT")
+			nameHint:SetWordWrap(false)
+			local function OwnName()
+				local db = ns.GetDB()
+				local names = db and db.markNames
+				return type(names) == "table" and names[kind] or ""
+			end
+			local function SaveName(self)
+				local text = self:GetText():match("^%s*(.-)%s*$")
+				local db = ns.GetDB()
+				db.markNames = db.markNames or {}
+				db.markNames[kind] = text ~= "" and text or nil
+				row:SetName()
+				Changed() -- (the page's preview's caption)
+				nameHint:SetShown(text == "" and not self:HasFocus())
+			end
+			nameBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+			nameBox:SetScript("OnEditFocusLost", SaveName)
+			nameBox:SetScript("OnEditFocusGained", function() nameHint:Hide() end)
+			nameBox:SetScript("OnEscapePressed", function(self)
+				self:SetText(OwnName())
+				self:ClearFocus()
+			end)
+			nameBox.Refresh = function(self)
+				if self:HasFocus() then return end
+				self:SetText(OwnName())
+				nameHint:SetText(AutoRowInfo(kind).full)
+				nameHint:SetShown(OwnName() == "")
+			end
+			controls[#controls + 1] = nameBox
+			Tooltip(nameBox, L["A name of your own for this row, shown on the grid and the preview, say Far " ..
+				"trash. Empty: its kind's name."])
+
+			-- Row: another kind, Who or Distance for it, as soon as it's picked
+			-- (in its place, its settings with it: RetypeRow).
+			if lineAt.Row then
+				local pick = PickOf(kind)
+				local kindPick, PlacePicks = PickLine(drawer, pick, { 100, 110, 90, 120 }, function()
+					RetypeRow(kind, pick)
+					-- (Nothing free to make it: back to its own.)
+					local own = PickOf(kind)
+					pick.kind, pick.type, pick.who, pick.distance = own.kind, own.type, own.who, own.distance
+				end)
+				At("Row", kindPick, LABEL_W)
+				local placer = CreateFrame("Frame", nil, drawer)
+				placer.Refresh = function() PlacePicks() end
+				controls[#controls + 1] = placer
+			end
+
+			-- Mark: style, color (and its custom color's swatch), movement;
+			-- size and opacity at the end.
+			local style = At("Mark", Pick(drawer, MarkKey(kind, "Style"), base == "aggro" and AGGRO_STYLES
 				or base == "others" and OTHERS_STYLES
 				or base == "mouseover" and MOUSEOVER_STYLES or MARK_STYLES, 100), LABEL_W)
 			style.searchLabel = info.full .. " " .. L["Style"]
 			GreyUnless(style, Shown)
-			local color = At(1, Pick(drawer, MarkKey(kind, "Color"), base == "aggro" and AGGRO_COLORS or MARK_COLORS, 92),
-				LABEL_W + 106)
+			-- (The rest of the line only with a mark: - has nothing to color,
+			-- move or size.)
+			local function MarkOn()
+				return ns.TargetMarkSetting("Style", kind) ~= "none"
+			end
+			local function ShownWithMark(control, also)
+				local refresh = control.Refresh
+				control.Refresh = function(self)
+					if refresh then refresh(self) end
+					self:SetShown(MarkOn())
+					if also then also:SetShown(MarkOn()) end
+				end
+			end
+			local color = At("Mark", Pick(drawer, MarkKey(kind, "Color"), base == "aggro" and AGGRO_COLORS or MARK_COLORS,
+				100), LABEL_W + 106)
 			color.searchLabel = info.full .. " " .. L["Color"]
+			Tooltip(color, L["The mark's color."])
 			GreyUnless(color, Shown)
-			local rKey, gKey, bKey = MarkKey(kind, "R"), MarkKey(kind, "G"), MarkKey(kind, "B")
-			local swatch = At(1, CreateFrame("Button", nil, drawer), LABEL_W + 204)
-			swatch:SetSize(18, 18)
-			local swatchBorder = swatch:CreateTexture(nil, "BACKGROUND")
-			swatchBorder:SetAllPoints()
-			swatchBorder:SetColorTexture(0.6, 0.6, 0.6, 1)
-			local swatchColor = swatch:CreateTexture(nil, "ARTWORK")
-			swatchColor:SetPoint("TOPLEFT", 2, -2)
-			swatchColor:SetPoint("BOTTOMRIGHT", -2, 2)
-			Tooltip(swatch, L["Click to choose the mark's custom color."])
 			-- (An aggro row on Your target's: your target's color, to start a custom one from.)
-			local function SwatchColor()
+			local function MarkColour()
 				if base == "aggro" and ns.TargetMarkOwn("Color", kind) == "same" and ns.TargetArrowColour then
 					return ns.TargetArrowColour(nil, "target")
 				end
 				return ns.TargetMarkOwn("R", kind) or 1, ns.TargetMarkOwn("G", kind) or 1,
 					ns.TargetMarkOwn("B", kind) or 1
 			end
-			swatch.Refresh = function(self)
-				local r, g, b = SwatchColor()
-				swatchColor:SetColorTexture(r, g, b, 1)
-				self:SetEnabled(Shown())
-				self:SetAlpha(Shown() and 1 or 0.4)
-			end
-			controls[#controls + 1] = swatch
-			for _, key in ipairs({ rKey, gKey, bKey }) do RecordKey(content, key) end
-			swatch:SetScript("OnClick", function()
-				local db = ns.GetDB()
-				local r0, g0, b0 = SwatchColor()
-				OpenColorPicker(r0, g0, b0, function(r, g, b)
-					db[rKey], db[gKey], db[bKey], db[MarkKey(kind, "Color")] = r, g, b, "custom"
-					Refresh()
-					Changed()
-				end)
-			end)
-			local sizeKey, bobKey = MarkKey(kind, "Size"), MarkKey(kind, "Bob")
-			RecordKey(content, sizeKey)
+			Swatch("Mark", LABEL_W + 212, { MarkKey(kind, "R"), MarkKey(kind, "G"), MarkKey(kind, "B") },
+				MarkKey(kind, "Color"), MarkColour, function() return MarkOn() and ns.TargetMarkOwn("Color", kind) == "custom" end,
+				L["Click to choose the mark's custom color."])
+			local bobKey = MarkKey(kind, "Bob")
 			RecordKey(content, bobKey)
-			local size = At(1, Slider(drawer, RowSetting(kind, "Size", sizeKey), L["Size"], 50, 200, 5, "%d%%", 100,
-				Changed), LABEL_W + 234, -6)
-			size:SetWidth(96)
-			size.searchLabel = info.full .. " " .. L["Size"]
-			GreyUnless(size, Shown)
-			local moving = At(1, Check(drawer, bobKey, L["Moving"],
+			local moving = At("Mark", Check(drawer, bobKey, L["Moving"],
 				L["The arrow, chevron and diamond bob up and down, the brackets, carets and corners close " ..
 				"in and out, the glow and underline pulse. Unticked, it holds still."], function(value)
 					ns.GetDB()[bobKey] = value
 					Changed()
-				end), LABEL_W + 340)
+				end), LABEL_W + 234)
 			moving.searchLabel = info.full .. " " .. L["Moving"]
 			GreyUnless(moving, Shown)
+			ShownWithMark(color)
+			ShownWithMark(moving)
+			ShownWithMark(PercentBox("Mark", 2, "Size", 50, 200, L["Size"], L["The mark's size."]))
+			ShownWithMark(PercentBox("Mark", 1, "Opacity", 0, 100, L["Opacity"],
+				L["The mark's own opacity (the plate's is on the Plate line)."]))
 
-			-- Plate: the unit's own parts in its mark's color (Also color),
-			-- ticked from a menu (or, on a client without menus, stepped
-			-- through each mix); the whole plate's opacity.
-			local also = At(2, ns.GridMenuButton(drawer, 150), LABEL_W)
-			Tooltip(also, L["The unit's own parts in its mark's color: its name and health bar (and on your " ..
-				"target, the game's border round it)."])
-			also.searchLabel = info.full .. " " .. L["Also color"]
-			local function AlsoChanged()
-				Refresh()
-				Changed()
-			end
-			local entries, parts = {}, {}
-			for _, part in ipairs(ALSO_PARTS) do
-				if not part.targetOnly or base == "target" or base == "aggro" then parts[#parts + 1] = part end
-			end
-			-- (An aggro row: first, Your target's, your target's ticks in its
-			-- color; its own parts then greyed in the menu.)
+			-- Plate: its color (- for the next row's, the game's, the mark's,
+			-- or its own) and the parts it colors; size (retail) and opacity
+			-- at the end. An aggro row's first: Your target's (AlsoSame), your
+			-- target's color and ticks.
 			local sameKey = base == "aggro" and MarkKey(kind, "AlsoSame") or nil
-			local function Own()
-				return not (sameKey and ns.TargetMarkOwn("AlsoSame", kind))
+			local plateKey = MarkKey(kind, "PlateColor")
+			RecordKey(content, plateKey)
+			if sameKey then RecordKey(content, sameKey) end
+			local plateChoices = {}
+			if sameKey then plateChoices[1] = { value = "target", text = L["Your target's"] } end
+			for _, choice in ipairs(PLATE_COLORS) do plateChoices[#plateChoices + 1] = choice end
+			local function PlateHow()
+				if sameKey and ns.TargetMarkOwn("AlsoSame", kind) then return "target" end
+				return ns.TargetMarkOwn("PlateColor", kind) or "-"
 			end
-			local function Ticked(part)
-				return ns.TargetMarkOwn("Color" .. part, kind) and true or false
+			local plateColor = At("Plate", Choice(drawer, 100, function() return plateChoices end, PlateHow,
+				function(value)
+					local db = ns.GetDB()
+					if sameKey then db[sameKey] = value == "target" end
+					if value ~= "target" then db[plateKey] = value end
+					Changed()
+				end), LABEL_W)
+			plateColor.searchLabel = info.full .. " " .. L["Plate color"]
+			Tooltip(plateColor, L["The plate's color, for the parts ticked beside it. -: the next row that fits " ..
+				"the plate decides (the game's if none does). The game's: the game's, whatever the rows below say. " ..
+				"Mark's: the mark's color. The rest as the mark's colors."])
+			GreyUnless(plateColor, Shown)
+			local function Colors()
+				local how = PlateHow()
+				return how ~= "-" and how ~= "game" and how ~= "target"
 			end
-			if sameKey then
-				RecordKey(content, sameKey)
-				entries[1] = { L["Your target's"], function() return not Own() end,
-					function() ns.GetDB()[sameKey] = Own() end, nil,
-					L["Its name, health bar and border as the Target row colors them."] }
+			local plateSwatch = Swatch("Plate", LABEL_W + 106,
+				{ MarkKey(kind, "PlateR"), MarkKey(kind, "PlateG"), MarkKey(kind, "PlateB") }, plateKey,
+				function()
+					return ns.TargetMarkOwn("PlateR", kind) or 1, ns.TargetMarkOwn("PlateG", kind) or 1,
+						ns.TargetMarkOwn("PlateB", kind) or 1
+				end, function() return PlateHow() == "custom" end, L["Click to choose the plate's custom color."])
+			-- (Its parts, closing up to the color with no swatch beside it.)
+			local ticks = {}
+			for _, part in ipairs(ALSO_PARTS) do
+				if not part.targetOnly or base == "target" or base == "aggro" then
+					local key = kind .. "Color" .. part[1]
+					RecordKey(content, key)
+					local tick = Check(drawer, key, ALSO_SHORT[part[1]], part[3], function(value)
+						ns.GetDB()[key] = value
+						Refresh()
+						Changed()
+					end)
+					tick.searchLabel = info.full .. " " .. part[2]
+					GreyUnless(tick, Shown)
+					ticks[#ticks + 1] = tick
+				end
 			end
-			for _, part in ipairs(parts) do
-				local key = kind .. "Color" .. part[1]
-				RecordKey(content, key)
-				entries[#entries + 1] = { part[2], function() return Ticked(part[1]) end,
-					function() ns.GetDB()[key] = not Ticked(part[1]) end, sameKey and Own or nil, part[3] }
+			local placer = CreateFrame("Frame", nil, drawer)
+			placer.Refresh = function()
+				local x = LABEL_W + (plateSwatch:IsShown() and 132 or 106)
+				for _, tick in ipairs(ticks) do
+					tick:ClearAllPoints()
+					At("Plate", tick, x)
+					tick:SetShown(Colors())
+					local text = tick.Text or tick.text
+					x = x + 30 + math.ceil(text and text:GetStringWidth() or 30)
+				end
 			end
-			also:SetScript("OnClick", function(self)
-				if ns.GRID_MENUS then
-					ns.TickMenu(self, entries, AlsoChanged, true)
-					return
-				end
-				-- (No menus: the next of the mixes; for an aggro row, Your
-				-- target's before the first and after the last.)
-				local db, mix = ns.GetDB(), 0
-				if Own() then
-					for bit, part in ipairs(parts) do
-						if Ticked(part[1]) then mix = mix + 2 ^ (bit - 1) end
-					end
-					mix = (mix + 1) % 2 ^ #parts
-					if sameKey and mix == 0 then
-						db[sameKey] = true
-						AlsoChanged()
-						return
-					end
-				else
-					db[sameKey] = false
-				end
-				for bit, part in ipairs(parts) do
-					db[kind .. "Color" .. part[1]] = math.floor(mix / 2 ^ (bit - 1)) % 2 == 1
-				end
-				AlsoChanged()
-			end)
-			also.Refresh = function(self)
-				local names = {}
-				if not Own() then
-					self:SetText(L["Also color"] .. ": " .. L["Your target's"])
-					self:SetEnabled(Shown())
-					return
-				end
-				for _, part in ipairs(parts) do
-					if Ticked(part[1]) then names[#names + 1] = ALSO_SHORT[part[1]] end
-				end
-				self:SetText(L["Also color"] .. ": " .. (#names > 0 and table.concat(names, ", ")
-					or "|cff808080" .. (base == "others" and L["The game's"] or L["None"]) .. "|r"))
-				self:SetEnabled(Shown())
+			controls[#controls + 1] = placer
+			if ns.isRetail then
+				PercentBox("Plate", 2, "Scale", 50, 200, L["Size"],
+					L["The plate's size, its mark too. Not on WoW Forever: its plates don't change size."])
 			end
-			controls[#controls + 1] = also
-			local alphaKey = MarkKey(kind, "Alpha")
-			RecordKey(content, alphaKey)
-			local opacity = At(2, Slider(drawer, RowSetting(kind, "Alpha", alphaKey), L["Opacity"], 0, 100, 5, "%d%%",
-				100, Changed), LABEL_W + 166, -6)
-			opacity:SetWidth(110)
-			opacity.searchLabel = info.full .. " " .. L["Opacity"]
-			Tooltip(opacity, L["The whole plate's opacity while this row fits it, whether it has a mark or not. " ..
-				"CineMode's own fade comes on top."])
-			GreyUnless(opacity, Shown)
+			PercentBox("Plate", 1, "Alpha", 0, 100, L["Opacity"], L["The whole plate's opacity while this row fits " ..
+				"it, whether it has a mark or not. CineMode's own fade comes on top."])
 
 			-- When: as the Standard Frames page's rows.
 			local whenKey = kind .. "When"
@@ -7136,143 +7688,35 @@ do
 					"or the one picked in the group finder), whatever the row says. None ticked (-): every role."] },
 				changed = WhenChanged,
 			})
-			At(3, when, LABEL_W)
+			At("When", when, LABEL_W)
 			when:SetBand(1)
 		end
 
-		-- Adding a row: a Kind; for Aggro and Units a Type (which of them); a
-		-- Who (that kind's own: none for the aggro rows, no Neutral for players
-		-- and minions); and Add row. A dropdown each (or on a client without
-		-- them a button that steps through), Type and Who only while there's
-		-- a choice to make. Kind and Type name a row kind (Core's MARK_ROW_KINDS).
-		local ADD_KINDS = {
-			{ "target", L["Target"] }, { "focus", L["Focus"] }, { "mouseover", L["Mouseover"] },
-			{ "aggro", L["Aggro"], { { "aggro", L["On you"] }, { "aggroother", L["Not on you"] },
-				{ "aggrononank", L["On a non-tank"] } } },
-			{ "units", L["Units"], { { "npc", L["Normal NPC"] }, { "elite", L["Elite NPC"] },
-				{ "players", L["Players"] }, { "minions", L["Minions"] } } },
-			{ "others", L["Default"] },
-		}
-		local addKind, addType, addWho = "target", nil, "Any"
-		local function AddKindInfo()
-			for _, kind in ipairs(ADD_KINDS) do
-				if kind[1] == addKind then return kind end
-			end
-			return ADD_KINDS[1]
-		end
-		-- (The row kind picked: Kind's own, or its Type's.)
-		local function RowKind()
-			local kind = AddKindInfo()
-			return kind[3] and (addType or kind[3][1][1]) or kind[1]
-		end
-		local function KindChoices()
-			local list = {}
-			for _, kind in ipairs(ADD_KINDS) do list[#list + 1] = { value = kind[1], text = kind[2] } end
-			return list
-		end
-		local function TypeChoices()
-			local list = {}
-			for _, kind in ipairs(AddKindInfo()[3] or {}) do list[#list + 1] = { value = kind[1], text = kind[2] } end
-			return list
-		end
-		local function WhoChoices()
-			local list = { { value = "Any", text = L["Any"] } }
-			for _, who in ipairs(ns.MARK_ROW_KINDS[RowKind()] or {}) do
-				list[#list + 1] = { value = who, text = REACTION_NAMES[who] }
-			end
-			return list
-		end
-		-- (A Who the row kind picked hasn't got: back to Any.)
-		local function KeepWho()
-			local known = false
-			for _, choice in ipairs(WhoChoices()) do known = known or choice.value == addWho end
-			if not known then addWho = "Any" end
-		end
-		local function Choice(parent, width, Choices, Get, Set)
-			local ok, dropdown = ns.MenuDropdown(parent)
-			if ok and dropdown and dropdown.SetupMenu then
-				dropdown:SetWidth(width)
-				dropdown:SetupMenu(function(_, root)
-					for _, choice in ipairs(Choices()) do
-						root:CreateRadio(choice.text, function() return Get() == choice.value end, function()
-							Set(choice.value)
-							Refresh()
-						end)
-					end
-				end)
-				dropdown.Refresh = function(self) self:GenerateMenu() end
-			else
-				dropdown = ns.PanelButton(parent)
-				dropdown:SetSize(width, 22)
-				dropdown:SetScript("OnClick", function()
-					local list, now = Choices(), 0
-					for i, choice in ipairs(list) do
-						if Get() == choice.value then now = i end
-					end
-					Set(list[now % #list + 1].value)
-					Refresh()
-				end)
-				dropdown.Refresh = function(self)
-					for _, choice in ipairs(Choices()) do
-						if Get() == choice.value then self:SetText(choice.text) end
-					end
-				end
-			end
-			dropdown.searchSkip = true
-			controls[#controls + 1] = dropdown
-			return dropdown
-		end
+		-- Adding a row: just a button. The row's an Any unit with its kind's
+		-- look (no mark, plate color -) at the end of the grid, its drawer
+		-- open to make it what you want (its Row line). With five of those,
+		-- the first kind with one free.
 		local adding = CreateFrame("Frame", nil, content)
-		adding:SetSize(460, 24)
+		adding:SetSize(ROW_W, 24)
 		stack:Add(adding, "label")
-		local kindPick = Choice(adding, 120, KindChoices, function() return addKind end, function(value)
-			addKind, addType = value, nil
-			KeepWho()
-		end)
-		kindPick:SetPoint("LEFT", adding, "LEFT", 0, 0)
-		Tooltip(kindPick, L["The kind of plate the new row is for: your target, focus or the unit under the " ..
-			"mouse; Aggro, enemies by who they're attacking; Units, by what they are; or Default, every other plate."])
-		local typePick = Choice(adding, 120, TypeChoices, function() return RowKind() end, function(value)
-			addType = value
-			KeepWho()
-		end)
-		Tooltip(typePick, L["Which of them: for Aggro, who the enemy's attacking; for Units, NPCs by rank, " ..
-			"players or their pets, totems and guardians (minions)."])
-		local whoPick = Choice(adding, 100, WhoChoices, function() return addWho end,
-			function(value) addWho = value end)
-		Tooltip(whoPick, L["Any: all of that kind. Enemy, Neutral or Friendly: just those of them."])
 		local add = ns.PanelButton(adding)
-		add:SetSize(100, 22)
+		add:SetSize(90, 22)
+		add:SetPoint("LEFT", adding, "LEFT", 0, 0)
 		add:SetText(L["Add row"])
-		Tooltip(add, L["Adds a row for the kind and Who picked, a copy of the first such row's look to start " ..
-			"with (its When on Always), just above the first row of its kind. The same again makes another, " ..
-			"numbered: Target (2). Five of each at most."])
-		local function Picked()
-			return FreeRow(RowKind(), addWho ~= "Any" and addWho or nil)
+		Tooltip(add, L["Adds a row at the end of the grid, for any unit to start with, its settings open: " ..
+			"pick what it's for on its Row line, and its look."])
+		local function NewRow()
+			local id = FreeRow("all")
+			for _, kind in ipairs(KINDS) do
+				id = id or kind[1] ~= "others" and FreeRow(kind[1])
+			end
+			return id or nil
 		end
 		add:SetScript("OnClick", function()
-			local id = Picked()
-			if id then AddRow(id) end
+			local id = NewRow()
+			if id then AddRow(id, true) end
 		end)
-		-- (Type and Who shown only with a choice to make; the rest close up
-		-- to the left.)
-		add.Refresh = function(self)
-			local hasType = AddKindInfo()[3] ~= nil
-			local hasWho = #(ns.MARK_ROW_KINDS[RowKind()] or {}) > 0
-			typePick:SetShown(hasType)
-			whoPick:SetShown(hasWho)
-			local last = kindPick
-			for _, pick in ipairs({ typePick, whoPick }) do
-				if pick:IsShown() then
-					pick:ClearAllPoints()
-					pick:SetPoint("LEFT", last, "RIGHT", 6, 0)
-					last = pick
-				end
-			end
-			self:ClearAllPoints()
-			self:SetPoint("LEFT", last, "RIGHT", 6, 0)
-			self:SetEnabled(Picked() ~= nil)
-		end
+		add.Refresh = function(self) self:SetEnabled(NewRow() ~= nil) end
 		controls[#controls + 1] = add
 
 		grid:Refresh()
@@ -7289,6 +7733,7 @@ do
 		Tooltip(bareHeight, L["Moves the marks drawn over the plate up, or down below 0, from where the plate's " ..
 			"middle is, while nothing of the plate shows. As the plate fades in or out, the marks move between " ..
 			"the two heights."])
+
 		canvas:SetScript("OnShow", PageShown(Refresh, content))
 		canvas:Hide()
 		RegisterSubpage(canvas, "Nameplate Style", L["Nameplates"])

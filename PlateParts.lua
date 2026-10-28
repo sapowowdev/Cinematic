@@ -987,12 +987,16 @@ local arrows = {} -- [plate] = arrow frame
 -- but for Also color's, <id>Color<part> for every row.
 -- Aggro on you (and its other rows) goes by your target's height, its look
 -- too while its own style is "same", and its color while its color is.
--- A setting a row hasn't got: the same row's without its number, then its
--- kind's (targetEnemy2, targetEnemy, target: Core's MarkRowBase).
+-- A setting a row hasn't got: the same row's without its number, then
+-- without its Distance, then its kind's (targetEnemyPast402,
+-- targetEnemyPast40, targetEnemy, target: Core's MarkRowBase).
 local AGGRO_COLOR_KEYS = { Color = true, R = true, G = true, B = true }
 local function MarkParent(kind)
-	local base, reaction, copy = ns.MarkRowBase(kind)
+	local base, reaction, copy, distance = ns.MarkRowBase(kind)
 	if copy then
+		return base .. (reaction or "") .. (distance or "")
+	end
+	if distance then
 		return base .. (reaction or "")
 	end
 	return reaction and base or nil
@@ -1044,6 +1048,21 @@ local function TintKind(kind)
 end
 ns.TargetMarkTintKind = TintKind
 
+-- A row's plate color (PlateColor): "-" none, the next fitting row's
+-- (PlateLook); "game" the game's, whatever the rows below say; "same" its
+-- mark's; "gold", "reaction", "class" or "custom" (PlateR, G, B).
+local function PlateHow(kind)
+	return ArrowSetting("PlateColor", kind) or "-"
+end
+local PLATE_PASS = { ["-"] = true, game = true }
+-- Whether a row's plate color ticks a part (ColorName, ColorBar, ColorBorder)
+-- and colors it: not on "-" or the game's (the page hides the ticks then).
+local function AlsoOn(key, kind)
+	return ArrowSetting(key, kind) and not PLATE_PASS[PlateHow(kind)] or false
+end
+ns.TargetMarkAlso = AlsoOn
+ns.TargetPlateHow = PlateHow
+
 -- Red, yellow or green by how a unit sees you (hostile: no unit, the preview).
 local function ReactionColour(unit)
 	local ok, reaction = pcall(UnitReaction, unit or "", "player")
@@ -1056,12 +1075,11 @@ local function ReactionColour(unit)
 	return 1, 0.1, 0.1
 end
 
--- The arrow's colour for a unit (nil: the preview's, a hostile NPC), by its
--- kind's row (nil: your target's).
-local function ArrowColour(unit, kind)
-	local how = ArrowSetting("Color", kind)
+-- A colour for a unit (nil: the preview's, a hostile NPC) by how (gold,
+-- reaction, class or custom: r, g, b).
+local function ColourBy(how, unit, r, g, b)
 	if how == "custom" then
-		return ArrowSetting("R", kind), ArrowSetting("G", kind), ArrowSetting("B", kind)
+		return r, g, b
 	elseif how == "class" and unit then
 		-- (By GUID: Forever's UnitIsPlayer can say no for a player.)
 		local okGuid, guid = pcall(UnitGUID, unit)
@@ -1077,6 +1095,21 @@ local function ArrowColour(unit, kind)
 	end
 	return unpack(GOLD)
 end
+-- The arrow's colour for a unit, by its kind's row (nil: your target's).
+local function ArrowColour(unit, kind)
+	return ColourBy(ArrowSetting("Color", kind), unit, ArrowSetting("R", kind), ArrowSetting("G", kind),
+		ArrowSetting("B", kind))
+end
+-- The colour a row's plate color gives a unit's parts (its mark's on "same").
+local function PlateColour(unit, kind)
+	local how = PlateHow(kind)
+	if how == "same" then
+		return ArrowColour(unit, kind)
+	end
+	return ColourBy(how, unit, ArrowSetting("PlateR", kind) or 1, ArrowSetting("PlateG", kind) or 1,
+		ArrowSetting("PlateB", kind) or 1)
+end
+ns.TargetPlateColour = PlateColour
 
 -- Moving (the Target Indicator page's Moving ticks): the arrow, chevron and
 -- diamond bob, the brackets, carets and corners close in, the glow and line
@@ -1464,7 +1497,7 @@ do
 		tint.level = level
 		for _, part in ipairs(TINT_PARTS) do
 			local kind = kinds[part]
-			tint[part] = kind and { ArrowColour(unit, kind) } or nil
+			tint[part] = kind and { PlateColour(unit, kind) } or nil
 		end
 		painter:Show()
 	end
@@ -1615,8 +1648,9 @@ ns.TargetMarkFits = function(kind) return whenNow[kind] ~= false end
 local function OthersOn(kind)
 	kind = kind or "others"
 	return ArrowSetting("Show", kind) and (ArrowSetting("Style", kind) ~= "none"
-		or ArrowSetting("ColorName", kind) or ArrowSetting("ColorBar", kind)
-		or (ArrowSetting("Alpha", kind) or 1) < 1) and true or false
+		or AlsoOn("ColorName", kind) or AlsoOn("ColorBar", kind)
+		or (ArrowSetting("Alpha", kind) or 1) < 1
+		or ns.isRetail and math.abs((ArrowSetting("Scale", kind) or 1) - 1) > 0.001) and true or false
 end
 
 -- How a unit stands with you, for the rows added for one reaction: "Enemy",
@@ -1632,19 +1666,24 @@ end
 -- The Style hub's Nameplates page's row a plate goes by now: the first, in
 -- their order, that's on, its When saying now, and the plate its: your
 -- target's, focus's or mouseover's; any enemy's after you or the rest (the
--- aggro rows); a living NPC's by rank (Normal NPC, Elite NPC); a player's or
--- minion's as the Nameplates page sorts them (Effects' PlateKind); and for
--- a row with a Who, only those units. The rows below it aren't asked. None
+-- aggro rows); a living NPC's by rank (Normal NPC, Elite NPC) or any (NPC);
+-- a player's or minion's as the Nameplates page sorts them (Effects'
+-- PlateKind); any unit's (Any unit); and for a row with a Who or a
+-- Distance, only those units. The rows below it aren't asked. None
 -- fitting: Default's while it's changed from the game's (a mark, an Also
 -- color or an opacity); else nil, the game's look.
 local mouseoverPlate -- (the plate with the mouseover mark: see mouseoverWatch)
-local NPC_RANKS = { npc = "normal", elite = "elite" }
+local NPC_RANKS = { npc = "normal", elite = "elite", npcs = true }
 local PLATE_KIND_ROWS = { Enemies = { "players", "Enemy" }, Friends = { "players", "Friendly" },
 	EnemyMinions = { "minions", "Enemy" }, FriendlyMinions = { "minions", "Friendly" } }
-local function FittingRow(plate, unit)
+-- (From the row at start on, for the rows below one: returns the row and
+-- its place in the order, none for Default's own.)
+local function FittingRow(plate, unit, start)
 	local standing, asked, plateKind, kindAsked, rank, rankAsked
-	for _, kind in ipairs(MarkOrder()) do
-		local base, reaction = ns.MarkRowBase(kind)
+	local order = MarkOrder()
+	for i = start or 1, #order do
+		local kind = order[i]
+		local base, reaction, _, distance = ns.MarkRowBase(kind)
 		if whenNow[kind] ~= false and ArrowSetting("Show", kind) then
 			local fits
 			if AGGRO_ROWS[base] then
@@ -1655,7 +1694,7 @@ local function FittingRow(plate, unit)
 				if not rankAsked then
 					rank, rankAsked = ns.NPCRank and ns.NPCRank(unit), true
 				end
-				fits = rank == NPC_RANKS[base]
+				fits = rank ~= nil and (NPC_RANKS[base] == true or rank == NPC_RANKS[base])
 			elseif base == "players" or base == "minions" then
 				if not kindAsked then
 					plateKind, kindAsked = unit and ns.PlateKindOf and ns.PlateKindOf(unit), true
@@ -1663,6 +1702,8 @@ local function FittingRow(plate, unit)
 				local sort = PLATE_KIND_ROWS[plateKind or ""]
 				fits = sort ~= nil and sort[1] == base and (not reaction or sort[2] == reaction)
 				reaction = nil -- (friend or foe as the Nameplates page has it, just now)
+			elseif base == "all" then
+				fits = unit ~= nil
 			else
 				fits = PlateOf(base, plate)
 			end
@@ -1672,7 +1713,10 @@ local function FittingRow(plate, unit)
 				end
 				fits = reaction == standing
 			end
-			if fits then return kind end
+			if fits and distance then
+				fits = unit ~= nil and ns.UnitInBand and ns.UnitInBand(unit, distance) == true
+			end
+			if fits then return kind, i end
 		end
 	end
 	if whenNow.others ~= false and OthersOn() then
@@ -1682,25 +1726,40 @@ end
 
 -- A plate's look from the row it goes by (all of it, that row's): the row
 -- its mark is (nil for none), each part's (name, bar, border: as TintKind
--- has it, while its Also color ticks it: kinds), whether it's the mouseover
--- row's, and its opacity (below 100%).
+-- has it, while its plate color ticks it: kinds), whether it's the mouseover
+-- row's, its opacity (below 100%) and its size (not 100%). Its plate color
+-- "-": the parts as the next row that fits says, and so on down (Default's
+-- own last); the game's: none.
 local partKinds = {}
 local PART_KEYS = { name = "ColorName", bar = "ColorBar", border = "ColorBorder" }
 local function PlateLook(plate, unit)
 	wipe(partKinds)
-	local kind = FittingRow(plate, unit)
+	local kind, at = FittingRow(plate, unit)
 	if not kind then
-		return nil, partKinds, false, nil
+		return nil, partKinds, false, nil, nil
 	end
 	local mark = ArrowSetting("Style", kind) ~= "none" and kind or nil
 	local alpha = ArrowSetting("Alpha", kind) or 1
-	local tintKind = TintKind(kind)
-	for part, key in pairs(PART_KEYS) do
-		if ArrowSetting(key, tintKind) then
-			partKinds[part] = tintKind
+	local scale = ArrowSetting("Scale", kind) or 1
+	local colorRow = kind
+	while colorRow do
+		local tintKind = TintKind(colorRow)
+		local how = PlateHow(tintKind)
+		if how ~= "-" then
+			if how ~= "game" then
+				for part, key in pairs(PART_KEYS) do
+					if ArrowSetting(key, tintKind) then
+						partKinds[part] = tintKind
+					end
+				end
+			end
+			break
 		end
+		if not at then break end
+		colorRow, at = FittingRow(plate, unit, at + 1)
 	end
-	return mark, partKinds, ns.MarkRowBase(kind) == "mouseover", alpha < 1 and alpha or nil
+	return mark, partKinds, ns.MarkRowBase(kind) == "mouseover", alpha < 1 and alpha or nil,
+		math.abs(scale - 1) > 0.001 and scale or nil
 end
 
 -- Each plate's opacity from its rows (below 1 only), for Effects' plate
@@ -1733,6 +1792,44 @@ local function AggroRowsOn()
 	end
 	return false
 end
+-- (Whether a row with a Distance is: plates looked at again as units come
+-- and go.)
+local function DistanceRowsOn()
+	for _, kind in ipairs(MarkOrder()) do
+		if select(4, ns.MarkRowBase(kind)) and ArrowSetting("Show", kind) and whenNow[kind] ~= false then
+			return true
+		end
+	end
+	return false
+end
+-- Each plate's size from its rows (retail: Forever's plates don't scale):
+-- its unit frame's own scale times the row's, eased in with the level, and
+-- its own put back after. [unit frame] = its own scale while ours is on.
+local ownScales = {}
+local function SetPlateScale(plate, scale, level)
+	local unitFrame = plate and plate.UnitFrame
+	if not (ns.isRetail and Usable(unitFrame)) then
+		return
+	end
+	scale = scale and level > 0 and 1 - level * (1 - scale) or nil
+	if scale and math.abs(scale - 1) < 0.001 then
+		scale = nil
+	end
+	local own = ownScales[unitFrame]
+	if not scale then
+		if own then
+			pcall(unitFrame.SetScale, unitFrame, own)
+			ownScales[unitFrame] = nil
+		end
+		return
+	end
+	if not own then
+		local ok, now = pcall(unitFrame.GetScale, unitFrame)
+		own = ok and type(now) == "number" and Known(now) and now or 1
+		ownScales[unitFrame] = own
+	end
+	pcall(unitFrame.SetScale, unitFrame, own * scale)
+end
 local function SetPlateOpacity(plate, opacity, level)
 	opacity = opacity and level > 0 and 1 - level * (1 - opacity) or nil
 	if opacity and opacity >= 1 then
@@ -1758,11 +1855,12 @@ local function RefreshTargetArrow(plate)
 	local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
 	-- (None while the Style hub's Nameplates page is switched off.)
 	local level = plate ~= PersonalPlate() and Style("handlePlateStyle") and levels.TargetArrow or 0
-	local kind, kinds, hovered, opacity
+	local kind, kinds, hovered, opacity, scale
 	if level > 0 then
-		kind, kinds, hovered, opacity = PlateLook(plate, unit)
+		kind, kinds, hovered, opacity, scale = PlateLook(plate, unit)
 	end
 	SetPlateOpacity(plate, opacity, level)
+	SetPlateScale(plate, scale, level)
 	if hovered then
 		mouseoverPlate = plate
 		mouseoverWatch:Show()
@@ -1787,7 +1885,8 @@ local function RefreshTargetArrow(plate)
 		if arrow.styled ~= kind then
 			StyleArrow(arrow, unit, kind)
 		end
-		arrow:SetAlpha(level)
+		-- (At its own opacity: Opacity, the mark's; Alpha is the plate's.)
+		arrow:SetAlpha(level * (ArrowSetting("Opacity", kind) or 1))
 		arrow:Show()
 	end
 end
@@ -1860,11 +1959,22 @@ function ns.ReportTargetMarks()
 	if not any then
 		ns.Print("  no mark showing: target, focus or hover a unit first")
 	end
+	-- (Each plate's size: the row it goes by and its Size, and the unit
+	-- frame's scale now against its own.)
+	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
+		local unitFrame = plate.UnitFrame
+		local unit = plate.namePlateUnitToken or (unitFrame and unitFrame.unit)
+		local row = (levels.TargetArrow or 0) > 0 and unit and FittingRow(plate, unit)
+		local okScale, scale = pcall(unitFrame and unitFrame.GetScale or error, unitFrame)
+		ns.Print(("  size %s: row %s, its Size %s; unit frame scale %s, own %s%s"):format(tostring(unit),
+			tostring(row), row and Num(ArrowSetting("Scale", row)) or "-", okScale and Num(scale) or "error",
+			Num(unitFrame and ownScales[unitFrame]), ns.isRetail and "" or " (Forever: not sized)"))
+	end
 end
 
 -- Every plate's mark looked at again (a new target, focus or mouseover).
 local function RefreshMarks()
-	if (levels.TargetArrow or 0) > 0 or next(arrows) or next(tints) or next(opacities) then
+	if (levels.TargetArrow or 0) > 0 or next(arrows) or next(tints) or next(opacities) or next(ownScales) then
 		for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
 			RefreshTargetArrow(plate)
 		end
@@ -1881,8 +1991,9 @@ CreateFrame("Frame"):SetScript("OnUpdate", function()
 		return
 	end
 	whenAt = now + WHEN_CHECK
-	-- (The aggro rows too: an enemy joining a fight has no event of its own.)
-	if (levels.TargetArrow or 0) > 0 and (UpdateWhen() or AggroRowsOn()) then
+	-- (The aggro rows too: an enemy joining a fight has no event of its own;
+	-- and the rows with a Distance: none for moving either.)
+	if (levels.TargetArrow or 0) > 0 and (UpdateWhen() or AggroRowsOn() or DistanceRowsOn()) then
 		RefreshMarks()
 	end
 end)
@@ -2012,12 +2123,14 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 			arrows[plate].styled = false
 		end
 		TintTarget(plate, 0)
+		SetPlateScale(plate, nil, 0)
 		opacities[plate] = nil
 		return
 	end
 	plateClass[plate], plateRole[plate] = nil, nil
 	if AnyClassIcons() or icons[plate] or roleIcons[plate] or questIcons[plate] or arrows[plate]
-		or opacities[plate] or ((levels.TargetArrow or 0) > 0 and (OthersOn() or TypeRowsOn())) then
+		or opacities[plate] or ownScales[plate.UnitFrame or plate]
+		or ((levels.TargetArrow or 0) > 0 and (OthersOn() or TypeRowsOn())) then
 		ns.RefreshClassIcon(plate)
 	end
 	if event == "NAME_PLATE_UNIT_ADDED" and AnyFaded() then

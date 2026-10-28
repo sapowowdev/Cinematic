@@ -32,6 +32,7 @@ local PROFILE_TABLES = {
 	"cooldownGroupDefaults", "cooldownProcOnly", "cooldownAlwaysShow", "cooldownBuffMode",
 	"frameRules", -- (none in any built-in profile: each starts with no Custom Visibility Rules)
 	"tankHide", "healerHide", "damageHide",
+	"markNames", -- (the Nameplates page's rows' own names)
 }
 ns.PROFILE_TABLES = PROFILE_TABLES
 ns.IS_PROFILE_TABLE = {}
