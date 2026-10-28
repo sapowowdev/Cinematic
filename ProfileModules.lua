@@ -229,12 +229,14 @@ ns.PROFILE_MODULES = {
 		scope = { "Standard Frames", "Personal Resources", "Advanced Frames/Supported addons", "Gamepad/top" },
 		tip = "Fights bring up only your resource bar: no portrait, target, buffs, minimap or swing timer, " ..
 		"nothing for an enemy or friend targeted, nothing in dungeons and raids, and the cast bar shows all " ..
-		"through CineMode. The player frame and resource display don't stay up until full; no focus's target of target.",
+		"through CineMode. The player frame and resource display don't stay up until full; no focus's target of target; " ..
+		"raid frames without names, buffs, threat, target markers, ready checks or titles in CineMode.",
 		apply = function(set)
 			set("portraitWhenNotFull", false)
 			set("prdWhenNotFull", false)
 			set("unitPartsFocusToT", false)
-			set("cineShow", { castbar = true })
+			set("cineShow", { castbar = true, raidnames = false, raidbuffs = false, raidthreat = false,
+				raidtarget = false, raidready = false, raidtitles = false })
 			set("combatShow", { prdpower = true, player = false, petframe = false, target = false, tot = false,
 				focus = false, castbar = false, prd = false, party = false, raidplayers = false, raidpets = false, minimap = false,
 				buffs = false, swing = false })
@@ -250,13 +252,11 @@ ns.PROFILE_MODULES = {
 			"Standard Frames/Extra action bars", "Standard Frames/Interface", "Advanced Frames/Supported addons",
 			"Gamepad/top" },
 		tip = "No action bars, micro menu, bags or XP bar in fights, with an enemy targeted or in instances; " ..
-		"the Cooldown Manager in fights, not just after them, and up after a fight until its cooldowns are ready.",
+		"the Cooldown Manager in fights, and up after a fight until its cooldowns are ready, within the Calm Timer.",
 		apply = function(set)
 			set("cooldownManagerOn", true)
 			set("cooldownWhileRecharging", true)
 			set("cooldownUtilityWhileRecharging", true)
-			set("cooldownAfterCombat", false)
-			set("cooldownUtilityAfterCombat", false)
 			local fights = All({ "mainbar", "art", "bottomleft", "bottomright", "pet", "stance", "totems", "micro",
 				"bags", "xp" }, false)
 			local combat = {}
@@ -269,7 +269,8 @@ ns.PROFILE_MODULES = {
 	{ key = "pure-plates", name = "Pure: nameplates", scope = { "Nameplates", "Nameplate Style" },
 		tip = "Enemies' nameplates (and their minions') in fights, not kept up otherwise; in PvP and " ..
 		"battlegrounds, none; in instances, friendly players' and NPCs' hidden; no group members' or friendly " ..
-		"targets'; an arrow over your target's plate all through CineMode, and its name in the arrow's color.",
+		"targets'; an arrow over your target's plate all through CineMode, and its name in the arrow's color " ..
+		"(the marks themselves: ultra-plates).",
 		apply = function(set)
 			for _, key in ipairs({ "plateAlwaysGroupMembers", "plateAlwaysGroupMinions", "plateGroupFriends",
 				"plateGroupFriendlyMinions", "plateAlwaysMyFriendlyNPCTarget", "plateAlwaysMyFriendlyPlayerTarget",
@@ -287,9 +288,62 @@ ns.PROFILE_MODULES = {
 			end
 			-- And your target's name in its color, often all there is of it to see.
 			set("targetColorName", true)
-			set("aggroColorName", true)
 			set("plateInstanceFriends", "hide")
 			set("plateInstanceFriendlyNPCs", "hide")
+		end },
+	{ key = "ultra-plates", name = "Ultra responsive nameplates", scope = { "Nameplate Style" },
+		tip = "In fights the plates say what matters at a glance: the further a unit, the fainter its plate " ..
+		"(past 40, 28 and within 11 yards), normal NPCs faint while an elite's within 40 yards, an enemy after " ..
+		"someone else tinted orange, and marks on your target and the unit under the mouse. No aggro mark, and " ..
+		"plates change quicker.",
+		apply = function(set)
+			set("markOrder", "target,mouseover,focus,allPast40,allPast28,allIn11,npc,aggroother,aggro")
+			set("markNames", { allPast40 = "Fade 40", allPast28 = "Fade 28", allIn11 = "Fade 11",
+				npc = "Fade non elite", aggroother = "Aggro not on you" })
+			set("plateStyleFadeTime", 0.6)
+			-- Your target's arrow and the mouseover's mark in fights too, a little lower.
+			set("targetWhenCombat", true)
+			set("targetArrowY", -10)
+			set("mouseoverWhen", false)
+			set("mouseoverWhenCombat", true)
+			-- Aggro on you: no mark.
+			set("aggroMarkStyle", "none")
+			-- Every unit by distance, in fights: no mark, just fainter.
+			for id, alpha in pairs({ allPast40 = 0.5, allPast28 = 0.8, allIn11 = 0.95 }) do
+				set(id .. "MarkStyle", "none")
+				set(id .. "MarkAlpha", alpha)
+				set(id .. "When", false)
+				for _, word in ipairs({ "Combat", "Enemy", "Friendly" }) do set(id .. "When" .. word, true) end
+			end
+			set("allPast40MarkColor", "custom")
+			-- Normal NPCs faint while an elite's within 40 yards, in fights.
+			set("npcMarkAlpha", 0.35)
+			set("npcWhen", false)
+			set("npcWhenCombat", true)
+			set("frameRules", { npcWhen = "combat and elite40" })
+			-- An enemy after someone else: its health bar orange, no mark.
+			set("aggrootherMarkStyle", "none")
+			set("aggrootherMarkBob", false)
+			set("aggrootherMarkColor", "reaction")
+			set("aggrootherMarkG", 1)
+			set("aggrootherMarkB", 1)
+			set("aggrootherColorBar", true)
+			set("aggrootherMarkPlateColor", "custom")
+			set("aggrootherMarkPlateG", 0.54)
+			set("aggrootherMarkPlateB", 0)
+		end },
+	{ key = "minimal-target", name = "Minimal target frame",
+		scope = { "Unit Frames/Target", "Standard Frames/Unit frames", "Quest Vision/top" },
+		tip = "The target frame stays through CineMode with nothing in it until a fight, then just its health, " ..
+		"buffs and debuffs and cast bar: the nameplates show the rest. No quest icon on it.",
+		apply = function(set)
+			for _, part in ipairs({ "Art", "Auras", "CastBar", "Health", "Icons", "Level", "Name", "Numbers",
+				"Portrait", "Power", "PvP", "Threat" }) do
+				set("unitPartTarget" .. part, false)
+			end
+			set("combatShow", { unitPartTargetHealth = true, unitPartTargetAuras = true, unitPartTargetCastBar = true })
+			set("cineShow", { target = true })
+			set("targetQuestIcon", false)
 		end },
 	{ key = "pure-tooltips", name = "Pure: tooltips", scope = { "Tooltips" },
 		tip = "The Tooltips page on: hidden in RP walk and the quest camera, friendlies' shown, nothing hidden " ..
@@ -354,11 +408,18 @@ ns.PROFILE_MODULES = {
 			set("musicCamWalk", true)
 			set("musicCamRun", true)
 		end },
-	{ key = "pure-cameras", name = "Pure: cameras", scope = { "Camera Triggers/Event", "Camera Modes/Runs in" },
+	{ key = "pure-cameras", name = "Pure: cameras", scope = { "Camera Triggers/Event", "Camera Modes/Runs in",
+		"Camera Settings/Chat Cam" },
 		tip = "Standing still starts the AFK camera and every event's camera can start music; the cameras " ..
 		"don't wait for things to calm down after a fight, auto-run carries on in cities and instances (as RP " ..
-		"walk always does), and the death camera runs in instances too.",
+		"walk always does), and the death camera runs in instances too. NPCs chatting nearby bring the chat " ..
+		"camera straight away, and it doesn't look round for speakers off screen.",
 		apply = function(set)
+			-- (Chat Cam: the dev build's only, for now.)
+			if ns.DEFAULTS.chatCamSearch ~= nil then
+				set("chatNearbyDelay", 0)
+				set("chatCamSearch", false)
+			end
 			set("eventStillCamera", "afk")
 			for _, event in ipairs(MUSIC_EVENTS) do set("event" .. event .. "Music", true) end
 			for _, cam in ipairs({ "walk", "run", "tele", "quest" }) do
@@ -389,10 +450,13 @@ ns.PROFILE_MODULES = {
 		tip = "No time of day title under the zone name.",
 		apply = function(set) set("timeOfDayMessage", false) end },
 	{ key = "vitals-vision", name = "Vitals Vision on", scope = { "Vitals Vision" },
-		tip = "Your health at the screen's edges, and the personal resource display fading in as it drops.",
+		tip = "Your health at the screen's edges, the picture drained toward grey and the personal resource " ..
+		"display fading in as it drops.",
 		apply = function(set)
 			set("lowHealth", true)
 			set("lowHealthPrd", true)
+			set("lowHealthGrade", true)
+			set("lowHealthGradeAmount", 1)
 		end },
 
 	-- Sound and chat
@@ -808,9 +872,21 @@ local function BuildMap()
 	return map
 end
 
+-- A setting of a Nameplate Style row, or a row's rule (frameRules' <id>When):
+-- the page shows only the rows in markOrder, so one added (Normal NPC, Any
+-- unit past 40 yards) is where the Marks grid is, shown or not.
+local function IsMarkRowSetting(key)
+	if type(key) ~= "string" then return false end
+	local id = key:match("^(%l[%a%d]-)Mark%u") or key:match("^(%l[%a%d]-)Color%u") or key:match("^(%l[%a%d]-)When")
+	return id ~= nil and ns.MarkRowValid(id)
+end
+
 -- A setting's addresses, or a list row's ({ "Page/Section"... }); nil: on no page.
 function ns.SettingAddresses(key, row)
 	map = map or BuildMap()
+	if (key == "frameRules" and IsMarkRowSetting(row)) or (row == nil and not map.keys[key] and IsMarkRowSetting(key)) then
+		return map.keys.markOrder
+	end
 	if row ~= nil and ROW_RULE_LISTS[key] and map.anyRow[row] then
 		local list = {}
 		for _, address in ipairs(map.anyRow[row]) do list[#list + 1] = address end
@@ -889,7 +965,7 @@ function ns.CheckModules(client, profiles)
 			end
 			-- (Each setting it sets, the old grids' too.)
 			ns.ApplyModules({ { module = module } }, {}, client, function(setting)
-				if ns.DEFAULTS[setting] == nil and not ns.IS_PROFILE_TABLE[setting]
+				if ns.DEFAULTS[setting] == nil and not ns.IS_PROFILE_TABLE[setting] and ns.MarkRowDefault(setting) == nil
 					and not (ns.OldGridDefault and ns.OldGridDefault(setting) ~= nil) then
 					Problem(("module %s: %s isn't a setting"):format(key, setting))
 				end

@@ -215,6 +215,7 @@ function ns.ProfileSettings(name)
 		if saved[k] ~= nil then settings[k] = saved[k] else settings[k] = base[k] end
 	end
 	for _, k in ipairs(PROFILE_TABLES) do settings[k] = saved[k] or base[k] end
+	EachRowSetting(base, function(k, v) settings[k] = v end)
 	EachRowSetting(saved, function(k, v) settings[k] = v end)
 	return settings
 end
@@ -265,8 +266,10 @@ end
 local function Load(name)
 	local db, base = ns.db, ns.ProfileBase(name)
 	local saved = db.profiles[name] or {}
-	-- (The Style hub's Nameplates page's added rows: the profile's, none else.)
+	-- (The Style hub's Nameplates page's added rows: the built-in's and the
+	-- profile's, none else.)
 	EachRowSetting(db, function(k) db[k] = nil end)
+	EachRowSetting(base, function(k, v) db[k] = v end)
 	EachRowSetting(saved, function(k, v) db[k] = v end)
 	for k in pairs(ns.DEFAULTS) do
 		if IsProfileKey(k) then
@@ -418,6 +421,14 @@ do
 			if IsProfileKey(k) and type(values[k]) ~= "table" and ns.SettingSlot(k) == slot then
 				fn(k, nil, values[k])
 			end
+		end
+		-- (The Nameplates page's added rows' settings: the choice's, and the
+		-- live ones it hasn't got, which go.)
+		local rowKeys = {}
+		EachRowSetting(values, function(k) rowKeys[k] = true end)
+		EachRowSetting(ns.db, function(k) rowKeys[k] = true end)
+		for k in pairs(rowKeys) do
+			if IsProfileKey(k) and ns.SettingSlot(k) == slot then fn(k, nil, values[k]) end
 		end
 		for _, k in ipairs(PROFILE_TABLES) do
 			local want, live, seen = values[k], ns.db[k], {}
