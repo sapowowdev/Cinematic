@@ -200,6 +200,15 @@ local function HandleSlash(msg)
 			ns.StartProfile(seconds)
 			ns.Print(("cpu profile for %d seconds (/cine debug cpu stop ends it early): play as usual"):format(seconds))
 		end
+	elseif cmd == "verbose" then
+		-- (Unlisted: for a player helping track a bug down. Always on in the dev copy.)
+		if ns.isDev then
+			ns.Print("verbose logging: always on in the dev copy")
+		else
+			ns.db.verboseLog = not ns.db.verboseLog or nil
+			ns.Print("verbose logging (everything logged, errors and blocked actions shown in chat): "
+				.. OnOff(ns.db.verboseLog) .. (ns.db.verboseLog and ". Reproduce the problem, then /cine log." or ""))
+		end
 	elseif cmd == "debug" and arg == "record" then
 		ns.db.logDetail = not ns.db.logDetail
 		ns.Print("detailed logging (game settings, music): " .. OnOff(ns.db.logDetail) ..

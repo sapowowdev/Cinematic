@@ -1766,7 +1766,7 @@ function Show(keepPage)
 	talk.seal = SealArt()
 	-- (And the page itself: a quest's theme can change it too.)
 	talk.pageArt = PageArt()
-	if ns.db.logDetail then
+	if ns.LogDetailOn() then
 		local function Name(art) return art and (art.atlas or tostring(art.file)) or "none" end
 		local up = QuestPanel()
 		ns.LogDetail("questtalk", ("art: %s, page %s, seal %s"):format(up and up:GetName() or "?",

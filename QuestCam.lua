@@ -680,7 +680,7 @@ local function Start()
 	cam.active, cam.closingAt, cam.handedOver = true, nil, false
 	cam.startedAt = GetTime()
 	cam.log = nil
-	if db.debugQuestCam then
+	if db.debugQuestCam or ns.Verbose() then
 		db.questCamLog = {}
 		cam.log = db.questCamLog
 	end

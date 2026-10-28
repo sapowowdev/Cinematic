@@ -368,7 +368,7 @@ local musicStartedAt
 local fadeWriting, lastFadeZero = false, nil
 
 local function MusicTrace(text)
-	if not (ns.db and ns.db.logDetail) then
+	if not ns.LogDetailOn() then
 		return
 	end
 	ns.Log("music", ("%.1f %s | managing %s saved %s written %s"):format(GetTime(), text,

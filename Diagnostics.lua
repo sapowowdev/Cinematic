@@ -12,6 +12,7 @@
 local ADDON_NAME, ns = ...
 
 local LOG_MAX = 500
+local VERBOSE_LOG_MAX = 5000 -- lines kept with verbose logging (ns.Verbose)
 local STACK_MAX = 1500       -- characters of stack kept per error
 local REPEAT_LIMIT = 5       -- the same error this many times...
 local REPEAT_WINDOW = 3      -- ...within this many seconds means it's stuck in a loop
@@ -36,12 +37,48 @@ local function Plain(text)
 	return (tostring(text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
 end
 
+-- Verbose logging: everything there is to log, and each of our errors and
+-- blocked actions told in chat. Always in the dev copy; in the released one,
+-- only after the unlisted /cine verbose (for a player helping track a bug down).
+function ns.Verbose()
+	return ns.isDev or (ns.db ~= nil and ns.db.verboseLog == true)
+end
+
+-- The detail only wanted while tracking something down: /cine debug record,
+-- or verbose logging.
+function ns.LogDetailOn()
+	return ns.db ~= nil and (ns.db.logDetail or ns.Verbose()) and true or false
+end
+
+-- Verbose lines are stamped to the hundredth of a second (a camera fight's
+-- over in one): the clock's whole seconds from time(), lined up with GetTime
+-- on the frame time() ticks over.
+local clockBase -- time() - GetTime(); nil until lined up
+do
+	local syncer, lastSecond = CreateFrame("Frame"), nil
+	syncer:SetScript("OnUpdate", function()
+		local second = time()
+		if lastSecond and second ~= lastSecond then
+			clockBase = second - GetTime()
+			syncer:SetScript("OnUpdate", nil)
+		end
+		lastSecond = second
+	end)
+end
+local function Stamp()
+	if not (clockBase and ns.Verbose()) then
+		return date("%H:%M:%S")
+	end
+	local now = clockBase + GetTime()
+	return date("%H:%M:%S", math.floor(now)) .. (".%02d"):format(math.floor(now % 1 * 100))
+end
+
 function ns.Log(category, text)
 	-- (What's printed to chat is caught at print, below; this adds what only goes in the log.)
 	if captured and category ~= "chat" and category ~= "cmd" then
 		captured[#captured + 1] = Plain(text)
 	end
-	local line = ("%s %s: %s"):format(date("%H:%M:%S"), category, Plain(text))
+	local line = ("%s %s: %s"):format(Stamp(), category, Plain(text))
 	pcall(LiveLine, category, line) -- (a chat window's trouble never stops the log)
 	local log = ns.db and ns.db.log
 	if not log then
@@ -50,9 +87,10 @@ function ns.Log(category, text)
 	end
 	log[#log + 1] = line
 	-- Trim in batches rather than shifting the whole list every line.
-	if #log > LOG_MAX + 50 then
+	local max = ns.Verbose() and VERBOSE_LOG_MAX or LOG_MAX
+	if #log > max + 50 then
 		local kept = {}
-		for i = #log - LOG_MAX + 1, #log do
+		for i = #log - max + 1, #log do
 			kept[#kept + 1] = log[i]
 		end
 		ns.db.log = kept
@@ -124,9 +162,9 @@ do
 	end
 end
 
--- Detail only wanted while tracking something down (/cine debug record).
+-- Detail only wanted while tracking something down (ns.LogDetailOn).
 function ns.LogDetail(category, text)
-	if ns.db and ns.db.logDetail then
+	if ns.LogDetailOn() then
 		ns.Log(category, text)
 	end
 end
@@ -173,6 +211,20 @@ local function Shorten(stack)
 	return stack
 end
 
+-- Verbose logging: each new error and each run of blocked actions printed to
+-- chat, and chat brought up to read it (in CineMode it's faded, and they
+-- went by unseen). Otherwise it only says once (below).
+local ALERT_PEEK = 10 -- seconds chat stays up
+local function Alert(text)
+	if not (ns.Verbose() and ns.Print) then
+		return
+	end
+	ns.Print("|cffff4040" .. text .. "|r")
+	if ns.PeekChat then
+		ns.PeekChat(DEFAULT_CHAT_FRAME, ALERT_PEEK)
+	end
+end
+
 -- Records an error from this addon. `caught` errors were stopped by the
 -- addon's own loop (so the game's error handler hasn't seen them yet).
 function ns.ReportError(message, stack, caught)
@@ -190,7 +242,9 @@ function ns.ReportError(message, stack, caught)
 			pcall(geterrorhandler(), message)
 			forwarding = false
 		end
-		if not told and ns.Print then
+		if ns.Verbose() then
+			Alert(("error: %s (/cine log for the stack)"):format(Shorten(message:match("^[^\n]*"))))
+		elseif not told and ns.Print then
 			told = true
 			ns.Print("hit a Lua error. Type /cine log to copy the details for a bug report.")
 		end
@@ -263,7 +317,31 @@ local function UseBugGrabber()
 	end)
 end
 
--- Blocked actions (taint) aren't Lua errors; the game names the addon.
+-- Blocked actions (taint) aren't Lua errors; the game names the addon. They
+-- come in runs (dozens a second through a fight): the first of a run is
+-- alerted, with what was going on, and how many in all once it's quiet.
+local BLOCK_QUIET = 3 -- seconds without one: the run's over
+local blocked = { count = 0, lastAt = -math.huge }
+local function RunOver()
+	local wait = BLOCK_QUIET - (GetTime() - blocked.lastAt)
+	if wait > 0 then
+		C_Timer.After(wait, RunOver)
+	elseif blocked.count > 1 then
+		Alert(("...blocked %d times in %.0f sec (all in /cine log)"):format(blocked.count,
+			blocked.lastAt - blocked.firstAt))
+	end
+end
+local function OnBlocked(event, action)
+	local now = GetTime()
+	if now - blocked.lastAt > BLOCK_QUIET then
+		blocked.count, blocked.firstAt = 0, now
+		Alert(("blocked: %s %s (%s, camera %s)"):format(event == "ADDON_ACTION_FORBIDDEN" and "forbidden" or "action",
+			tostring(action), InCombatLockdown() and "in combat" or "out of combat", tostring(ns.activeCam or "none")))
+		C_Timer.After(BLOCK_QUIET, RunOver)
+	end
+	blocked.count, blocked.lastAt = blocked.count + 1, now
+end
+
 local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("ADDON_ACTION_BLOCKED")
 watcher:RegisterEvent("ADDON_ACTION_FORBIDDEN")
@@ -285,6 +363,7 @@ watcher:SetScript("OnEvent", function(_, event, addon, action)
 		end
 	elseif addon == ADDON_NAME then
 		ns.Log("BLOCKED", ("%s: %s"):format(event, tostring(action)))
+		OnBlocked(event, action)
 	end
 end)
 
