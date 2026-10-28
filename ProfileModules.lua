@@ -266,7 +266,7 @@ ns.PROFILE_MODULES = {
 			set("enemyShow", fights)
 			set("instanceShow", EveryRow(true, false))
 		end },
-	{ key = "pure-plates", name = "Pure: nameplates", scope = { "Nameplates", "Target Indicator" },
+	{ key = "pure-plates", name = "Pure: nameplates", scope = { "Nameplates", "Nameplate Style" },
 		tip = "Enemies' nameplates (and their minions') in fights, not kept up otherwise; in PvP and " ..
 		"battlegrounds, none; in instances, friendly players' and NPCs' hidden; no group members' or friendly " ..
 		"targets'; an arrow over your target's plate all through CineMode, and its name in the arrow's color.",
@@ -287,6 +287,7 @@ ns.PROFILE_MODULES = {
 			end
 			-- And your target's name in its color, often all there is of it to see.
 			set("targetColorName", true)
+			set("aggroColorName", true)
 			set("plateInstanceFriends", "hide")
 			set("plateInstanceFriendlyNPCs", "hide")
 		end },

@@ -251,7 +251,10 @@ local function Slider(parent, key, label, minV, maxV, step, fmt, scale, onChange
 		bg:SetHeight(6)
 	end
 	slider:SetSize(200, 16)
-	slider:SetMinMaxValues(minV, maxV)
+	-- (A range below 0 runs from 0 on the slider itself, moved back as it's
+	-- read: dragging the game's slider from -40 to 40 skipped 0.)
+	local offset = minV < 0 and -minV or 0
+	slider:SetMinMaxValues(minV + offset, maxV + offset)
 	slider:SetValueStep(step)
 	if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
 
@@ -279,7 +282,7 @@ local function Slider(parent, key, label, minV, maxV, step, fmt, scale, onChange
 	slider.title = title
 
 	slider:SetScript("OnValueChanged", function(self, value)
-		value = math.floor(value / step + 0.5) * step
+		value = math.floor((value - offset) / step + 0.5) * step
 		UpdateTitle(value)
 		if self.refreshing then return end
 		if type(key) == "table" then
@@ -292,7 +295,7 @@ local function Slider(parent, key, label, minV, maxV, step, fmt, scale, onChange
 	slider.Refresh = function(self)
 		local value = (type(key) == "table" and key.get() or ns.GetDB()[key]) * scale
 		self.refreshing = true
-		self:SetValue(value)
+		self:SetValue(value + offset)
 		self.refreshing = false
 		UpdateTitle(value)
 	end
@@ -1200,8 +1203,8 @@ do
 			{ "Graphics+", "Interface\\Icons\\INV_Misc_Gem_Pearl_04" },
 		} },
 		{ name = "Style", pages = {
+			{ "Nameplate Style", "Interface\\Icons\\Ability_Marksmanship", label = "Nameplates" },
 			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names" },
-			{ "Target Indicator", "Interface\\Icons\\Ability_Marksmanship" },
 		} },
 		{ name = "Visions", pages = {
 			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl", label = "General" },
@@ -5850,7 +5853,7 @@ local function CreatePlatesPanel()
 			icon = true },
 		{ "TargetArrow", L["Target Indicator"], L[" A mark on your target's nameplate (and its name, health bar or " ..
 			"border in its color), shown even while the rest of the plate is faded or shows just its name. Its " ..
-			"look: the Style hub's Target Indicator page."], icon = true },
+			"look: the Style hub's Nameplates page."], icon = true },
 	}
 	-- (The class and role icons and the arrow are the addon's own: off unless
 	-- ticked, outside CineMode shown only with Always ticked, and in a section
@@ -6039,11 +6042,12 @@ local function CreateNameStylePanel()
 	end
 	local function On(db) return db.plateNameStyle end
 
-	local stack = Stack(subtitle, "label")
-	stack:Add(StyleCheck("plateNameStyle", L["Style names like the game's"],
-		L["Ticked, these names look as this page says. Unticked, as the nameplate draws them: white or gray " ..
+	-- (Its switch: names as this page says, or as the plates draw them.)
+	local switch = PageSwitch(content, "plateNameStyle", L["Enable page"],
+		L["On: these names look as this page says. Off: as the nameplate draws them: white or gray " ..
 		"for every unit, with a heavy black outline, growing and shrinking with distance (the preview shows " ..
-		"that too)."]), "check")
+		"that too). Each setting keeps its value for when you turn this back on."], subtitle, Changed)
+	local stack = Stack(switch, "check")
 
 	-- The preview: a strip of names on a dark ground, one of each colour and
 	-- your own name for a friendly player, drawn as the plates would draw them.
@@ -6268,32 +6272,119 @@ local function CreateNameStylePanel()
 	RegisterSubpage(canvas, "Name Style", "Name Style")
 end
 
--- The Style hub's Target Indicator page: how the Nameplates page's Target
--- Indicator row looks (PlateParts draws it: a mark, and your target's name,
--- health bar or border in its color), with a preview of it on a plate at the top.
+-- The Style hub's Nameplates page (Nameplate Style): how the Nameplates page's Target
+-- Indicator row looks (PlateParts draws it), a grid with a row for each kind
+-- of unit it marks (your target, your target while it's after you, your
+-- focus, the one under the mouse): whether it shows, its mark, color, which
+-- of the unit's own parts take the color, size and movement. A preview of
+-- each on a plate at the top; under the grid, the height of marks over the plate.
 -- (In a block: the main chunk's locals are near Lua's cap.)
 local CreateTargetArrowPanel
 do
+	-- The grid's rows: kind, label, tip. Aggro goes by your target's size
+	-- and movement (no cells of its own for them), and by its style, color
+	-- and Also color where they say Your target's.
+	local MARK_KINDS = {
+		{ "aggro", L["After you"], L["Your target while it's attacking you (you have its aggro): above the " ..
+			"Target row, or that one wins. A cell set to Your target's takes the Target row's; change it to set " ..
+			"this one apart. Its size, height and movement are always your target's."] },
+		{ "target", L["Target"], L["Your target."] },
+		{ "focus", L["Focus"], L["Your focus."] },
+		{ "mouseover", L["Mouseover"], L["The unit under the mouse. " ..
+			"Hovering a unit itself works too, not just its plate. Just the marks over the plate: the others " ..
+			"hang in the air where its plate is hidden."] },
+		{ "others", L["Default"], L["Every other plate, when no row above fits it: the game's own look " ..
+			"to start with (no mark, its own colors). Give it a mark or an Also color to change them all."] },
+	}
+	local MARK_STYLES = {
+		{ value = "arrow", text = L["Arrow"] },
+		{ value = "chevron", text = L["Chevron"] },
+		{ value = "diamond", text = L["Diamond"] },
+		{ value = "glow", text = L["Glow"] },
+		{ value = "brackets", text = L["Brackets"] },
+		{ value = "carets", text = L["Carets"] },
+		{ value = "corners", text = L["Corners"] },
+		{ value = "underline", text = L["Underline"] },
+		{ value = "none", text = L["None"] },
+	}
+	-- (The unit under the mouse: just the marks over its plate. Round it or
+	-- under it, they hang in the air where its plate is hidden.)
+	local MOUSEOVER_STYLES = {
+		{ value = "arrow", text = L["Arrow"] },
+		{ value = "chevron", text = L["Chevron"] },
+		{ value = "diamond", text = L["Diamond"] },
+		{ value = "none", text = L["None"] },
+	}
+	local AGGRO_STYLES = { { value = "same", text = L["Your target's"] } }
+	for _, choice in ipairs(MARK_STYLES) do AGGRO_STYLES[#AGGRO_STYLES + 1] = choice end
+	-- (Default: no mark is the game's look, so said so.)
+	local OTHERS_STYLES = { { value = "none", text = L["The game's"] } }
+	for _, choice in ipairs(MARK_STYLES) do
+		if choice.value ~= "none" then OTHERS_STYLES[#OTHERS_STYLES + 1] = choice end
+	end
+	local MARK_COLORS = {
+		{ value = "gold", text = L["Gold"] },
+		{ value = "reaction", text = L["By reaction"] },
+		{ value = "class", text = L["Class colors"] },
+		{ value = "custom", text = L["Custom"] },
+	}
+	local AGGRO_COLORS = { { value = "same", text = L["Your target's"] } }
+	for _, choice in ipairs(MARK_COLORS) do AGGRO_COLORS[#AGGRO_COLORS + 1] = choice end
+	-- The setting for a kind's cell (see Core's DEFAULTS).
+	local function MarkKey(kind, key)
+		return kind == "target" and "targetArrow" .. key or kind .. "Mark" .. key
+	end
+	-- The grid's columns: where each starts, from the row's left.
+	local COL_SHOW, COL_STYLE, COL_COLOR, COL_SWATCH, COL_ALSO, COL_SIZE, COL_MOVING =
+		90, 120, 222, 316, 342, 446, 530
+	-- The Also color column's parts: setting (<kind>Color<part>), name, tip,
+	-- and (targetOnly) whether only your target's plate has one: the game's
+	-- border, round your target's health bar alone.
+	local ALSO_PARTS = {
+		{ "Name", L["Name"], L["The unit's name in its mark's color, on its plate or shown alone."] },
+		{ "Bar", L["Health bar"], L["The unit's health bar in its mark's color."] },
+		{ "Border", L["Border"], L["The border the game puts round your target's health bar, in its mark's " ..
+			"color."], targetOnly = true },
+	}
+	local ALSO_SHORT = { Name = L["Name"], Bar = L["Bar"], Border = L["Border"] }
+	local ROW_H = 36
+	-- The preview's plates, by kind (named for their rows; Default has none,
+	-- the game's look): the name's color, the bar's, and whether it has the
+	-- game's target border. (Target and aggro: a hostile NPC; focus neutral,
+	-- mouseover friendly.)
+	local PREVIEW_UNITS = {
+		target = { nil, { 1, 0.2, 0.2 }, { 0.75, 0.1, 0.1 }, true },
+		aggro = { nil, { 1, 0.2, 0.2 }, { 0.75, 0.1, 0.1 }, true },
+		focus = { nil, { 1, 1, 0 }, { 0.85, 0.75, 0 } },
+		mouseover = { nil, { 0.1, 1, 0.1 }, { 0, 0.6, 0.1 } },
+	}
+
 	function CreateTargetArrowPanel()
 		local canvas, content = CreateScrollPage()
 
-		local title = Label(content, "GameFontNormalLarge", L["Target Indicator"])
+		local title = Label(content, "GameFontNormalLarge", L["Nameplates"])
 		title:SetPoint("TOPLEFT", 16, -16)
 		local subtitle = PageIntro(content, title,
-			L["How your target stands out on the nameplates, for when no target frame shows what you've " ..
-			"targeted: a mark on its plate, and its name, health bar or border in the mark's color. When it " ..
-			"shows is the Target Indicator row's, on the Nameplates page's Cinematic Plate Parts grid. Changes " ..
-			"show at once, here and on your target."])
+			L["How your target, focus and the unit under the mouse stand out on the nameplates, for when no " ..
+			"target frame shows them: a mark on each one's plate, a row for each in the grid, and its name, " ..
+			"health bar or border in its mark's color (the row's Also color). When they show is the Target Indicator row's, on " ..
+			"the Nameplates page's Cinematic Plate Parts grid. Changes show at once, here and on the plates."])
 
 		local preview -- (below: drawn again as each setting changes)
 		local function Changed()
 			if ns.RefreshTargetArrows then ns.RefreshTargetArrows() end
 			if preview then preview:Refresh() end
 		end
-		local stack = Stack(subtitle, "label")
+		-- (Its switch: the marks and their colors on the plates, or none at all.)
+		local switch = PageSwitch(content, "handlePlateStyle", L["Enable page"],
+			L["On: the marks and colors on this page show on the plates, when the Nameplates page's Target " ..
+			"Indicator row says. Off: none of them do. Each setting keeps its value for when you turn this " ..
+			"back on."], subtitle, Changed)
+		local stack = Stack(switch, "check")
 
-		-- The preview: a plate's health bar and name on a dark ground, with the arrow.
-		local PREVIEW_W, PREVIEW_H = 520, 140
+		-- The preview: a plate for each kind, its health bar and name on a dark
+		-- ground, with its mark.
+		local PREVIEW_W, PREVIEW_H, PLATE_W = 560, 130, 140
 		preview = CreateFrame("Frame", nil, content)
 		preview:SetSize(PREVIEW_W, PREVIEW_H)
 		stack:Add(preview, "label")
@@ -6303,146 +6394,600 @@ do
 		local caption = Label(preview, "GameFontDisableSmall", L["Preview"])
 		caption:SetPoint("TOPLEFT", 6, -5)
 		caption.searchSkip = true
-		local bar = CreateFrame("Frame", nil, preview)
-		bar:SetSize(110, 9)
-		bar:SetPoint("CENTER", preview, "CENTER", 0, -40)
-		bar:SetFrameLevel(preview:GetFrameLevel() + 2)
-		local fill = bar:CreateTexture(nil, "ARTWORK")
-		fill:SetAllPoints()
-		fill:SetColorTexture(0.75, 0.1, 0.1, 1)
-		local barEdge = bar:CreateTexture(nil, "BORDER")
-		barEdge:SetPoint("TOPLEFT", -1, 1)
-		barEdge:SetPoint("BOTTOMRIGHT", 1, -1)
-		barEdge:SetColorTexture(0, 0, 0, 1)
-		-- The game's border round your target's bar: white, 2 pixels, just
-		-- outside the bar's black edge (four edges, so none rounds away).
-		local border = {}
-		for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-			local edge = bar:CreateTexture(nil, "BORDER", nil, 1)
-			if side == "TOP" or side == "BOTTOM" then
-				edge:SetPoint(side .. "LEFT", barEdge, side .. "LEFT", -2, side == "TOP" and 2 or -2)
-				edge:SetPoint(side .. "RIGHT", barEdge, side .. "RIGHT", 2, side == "TOP" and 2 or -2)
-				edge:SetHeight(2)
-			else
-				edge:SetPoint("TOP" .. side, barEdge, "TOP" .. side, side == "LEFT" and -2 or 2, 0)
-				edge:SetPoint("BOTTOM" .. side, barEdge, "BOTTOM" .. side, side == "LEFT" and -2 or 2, 0)
-				edge:SetWidth(2)
+		local plates = {}
+		for i, info in ipairs(MARK_KINDS) do
+			local unit = PREVIEW_UNITS[info[1]]
+			if not unit then break end
+			local plate = {}
+			plates[info[1]] = plate
+			local bar = CreateFrame("Frame", nil, preview)
+			bar:SetSize(90, 8)
+			bar:SetPoint("CENTER", preview, "LEFT", PLATE_W * (i - 0.5), -22)
+			bar:SetFrameLevel(preview:GetFrameLevel() + 2)
+			plate.bar = bar
+			plate.fill = bar:CreateTexture(nil, "ARTWORK")
+			plate.fill:SetAllPoints()
+			local barEdge = bar:CreateTexture(nil, "BORDER")
+			barEdge:SetPoint("TOPLEFT", -1, 1)
+			barEdge:SetPoint("BOTTOMRIGHT", 1, -1)
+			barEdge:SetColorTexture(0, 0, 0, 1)
+			-- The game's border round your target's bar: white, 2 pixels, just
+			-- outside the bar's black edge (four edges, so none rounds away).
+			plate.border = {}
+			for _, side in ipairs(unit[4] and { "TOP", "BOTTOM", "LEFT", "RIGHT" } or {}) do
+				local edge = bar:CreateTexture(nil, "BORDER", nil, 1)
+				if side == "TOP" or side == "BOTTOM" then
+					edge:SetPoint(side .. "LEFT", barEdge, side .. "LEFT", -2, side == "TOP" and 2 or -2)
+					edge:SetPoint(side .. "RIGHT", barEdge, side .. "RIGHT", 2, side == "TOP" and 2 or -2)
+					edge:SetHeight(2)
+				else
+					edge:SetPoint("TOP" .. side, barEdge, "TOP" .. side, side == "LEFT" and -2 or 2, 0)
+					edge:SetPoint("BOTTOM" .. side, barEdge, "BOTTOM" .. side, side == "LEFT" and -2 or 2, 0)
+					edge:SetWidth(2)
+				end
+				plate.border[#plate.border + 1] = edge
 			end
-			border[#border + 1] = edge
+			plate.name = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+			plate.name:SetPoint("BOTTOM", bar, "TOP", 0, 3)
+			plate.name:SetText(info[2])
+			plate.name.searchSkip = true
 		end
-		local name = bar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-		name:SetPoint("BOTTOM", bar, "TOP", 0, 3)
-		name:SetTextColor(1, 0.2, 0.2)
-		name:SetText(L["Hostile"])
-		name.searchSkip = true
-		local arrow
 		function preview:Refresh()
 			if not ns.MakeTargetArrow then return end
-			arrow = arrow or ns.MakeTargetArrow(preview, bar)
-			ns.StyleTargetArrow(arrow)
-			-- (The preview's unit: a hostile NPC, its name and bar red, its border the game's white.)
 			local db = ns.GetDB()
-			local r, g, b = ns.TargetArrowColour()
-			if db.targetColorName then name:SetTextColor(r, g, b) else name:SetTextColor(1, 0.2, 0.2) end
-			if db.targetColorBar then fill:SetColorTexture(r, g, b, 1) else fill:SetColorTexture(0.75, 0.1, 0.1, 1) end
-			for _, edge in ipairs(border) do
-				if db.targetColorBorder then edge:SetColorTexture(r, g, b, 1) else edge:SetColorTexture(1, 1, 1, 1) end
+			-- (Left to right in the grid's order.)
+			for at, kind in ipairs(ns.TargetMarkOrder()) do
+				plates[kind].bar:SetPoint("CENTER", preview, "LEFT", PLATE_W * (at - 0.5), -22)
+			end
+			for kind, plate in pairs(plates) do
+				local unit = PREVIEW_UNITS[kind]
+				local shown = ns.TargetMarkSetting("Show", kind) and true or false
+				plate.arrow = plate.arrow or ns.MakeTargetArrow(preview, plate.bar)
+				ns.StyleTargetArrow(plate.arrow, nil, kind)
+				plate.arrow:SetShown(shown)
+				-- (Your target's own parts in its mark's color, as ticked below:
+				-- After you's, your target's while its Also color is.)
+				local tintKind = ns.TargetMarkTintKind(kind)
+				local r, g, b = ns.TargetArrowColour(nil, tintKind)
+				local name, fill = unit[2], unit[3]
+				if shown and db[tintKind .. "ColorName"] then
+					plate.name:SetTextColor(r, g, b)
+				else
+					plate.name:SetTextColor(name[1], name[2], name[3])
+				end
+				if shown and db[tintKind .. "ColorBar"] then
+					plate.fill:SetColorTexture(r, g, b, 1)
+				else
+					plate.fill:SetColorTexture(fill[1], fill[2], fill[3], 1)
+				end
+				for _, edge in ipairs(plate.border) do
+					if shown and db[tintKind .. "ColorBorder"] then
+						edge:SetColorTexture(r, g, b, 1)
+					else
+						edge:SetColorTexture(1, 1, 1, 1)
+					end
+				end
 			end
 		end
 		controls[#controls + 1] = preview
 
-		-- A row of choices for a setting, after its label.
-		local function Choices(key, label, list, test)
-			local rowLabel = stack:Add(Label(content, "GameFontHighlight", label), "label", 28)
-			local last
-			for _, info in ipairs(list) do
-				local choice = Choice(content, key, info[1], info[2], info[3])
-				choice:HookScript("OnClick", Changed)
-				if last then
-					choice:SetPoint("LEFT", last.Text or last.text, "RIGHT", 16, 0)
-				else
-					choice:SetPoint("LEFT", rowLabel, "RIGHT", 10, 0)
-				end
-				if test then GreyUnless(choice, test) end
-				last = choice
+		-- A choice from a list: a dropdown, or on a client without the modern
+		-- one a button that steps through them.
+		local function Pick(parent, key, choices, width)
+			RecordKey(content, key) -- (for Reset page: the row's own isn't the page)
+			local pick = Dropdown(parent, key, choices, width, Changed)
+			if pick then
+				return pick
 			end
-			return rowLabel, last
-		end
-
-		stack:Header(content, L["Look"])
-		Choices("targetArrowStyle", L["Style:"], {
-			{ "arrow", L["Arrow"], L["An arrow pointing down at the plate, over its name."] },
-			{ "chevron", L["Chevron"], L["Two chevrons pointing down at the plate, over its name."] },
-			{ "glow", L["Glow"], L["A soft glow behind the plate's health bar."] },
-			{ "brackets", L["Brackets"], L["Brackets either side of the plate's health bar."] },
-			{ "none", L["None"], L["No mark: just the colors below, on the parts ticked."] },
-		})
-
-		stack:Header(content, L["Color"])
-		local _, lastColor = Choices("targetArrowColor", L["Color:"], {
-			{ "gold", L["Gold"], nil },
-			{ "reaction", L["By reaction"], L["Red for hostile units, yellow for neutral ones and green for friendly ones."] },
-			{ "class", L["Class colors"], L["Players in their class's color; everyone else by reaction."] },
-			{ "custom", L["Custom"], L["The color of the swatch beside it."] },
-		})
-		-- The custom colour's swatch, after its choice.
-		local swatch = CreateFrame("Button", nil, content)
-		swatch:SetSize(20, 20)
-		swatch:SetPoint("LEFT", lastColor.Text or lastColor.text, "RIGHT", 8, 0)
-		local swatchBorder = swatch:CreateTexture(nil, "BACKGROUND")
-		swatchBorder:SetAllPoints()
-		swatchBorder:SetColorTexture(0.6, 0.6, 0.6, 1)
-		local swatchColor = swatch:CreateTexture(nil, "ARTWORK")
-		swatchColor:SetPoint("TOPLEFT", 2, -2)
-		swatchColor:SetPoint("BOTTOMRIGHT", -2, 2)
-		Tooltip(swatch, L["Click to choose the arrow's custom color."])
-		swatch.Refresh = function()
-			local db = ns.GetDB()
-			swatchColor:SetColorTexture(db.targetArrowR, db.targetArrowG, db.targetArrowB, 1)
-		end
-		controls[#controls + 1] = swatch
-		for _, key in ipairs({ "targetArrowR", "targetArrowG", "targetArrowB" }) do RecordKey(content, key) end
-		swatch:SetScript("OnClick", function()
-			local db = ns.GetDB()
-			OpenColorPicker(db.targetArrowR, db.targetArrowG, db.targetArrowB, function(r, g, b)
-				db.targetArrowR, db.targetArrowG, db.targetArrowB, db.targetArrowColor = r, g, b, "custom"
+			pick = ns.PanelButton(parent)
+			pick:SetSize(width, 22)
+			pick:SetScript("OnClick", function()
+				local db = ns.GetDB()
+				local now = 0
+				for i, choice in ipairs(choices) do
+					if db[key] == choice.value then now = i end
+				end
+				db[key] = choices[now % #choices + 1].value
 				Refresh()
 				Changed()
 			end)
-		end)
-		-- Your target's own parts in the color too.
-		local alsoLabel = stack:Add(Label(content, "GameFontHighlight", L["Also color its:"]), "label", 28)
-		local lastAlso
-		for _, info in ipairs({
-			{ "targetColorName", L["Name"], L["Your target's name in the color, on its plate or shown alone."] },
-			{ "targetColorBar", L["Health bar"], L["Your target's health bar in the color."] },
-			{ "targetColorBorder", L["Border"], L["The border the game puts round your target's health bar, in the color."] },
-		}) do
-			local key = info[1]
-			local check = Check(content, key, info[2], info[3], function(value)
-				ns.GetDB()[key] = value
-				Changed()
-			end)
-			check:SetPoint("LEFT", lastAlso and (lastAlso.Text or lastAlso.text) or alsoLabel, "RIGHT",
-				lastAlso and 16 or 10, 0)
-			lastAlso = check
+			pick.Refresh = function(self)
+				for _, choice in ipairs(choices) do
+					if ns.GetDB()[key] == choice.value then self:SetText(choice.text) end
+				end
+			end
+			controls[#controls + 1] = pick
+			RecordKey(content, key)
+			return pick
 		end
 
-		stack:Header(content, L["Size and movement"])
-		stack:Add(Slider(content, "targetArrowSize", L["Size"], 50, 200, 5, "%d%%", 100, Changed), "slider")
-		local height = stack:Add(Slider(content, "targetArrowY", L["Height"], -10, 40, 1, "%d", 1, Changed), "slider")
-		Tooltip(height, L["Moves the arrow or chevron up (or down, below 0) from just over the name."])
-		GreyUnless(height, function(db) return db.targetArrowStyle == "arrow" or db.targetArrowStyle == "chevron" end)
-		stack:Add(Check(content, "targetArrowBob", L["Moving"],
-			L["The arrow and chevron bob up and down, the brackets close in and out, the glow pulses. " ..
-			"Unticked, it holds still."], function(value)
-				ns.GetDB().targetArrowBob = value
-				Changed()
-			end), "check")
+		-- The grid: its column headings, then a row for each kind.
+		stack:Header(content, L["Marks"])
+		stack:Help(content, L["Each part of a plate (its mark, name, health bar and border) comes from the " ..
+			"first row that fits it and sets that part, top to bottom: a row left on None passes it to the next. " ..
+			"Move a row with its arrows. After you fits your target only while it's attacking you, so it needs " ..
+			"to be above Target to change anything. Default, always last, is the game's look unless you change it. " ..
+			"Add row adds one for just the enemies, neutral units or friends of Target, Focus, Mouseover or " ..
+			"Default: put it above that kind's own row, so it comes first for them."])
+		local grid = CreateFrame("Frame", nil, content)
+		grid:SetSize(COL_MOVING + 50, 18 + ROW_H * #MARK_KINDS)
+		stack:Add(grid, "label")
+		for _, heading in ipairs({
+			{ COL_SHOW - 4, L["Show"] }, { COL_STYLE, L["Style"] }, { COL_COLOR, L["Color"] },
+			{ COL_ALSO, L["Also color"] }, { COL_SIZE, L["Size"] }, { COL_MOVING - 6, L["Moving"] },
+		}) do
+			local label = Label(grid, "GameFontNormalSmall", heading[2])
+			label:SetPoint("TOPLEFT", grid, "TOPLEFT", heading[1], 0)
+			label.searchSkip = true
+		end
+		-- Every row there can be: the kinds' own (MARK_KINDS), and one for each
+		-- reaction of Target, Focus, Mouseover and Default, shown once added
+		-- (in markOrder: Core's MarkRowBase). id, base kind, label, reaction's
+		-- name (nil: all its units), tip.
+		local ROWS = {}
+		for _, info in ipairs(MARK_KINDS) do
+			ROWS[#ROWS + 1] = { id = info[1], base = info[1], label = info[2], tip = info[3] }
+		end
+		local REACTION_NAMES = { Enemy = L["Enemy"], Neutral = L["Neutral"], Friendly = L["Friendly"] }
+		local REACTION_TIPS = { Enemy = L["This row: just the enemies among them."],
+			Neutral = L["This row: just the neutral ones among them."],
+			Friendly = L["This row: just the friendly ones among them."] }
+		local REACTS = {}
+		for _, kind in ipairs(ns.MARK_REACTION_KINDS) do REACTS[kind] = true end
+		for _, info in ipairs(MARK_KINDS) do
+			if REACTS[info[1]] then
+				for _, reaction in ipairs(ns.MARK_REACTIONS) do
+					ROWS[#ROWS + 1] = { id = info[1] .. reaction, base = info[1], label = info[2],
+						reaction = REACTION_NAMES[reaction], tip = info[3] .. " " .. REACTION_TIPS[reaction] }
+				end
+			end
+		end
 
+		-- The rows top to bottom in the order a plate tries them (Default
+		-- last), each with arrows to move it up or down within its part (an
+		-- added Default row only among Default's), and the added ones a button
+		-- to take them off.
+		local rows, moves = {}, {}
+		-- (The When grid below, its rows in the same order: made further down.)
+		local whenRows, whenTop = {}, nil
+		local WHEN_ROW_H = 26
+		local function RowList()
+			local list = {}
+			for _, id in ipairs(ns.TargetMarkOrder()) do list[#list + 1] = id end
+			list[#list + 1] = "others"
+			return list
+		end
+		local function Group(id) return ns.MarkRowBase(id) == "others" end
+		function grid:Refresh()
+			local list = RowList()
+			local at = {}
+			for i, id in ipairs(list) do at[id] = i end
+			for id, row in pairs(rows) do
+				local i = at[id]
+				row:SetShown(i ~= nil)
+				if i then
+					row:ClearAllPoints()
+					row:SetPoint("TOPLEFT", grid, "TOPLEFT", 0, -18 - ROW_H * (i - 1))
+					if moves[id] then
+						moves[id].up:SetShown(i > 1 and Group(list[i - 1]) == Group(id))
+						moves[id].down:SetShown(i < #list - 1 and Group(list[i + 1]) == Group(id))
+					end
+					-- (A row for one reaction under its kind's own: that one sets first.)
+					if row.reaction then
+						local base = ns.MarkRowBase(id)
+						local below = base ~= "others" and at[base] and at[base] < i
+						row.reaction:SetTextColor(below and 1 or 0.6, below and 0.55 or 0.6, below and 0.1 or 0.6)
+						row.below = below
+					end
+				end
+				local whenRow = whenRows[id]
+				if whenRow then
+					whenRow:SetShown(i ~= nil)
+					if i then
+						whenRow:ClearAllPoints()
+						whenRow:SetPoint("TOPLEFT", whenTop, "TOPLEFT", 0,
+							-FRAME_HEADING_HEIGHT - 4 - WHEN_ROW_H * (i - 1))
+						whenRow.grid:SetBand(i)
+					end
+				end
+			end
+			grid:SetHeight(18 + ROW_H * #list)
+			if whenTop then whenTop:SetHeight(FRAME_HEADING_HEIGHT + 4 + WHEN_ROW_H * #list) end
+		end
+		controls[#controls + 1] = grid
+		RecordKey(content, "markOrder")
+		local function SetOrder(order)
+			ns.GetDB().markOrder = table.concat(order, ",")
+			Refresh()
+			Changed()
+		end
+		local function Order()
+			local order = {}
+			for i, each in ipairs(ns.TargetMarkOrder()) do order[i] = each end
+			return order
+		end
+		local function Move(kind, by)
+			local order = Order()
+			for i, each in ipairs(order) do
+				if each == kind and order[i + by] then
+					order[i], order[i + by] = order[i + by], each
+					break
+				end
+			end
+			SetOrder(order)
+		end
+		local function MoveButton(row, kind, by)
+			local button = CreateFrame("Button", nil, row)
+			button:SetSize(14, 14)
+			button:SetPoint("LEFT", row, "LEFT", 0, by < 0 and 7 or -7)
+			local art = by < 0 and "Interface\\Buttons\\Arrow-Up-" or "Interface\\Buttons\\Arrow-Down-"
+			button:SetNormalTexture(art .. "Up")
+			button:SetPushedTexture(art .. "Down")
+			button:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+			Tooltip(button, by < 0 and L["Move this row up: a plate tries it sooner."]
+				or L["Move this row down: a plate tries it later."])
+			button:SetScript("OnClick", function() Move(kind, by) end)
+			return button
+		end
+		-- An added row, starting as a copy of its kind's own (look, Also color,
+		-- When, rule and roles), just above it (Default's: at the end).
+		local MARK_COPY = { "Show", "Style", "Color", "R", "G", "B", "Size", "Bob" }
+		local function AddRow(id)
+			local db, base = ns.GetDB(), ns.MarkRowBase(id)
+			for _, key in ipairs(MARK_COPY) do
+				db[MarkKey(id, key)] = ns.TargetMarkSetting(key, base)
+			end
+			for _, part in ipairs({ "Name", "Bar", "Border" }) do
+				db[id .. "Color" .. part] = db[base .. "Color" .. part]
+			end
+			db[id .. "When"] = db[base .. "When"]
+			for _, word in ipairs(ns.MARK_WHEN_WORDS) do
+				db[id .. "When" .. word[2]] = db[base .. "When" .. word[2]]
+			end
+			db.frameRules = db.frameRules or {}
+			db.frameRules[id .. "When"] = db.frameRules[base .. "When"]
+			for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
+				if type(db[list]) == "table" then db[list][id .. "When"] = db[list][base .. "When"] end
+			end
+			local order = Order()
+			local at = #order + 1
+			for i, each in ipairs(order) do
+				if each == base then at = i break end
+			end
+			table.insert(order, at, id)
+			SetOrder(order)
+		end
+		local function RemoveRow(id)
+			local order = {}
+			for _, each in ipairs(ns.TargetMarkOrder()) do
+				if each ~= id then order[#order + 1] = each end
+			end
+			SetOrder(order)
+		end
+
+		local NAME_X = 18
+		for _, info in ipairs(ROWS) do
+			local kind, base = info.id, info.base
+			local row = CreateFrame("Frame", nil, grid)
+			row:SetSize(COL_MOVING + 50, ROW_H)
+			row:Hide()
+			rows[kind] = row
+			local function Place(control, x, dy)
+				control:SetPoint("LEFT", row, "LEFT", x, dy or 0)
+				return control
+			end
+			local function Shown(db)
+				return db[MarkKey(kind, "Show")] and true or false
+			end
+			-- (Default stays last: no arrows.)
+			if kind ~= "others" then
+				moves[kind] = { up = MoveButton(row, kind, -1), down = MoveButton(row, kind, 1) }
+			end
+			-- (The row's name: a button, for its tip; an added row's reaction
+			-- under it, orange while its kind's own row is above it.)
+			local nameButton = Place(CreateFrame("Button", nil, row), NAME_X)
+			nameButton:SetSize(COL_SHOW - 4 - NAME_X, info.reaction and 30 or 20)
+			local name = Label(nameButton, "GameFontHighlight", info.label)
+			name:SetPoint(info.reaction and "TOPLEFT" or "LEFT")
+			name:SetPoint(info.reaction and "TOPRIGHT" or "RIGHT")
+			name:SetJustifyH("LEFT")
+			if info.reaction then
+				row.reaction = Label(nameButton, "GameFontHighlightSmall", info.reaction)
+				row.reaction:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -1)
+			end
+			Tooltip(nameButton, info.tip)
+			nameButton:HookScript("OnEnter", function()
+				if row.below then
+					GameTooltip:AddLine((L["%s's own row is above this one, so it sets its parts first: move " ..
+						"this one above it."]):format(info.label), 1, 0.55, 0.1, true)
+					GameTooltip:Show()
+				end
+			end)
+
+			local showKey = MarkKey(kind, "Show")
+			RecordKey(content, showKey)
+			local show = Place(Check(row, showKey, "", info.tip, function(value)
+				ns.GetDB()[showKey] = value
+				Refresh()
+				Changed()
+			end), COL_SHOW)
+			show.searchLabel = info.label .. (info.reaction and " " .. info.reaction or "")
+
+			local style = Place(Pick(row, MarkKey(kind, "Style"), kind == "aggro" and AGGRO_STYLES
+				or base == "others" and OTHERS_STYLES
+				or base == "mouseover" and MOUSEOVER_STYLES or MARK_STYLES, 96), COL_STYLE)
+			GreyUnless(style, Shown)
+
+			local color = Place(Pick(row, MarkKey(kind, "Color"), kind == "aggro" and AGGRO_COLORS or MARK_COLORS, 90),
+				COL_COLOR)
+			GreyUnless(color, Shown)
+			-- The custom color's swatch: picking from it chooses Custom.
+			local rKey, gKey, bKey = MarkKey(kind, "R"), MarkKey(kind, "G"), MarkKey(kind, "B")
+			local swatch = Place(CreateFrame("Button", nil, row), COL_SWATCH)
+			swatch:SetSize(18, 18)
+			local swatchBorder = swatch:CreateTexture(nil, "BACKGROUND")
+			swatchBorder:SetAllPoints()
+			swatchBorder:SetColorTexture(0.6, 0.6, 0.6, 1)
+			local swatchColor = swatch:CreateTexture(nil, "ARTWORK")
+			swatchColor:SetPoint("TOPLEFT", 2, -2)
+			swatchColor:SetPoint("BOTTOMRIGHT", -2, 2)
+			Tooltip(swatch, L["Click to choose the mark's custom color."])
+			-- (After you on Your target's: your target's color, to start a custom one from.)
+			local function SwatchColor(db)
+				if kind == "aggro" and db[MarkKey(kind, "Color")] == "same" and ns.TargetArrowColour then
+					return ns.TargetArrowColour(nil, "target")
+				end
+				return db[rKey] or 1, db[gKey] or 1, db[bKey] or 1
+			end
+			swatch.Refresh = function(self)
+				local db = ns.GetDB()
+				local r, g, b = SwatchColor(db)
+				swatchColor:SetColorTexture(r, g, b, 1)
+				self:SetEnabled(Shown(db))
+				self:SetAlpha(Shown(db) and 1 or 0.4)
+			end
+			controls[#controls + 1] = swatch
+			for _, key in ipairs({ rKey, gKey, bKey }) do RecordKey(content, key) end
+			swatch:SetScript("OnClick", function()
+				local db = ns.GetDB()
+				local r0, g0, b0 = SwatchColor(db)
+				OpenColorPicker(r0, g0, b0, function(r, g, b)
+					db[rKey], db[gKey], db[bKey], db[MarkKey(kind, "Color")] = r, g, b, "custom"
+					Refresh()
+					Changed()
+				end)
+			end)
+
+			-- Also color: the unit's own parts in its mark's color, ticked from a
+			-- menu (or, on a client without menus, stepped through each mix).
+			local also = Place(ns.GridMenuButton(row, 96), COL_ALSO)
+			Tooltip(also, L["The unit's own parts in its mark's color: its name and health bar (and on your " ..
+				"target, the game's border round it)."])
+			also.searchLabel = info.label .. " " .. L["Also color"]
+			local function AlsoChanged()
+				Refresh()
+				Changed()
+			end
+			local entries, parts = {}, {}
+			for _, part in ipairs(ALSO_PARTS) do
+				if not part.targetOnly or base == "target" or kind == "aggro" then parts[#parts + 1] = part end
+			end
+			-- (After you: first, Your target's, your target's ticks in its color;
+			-- its own parts then greyed in the menu.)
+			local sameKey = kind == "aggro" and "aggroMarkAlsoSame" or nil
+			local function Own()
+				return not (sameKey and ns.GetDB()[sameKey])
+			end
+			if sameKey then
+				RecordKey(content, sameKey)
+				entries[1] = { L["Your target's"], function() return not Own() end,
+					function() ns.GetDB()[sameKey] = Own() end, nil,
+					L["Its name, health bar and border as the Target row colors them."] }
+			end
+			for _, part in ipairs(parts) do
+				local key = kind .. "Color" .. part[1]
+				RecordKey(content, key)
+				entries[#entries + 1] = { part[2], function() return ns.GetDB()[key] and true or false end,
+					function() ns.GetDB()[key] = not ns.GetDB()[key] end, sameKey and Own or nil, part[3] }
+			end
+			also:SetScript("OnClick", function(self)
+				if ns.GRID_MENUS then
+					ns.TickMenu(self, entries, AlsoChanged, true)
+					return
+				end
+				-- (No menus: the next of the mixes; for After you, Your target's
+				-- before the first and after the last.)
+				local db, mix = ns.GetDB(), 0
+				if Own() then
+					for bit, part in ipairs(parts) do
+						if db[kind .. "Color" .. part[1]] then mix = mix + 2 ^ (bit - 1) end
+					end
+					mix = (mix + 1) % 2 ^ #parts
+					if sameKey and mix == 0 then
+						db[sameKey] = true
+						AlsoChanged()
+						return
+					end
+				else
+					db[sameKey] = false
+				end
+				for bit, part in ipairs(parts) do
+					db[kind .. "Color" .. part[1]] = math.floor(mix / 2 ^ (bit - 1)) % 2 == 1
+				end
+				AlsoChanged()
+			end)
+			also.Refresh = function(self)
+				local db, names = ns.GetDB(), {}
+				if not Own() then
+					self:SetText(L["Your target's"])
+					self:SetEnabled(Shown(db))
+					return
+				end
+				for _, part in ipairs(parts) do
+					if db[kind .. "Color" .. part[1]] then names[#names + 1] = ALSO_SHORT[part[1]] end
+				end
+				self:SetText(#names > 0 and table.concat(names, ", ")
+					or "|cff808080" .. (base == "others" and L["The game's"] or L["None"]) .. "|r")
+				self:SetEnabled(Shown(db))
+			end
+			controls[#controls + 1] = also
+
+			-- (Aggro: your target's size and movement, so none of its own; said
+			-- across both cells.)
+			if kind == "aggro" then
+				local same = Place(Label(row, "GameFontDisableSmall", L["Your target's"]), COL_SIZE)
+				same.searchSkip = true
+			else
+				local sizeKey, bobKey = MarkKey(kind, "Size"), MarkKey(kind, "Bob")
+				RecordKey(content, sizeKey)
+				RecordKey(content, bobKey)
+				local size = Place(Slider(row, sizeKey, "", 50, 200, 5, "%d%%", 100, Changed), COL_SIZE, -6)
+				size:SetWidth(76)
+				size.searchLabel = info.label .. " " .. L["Size"]
+				GreyUnless(size, Shown)
+				local moving = Place(Check(row, bobKey, "",
+					L["The arrow, chevron and diamond bob up and down, the brackets, carets and corners close " ..
+					"in and out, the glow and underline pulse. Unticked, it holds still."], function(value)
+						ns.GetDB()[bobKey] = value
+						Changed()
+					end), COL_MOVING)
+				moving.searchLabel = info.label .. " " .. L["Moving"]
+				GreyUnless(moving, Shown)
+			end
+			-- (An added row: a button to take it off.)
+			if info.reaction then
+				local remove = Place(CreateFrame("Button", nil, row), COL_MOVING + 30)
+				remove:SetSize(16, 16)
+				remove:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
+				remove:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+				Tooltip(remove, L["Remove this row."])
+				remove:SetScript("OnClick", function() RemoveRow(kind) end)
+			end
+		end
+
+		-- Add row: the rows not on the grid yet, from a menu (none on a client
+		-- without menus: the button hides).
+		local add = ns.PanelButton(content)
+		add:SetSize(100, 22)
+		add:SetText(L["Add row"])
+		Tooltip(add, L["Adds a row for just the enemies, neutral units or friends of Target, Focus, Mouseover " ..
+			"or Default, a copy of that kind's own row to start with, just above it."])
+		add:SetScript("OnClick", function(self)
+			local on = {}
+			for _, id in ipairs(ns.TargetMarkOrder()) do on[id] = true end
+			MenuUtil.CreateContextMenu(self, function(_, root)
+				for _, info in ipairs(ROWS) do
+					if info.reaction and not on[info.id] then
+						root:CreateButton(info.label .. " - " .. info.reaction, function() AddRow(info.id) end)
+					end
+				end
+			end)
+		end)
+		add.Refresh = function(self)
+			local count = 0
+			for _ in ipairs(ns.TargetMarkOrder()) do count = count + 1 end
+			self:SetShown(ns.GRID_MENUS and true or false)
+			-- (All added: nothing left to add.)
+			self:SetEnabled(count < #ROWS - 1)
+		end
+		controls[#controls + 1] = add
+		stack:Add(add, "label")
+
+		-- When: a row for each of the grid's, in its order, as the Standard
+		-- Frames page's rows (Always, the dropdowns, roles, a rule: Core's
+		-- MARK_WHEN_WORDS). A row that doesn't fit now leaves the plate to the next.
+		stack:Header(content, L["When"])
+		stack:Help(content, L["When each row above fits: Always, or only in the fights, targets and places " ..
+			"ticked (or as its rule says). A row that doesn't fit now leaves the plate to the next one. The " ..
+			"Nameplates page's Target Indicator row still says when marks show at all."])
+		local WHEN_NAME_W = 120
+		local WHEN_LAYOUT = { roles = true, edit = true }
+		local WHEN_GROUP = { combat = 1, calm = 1, nocombat = 1, camera = 1, enemy = 2, friendly = 2, near = 2,
+			near28 = 2 }
+		local WHEN_NAMES = { combat = L["In combat"], calm = L["Calm Timer"], nocombat = L["Out of combat"],
+			camera = L["In a camera mode"], enemy = L["Enemy targeted"], friendly = L["Friend targeted"],
+			near = L["Near (11 yards)"], near28 = L["Near (28 yards)"], world = L["Open World"], city = L["Cities"],
+			inn = L["Inns"], bg = L["BGs & Arenas"], instance = L["Instances"], dungeon = L["Dungeons"],
+			raid = L["Raids"], group = L["Grouped"] }
+		whenTop = CreateFrame("Frame", nil, content)
+		whenTop:SetSize(WHEN_NAME_W + ns.GridWidth(WHEN_LAYOUT), FRAME_HEADING_HEIGHT + 4 + WHEN_ROW_H * #MARK_KINDS)
+		stack:Add(whenTop, "label")
+		ns.GridHeadings(ns.GRID_KIT, whenTop, whenTop, WHEN_NAME_W, WHEN_LAYOUT)
+		for _, info in ipairs(ROWS) do
+			local kind, base = info.id, info.id .. "When"
+			local shownName = info.label .. (info.reaction and " - " .. info.reaction or "")
+			local row = CreateFrame("Frame", nil, whenTop)
+			row:SetSize(whenTop:GetWidth(), 24)
+			row:Hide()
+			whenRows[kind] = row
+			local name = Label(row, info.reaction and "GameFontHighlightSmall" or "GameFontHighlight", shownName)
+			name:SetPoint("LEFT", row, "LEFT", 0, 0)
+			name:SetWidth(WHEN_NAME_W - 4)
+			name:SetJustifyH("LEFT")
+			name:SetWordWrap(false)
+			name.searchSkip = true
+			RecordKey(content, base)
+			local menus, words = { {}, {}, {} }, {}
+			for _, word in ipairs(ns.MARK_WHEN_WORDS) do
+				local key = base .. word[2]
+				RecordKey(content, key)
+				words[word[1]] = true
+				local group = menus[WHEN_GROUP[word[1]] or 3]
+				group[#group + 1] = { WHEN_NAMES[word[1]], function() return ns.GetDB()[key] and true or false end,
+					function() ns.GetDB()[key] = not ns.GetDB()[key] end }
+			end
+			RuleTarget(base, shownName .. " (" .. L["Nameplates"] .. ")", "Nameplate Style")
+			ns.GRID_RULE_KEYS[base] = true
+			for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
+				RecordKey(content, list)
+				RecordRow(content, list, base)
+			end
+			row.grid = ns.GridRow(ns.GRID_KIT, row, WHEN_NAME_W, WHEN_LAYOUT, {
+				band = 1,
+				always = { isOn = function() return ns.GetDB()[base] end,
+					set = function(value) ns.GetDB()[base] = value end,
+					tip = L["This row fits everywhere. The rest of the row keeps its ticks for when you untick this."] },
+				menus = menus,
+				rule = { key = function() return base end, label = function() return shownName end, grid = words,
+					words = function()
+						local ticked = {}
+						for _, word in ipairs(ns.MARK_WHEN_WORDS) do
+							if ns.GetDB()[base .. word[2]] then ticked[#ticked + 1] = word[1] end
+						end
+						return ticked
+					end,
+					apply = function(isAlways, ticked)
+						local db = ns.GetDB()
+						db[base] = isAlways and true or false
+						for _, word in ipairs(ns.MARK_WHEN_WORDS) do
+							db[base .. word[2]] = ticked[word[1]] and true or false
+						end
+					end,
+					changed = Changed },
+				roles = { key = function() return base end, changed = Changed,
+					tip = L["Tick roles to have this row fit only while you're one of them (your specialization's, " ..
+					"or the one picked in the group finder), whatever the row says. None ticked (-): every role."] },
+				changed = Changed,
+			})
+			row.grid:SetPoint("LEFT", row, "LEFT", WHEN_NAME_W, 0)
+		end
+		grid:Refresh()
+
+		stack:Header(content, L["All marks"])
+		-- (Two heights: on a showing plate, and with none; the marks move
+		-- between them as the plate fades, as the quest mark does.)
+		local height = stack:Add(Slider(content, "targetArrowY", L["Height with a plate"], -40, 40, 1, "%d", 1,
+			Changed), "slider")
+		Tooltip(height, L["Moves the marks drawn over the plate (arrow, chevron, diamond) up, or down below 0, " ..
+			"from just over the name, while the plate shows."])
+		local bareHeight = stack:Add(Slider(content, "targetArrowBareY", L["Height without a plate"], -40, 40, 1,
+			"%d", 1, Changed), "slider")
+		Tooltip(bareHeight, L["Moves the marks drawn over the plate up, or down below 0, from where the plate's " ..
+			"middle is, while nothing of the plate shows. As the plate fades in or out, the marks move between " ..
+			"the two heights."])
 		canvas:SetScript("OnShow", PageShown(Refresh, content))
 		canvas:Hide()
-		RegisterSubpage(canvas, "Target Indicator")
+		RegisterSubpage(canvas, "Nameplate Style", L["Nameplates"])
 	end
 end
 

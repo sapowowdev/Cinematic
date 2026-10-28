@@ -634,17 +634,94 @@ DEFAULTS.plateInstanceFriendlyMinions = "hide"
 DEFAULTS.plateInstanceFriendlyNPCs = "target"
 -- And your target's plate, shown everywhere whatever its own row says.
 DEFAULTS.handlePlates = true -- the Nameplates page's master switch (off: the game's own options decide)
--- The Target Indicator row's look (the Style hub's Target Indicator page; see PlateParts).
-DEFAULTS.targetArrowStyle = "arrow" -- "arrow", "chevron" (over the plate), "glow" (behind its bar), "brackets" or "none"
--- Your target's name, health bar and border in the arrow's color, while the row shows.
-DEFAULTS.targetColorName = false
-DEFAULTS.targetColorBar = false
-DEFAULTS.targetColorBorder = false
-DEFAULTS.targetArrowColor = "gold" -- "gold", "reaction" (red, yellow, green), "class" (players; else reaction) or "custom"
-DEFAULTS.targetArrowR, DEFAULTS.targetArrowG, DEFAULTS.targetArrowB = 1, 0.82, 0 -- the custom color
+-- The Target Indicator row's look (the Style hub's Nameplates page; see PlateParts).
+-- Its grid's Target row: whether it shows, and its look.
+DEFAULTS.handlePlateStyle = true -- (its page's switch: off, no marks or their colors at all)
+DEFAULTS.targetArrowShow = true
+-- "arrow", "chevron", "diamond" (over the plate), "glow" (behind its bar),
+-- "brackets", "carets", "corners" (round it), "underline" or "none"
+DEFAULTS.targetArrowStyle = "arrow"
+-- Each row's Also color: the unit's name, health bar and border in its
+-- mark's color, while the row shows (<kind>ColorName, ColorBar, ColorBorder).
+-- Your target's and your focus's names and bars to start with.
+for _, kind in ipairs({ "target", "aggro", "focus", "mouseover", "others" }) do
+	local colored = kind == "target" or kind == "focus"
+	DEFAULTS[kind .. "ColorName"] = colored
+	DEFAULTS[kind .. "ColorBar"] = colored
+	DEFAULTS[kind .. "ColorBorder"] = false
+end
+DEFAULTS.targetArrowColor = "custom" -- "gold", "reaction" (red, yellow, green), "class" (players; else reaction) or "custom"
+DEFAULTS.targetArrowR, DEFAULTS.targetArrowG, DEFAULTS.targetArrowB = 0.85, 0, 1 -- the custom color: purple
 DEFAULTS.targetArrowSize = 1 -- times its own
-DEFAULTS.targetArrowY = 0 -- the arrow and chevron: up from just over the name
+DEFAULTS.targetArrowY = 0 -- the marks over the plate: up from just over the name (-40 to 40)
+DEFAULTS.targetArrowBareY = -20 -- and with no plate showing: up from where its middle is (-40 to 40)
 DEFAULTS.targetArrowBob = true -- the arrow and chevron bob, the brackets close in, the glow pulses
+-- Its other rows, <kind>Mark<key> as the Target row's (Show, Style, Color, R,
+-- G, B, Size, Bob): your target while it's after you (aggro: its size,
+-- height and movement your target's; style and color "same" for your
+-- target's too, and its Also color while aggroMarkAlsoSame: then your
+-- target's ticks in your target's color), your focus, and the unit under
+-- the mouse.
+-- Which row a plate goes by when more than one fits (your target that's
+-- your focus too, say): the first in this order (aggro under target's
+-- never shows). Rows can be added for one reaction of a kind's units
+-- (targetEnemy, focusFriendly, othersNeutral...: MarkRowBase), their
+-- settings keyed as their kind's with the row's id in its place (their
+-- Default ones last, before Default's own).
+DEFAULTS.markOrder = "target,mouseover,focus,aggro"
+ns.MARK_REACTIONS = { "Enemy", "Neutral", "Friendly" }
+ns.MARK_REACTION_KINDS = { "target", "focus", "mouseover", "others" }
+-- A row's kind and reaction ("targetEnemy": "target", "Enemy"; nil reaction:
+-- all its units).
+function ns.MarkRowBase(id)
+	for _, reaction in ipairs(ns.MARK_REACTIONS) do
+		local base = id:match("^(%l+)" .. reaction .. "$")
+		if base then return base, reaction end
+	end
+	return id, nil
+end
+DEFAULTS.aggroMarkShow = true
+DEFAULTS.aggroMarkStyle = "same"
+DEFAULTS.aggroMarkColor = "custom"
+DEFAULTS.aggroMarkAlsoSame = false
+DEFAULTS.aggroMarkR, DEFAULTS.aggroMarkG, DEFAULTS.aggroMarkB = 1, 0.19, 0.19
+DEFAULTS.focusMarkShow = true
+DEFAULTS.focusMarkStyle = "diamond"
+DEFAULTS.focusMarkColor = "custom"
+DEFAULTS.focusMarkR, DEFAULTS.focusMarkG, DEFAULTS.focusMarkB = 0.07, 0.91, 0.98 -- cyan
+DEFAULTS.focusMarkSize = 1
+DEFAULTS.focusMarkBob = false
+DEFAULTS.mouseoverMarkShow = true
+DEFAULTS.mouseoverMarkStyle = "chevron" -- (just "arrow", "chevron", "diamond" or "none": see PlateParts)
+DEFAULTS.mouseoverMarkColor = "custom"
+DEFAULTS.mouseoverMarkR, DEFAULTS.mouseoverMarkG, DEFAULTS.mouseoverMarkB = 1, 1, 1
+DEFAULTS.mouseoverMarkSize = 1
+DEFAULTS.mouseoverMarkBob = false
+-- Default (others, after all of them in the order): every other plate,
+-- the game's own look (no mark, no Also color) until you change it.
+DEFAULTS.othersMarkShow = true
+DEFAULTS.othersMarkStyle = "none"
+DEFAULTS.othersMarkColor = "reaction"
+DEFAULTS.othersMarkR, DEFAULTS.othersMarkG, DEFAULTS.othersMarkB = 1, 1, 1
+DEFAULTS.othersMarkSize = 1
+DEFAULTS.othersMarkBob = false
+-- When each row fits (the page's When grid, as the Standard Frames page's
+-- rows): <kind>When is Always, <kind>When<Word> each of the dropdowns' ticks
+-- (the rules' words, MARK_WHEN_WORDS); frameRules[<kind>When] a rule in their
+-- place, and the roles lists' <kind>When. A row that doesn't fit now leaves
+-- the plate to the next one. Always to start with.
+ns.MARK_WHEN_WORDS = {
+	{ "combat", "Combat" }, { "calm", "Calm" }, { "nocombat", "NoCombat" }, { "camera", "Camera" },
+	{ "enemy", "Enemy" }, { "friendly", "Friendly" }, { "near", "Near" }, { "near28", "Near28" },
+	{ "world", "World" }, { "city", "City" }, { "inn", "Inn" }, { "bg", "BG" }, { "instance", "Instance" },
+	{ "dungeon", "Dungeon" }, { "raid", "Raid" }, { "group", "Group" },
+}
+for _, kind in ipairs({ "aggro", "target", "focus", "mouseover", "others" }) do
+	DEFAULTS[kind .. "When"] = true
+	for _, word in ipairs(ns.MARK_WHEN_WORDS) do
+		DEFAULTS[kind .. "When" .. word[2]] = false
+	end
+end
 -- Names on plates showing just their name (CineMode), drawn like the game's
 -- names over heads (Nameplates page's tick, the Style hub's Names page; see PlateParts).
 DEFAULTS.plateNameStyle = true
@@ -3770,6 +3847,22 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				ns.db.targetColorName = true
 			end
 			ns.db.targetColorV1 = true
+		end
+		-- Your target's Also color went to its aggro row too, while it was
+		-- after you: that row has its own now, as your target's to start. Once.
+		if not ns.db.aggroColorV1 then
+			for _, part in ipairs({ "Name", "Bar", "Border" }) do
+				if ns.db["targetColor" .. part] ~= nil then
+					ns.db["aggroColor" .. part] = ns.db["targetColor" .. part]
+				end
+			end
+			ns.db.aggroColorV1 = true
+		end
+		-- The unit under the mouse takes just the marks over its plate now (see
+		-- PlateParts): one round or under it goes back to the default.
+		local over = { arrow = true, chevron = true, diamond = true, none = true }
+		if ns.db.mouseoverMarkStyle ~= nil and not over[ns.db.mouseoverMarkStyle] then
+			ns.db.mouseoverMarkStyle = nil
 		end
 		-- The Buffs/debuffs page's peeks as their defaults in every profile
 		-- (debuffs now held until gone, long auras skipped). Once. (Not the

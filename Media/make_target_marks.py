@@ -1,8 +1,9 @@
 """The target indicator's other styles (PlateParts.lua's Target Arrow), each
 white with a dark edge (the glow: soft, no edge) so the game can tint it,
 on a see-through background. Our own, drawn from scratch here; usage:
-make_target_marks.py Textures   (writes TargetChevron, TargetGlow and
-TargetBracket .tga there)"""
+make_target_marks.py Textures   (writes TargetChevron, TargetGlow,
+TargetBracket, TargetDiamond, TargetCorner, TargetCaret and TargetUnderline
+.tga there)"""
 import os
 import sys
 from PIL import Image, ImageDraw, ImageFilter
@@ -54,3 +55,43 @@ draw.polygon(scaled(outer, 1.5, 2), fill=SHADOW)
 draw.polygon(scaled(outer), fill=EDGE)
 draw.polygon(scaled(inner), fill=FACE)
 save(big, 32, 64, "TargetBracket.tga")
+
+# Diamond: an outlined diamond with a dot in it, pointing down at the plate, 64x64.
+def diamond(cx, cy, r):
+    return [(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)]
+
+
+big, draw = canvas(64, 64)
+draw.polygon(scaled(diamond(32, 32, 24), 1.5, 2), fill=SHADOW)
+draw.polygon(scaled(diamond(32, 32, 24)), fill=EDGE)
+draw.polygon(scaled(diamond(32, 32, 20.5)), fill=FACE)
+draw.polygon(scaled(diamond(32, 32, 14)), fill=EDGE)
+draw.polygon(scaled(diamond(32, 32, 11)), fill=(0, 0, 0, 0))
+draw.polygon(scaled(diamond(32, 32, 6)), fill=EDGE)
+draw.polygon(scaled(diamond(32, 32, 4)), fill=FACE)
+save(big, 64, 64, "TargetDiamond.tga")
+
+# Corner: a top-left corner of a lock-on frame (the others are it mirrored), 32x32.
+outer = [(4, 4), (26, 4), (26, 11), (11, 11), (11, 26), (4, 26)]
+inner = [(6.5, 6.5), (23.5, 6.5), (23.5, 8.5), (8.5, 8.5), (8.5, 23.5), (6.5, 23.5)]
+big, draw = canvas(32, 32)
+draw.polygon(scaled(outer, 1.5, 2), fill=SHADOW)
+draw.polygon(scaled(outer), fill=EDGE)
+draw.polygon(scaled(inner), fill=FACE)
+save(big, 32, 32, "TargetCorner.tga")
+
+# Caret: a triangle pointing right, for the left of the bar (the right one mirrored), 32x32.
+outer = [(5, 4), (28, 16), (5, 28)]
+inner = [(8, 9), (22.5, 16), (8, 23)]
+big, draw = canvas(32, 32)
+draw.polygon(scaled(outer, 1.5, 2), fill=SHADOW)
+draw.polygon(scaled(outer), fill=EDGE)
+draw.polygon(scaled(inner), fill=FACE)
+save(big, 32, 32, "TargetCaret.tga")
+
+# Underline: a rounded bar under the plate, 128x16.
+big, draw = canvas(128, 16)
+draw.rounded_rectangle([(4 + 1.5) * S, (3 + 2) * S, (124 + 1.5) * S, (12 + 2) * S], radius=4 * S, fill=SHADOW)
+draw.rounded_rectangle([4 * S, 3 * S, 124 * S, 12 * S], radius=4 * S, fill=EDGE)
+draw.rounded_rectangle([6.5 * S, 5.5 * S, 121.5 * S, 9.5 * S], radius=2 * S, fill=FACE)
+save(big, 128, 16, "TargetUnderline.tga")

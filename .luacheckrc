@@ -259,6 +259,7 @@ read_globals = {
 	"UnitChannelInfo",
 	"UnitClass",
 	"UnitClassification",
+	"UnitIsBossMob", "UnitThreatSituation", "GetActionInfo", "IsHarmfulSpell", "IsHelpfulSpell", "SpellHasRange",
 	"UnitCreatureType",
 	"UnitExists",
 	"UnitFactionGroup",

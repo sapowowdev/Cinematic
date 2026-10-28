@@ -161,16 +161,15 @@ local texts = {}
 -- while the text fades in at the new one (see swaps).
 local ghosts = {}
 
--- Your target's colors (the Target Indicator page's Name, Health bar and
--- Border ticks: see TintTarget, below): its unit frame (frame), the color
--- (r, g, b), how far it's in (level, the row's), and which parts (name,
--- bar, border).
-local targetTint = {}
+-- Marked plates' colors (the Target Indicator page's Also color column: see
+-- TintTarget, below), [unit frame] = how far it's in (level, the rows'),
+-- and each part's color ({ r, g, b }, nil for the game's: name, bar, border).
+local tints = {}
 
--- A color blended into the target's, as far as it's in.
-local function Blend(r, g, b, tint)
-	local level = tint.level
-	return r + (tint.r - r) * level, g + (tint.g - g) * level, b + (tint.b - b) * level
+-- A color blended into a part's (name, bar or border), as far as it's in.
+local function Blend(r, g, b, tint, part)
+	local level, colour = tint.level, tint[part]
+	return r + (colour[1] - r) * level, g + (colour[2] - g) * level, b + (colour[3] - b) * level
 end
 
 local function Known(value)
@@ -441,8 +440,9 @@ local function DrawName(text, name, unit)
 	local okColour, r, g, b = pcall(text.GetTextColor, text)
 	if okColour and type(r) == "number" and Known(r) and Known(g) and Known(b) then
 		text.baseR, text.baseG, text.baseB = r, g, b
-		if targetTint.name and targetTint.frame == text:GetParent() then
-			text:SetTextColor(Blend(r, g, b, targetTint))
+		local tint = tints[text:GetParent()]
+		if tint and tint.name then
+			text:SetTextColor(Blend(r, g, b, tint, "name"))
 		end
 	end
 	text:SetAlpha(alpha)
@@ -963,22 +963,74 @@ function RefreshQuestIcon(plate)
 end
 
 -- The Target Arrow row: a mark on your target's plate, for when no target
--- frame shows what you've targeted (Pure Cinema). Shown like the class
--- icons, but not faded with the plate: one faded right out, or showing just
--- its name, still has it. It hides with the plate. Its look is the Style
--- hub's Target Indicator page's: an arrow or chevron over the plate (clear of
--- the name), a glow behind its health bar, or brackets either side of it;
--- colored, sized, raised and moving as that page says.
+-- frame shows what you've targeted (Pure Cinema), and on your focus's and
+-- the one under the mouse. Shown like the class icons, but not faded with
+-- the plate: one faded right out, or showing just its name, still has it. It
+-- hides with the plate. Its look is the Style hub's Target Indicator page's,
+-- a row for each kind: an arrow, chevron or diamond over the plate (clear of
+-- the name), a glow behind its health bar, brackets, carets or corners round
+-- it, or a line under it; colored, sized, raised and moving as that page says.
 -- (Media/make_target_arrow.py and make_target_marks.py)
 local ARROW_ART = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\"
-local ARROW_OVER = { arrow = "TargetArrow", chevron = "TargetChevron" }
+local ARROW_OVER = { arrow = "TargetArrow", chevron = "TargetChevron", diamond = "TargetDiamond" }
+local ARROW_SIDES = { brackets = "TargetBracket", carets = "TargetCaret" }
+-- The corners' texture coordinates: top left as drawn, the others mirrored.
+local CORNERS = {
+	{ "TOPLEFT", -1, 1, 0, 1, 0, 1 }, { "TOPRIGHT", 1, 1, 1, 0, 0, 1 },
+	{ "BOTTOMLEFT", -1, -1, 0, 1, 1, 0 }, { "BOTTOMRIGHT", 1, -1, 1, 0, 1, 0 },
+}
 local GOLD = { 1, 0.82, 0 }
 local arrows = {} -- [plate] = arrow frame
 
--- An arrow setting (the Target Indicator page's, see Core's DEFAULTS).
-local function ArrowSetting(key)
-	return Style("targetArrow" .. key)
+-- A mark setting for a kind (the Target Indicator page's rows, see Core's
+-- DEFAULTS): your target's are targetArrow<key>, the others' <kind>Mark<key>,
+-- but for Also color's, <kind>Color<part> for every kind.
+-- Aggro goes by your target's size, height and movement, its look too while
+-- its own style is "same", and its color while its color is.
+-- A row added for one reaction (targetEnemy...: Core's MarkRowBase) is
+-- keyed as its kind's, its id in the kind's place; a setting it hasn't got,
+-- its kind's own row's.
+local AGGRO_COLOR_KEYS = { Color = true, R = true, G = true, B = true }
+local function ArrowSetting(key, kind)
+	kind = kind or "target"
+	if kind == "aggro" and (key == "Size" or key == "Y" or key == "BareY" or key == "Bob"
+		or AGGRO_COLOR_KEYS[key] and Style("aggroMarkColor") == "same") then
+		kind = "target"
+	end
+	local base, reaction = ns.MarkRowBase(kind)
+	local value
+	-- (Its Also color ticks: <kind>ColorName, ColorBar and ColorBorder.)
+	if key == "ColorName" or key == "ColorBar" or key == "ColorBorder" then
+		value = Style(kind .. key)
+	elseif kind == "target" then
+		return Style("targetArrow" .. key)
+	else
+		value = Style(kind .. "Mark" .. key)
+	end
+	if value == nil and reaction then
+		return ArrowSetting(key, base)
+	end
+	if kind == "aggro" and key == "Style" and value == "same" then
+		return Style("targetArrowStyle")
+	end
+	-- (The unit under the mouse: just the marks over its plate. Round it or
+	-- under it, they hang in the air where its plate is hidden.)
+	if base == "mouseover" and key == "Style" and not (ARROW_OVER[value] or value == "none") then
+		return ns.DEFAULTS.mouseoverMarkStyle
+	end
+	return value
 end
+ns.TargetMarkSetting = ArrowSetting
+
+-- Whose Also color a kind's plate takes: aggro's own, or while it's your
+-- target's, your target's ticks in your target's color.
+local function TintKind(kind)
+	if kind == "aggro" and Style("aggroMarkAlsoSame") then
+		return "target"
+	end
+	return kind
+end
+ns.TargetMarkTintKind = TintKind
 
 -- Red, yellow or green by how a unit sees you (hostile: no unit, the preview).
 local function ReactionColour(unit)
@@ -992,11 +1044,12 @@ local function ReactionColour(unit)
 	return 1, 0.1, 0.1
 end
 
--- The arrow's colour for a unit (nil: the preview's, a hostile NPC).
-local function ArrowColour(unit)
-	local how = ArrowSetting("Color")
+-- The arrow's colour for a unit (nil: the preview's, a hostile NPC), by its
+-- kind's row (nil: your target's).
+local function ArrowColour(unit, kind)
+	local how = ArrowSetting("Color", kind)
 	if how == "custom" then
-		return ArrowSetting("R"), ArrowSetting("G"), ArrowSetting("B")
+		return ArrowSetting("R", kind), ArrowSetting("G", kind), ArrowSetting("B", kind)
 	elseif how == "class" and unit then
 		-- (By GUID: Forever's UnitIsPlayer can say no for a player.)
 		local okGuid, guid = pcall(UnitGUID, unit)
@@ -1013,24 +1066,109 @@ local function ArrowColour(unit)
 	return unpack(GOLD)
 end
 
--- Moving (the Target Indicator page's Moving tick): the arrow and chevron
--- bob, the brackets close in, the glow pulses, out and back every BOB_TIME
--- seconds. Worked out each frame: an animation group's BOUNCE looping
--- jumped a few pixels for a frame as it turned, at the top of each bob
--- (seen frame by frame in a capture).
+-- Moving (the Target Indicator page's Moving ticks): the arrow, chevron and
+-- diamond bob, the brackets, carets and corners close in, the glow and line
+-- pulse, out and back every BOB_TIME seconds. Worked out each frame: an
+-- animation group's BOUNCE looping jumped a few pixels for a frame as it
+-- turned, at the top of each bob (seen frame by frame in a capture).
 local BOB_TIME = 1.2
 
--- An arrow's pieces where they go, out (t) from 0 (at rest) to 1.
-local function PlaceArrow(arrow, t)
-	local size = arrow.size
-	arrow.over:SetPoint("BOTTOM", arrow, "TOP", 0, arrow.overY + 4 * size * t)
-	arrow.left:SetPoint("RIGHT", arrow, "LEFT", -3 + 3 * size * t, 0)
-	arrow.right:SetPoint("LEFT", arrow, "RIGHT", 3 - 3 * size * t, 0)
-	arrow.glow:SetAlpha(1 - 0.45 * t)
+-- Whether a region shows, as far as the game will say: nil when it won't.
+local function Seen(region)
+	if not (region and region.IsVisible) then
+		return nil
+	end
+	local ok, shown = pcall(region.IsVisible, region)
+	if not ok or not Known(shown) then
+		return nil
+	end
+	return shown and true or false
 end
 
+-- Whether the plate draws its health bar or name at all: the game hides
+-- them itself on some plates (the alpha stays 1). Can't tell: it does.
+local function PlateDrawn(plate)
+	local unitFrame = plate.UnitFrame
+	if not Usable(unitFrame) then
+		return true
+	end
+	local text = texts[unitFrame]
+	if text and text:IsShown() then
+		return true
+	end
+	local bar = Seen(unitFrame.HealthBarsContainer or unitFrame.healthBar)
+	local name = Seen(unitFrame.name)
+	if bar == nil and name == nil then
+		return true
+	end
+	return bar or name or false
+end
+
+-- A frame's alpha with all it's in (effective), 0 to 1: 1 when the game won't say.
+local function Opacity(frame)
+	local ok, alpha = pcall(frame.GetEffectiveAlpha, frame)
+	return ok and type(alpha) == "number" and Known(alpha) and alpha or 1
+end
+
+-- How much of a plate shows, 0 to 1: its alpha (its unit frame's with all
+-- it's in: the game fades that one too, a unit out of sight, and we never
+-- do) times the most of its health bar or name (shown alone or not); none
+-- while the game draws neither. Unknown alpha (secret): all of it.
+local function PlateShowing(plate)
+	if not PlateDrawn(plate) then
+		return 0
+	end
+	local alpha = Opacity(Usable(plate.UnitFrame) and plate.UnitFrame or plate)
+	local body = bodyShare[plate] or 1
+	local shown = math.max((levels.Health or 1) * body, (levels.Name or 1) * body,
+		(nameShare[plate] or 0) * (sight[plate] or 1))
+	return alpha * shown
+end
+
+-- An arrow's pieces where they go, out (t) from 0 (at rest) to 1. The marks
+-- over the plate sit over its name, raised by the Height setting; with
+-- nothing of the plate showing, on the plate itself, centred on its health
+-- bar (no name to clear: hung up there, they'd point at empty air), raised
+-- by the no-plate Height. Between: moved as the quest mark is (QuestMove),
+-- in the first part of the plate's fade, eased; and never faster than
+-- MARK_MOVE seconds the whole way (the game showing or hiding a plate's bar
+-- and name at once would jump it).
+local MARK_MOVE = 0.4
+local function PlaceArrow(arrow, t)
+	local size = arrow.size
+	local overY = arrow.overY
+	if arrow.plate then
+		local showing = QuestMove(PlateShowing(arrow.plate))
+		local now = GetTime()
+		local was = arrow.showing
+		if was and arrow.placedAt then
+			local step = (now - arrow.placedAt) / MARK_MOVE
+			showing = math.max(was - step, math.min(was + step, showing))
+		end
+		arrow.showing, arrow.placedAt = showing, now
+		if showing < 1 then
+			local ok, high = pcall(arrow.GetHeight, arrow)
+			high = ok and type(high) == "number" and Known(high) and high or 9
+			local bare = -high / 2 - arrow.over:GetHeight() / 2 + arrow.bareRaise
+			overY = bare + (overY - bare) * showing
+		end
+	end
+	arrow.over:SetPoint("BOTTOM", arrow, "TOP", 0, overY + 4 * size * t)
+	arrow.left:SetPoint("RIGHT", arrow, "LEFT", -3 + 3 * size * t, 0)
+	arrow.right:SetPoint("LEFT", arrow, "RIGHT", 3 - 3 * size * t, 0)
+	local out = 6 * size - 3 * size * t
+	for i, corner in ipairs(arrow.corners) do
+		local spec = CORNERS[i]
+		corner:SetPoint(spec[1], arrow, spec[1], spec[2] * out, spec[3] * out)
+	end
+	arrow.glow:SetAlpha(1 - 0.45 * t)
+	arrow.under:SetAlpha(1 - 0.45 * t)
+end
+
+-- Each frame while it shows: moving, and (on a plate) down onto it as the
+-- plate's name and bar fade out.
 local function ArrowMoves(arrow)
-	PlaceArrow(arrow, (1 - math.cos(GetTime() * 2 * math.pi / BOB_TIME)) / 2)
+	PlaceArrow(arrow, arrow.bob and (1 - math.cos(GetTime() * 2 * math.pi / BOB_TIME)) / 2 or 0)
 end
 
 -- Makes a target arrow on a frame, over bar (a plate's health bar, or the
@@ -1048,42 +1186,70 @@ local function MakeArrow(parent, bar)
 	arrow.glow:SetTexture(ARROW_ART .. "TargetGlow")
 	arrow.left = arrow:CreateTexture(nil, "OVERLAY")
 	arrow.right = arrow:CreateTexture(nil, "OVERLAY")
-	for _, side in ipairs({ arrow.left, arrow.right }) do
-		side:SetTexture(ARROW_ART .. "TargetBracket")
+	arrow.corners = {}
+	for i, spec in ipairs(CORNERS) do
+		local corner = arrow:CreateTexture(nil, "OVERLAY")
+		corner:SetTexture(ARROW_ART .. "TargetCorner")
+		corner:SetTexCoord(spec[4], spec[5], spec[6], spec[7])
+		arrow.corners[i] = corner
 	end
-	arrow.right:SetTexCoord(1, 0, 0, 1)
+	arrow.under = arrow:CreateTexture(nil, "OVERLAY")
+	arrow.under:SetTexture(ARROW_ART .. "TargetUnderline")
 	return arrow
 end
 
--- Gives an arrow its look for a unit, as the Target Indicator page says.
-local function StyleArrow(arrow, unit)
-	local style, size = ArrowSetting("Style"), ArrowSetting("Size")
-	local r, g, b = ArrowColour(unit)
+-- Gives an arrow its look for a unit, as the Target Indicator page's row for
+-- its kind says (nil: your target's).
+local function StyleArrow(arrow, unit, kind)
+	local style, size = ArrowSetting("Style", kind), ArrowSetting("Size", kind)
+	local r, g, b = ArrowColour(unit, kind)
 	local over = ARROW_OVER[style]
 	arrow.over:SetShown(over ~= nil)
 	if over then
 		arrow.over:SetTexture(ARROW_ART .. over)
-		arrow.over:SetSize(20 * size, 20 * size)
+		arrow.over:SetSize((style == "diamond" and 16 or 20) * size, (style == "diamond" and 16 or 20) * size)
 	end
 	arrow.glow:SetShown(style == "glow")
 	arrow.glow:ClearAllPoints()
 	arrow.glow:SetPoint("TOPLEFT", arrow, "TOPLEFT", -24 * size, 14 * size)
 	arrow.glow:SetPoint("BOTTOMRIGHT", arrow, "BOTTOMRIGHT", 24 * size, -14 * size)
-	arrow.left:SetShown(style == "brackets")
-	arrow.right:SetShown(style == "brackets")
-	for _, piece in ipairs({ arrow.over, arrow.glow, arrow.left, arrow.right }) do
+	local sides = ARROW_SIDES[style]
+	arrow.left:SetShown(sides ~= nil)
+	arrow.right:SetShown(sides ~= nil)
+	if sides then
+		for _, side in ipairs({ arrow.left, arrow.right }) do
+			side:SetTexture(ARROW_ART .. sides)
+			if style == "carets" then
+				side:SetSize(12 * size, 12 * size)
+			else
+				side:SetSize(11 * size, 24 * size)
+			end
+		end
+		arrow.left:SetTexCoord(0, 1, 0, 1)
+		arrow.right:SetTexCoord(1, 0, 0, 1)
+	end
+	for _, corner in ipairs(arrow.corners) do
+		corner:SetShown(style == "corners")
+		corner:SetSize(10 * size, 10 * size)
+	end
+	arrow.under:SetShown(style == "underline")
+	arrow.under:ClearAllPoints()
+	arrow.under:SetPoint("TOPLEFT", arrow, "BOTTOMLEFT", 6, -3)
+	arrow.under:SetPoint("TOPRIGHT", arrow, "BOTTOMRIGHT", -6, -3)
+	arrow.under:SetHeight(6 * size)
+	for _, piece in ipairs({ arrow.over, arrow.glow, arrow.left, arrow.right, arrow.under, unpack(arrow.corners) }) do
 		piece:SetVertexColor(r, g, b)
 	end
-	arrow.left:SetSize(11 * size, 24 * size)
-	arrow.right:SetSize(11 * size, 24 * size)
 	-- (Placed at rest, then moving each frame while it shows, if it moves.)
-	arrow.size, arrow.overY = size, 18 + ArrowSetting("Y")
-	for _, piece in ipairs({ arrow.over, arrow.left, arrow.right }) do
+	arrow.raise, arrow.bareRaise = ArrowSetting("Y"), ArrowSetting("BareY")
+	arrow.size, arrow.overY = size, 18 + arrow.raise
+	for _, piece in ipairs({ arrow.over, arrow.left, arrow.right, unpack(arrow.corners) }) do
 		piece:ClearAllPoints()
 	end
 	PlaceArrow(arrow, 0)
-	arrow:SetScript("OnUpdate", ArrowSetting("Bob") and ArrowMoves or nil)
-	arrow.styled = true
+	arrow.bob = ArrowSetting("Bob", kind)
+	arrow:SetScript("OnUpdate", (arrow.bob or arrow.plate) and ArrowMoves or nil)
+	arrow.styled = kind or "target"
 end
 
 -- For the Target Indicator page's preview.
@@ -1101,20 +1267,25 @@ local function TargetArrow(plate)
 	end
 	arrow = MakeArrow(unitFrame, unitFrame.HealthBarsContainer or unitFrame.healthBar or unitFrame)
 	arrow:SetIgnoreParentAlpha(true)
+	arrow.plate = plate
 	arrows[plate] = arrow
 	return arrow
 end
 
--- Target colors (the Target Indicator page's Name, Health bar and Border
--- ticks): your target's name, health bar and border in the arrow's color,
--- blended in as far as the row shows. The game paints these again whenever
--- it likes, so they're painted every frame while a plate is tinted, then
--- given back the colors they had. (Our own name text: DrawName keeps its color.)
--- TintTarget(plate, level, unit): level 0 lets the plate go, if it's tinted.
+-- Mark colors (the Target Indicator page's Also color column): a marked
+-- plate's name, health bar and border each in the color of the first row
+-- that fits it and colors that part, blended in as far as the row shows. The
+-- game paints these again whenever it likes, so they're painted every frame
+-- while a plate is tinted, then given back the colors they had. (Our own
+-- name text: DrawName keeps its color.)
+-- TintTarget(plate, level, unit, kinds): kinds = { name, bar, border }, each
+-- the row (kind) whose color it takes, or nil for the game's; level 0 or no
+-- kinds lets the plate go, if it's tinted.
 local TintTarget
 do
 	local BORDER_FIELDS = { "selectionHighlight", "healthBar.selectedBorder" }
-	local saved = {} -- [region] = { r, g, b, getter, setter }: the color it had first
+	-- [region] = { r, g, b, getter, setter, unit frame, part }: the color it had first
+	local saved = {}
 
 	-- A region's color, if the game will say: r, g, b and its alpha (or nil).
 	local function ReadColour(region, getter)
@@ -1149,17 +1320,17 @@ do
 		hooked[region] = true
 		hooksecurefunc(region, setter, function(self, r, g, b)
 			local first = saved[self]
-			if painting or not first or not targetTint.frame then
+			if painting or not first or not tints[first[6]] then
 				return
 			end
 			if type(r) == "number" and Known(r) and Known(g) and Known(b) then
 				first[1], first[2], first[3] = r, g, b
 			end
-			Paint(self, first[4], first[5])
+			Paint(self, first[4], first[5], first[6], first[7])
 		end)
 	end
 
-	function Paint(region, getter, setter)
+	function Paint(region, getter, setter, unitFrame, part)
 		if not (region[getter] and region[setter]) then
 			return
 		end
@@ -1169,11 +1340,15 @@ do
 		end
 		local first = saved[region]
 		if not first then
-			first = { r, g, b, getter, setter }
+			first = { r, g, b, getter, setter, unitFrame, part }
 			saved[region] = first
 			Hook(region, setter)
 		end
-		local br, bg, bb = Blend(first[1], first[2], first[3], targetTint)
+		local tint = tints[unitFrame]
+		if not (tint and tint[part]) then
+			return
+		end
+		local br, bg, bb = Blend(first[1], first[2], first[3], tint, part)
 		painting = true
 		SetColour(region, setter, br, bg, bb, a)
 		painting = false
@@ -1185,11 +1360,11 @@ do
 			local region = Field(unitFrame, field)
 			if Usable(region) and region.GetObjectType then
 				if region:GetObjectType() == "Texture" then
-					Paint(region, "GetVertexColor", "SetVertexColor")
+					Paint(region, "GetVertexColor", "SetVertexColor", unitFrame, "border")
 				elseif region.GetRegions then
 					for _, child in ipairs({ region:GetRegions() }) do
 						if child:GetObjectType() == "Texture" then
-							Paint(child, "GetVertexColor", "SetVertexColor")
+							Paint(child, "GetVertexColor", "SetVertexColor", unitFrame, "border")
 						end
 					end
 				end
@@ -1200,84 +1375,319 @@ do
 	local painter = CreateFrame("Frame")
 	painter:Hide()
 	painter:SetScript("OnUpdate", ns.Profiled("Target colors", function()
-		local unitFrame = targetTint.frame
-		if not Usable(unitFrame) then
-			return
-		end
-		if targetTint.name then
-			if Usable(unitFrame.name) then
-				Paint(unitFrame.name, "GetTextColor", "SetTextColor")
+		for unitFrame, tint in pairs(tints) do
+			if Usable(unitFrame) then
+				if tint.name then
+					if Usable(unitFrame.name) then
+						Paint(unitFrame.name, "GetTextColor", "SetTextColor", unitFrame, "name")
+					end
+					local text = texts[unitFrame]
+					if text and text.baseR then
+						local alpha = text:GetAlpha()
+						text:SetTextColor(Blend(text.baseR, text.baseG, text.baseB, tint, "name"))
+						text:SetAlpha(alpha)
+					end
+				end
+				if tint.bar and Usable(unitFrame.healthBar) then
+					Paint(unitFrame.healthBar, "GetStatusBarColor", "SetStatusBarColor", unitFrame, "bar")
+				end
+				if tint.border then
+					PaintBorder(unitFrame)
+				end
 			end
-			local text = texts[unitFrame]
-			if text and text.baseR then
-				local alpha = text:GetAlpha()
-				text:SetTextColor(Blend(text.baseR, text.baseG, text.baseB, targetTint))
-				text:SetAlpha(alpha)
-			end
-		end
-		if targetTint.bar and Usable(unitFrame.healthBar) then
-			Paint(unitFrame.healthBar, "GetStatusBarColor", "SetStatusBarColor")
-		end
-		if targetTint.border then
-			PaintBorder(unitFrame)
 		end
 	end))
 
-	-- Every color given back as it was.
-	local function Untint()
+	-- A plate's colors given back as they were.
+	local function Untint(unitFrame)
 		painting = true
 		for region, first in pairs(saved) do
-			local _, _, _, a = ReadColour(region, first[4])
-			SetColour(region, first[5], first[1], first[2], first[3], a)
+			if first[6] == unitFrame then
+				local _, _, _, a = ReadColour(region, first[4])
+				SetColour(region, first[5], first[1], first[2], first[3], a)
+				saved[region] = nil
+			end
 		end
 		painting = false
-		wipe(saved)
-		local text = targetTint.frame and texts[targetTint.frame]
+		local text = texts[unitFrame]
 		if text and text.baseR then
 			local alpha = text:GetAlpha()
 			text:SetTextColor(text.baseR, text.baseG, text.baseB)
 			text:SetAlpha(alpha)
 		end
-		targetTint.frame = nil
-		painter:Hide()
+		tints[unitFrame] = nil
+		if not next(tints) then
+			painter:Hide()
+		end
 	end
 
-	function TintTarget(plate, level, unit)
+	local TINT_PARTS = { "name", "bar", "border" }
+	function TintTarget(plate, level, unit, kinds)
 		local unitFrame = plate.UnitFrame
-		local name, bar, border = Style("targetColorName"), Style("targetColorBar"), Style("targetColorBorder")
-		if level <= 0 or not (name or bar or border) or not Usable(unitFrame) then
-			if targetTint.frame and targetTint.frame == unitFrame then
-				Untint()
+		if not Usable(unitFrame) then
+			return
+		end
+		if not (kinds and level > 0) then
+			kinds = {}
+		end
+		local tint = tints[unitFrame]
+		if not (kinds.name or kinds.bar or kinds.border) then
+			if tint then
+				Untint(unitFrame)
 			end
 			return
 		end
-		-- (Another plate, or a part unticked: the old colors back first.)
-		if targetTint.frame and (targetTint.frame ~= unitFrame or targetTint.name ~= name
-			or targetTint.bar ~= bar or targetTint.border ~= border) then
-			Untint()
+		-- (A part going back to the game's: the old colors back first.)
+		if tint then
+			for _, part in ipairs(TINT_PARTS) do
+				if tint[part] and not kinds[part] then
+					Untint(unitFrame)
+					tint = nil
+					break
+				end
+			end
 		end
-		targetTint.frame, targetTint.level = unitFrame, level
-		targetTint.name, targetTint.bar, targetTint.border = name, bar, border
-		targetTint.r, targetTint.g, targetTint.b = ArrowColour(unit)
+		tint = tint or {}
+		tints[unitFrame] = tint
+		tint.level = level
+		for _, part in ipairs(TINT_PARTS) do
+			local kind = kinds[part]
+			tint[part] = kind and { ArrowColour(unit, kind) } or nil
+		end
 		painter:Show()
 	end
 end
 
--- Shows or hides a plate's arrow as its row says, on your target's alone.
+-- Whether a unit is after you: you have its aggro, or it's fighting you and
+-- has you targeted (no threat list: a player, say).
+local function OnYou(unit)
+	local ok, status = pcall(UnitThreatSituation, "player", unit)
+	if ok and Known(status) and type(status) == "number" then
+		return status >= 2
+	end
+	return Ask(UnitCanAttack, "player", unit) and Ask(UnitAffectingCombat, unit)
+		and Ask(UnitIsUnit, unit .. "target", "player")
+end
+
+-- Whether a plate is a unit's (pcall: a token a client lacks).
+local function PlateOf(token, plate)
+	local ok, found = pcall(C_NamePlate.GetNamePlateForUnit, token)
+	return ok and found ~= nil and found == plate
+end
+
+-- The Target Indicator page's rows in the order a plate tries them (the
+-- markOrder setting; any it lacks after, in the default's order, but aggro
+-- just before your target's, where it can show).
+local MARK_ORDER_KINDS = { "aggro", "target", "focus", "mouseover" }
+-- (The rows that can be added: a kind's for each reaction.)
+local MARK_ADDED = {}
+for _, kind in ipairs(ns.MARK_REACTION_KINDS) do
+	for _, reaction in ipairs(ns.MARK_REACTIONS) do MARK_ADDED[kind .. reaction] = true end
+end
+local markOrderText, markOrder
+local function MarkOrder()
+	local text = Style("markOrder")
+	if text ~= markOrderText or not markOrder then
+		markOrderText, markOrder = text, {}
+		local known, seen, last = {}, {}, {}
+		for _, kind in ipairs(MARK_ORDER_KINDS) do known[kind] = true end
+		for kind in tostring(text or ""):gmatch("[^,]+") do
+			if (known[kind] or MARK_ADDED[kind]) and not seen[kind] then
+				seen[kind] = true
+				-- (Default's added rows after all the rest.)
+				if kind:find("^others") then
+					last[#last + 1] = kind
+				else
+					markOrder[#markOrder + 1] = kind
+				end
+			end
+		end
+		for _, kind in ipairs(MARK_ORDER_KINDS) do
+			if not seen[kind] then
+				local at = #markOrder + 1
+				if kind == "aggro" then
+					for i, each in ipairs(markOrder) do
+						if each == "target" then at = i end
+					end
+				end
+				table.insert(markOrder, at, kind)
+			end
+		end
+		for _, kind in ipairs(last) do markOrder[#markOrder + 1] = kind end
+	end
+	return markOrder
+end
+ns.TargetMarkOrder = MarkOrder
+
+-- Whether each row fits now, as the page's When grid says (see Core's
+-- MARK_WHEN_WORDS): kind -> false while it doesn't, worked out by UpdateWhen
+-- (twice a second, and as settings change), facts asked only for a row set
+-- to more than Always.
+local WHEN_ROLES = { "tankHide", "healerHide", "damageHide" }
+local whenNow = {}
+-- (An added row's When setting: its kind's while it hasn't one.)
+local function WhenStyle(kind, suffix)
+	local value = Style(kind .. "When" .. suffix)
+	if value == nil then
+		local base, reaction = ns.MarkRowBase(kind)
+		if reaction then return Style(base .. "When" .. suffix) end
+	end
+	return value
+end
+local function WhenSet(kind)
+	local key, db = kind .. "When", ns.db
+	if not WhenStyle(kind, "") or (db.frameRules and db.frameRules[key]) then
+		return true
+	end
+	for _, list in ipairs(WHEN_ROLES) do
+		if ns.RoleHidden(db, list, key) then return true end
+	end
+	return false
+end
+local function WhenFits(kind, facts)
+	local key = kind .. "When"
+	local list = facts.tank and "tankHide" or facts.healer and "healerHide" or facts.damage and "damageHide"
+	if list and ns.RoleHidden(ns.db, list, key) then
+		return false
+	end
+	local rule = ns.RuleShows(key, facts)
+	if rule ~= nil then
+		return rule
+	end
+	if WhenStyle(kind, "") then
+		return true
+	end
+	for _, word in ipairs(ns.MARK_WHEN_WORDS) do
+		if WhenStyle(kind, word[2]) and facts[ns.RULE_WORDS[word[1]]] then return true end
+	end
+	return false
+end
+-- (Gives whether any row's changed.)
+local function UpdateWhen()
+	if not ns.db then
+		return false
+	end
+	local facts, changed
+	local function Look(kind)
+		local fits = true
+		if WhenSet(kind) then
+			facts = facts or (ns.RuleFactsNow and ns.RuleFactsNow())
+			fits = not facts or WhenFits(kind, facts)
+		end
+		if (whenNow[kind] ~= false) ~= fits then changed = true end
+		whenNow[kind] = fits
+	end
+	for _, kind in ipairs(MarkOrder()) do Look(kind) end
+	Look("others")
+	return changed
+end
+ns.TargetMarkFits = function(kind) return whenNow[kind] ~= false end
+
+-- Whether Default's row changes every other plate from the game's
+-- look: shown, with a mark or an Also color.
+local function OthersOn(kind)
+	kind = kind or "others"
+	return ArrowSetting("Show", kind) and (ArrowSetting("Style", kind) ~= "none"
+		or ArrowSetting("ColorName", kind) or ArrowSetting("ColorBar", kind)) and true or false
+end
+
+-- How a unit stands with you, for the rows added for one reaction: "Enemy",
+-- "Neutral" or "Friendly"; nil when the game won't say.
+local function UnitStanding(unit)
+	local ok, reaction = pcall(UnitReaction, unit or "", "player")
+	if not (ok and Known(reaction) and type(reaction) == "number") then
+		return nil
+	end
+	return reaction >= 5 and "Friendly" or reaction == 4 and "Neutral" or "Enemy"
+end
+
+-- The Target Indicator page's rows that fit a plate now, in their order:
+-- on, their When saying now, and the plate theirs (aggro: your target while
+-- it's after you), then Default's while it's changed from the game's (a mark
+-- or an Also color). Each part goes by the first of them that sets it (see
+-- PlateLook): a row left on None passes it to the next.
+local mouseoverPlate -- (the plate with the mouseover mark: see mouseoverWatch)
+local fitting = {}
+local function FittingKinds(plate, unit)
+	wipe(fitting)
+	local standing, asked
+	for _, kind in ipairs(MarkOrder()) do
+		local base, reaction = ns.MarkRowBase(kind)
+		if reaction and not asked then
+			standing, asked = UnitStanding(unit), true
+		end
+		if whenNow[kind] ~= false and (not reaction or reaction == standing) then
+			if kind == "aggro" then
+				if ArrowSetting("Show", "aggro") and unit and PlateOf("target", plate) and OnYou(unit) then
+					fitting[#fitting + 1] = "aggro"
+				end
+			elseif base == "others" then
+				if OthersOn(kind) then fitting[#fitting + 1] = kind end
+			elseif ArrowSetting("Show", kind) and PlateOf(base, plate) then
+				fitting[#fitting + 1] = kind
+			end
+		end
+	end
+	if whenNow.others ~= false and OthersOn() then
+		fitting[#fitting + 1] = "others"
+	end
+	return fitting
+end
+
+-- A plate's look from the rows that fit it: the row its mark is (the first
+-- with a mark, nil for none), and each part's (name, bar, border: the first
+-- whose Also color ticks it, as TintKind has it: kinds), and whether the
+-- mouseover row is among them.
+local partKinds = {}
+local PART_KEYS = { name = "ColorName", bar = "ColorBar", border = "ColorBorder" }
+local function PlateLook(plate, unit)
+	wipe(partKinds)
+	local mark, hovered
+	for _, kind in ipairs(FittingKinds(plate, unit)) do
+		hovered = hovered or ns.MarkRowBase(kind) == "mouseover"
+		if not mark and ArrowSetting("Style", kind) ~= "none" then
+			mark = kind
+		end
+		local tintKind = TintKind(kind)
+		for part, key in pairs(PART_KEYS) do
+			if not partKinds[part] and ArrowSetting(key, tintKind) then
+				partKinds[part] = tintKind
+			end
+		end
+	end
+	return mark, partKinds, hovered
+end
+
+-- The mouse leaving a unit has no event: while a plate has the mouseover
+-- mark, looked at now and then to see it's still the mouse's.
+local MOUSEOVER_CHECK = 0.1
+local mouseoverWatch = CreateFrame("Frame")
+mouseoverWatch:Hide()
+
+-- Shows or hides a plate's mark and colors as the rows that fit it say.
 local function RefreshTargetArrow(plate)
 	if not plate or (plate.IsForbidden and plate:IsForbidden()) then
 		return
 	end
-	local level = plate ~= PersonalPlate() and levels.TargetArrow or 0
+	local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+	-- (None while the Style hub's Nameplates page is switched off.)
+	local level = plate ~= PersonalPlate() and Style("handlePlateStyle") and levels.TargetArrow or 0
+	local kind, kinds, hovered
 	if level > 0 then
-		local ok, targetPlate = pcall(C_NamePlate.GetNamePlateForUnit, "target")
-		if not (ok and targetPlate == plate) then
-			level = 0
-		end
+		kind, kinds, hovered = PlateLook(plate, unit)
+	end
+	if hovered then
+		mouseoverPlate = plate
+		mouseoverWatch:Show()
+	elseif mouseoverPlate == plate then
+		mouseoverPlate = nil
 	end
 	local arrow = arrows[plate]
-	local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
-	TintTarget(plate, level, unit)
+	-- (Its own colors, each part in its row's, as their Also colors say.)
+	TintTarget(plate, level, unit, kinds)
+	if not kind then
+		level = 0
+	end
 	if level <= 0 then
 		if arrow then
 			arrow:Hide()
@@ -1287,20 +1697,129 @@ local function RefreshTargetArrow(plate)
 	end
 	arrow = TargetArrow(plate)
 	if arrow then
-		if not arrow.styled then
-			StyleArrow(arrow, unit)
+		if arrow.styled ~= kind then
+			StyleArrow(arrow, unit, kind)
 		end
 		arrow:SetAlpha(level)
 		arrow:Show()
 	end
 end
 
+-- /cine debug marks: each plate's mark now, and why it sits where it does
+-- (the Height setting, how much of the plate shows and from what, where the
+-- mark over the plate ended up).
+function ns.ReportTargetMarks()
+	local function Num(value)
+		if type(value) ~= "number" then return tostring(value) end
+		return Known(value) and ("%.2f"):format(value) or "secret"
+	end
+	ns.Print(("marks: client %s, combat %s, page %s, Target Indicator row %s, Height %s (no plate %s), target %s"):format(
+		ns.isRetail and "retail" or "forever", tostring(InCombatLockdown()),
+		Style("handlePlateStyle") and "on" or "off", Num(levels.TargetArrow),
+		tostring(Style("targetArrowY")), tostring(Style("targetArrowBareY")), tostring(UnitExists("target"))))
+	-- (Each row's When now, top to bottom.)
+	local when = {}
+	for _, kind in ipairs(MarkOrder()) do
+		when[#when + 1] = kind .. (whenNow[kind] == false and " no" or " yes")
+	end
+	ns.Print("  order and fits now: " .. table.concat(when, ", ") .. ", others "
+		.. (whenNow.others == false and "no" or "yes") .. (OthersOn() and " (changed)" or " (the game's)"))
+	local any = false
+	for plate, arrow in pairs(arrows) do
+		if arrow:IsShown() then
+			any = true
+			local okAlpha, alpha = pcall(plate.GetAlpha, plate)
+			local okHigh, high = pcall(arrow.GetHeight, arrow)
+			-- (Where it ended up can't be asked on retail: its plate is restricted.)
+			local okPoint, _, _, _, x, y = pcall(arrow.over.GetPoint, arrow.over, 1)
+			if not okPoint then
+				x, y = "restricted", ""
+			end
+			local okTop, top = pcall(arrow.over.GetTop, arrow.over)
+			local okBarTop, barTop = pcall(arrow.GetTop, arrow)
+			-- (Any frame it's in that cuts off what's drawn outside it: a mark
+			-- moved below the plate went missing.)
+			local clips, frame = {}, arrow
+			while frame do
+				local okClip, clip = pcall(frame.DoesClipChildren, frame)
+				if okClip and clip then
+					local okName, name = pcall(frame.GetDebugName, frame)
+					clips[#clips + 1] = okName and tostring(name) or "?"
+				end
+				frame = frame:GetParent()
+			end
+			ns.Print("    clipped by: " .. (#clips > 0 and table.concat(clips, ", ") or "nothing"))
+			local unitFrame = plate.UnitFrame
+			local bar = unitFrame and (unitFrame.HealthBarsContainer or unitFrame.healthBar)
+			local function Alpha(frame)
+				if not frame then return "none" end
+				local okOwn, own = pcall(frame.GetAlpha, frame)
+				return Num(okOwn and own or nil) .. "/" .. Num(Opacity(frame))
+			end
+			ns.Print(("    game draws: bar %s, name %s; eased showing %s; alpha own/effective: plate %s, " ..
+				"unit frame %s, bar %s, name %s"):format(
+				tostring(unitFrame and Seen(bar)), tostring(unitFrame and Seen(unitFrame.name)), Num(arrow.showing),
+				Alpha(plate), Alpha(unitFrame), Alpha(bar), Alpha(unitFrame and unitFrame.name)))
+			ns.Print(("  %s (%s): style %s, overY %s, showing %s = alpha %s x max(health %s, name %s) x body %s; " ..
+				"name alone %s, sight %s; bar height %s; mark at %s, %s; mark top %s over bar top %s"):format(
+				tostring(arrow.styled), tostring(plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)),
+				tostring(ArrowSetting("Style", arrow.styled)),
+				Num(arrow.overY), Num(PlateShowing(plate)), okAlpha and Num(alpha) or "error",
+				Num(levels.Health), Num(levels.Name), Num(bodyShare[plate] or 1), Num(nameShare[plate]),
+				Num(sight[plate]), okHigh and Num(high) or "error",
+				Num(x), Num(y), okTop and Num(top) or "error", okBarTop and Num(barTop) or "error"))
+		end
+	end
+	if not any then
+		ns.Print("  no mark showing: target, focus or hover a unit first")
+	end
+end
+
+-- Every plate's mark looked at again (a new target, focus or mouseover).
+local function RefreshMarks()
+	if (levels.TargetArrow or 0) > 0 or next(arrows) or next(tints) then
+		for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
+			RefreshTargetArrow(plate)
+		end
+	end
+end
+
+-- The When grid's rows looked at twice a second, the marks again as one
+-- starts or stops fitting (a fight starting, a zone changing...).
+local WHEN_CHECK = 0.5
+local whenAt = 0
+CreateFrame("Frame"):SetScript("OnUpdate", function()
+	local now = GetTime()
+	if now < whenAt then
+		return
+	end
+	whenAt = now + WHEN_CHECK
+	if (levels.TargetArrow or 0) > 0 and UpdateWhen() then
+		RefreshMarks()
+	end
+end)
+
+local mouseoverAt = 0
+mouseoverWatch:SetScript("OnUpdate", function(self)
+	local now = GetTime()
+	if now < mouseoverAt then
+		return
+	end
+	mouseoverAt = now + MOUSEOVER_CHECK
+	if not mouseoverPlate then
+		self:Hide()
+	elseif not PlateOf("mouseover", mouseoverPlate) then
+		RefreshTargetArrow(mouseoverPlate)
+	end
+end)
+
 -- After a change on the Target Indicator page: the arrows styled anew.
 function ns.RefreshTargetArrows()
-	for plate, arrow in pairs(arrows) do
+	UpdateWhen()
+	for _, arrow in pairs(arrows) do
 		arrow.styled = false
-		RefreshTargetArrow(plate)
 	end
+	RefreshMarks()
 end
 
 -- A plate's icons (the role icon goes by where the class icon is).
@@ -1337,7 +1856,12 @@ watcher:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 watcher:RegisterEvent("UNIT_FACTION")
 watcher:RegisterEvent("GROUP_ROSTER_UPDATE")
 watcher:RegisterEvent("PLAYER_TARGET_CHANGED")
-pcall(watcher.RegisterEvent, watcher, "PLAYER_ROLES_ASSIGNED") -- (not every client has it)
+watcher:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
+watcher:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
+watcher:RegisterEvent("UNIT_TARGET")
+-- (Not every client has these.)
+pcall(watcher.RegisterEvent, watcher, "PLAYER_ROLES_ASSIGNED")
+pcall(watcher.RegisterEvent, watcher, "PLAYER_FOCUS_CHANGED")
 watcher:SetScript("OnEvent", function(_, event, unit)
 	if not (ns.db and C_NamePlate and C_NamePlate.GetNamePlateForUnit) then
 		return
@@ -1349,12 +1873,16 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 		end
 		return
 	end
-	-- (The arrow moves to the new target's plate.)
-	if event == "PLAYER_TARGET_CHANGED" then
-		if (levels.TargetArrow or 0) > 0 or next(arrows) or targetTint.frame then
-			for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
-				RefreshTargetArrow(plate)
-			end
+	-- (The marks move to the new target's, focus's or mouseover's plate.)
+	if event == "PLAYER_TARGET_CHANGED" or event == "PLAYER_FOCUS_CHANGED" or event == "UPDATE_MOUSEOVER_UNIT" then
+		RefreshMarks()
+		return
+	end
+	-- (Your target coming after you, or leaving off: its mark to aggro's and back.)
+	if event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_TARGET" then
+		if (levels.TargetArrow or 0) > 0 and ArrowSetting("Show", "aggro") and type(unit) == "string"
+			and (unit == "player" or Ask(UnitIsUnit, unit, "target")) then
+			RefreshTargetArrow(C_NamePlate.GetNamePlateForUnit("target"))
 		end
 		return
 	end
@@ -1391,7 +1919,8 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 		return
 	end
 	plateClass[plate], plateRole[plate] = nil, nil
-	if AnyClassIcons() or icons[plate] or roleIcons[plate] or questIcons[plate] or arrows[plate] then
+	if AnyClassIcons() or icons[plate] or roleIcons[plate] or questIcons[plate] or arrows[plate]
+		or ((levels.TargetArrow or 0) > 0 and OthersOn()) then
 		ns.RefreshClassIcon(plate)
 	end
 	if event == "NAME_PLATE_UNIT_ADDED" and AnyFaded() then

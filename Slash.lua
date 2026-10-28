@@ -102,6 +102,7 @@ local function PrintDebugHelp()
 	print("  /cine debug plates - nameplate settings, and how the plates (and your target) are sorted")
 	print("  /cine debug range - what the game says about how far your target and units with name-only plates are")
 	print("  /cine debug names - log players' plate names as they show and hide (again to stop, /reload to save)")
+	print("  /cine debug marks - the Target Indicator's marks on the plates now, and why each sits where it does")
 	print("  /cine debug readycheck - the raid frames' ready check icons and whether they fade (Ready check row)")
 	print("  /cine debug marker [across up size] - where the kept raid markers sit over faded plates")
 	print("  /cine debug platewatch - log how faded nameplates are drawn each time it changes, to find one flashing up")
@@ -334,6 +335,8 @@ local function HandleSlash(msg)
 		ns.Print("print camera mode changes to chat: " .. OnOff(ns.db.debugCameraMode))
 	elseif cmd == "debug" and arg:find("^frame ") then
 		ns.ReportFrames(arg:match("^frame%s+(.+)$"))
+	elseif cmd == "debug" and arg == "marks" then
+		ns.ReportTargetMarks()
 	elseif cmd == "debug" and arg == "names" then
 		ns.Print("log players' plate names as they change: " .. OnOff(ns.ToggleNamesDebug())
 			.. " (/reload afterwards to save the log)")
