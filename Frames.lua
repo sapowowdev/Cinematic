@@ -2524,7 +2524,17 @@ do
 	-- a Distance (Core's MARK_DISTANCES): In11, In28 and In40 within about 11,
 	-- 28 or 40 yards, Past28 and Past40 further. True or false; nil when
 	-- nothing can say (40: no 40-yard spell on your bars that can).
+	-- (In a fight retail blocks it for nameplate units, blamed on us dozens
+	-- of times a second (tested): then only your target's is asked, as
+	-- "target".)
 	local function Within(unit, index)
+		if InCombatLockdown() and unit ~= "target" then
+			local okSame, same = pcall(UnitIsUnit, unit, "target")
+			if not (okSame and same ~= nil and not (issecretvalue and issecretvalue(same)) and same) then
+				return nil
+			end
+			unit = "target"
+		end
 		local ok, near = pcall(CheckInteractDistance, unit, index)
 		if ok and near ~= nil and not (issecretvalue and issecretvalue(near)) then
 			return near and true or false

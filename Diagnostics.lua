@@ -322,6 +322,7 @@ end
 -- alerted, with what was going on, and how many in all once it's quiet.
 local BLOCK_QUIET = 3 -- seconds without one: the run's over
 local blocked = { count = 0, lastAt = -math.huge }
+local blockedStacks = {}
 local function RunOver()
 	local wait = BLOCK_QUIET - (GetTime() - blocked.lastAt)
 	if wait > 0 then
@@ -363,6 +364,13 @@ watcher:SetScript("OnEvent", function(_, event, addon, action)
 		end
 	elseif addon == ADDON_NAME then
 		ns.Log("BLOCKED", ("%s: %s"):format(event, tostring(action)))
+		-- (The event comes during the blocked call, so the stack says whose it
+		-- was; each different one logged once.)
+		local stack = debugstack(2, 12, 0)
+		if type(stack) == "string" and not blockedStacks[stack] then
+			blockedStacks[stack] = true
+			ns.Log("BLOCKED", "by " .. stack:gsub("Interface[/\\]AddOns[/\\]", ""):gsub("\n", " < "))
+		end
 		OnBlocked(event, action)
 	end
 end)
