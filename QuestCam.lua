@@ -75,6 +75,11 @@ local MOVE_MIN_SPEED = 1 -- degrees per second: the slowest step sent (lower, th
 local MOVE_MIN_SETTING = 1 -- the lowest speed setting sent (the start's speed is this times the move's share)
 local MOVE_CHANGE = 0.02 -- speed changes smaller than this share aren't sent
 local MOVE_PRIME_TIME = 0.2 -- seconds the starting speed is set before the move starts
+-- ...creeping meanwhile at this share of it, too slow to see; the move is sent
+-- over the creep. (From rest, the Chat Cam's swings jumped 2-3 pixels in their
+-- first frame, about a frame at full speed, then all but stopped for the
+-- prime's 0.2 seconds: a lurch at each start. With the creep, tested, gone.)
+local PRIME_SHARE = 0.001
 local SPEED_RESTORE_DELAY = 0.3 -- seconds after stopping before your speed setting comes back
 local ZOOM_CVAR = "cameraZoomSpeed"
 local WHO = "quest" -- (its holds on your speed settings: ns.HoldSpeed, Core.lua)
@@ -220,10 +225,10 @@ local function StopMove(m)
 	if not m.moving then
 		return
 	end
-	if m.sent then
+	if m.sent or m.creeping then
 		Send(Command(m) .. "Stop")
 	end
-	m.moving, m.sent, m.stoppedAt = false, nil, GetTime()
+	m.moving, m.sent, m.creeping, m.stoppedAt = false, nil, nil, GetTime()
 	-- (Put back a moment later, so the end of the move can't run at full speed.
 	-- Not between the drift's legs: your setting coming back just as the
 	-- camera came to rest jumped it. Held till then: see the camera lock.)
@@ -261,11 +266,14 @@ local function MoveTo(m, target, T, ease, tail)
 	m.cruise = math.abs(target - m.amount) / (m.T * (1 - m.ease))
 	m.limit = m.T + 1 + (tail and (math.abs(final - target) / tail.speed + tail.R) or 0)
 	m.share = math.max(m.cruise, m.tail and m.tail.speed or 0) / yours
-	-- The setting goes to its lowest a moment before the move starts.
+	-- The setting goes to its lowest a moment before the move starts, the
+	-- creep started its way (see PRIME_SHARE).
 	ns.SetHeldSpeed(WHO, m.cvar, MOVE_MIN_SETTING)
 	m.primedUntil = GetTime() + MOVE_PRIME_TIME
 	m.growing = final > m.amount
 	m.lastGrowing = m.growing
+	Send(Command(m) .. "Start", PRIME_SHARE)
+	m.creeping = true
 	m.moving = true
 end
 

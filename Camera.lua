@@ -3448,7 +3448,12 @@ local FLYBY = {
 	WHO = "modes:flyby", -- (its hold on your turn speed: ns.HoldSpeed, Core.lua)
 	MIN_SETTING = 1,    -- the lowest turn speed setting sent (lower, the game uses its full speed)
 	SETTING_CHANGE = 0.02, -- speed setting changes smaller than this share aren't sent
-	PRIME_TIME = 0.2,   -- seconds the starting speed is set before the turn starts
+	PRIME_TIME = 0.2,   -- seconds the starting speed is set before the turn starts...
+	-- ...creeping meanwhile at this share of it, too slow to see. (From rest, the
+	-- Chat Cam's swings jumped 2-3 pixels in their first frame, about a frame at
+	-- full speed, then all but stopped for the prime: a lurch at each start.
+	-- With the creep, tested there, gone.)
+	PRIME_SHARE = 0.001,
 	RESTORE_DELAY = 0.3, -- seconds after a turn stops before your speed setting comes back
 	HANDOVER = 0.6,     -- seconds to ease out the flight camera's drift before the first turn
 	HANDOVER_MAX = 1.5, -- ...longer from a faster sway (BRAKE_RATE degrees/sec per second), up to this...
@@ -3538,6 +3543,10 @@ local function BeginStep(phase, turn, T)
 	ns.SetHeldSpeed(FLYBY.WHO, FLYBY.SPEED_CVAR, FLYBY.MIN_SETTING)
 	flyby.primedUntil = GetTime() + FLYBY.PRIME_TIME
 	flyby.turning, flyby.sent = true, nil
+	-- (Creeping its way meanwhile, the turn sent over it: see PRIME_SHARE.)
+	local axis = ns.yawAxis
+	axis.positive, axis.moving, axis.speed, axis.lastStart = turn < 0, true, FLYBY.PRIME_SHARE, GetTime()
+	CallCameraFunction(axis.positive and axis.positiveStart or axis.negativeStart, FLYBY.PRIME_SHARE)
 end
 
 

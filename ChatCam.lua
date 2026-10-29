@@ -134,9 +134,17 @@ local STOP_TIME = 0.8  -- seconds a move under way takes to ease to a stop for a
 -- share. (Once, stepping the setting, every swing straight after a drift leg
 -- jumped about a degree as it started; with the drift at 0, its default,
 -- that can't happen.)
+-- A move from rest starts creeping as the lowest setting goes in (at
+-- PRIME_SHARE, too slow to see), the move itself sent over it once primed.
+-- (Two videos, matched frame by frame to the debug log: every swing's first
+-- frame jumped 2-3 pixels its way, about a frame at full speed, then the
+-- camera all but stopped for 0.2 seconds before following the curve, which
+-- read as a lurch at each start. A move already under way takes the new
+-- share without a jump: the drift carry does it.)
 local SPEED_MIN_SETTING = 1 -- the lowest speed setting sent (lower, the game uses its full speed)
 local SPEED_CHANGE = 0.02   -- setting changes smaller than this share aren't sent
 local SPEED_PRIME_TIME = 0.2 -- seconds the lowest setting is in before the move starts
+local PRIME_SHARE = 0.001   -- the creep's share of the setting (even at your 180: 0.18 deg/sec)
 local SPEED_RESTORE_DELAY = 0.3 -- seconds after a move stops before your setting comes back
 local TALKED_WINDOW = 30 -- seconds after a gossip or quest window closes its NPC's lines still start it at once
 local BUBBLE_WAIT = 2  -- seconds after a line its bubble is waited for before saying there's none
@@ -283,10 +291,10 @@ local function StopMove()
 	if not turn.moving then
 		return
 	end
-	if turn.sent then
+	if turn.sent or turn.creeping then
 		Send(Command(turn.right) .. "Stop")
 	end
-	turn.moving, turn.sent, turn.stopping, turn.stoppedAt = false, nil, nil, GetTime()
+	turn.moving, turn.sent, turn.creeping, turn.stopping, turn.stoppedAt = false, nil, nil, nil, GetTime()
 	-- (Your setting back a moment later, so the end of the move can't run at
 	-- full speed; not if a new move has started.
 	-- Held till then: see the camera lock.)
@@ -315,6 +323,15 @@ local function Push(speed)
 		SendSetting(setting)
 	end
 	turn.sent = turn.setting * turn.share
+end
+
+-- A move from rest: the lowest setting in and the creep started its way
+-- (see PRIME_SHARE), the move sent over it SPEED_PRIME_TIME later (Push).
+local function Prime()
+	SendSetting(SPEED_MIN_SETTING)
+	Send(Command(turn.right) .. "Start", PRIME_SHARE)
+	turn.creeping = true
+	turn.primedUntil = GetTime() + SPEED_PRIME_TIME
 end
 
 -- A move's top speed (degrees/sec) and its most speeding up or slowing
@@ -375,9 +392,8 @@ local function MoveTo(target, T, ease, kind, from)
 		Send(Command(turn.right) .. "Start", turn.share)
 		turn.sent, turn.primedUntil = turn.setting * turn.share, 0
 	else
-		-- (The setting at its lowest a moment before the move starts.)
-		SendSetting(SPEED_MIN_SETTING)
-		turn.primedUntil = GetTime() + SPEED_PRIME_TIME
+		-- (The setting at its lowest a moment before the move starts, creeping.)
+		Prime()
 	end
 	turn.stopping = nil
 	turn.moving = true
@@ -391,8 +407,7 @@ local function StartTrack(right, want)
 	StopMove()
 	turn.kind, turn.right, turn.want, turn.speed, turn.t = "track", right, want, 0, 0
 	turn.share = ns.db.chatCamSwingSpeed / ns.HoldSpeed(WHO, CVAR)
-	SendSetting(SPEED_MIN_SETTING)
-	turn.primedUntil = GetTime() + SPEED_PRIME_TIME
+	Prime()
 	turn.stopping = nil
 	turn.moving = true
 	ns.ApplyCVarSet(FOLLOW_CVARS, true)
