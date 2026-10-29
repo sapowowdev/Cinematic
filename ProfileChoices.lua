@@ -68,7 +68,7 @@ ns.SLOT_CHOICES = {
 			modules = { "recovering", "solo-only" } },
 		{ part = "pure", label = "Almost always", line = "As little UI as possible, even in fights",
 			modules = { "pure-frames", "minimal-target", "pure-plates", "ultra-plates", "pure-tooltips",
-				"heal-vision-everywhere" } },
+				"heal-vision-everywhere", "quest-talk" } },
 		{ part = "nofade", label = "Never", line = "Your UI stays as the game has it",
 			modules = { "recovering", "no-fading" } },
 		{ part = "standard", label = "Softly", line = "Between fights, with the minimap and group plates as usual",

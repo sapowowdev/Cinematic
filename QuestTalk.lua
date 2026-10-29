@@ -65,13 +65,63 @@ local function Ink(color)
 	end
 	return color
 end
--- The two looks: parchment, or the game's chat bubble (as the Chat bubbles
--- page's bubbles look).
+-- The looks: parchment, the game's chat bubble (as the Chat bubbles page's
+-- bubbles look), dark, or none (just the words, over the world).
 local LOOKS = {
 	parchment = { bg = { 0.93, 0.86, 0.70, 0.97 }, edge = { 0.45, 0.33, 0.16, 1 }, text = { 0, 0, 0 },
 		name = { 0.40, 0.27, 0.10 }, title = { 0, 0, 0 }, font = "QuestFont", art = true },
 	bubble = { text = { 1, 1, 1 }, name = { 1, 0.82, 0 }, title = { 1, 0.82, 0 }, font = "ChatBubbleFont" },
+	dark = { bg = { 0.03, 0.04, 0.05, 0.88 }, edge = { 0.42, 0.35, 0.19, 1 }, text = { 1, 1, 1 },
+		name = { 1, 0.82, 0 }, title = { 1, 0.82, 0 }, font = "QuestFont" },
+	none = { bg = { 0, 0, 0, 0 }, edge = { 0, 0, 0, 0 }, text = { 1, 1, 1 }, name = { 1, 0.82, 0 },
+		title = { 1, 0.82, 0 }, font = "QuestFont", bare = true },
 }
+
+-- Its look: the Style hub's Quest talk page (questTalkStyled: on; off, these
+-- defaults, whatever the page's set to). questTalkStyle (the look's name), questTalkPortrait,
+-- questTalkCardSame, questTalkLines and questTalkScale are Core's, from before
+-- the page (they were on the Quest Vision page).
+local DEFAULTS = ns.DEFAULTS
+DEFAULTS.questTalkStyled = true
+DEFAULTS.questTalkAlpha = 1      -- the panels' opacity (their fill, edge and page)
+DEFAULTS.questTalkFont = "game"  -- the words' font (ns.QUEST_ITEM_FONTS' names; game: each part's own)
+DEFAULTS.questTalkTextSize = 1   -- ...times their usual size
+DEFAULTS.questTalkOutline = 0    -- ...outline: 0 none, 1 thin, 2 thick
+local function Styled(key)
+	local db = ns.db
+	if db and db.questTalkStyled then
+		return db[key]
+	end
+	return DEFAULTS[key]
+end
+local function CurrentLook()
+	return LOOKS[Styled("questTalkStyle")] or LOOKS.parchment
+end
+
+-- The words' font as the page says, after SetFontObject (and before
+-- SetText): its own file unless the client's language needs the game's
+-- (Cyrillic, Korean, Chinese: boxes in the others), sized and outlined.
+local ROMAN = not ({ ruRU = true, koKR = true, zhCN = true, zhTW = true })[GetLocale and GetLocale() or ""]
+local function Font(fs)
+	local font, size, outline = Styled("questTalkFont"), Styled("questTalkTextSize"), Styled("questTalkOutline")
+	if font == "game" and size == 1 and outline == 0 then
+		return
+	end
+	local file, height, flags = fs:GetFont()
+	if not (file and height) then
+		return
+	end
+	if ROMAN then
+		for _, info in ipairs(ns.QUEST_ITEM_FONTS or {}) do
+			if info[1] == font and info[3] then file = info[3] end
+		end
+	end
+	fs:SetFont(file, height * size, ns.OutlinedFlags and ns.OutlinedFlags(flags, outline) or flags)
+end
+-- (What the words' look is now, to tell when it's changed.)
+local function FontKey()
+	return ("%s:%s:%s"):format(Styled("questTalkFont"), Styled("questTalkTextSize"), Styled("questTalkOutline"))
+end
 
 local function Setting(key)
 	return ns.QuestVisionSetting(key)
@@ -133,7 +183,8 @@ end
 -- "complete"), its pages of words and the one shown, the reward picked.
 local talk = { pages = {}, page = 1 }
 -- The click that opened the last conversation: whose, where across the
--- screen, and when (for talks the game reopens itself: Open).
+-- screen, and when (for talks the game reopens itself: Open); window: the
+-- game's own talk window's (ns.TalkWindowSide).
 local lastClick = { at = -math.huge }
 local SAME_NPC_TIME = 120 -- seconds
 local gameWindow = false -- "Show the game's window" for this conversation
@@ -235,8 +286,9 @@ local function Measure(words)
 		measurer:SetJustifyH("LEFT")
 		measurer:SetWordWrap(true)
 	end
-	local look = LOOKS[ns.db and ns.db.questTalkStyle] or LOOKS.parchment
+	local look = CurrentLook()
 	measurer:SetFontObject(_G[look.font] or GameFontHighlight)
+	Font(measurer)
 	measurer:SetWidth(TEXT_WIDTH)
 	measurer:SetText(words)
 	return Plain(measurer:GetStringHeight()) or 0
@@ -245,9 +297,9 @@ end
 -- The bubble's one height for its words: questTalkLines lines (kept per font
 -- and count).
 local function FullHeight()
-	local look = LOOKS[ns.db and ns.db.questTalkStyle] or LOOKS.parchment
-	local lines = math.max(1, math.floor(tonumber(ns.db and ns.db.questTalkLines) or 7))
-	local key = look.font .. ":" .. lines
+	local look = CurrentLook()
+	local lines = math.max(1, math.floor(tonumber(Styled("questTalkLines")) or 7))
+	local key = look.font .. ":" .. FontKey() .. ":" .. lines
 	if not fullHeights[key] then
 		fullHeights[key] = Measure(("Wordy\n"):rep(lines - 1) .. "Wordy")
 	end
@@ -432,6 +484,50 @@ local function Opposite()
 	return PlaceMode() == "opposite" and (talk.clickX ~= nil or NpcSide() ~= nil)
 end
 
+-- Where you clicked the NPC this conversation started with (a share of the
+-- screen's width), or nil. The game opening the same NPC's talk again, after
+-- a quest's accepted or turned in, with no click of yours: that first click
+-- still goes, for a while.
+function ns.TalkClickX()
+	local x = ns.ClickedX and ns.ClickedX() or nil
+	local guid = Plain(UnitGUID("npc"))
+	if x then
+		lastClick.guid, lastClick.x, lastClick.at = guid, x, GetTime()
+	elseif guid and guid == lastClick.guid and GetTime() - lastClick.at <= SAME_NPC_TIME then
+		x = lastClick.x
+	end
+	return x
+end
+
+-- With quest talk off, Where they go places the game's own
+-- gossip and quest windows (CenterPanels.lua): "fixed" or "opposite", or nil
+-- to leave them be (Over the head: a whole window over an NPC would hide
+-- them; or ours are on, the game's window only shown on request).
+function ns.TalkWindowPlace()
+	if not ns.db or Setting("questTalk") then
+		return nil
+	end
+	local mode = PlaceMode()
+	return mode ~= "head" and mode or nil
+end
+
+-- ...and with Opposite Clicked, the half of the screen to keep clear for a
+-- window opening now ("left" or "right"; nil: neither). starting: a new
+-- conversation (no talk window open yet): its click is read.
+function ns.TalkWindowSide(starting)
+	if starting then
+		lastClick.window = ns.TalkClickX()
+	end
+	if ns.TalkWindowPlace() ~= "opposite" then
+		return nil
+	end
+	local x = lastClick.window
+	if x then
+		return x > 0.5 and "right" or "left"
+	end
+	return ns.QuestCamSide and ns.QuestCamSide()
+end
+
 local function Place()
 	bubble:ClearAllPoints()
 	local mode = PlaceMode()
@@ -611,8 +707,12 @@ end
 local CARD = { bg = { 0.03, 0.04, 0.03, 0.88 }, edge = { 0.42, 0.35, 0.19, 1 } }
 local function Dress(frame, look)
 	local chat = look == LOOKS.bubble and frame.slice ~= nil
-	if frame.slice then frame.slice:SetShown(chat) end
-	if chat then
+	local alpha = Styled("questTalkAlpha") -- (the page's opacity)
+	if frame.slice then
+		frame.slice:SetShown(chat)
+		frame.slice:SetAlpha(alpha)
+	end
+	if chat or look and look.bare then
 		frame:SetBackdrop(nil)
 	else
 		-- (A flat fill for a look: the tooltip's own background darkens the
@@ -624,13 +724,22 @@ local function Dress(frame, look)
 			insets = { left = 3, right = 3, top = 3, bottom = 3 },
 		})
 		local own = look or CARD
-		frame:SetBackdropColor(unpack(own.bg or { 0, 0, 0, 0.85 }))
-		frame:SetBackdropBorderColor(unpack(own.edge or { 0.6, 0.6, 0.6, 1 }))
+		local bg, edge = own.bg or { 0, 0, 0, 0.85 }, own.edge or { 0.6, 0.6, 0.6, 1 }
+		frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] * alpha)
+		frame:SetBackdropBorderColor(edge[1], edge[2], edge[3], edge[4] * alpha)
 	end
 	local art = not chat and look and look.art and PageArt()
 	if art then SetArt(frame.page, art) end
 	frame.page:SetShown(art and true or false)
+	frame.page:SetAlpha(alpha)
+	frame.seal:SetAlpha(alpha)
 	return art
+end
+
+-- What a frame's dressing goes by (its look, the page's opacity and font),
+-- to dress it again only once one changes.
+local function DressKey(look)
+	return tostring(look) .. ":" .. Styled("questTalkAlpha") .. ":" .. FontKey()
 end
 
 -- What Dress needs on a frame: its chat bubble nine-slice and page texture.
@@ -661,21 +770,29 @@ local function Dressable(frame)
 end
 
 local function ApplyLook()
-	local look = LOOKS[ns.db and ns.db.questTalkStyle] or LOOKS.parchment
-	if bubble.look == look then
+	local look = CurrentLook()
+	if bubble.look == look and bubble.lookKey == DressKey(look) then
 		return look
 	end
-	bubble.look = look
+	bubble.look, bubble.lookKey = look, DressKey(look)
 	local art = Dress(bubble, look)
 	if not (look == LOOKS.bubble and bubble.slice) then
 		local bg, edge = look.bg or { 0, 0, 0, 0.85 }, look.edge or { 0.6, 0.6, 0.6, 1 }
-		bubble.pointFill:SetColorTexture(bg[1], bg[2], bg[3], 1)
-		bubble.pointEdge:SetColorTexture(unpack(edge))
+		local alpha = Styled("questTalkAlpha")
+		bubble.pointFill:SetColorTexture(bg[1], bg[2], bg[3], (look.bare and 0 or 1) * alpha)
+		bubble.pointEdge:SetColorTexture(edge[1], edge[2], edge[3], edge[4] * alpha)
 		-- (The point: it's turned, so any part of the page will do.)
 		if art then SetArt(bubble.pointFill, art) end
 	end
 	local font = _G[look.font] or GameFontHighlight
 	bubble.text:SetFontObject(font)
+	-- (Each from its own font again, then the page's size and outline on it;
+	-- the name's put back after, so its letters take the font.)
+	bubble.name:SetFontObject("GameFontNormalSmall")
+	bubble.title:SetFontObject("QuestTitleFont")
+	bubble.count:SetFontObject("GameFontNormalSmall")
+	for _, fs in ipairs({ bubble.text, bubble.name, bubble.title, bubble.count }) do Font(fs) end
+	bubble.name:SetText(bubble.name:GetText() or "")
 	bubble.text:SetTextColor(unpack(look.text))
 	bubble.name:SetTextColor(unpack(look.name))
 	bubble.title:SetTextColor(unpack(look.title))
@@ -715,7 +832,7 @@ local function ShowPage()
 		SetArtFitted(bubble.seal, seal, artW, artH, "top")
 	end
 	bubble.seal:SetShown(seal and true or false)
-	bubble:SetScale(tonumber(ns.db.questTalkScale) or 1)
+	bubble:SetScale(tonumber(Styled("questTalkScale")) or 1)
 	-- (No words, as some gossip has: just the list.)
 	bubble:SetShown(words ~= "")
 	Place()
@@ -890,6 +1007,7 @@ local function AddText(words, font, color, gap)
 		texts[textCount] = fs
 	end
 	fs:SetFontObject(font or "GameFontHighlight")
+	Font(fs)
 	Shade(fs)
 	fs:SetWidth(panelWidth - 28)
 	fs:SetText(words)
@@ -916,6 +1034,7 @@ local function AddPair(words, value, color, gap)
 		texts[textCount] = fs
 	end
 	fs:SetFontObject("NumberFontNormalLarge")
+	Font(fs)
 	fs:SetWidth(0)
 	fs:SetText(value)
 	fs:SetTextColor(1, 1, 1)
@@ -967,7 +1086,10 @@ local function AddRow(entry)
 	row:ClearAllPoints()
 	row:SetPoint("TOPLEFT", 6, -cursor)
 	row:SetPoint("RIGHT", panel, "RIGHT", -6, 0)
-	cursor = cursor + ROW_HEIGHT
+	-- (taller for bigger words: the Style hub's Quest talk page)
+	local rowHeight = ROW_HEIGHT * math.max(1, Styled("questTalkTextSize"))
+	row:SetHeight(rowHeight)
+	cursor = cursor + rowHeight
 	local key
 	if entry.onClick and not entry.locked and #keyed < 10 then
 		key = #keyed + 1
@@ -978,6 +1100,9 @@ local function AddRow(entry)
 	row.text:SetFontObject(ink == INK.parchment and "QuestFont" or "GameFontHighlight")
 	row.key:SetFontObject(ink == INK.parchment and "QuestFont" or "GameFontDisableSmall")
 	row.tag:SetFontObject("GameFontNormalSmall")
+	Font(row.text)
+	Font(row.key)
+	Font(row.tag)
 	Shade(row.text)
 	Shade(row.key)
 	Shade(row.tag)
@@ -1286,7 +1411,7 @@ local function FinishPanel()
 		SetArtFitted(panel.seal, seal, panelWidth - 6, high - 6, "bottom")
 	end
 	panel.seal:SetShown(seal and true or false)
-	panel:SetScale(tonumber(ns.db.questTalkScale) or 1)
+	panel:SetScale(tonumber(Styled("questTalkScale")) or 1)
 	-- Below it: the bubble goes up by the card's height.
 	local under = over and talk.cardBelow and high + FOLLOW_GAP or 0
 	if under ~= (bubble.under or 0) then
@@ -1555,7 +1680,7 @@ end
 ---------------------------------------------------------------------------
 -- Each kind of conversation.
 ---------------------------------------------------------------------------
-local Show -- (below)
+local Show, TalkState -- (below)
 
 local function SpeakerName()
 	return Plain(UnitName("npc")) or Plain(UnitName("questnpc")) or ""
@@ -1752,10 +1877,10 @@ function Show(keepPage)
 	local page = talk.page
 	bubble.name:SetText(SpeakerName())
 	local portrait = bubble.portrait
-	local face = Setting("questTalkPortrait") and ns.Flag(UnitExists("npc"))
+	local face = Styled("questTalkPortrait") and ns.Flag(UnitExists("npc"))
 	if face then
 		SetPortraitTexture(portrait.face, "npc")
-		local edge = (LOOKS[ns.db.questTalkStyle] or LOOKS.parchment).edge or { 0.6, 0.6, 0.6, 1 }
+		local edge = CurrentLook().edge or { 0.6, 0.6, 0.6, 1 }
 		portrait.ring:SetVertexColor(edge[1], edge[2], edge[3], 1)
 	end
 	portrait:SetShown(face and true or false)
@@ -1770,10 +1895,10 @@ function Show(keepPage)
 		and (mode == "head" and NpcPlate() ~= nil or Opposite())
 	panelWidth = talk.cardBelow and TEXT_WIDTH + bubble.indent + PAD_X or PANEL_WIDTH
 	panel:SetWidth(panelWidth)
-	local look = LOOKS[ns.db.questTalkStyle] or LOOKS.parchment
-	local cardLook = Setting("questTalkCardSame") and look or nil
-	if panel.look ~= (cardLook or CARD) then
-		panel.look = cardLook or CARD
+	local look = CurrentLook()
+	local cardLook = Styled("questTalkCardSame") and look or nil
+	if panel.look ~= (cardLook or CARD) or panel.lookKey ~= DressKey(cardLook or CARD) then
+		panel.look, panel.lookKey = cardLook or CARD, DressKey(cardLook or CARD)
 		Dress(panel, cardLook)
 	end
 	ink = cardLook == LOOKS.parchment and INK.parchment or INK.dark
@@ -1814,7 +1939,8 @@ function Show(keepPage)
 	ParkWindows(true)
 end
 
-local function Hide()
+local function Hide(why)
+	ns.LogDetail("questtalk", ("ours gone, the game's windows back (%s)"):format(why or "?"))
 	if bubble then
 		bubble:Hide()
 		panel:Hide()
@@ -1826,9 +1952,20 @@ end
 
 -- "Show the game's window": ours go, the game's come back, until the
 -- conversation ends.
-local function ShowGameWindow()
+local function ShowGameWindow(why)
 	gameWindow = true
-	Hide()
+	Hide(type(why) == "string" and why or "Show the game's window clicked")
+end
+
+-- The screen built again (pcall'd: a later look, not the open itself). Gone
+-- wrong: logged, and the game's window, so the conversation can go on (it
+-- was swallowed, and nothing was left to answer with).
+local function Reshow(why)
+	local ok, err = pcall(Show, true)
+	if not ok then
+		ns.Log("questtalk", ("%s: building the screen failed (%s): the game's window back"):format(why, tostring(err)))
+		ShowGameWindow("failed " .. why)
+	end
 end
 
 ---------------------------------------------------------------------------
@@ -1926,6 +2063,61 @@ local OPENS = {
 }
 local CLOSES = { GOSSIP_CLOSED = true, QUEST_FINISHED = true }
 
+-- Whether the game's gossip or quest window is still open.
+local function TalkWindowOpen()
+	for _, name in ipairs(WINDOWS) do
+		local frame = _G[name]
+		if frame and ns.Flag(frame:IsShown()) then
+			return true
+		end
+	end
+	return false
+end
+
+-- For the log: whether ours are up where you can answer with them, and why
+-- not. (The card shown, not faded out.)
+local function Answerable()
+	if not (panel and ns.Flag(panel:IsShown())) then
+		return false
+	end
+	local ok, alpha = pcall(panel.GetEffectiveAlpha, panel)
+	alpha = ok and Plain(alpha)
+	return type(alpha) ~= "number" or alpha > 0.05
+end
+local function Where(frame)
+	local ok, x, y = pcall(frame.GetCenter, frame)
+	x, y = ok and Plain(x), ok and Plain(y)
+	if type(x) ~= "number" or type(y) ~= "number" then
+		return "unmeasured"
+	end
+	return ("%.0f,%.0f"):format(x, y)
+end
+function TalkState()
+	local open = {}
+	for _, name in ipairs(WINDOWS) do
+		local frame = _G[name]
+		if frame and ns.Flag(frame:IsShown()) then
+			open[#open + 1] = name .. (parked[frame] and " parked" or " in view")
+		end
+	end
+	local function Frame(frame, extra)
+		if not frame then return "none" end
+		local ok, alpha = pcall(frame.GetEffectiveAlpha, frame)
+		alpha = ok and Plain(alpha)
+		return ("%s alpha %s at %s%s"):format(ns.Flag(frame:IsShown()) and "shown" or "hidden",
+			type(alpha) == "number" and ("%.2f"):format(alpha) or "?", Where(frame), extra)
+	end
+	return ("windows %s; npc %s (had %s); place %s, cam move %s (moving %s, quest cam pending %s, fade %.2f);"
+		.. " bubble %s; card %s; game window %s, close due %s, %s"):format(
+		#open > 0 and table.concat(open, ", ") or "none",
+		ns.Flag(UnitExists("npc")) and "here" or "gone", tostring(talk.hadNpc), PlaceMode(), MoveMode(),
+		tostring(CameraMoving()), tostring(ns.QuestCamPending and ns.QuestCamPending()), camMove.alpha,
+		Frame(bubble, bubble and (", on plate %s, waiting %s, free %s"):format(tostring(bubble.onPlate ~= nil),
+			tostring(bubble.waiting), tostring(bubble.free)) or ""),
+		Frame(panel, panel and (", following %s"):format(tostring(panel.following)) or ""),
+		tostring(gameWindow), tostring(closeTimer ~= nil), InCombatLockdown() and "in a fight" or "no fight")
+end
+
 local function Open(kind)
 	if not ns.db or not Setting("questTalk") or gameWindow then
 		return
@@ -1939,16 +2131,7 @@ local function Open(kind)
 	end
 	-- (A new conversation: where you clicked them, for Opposite Clicked.)
 	if not talk.kind then
-		talk.clickX = ns.ClickedX and ns.ClickedX() or nil
-		-- (The game opening the same NPC's talk again, after a quest's
-		-- accepted or turned in, with no click of yours: that first click
-		-- still goes, for a while.)
-		local guid = Plain(UnitGUID("npc"))
-		if talk.clickX then
-			lastClick.guid, lastClick.x, lastClick.at = guid, talk.clickX, GetTime()
-		elseif guid and guid == lastClick.guid and GetTime() - lastClick.at <= SAME_NPC_TIME then
-			talk.clickX = lastClick.x
-		end
+		talk.clickX = ns.TalkClickX()
 	end
 	talk.choice, talk.cardPage = nil, nil
 	talk.kind = kind
@@ -1957,9 +2140,13 @@ local function Open(kind)
 	-- Anything going wrong: the game's window, so the conversation can go on.
 	local ok, err = pcall(Show)
 	if not ok then
-		ShowGameWindow()
+		ns.Log("questtalk", ("%s: building the screen failed (%s): the game's window back"):format(kind, tostring(err)))
+		ShowGameWindow("failed to open " .. kind)
 		geterrorhandler()(err)
 		return
+	end
+	if ns.LogDetailOn() then
+		ns.LogDetail("questtalk", ("opened %s: %s"):format(kind, TalkState()))
 	end
 	-- Once more a moment later: the game can set a screen's theme (its page
 	-- and emblem) after the window's up. (Only if it's still this screen.)
@@ -1967,20 +2154,9 @@ local function Open(kind)
 	talk.opened = opened + 1
 	C_Timer.After(ART_RECHECK, function()
 		if talk.kind == kind and talk.opened == opened + 1 and not gameWindow then
-			pcall(Show, true)
+			Reshow("art recheck")
 		end
 	end)
-end
-
--- Whether the game's gossip or quest window is still open.
-local function TalkWindowOpen()
-	for _, name in ipairs(WINDOWS) do
-		local frame = _G[name]
-		if frame and ns.Flag(frame:IsShown()) then
-			return true
-		end
-	end
-	return false
 end
 
 -- The game's window closed: ours go too, unless another opens meanwhile
@@ -1991,24 +2167,60 @@ local function ScheduleClose()
 		closeTimer = nil
 		if not TalkWindowOpen() then
 			gameWindow = false
-			Hide()
+			Hide("the game's window closed")
+		elseif ns.LogDetailOn() then
+			ns.LogDetail("questtalk", ("close called off, a window's still open: %s"):format(TalkState()))
 		end
 	end)
 end
 
 -- And in case no event says so (Escape closing them, say): while ours show,
 -- the game's windows are looked at a few times a second.
+-- Also the way out if you're locked out: the game's window open (parked off
+-- the screen) with nothing of ours to answer with for LOCKOUT_WAIT while the
+-- camera's still (LOCKOUT_MOVING if it never is), or parked with no talk of
+-- ours at all: logged with all there is, and the game's window back.
 local WATCH_EVERY = 0.2
+local LOCKOUT_WAIT = 1.5
+local LOCKOUT_MOVING = 10
 local watcher = CreateFrame("Frame")
-local watched = 0
+local watched, unseen, hiddenFor, stray = 0, 0, 0, 0
 watcher:SetScript("OnUpdate", function(_, elapsed)
 	watched = watched + elapsed
 	if watched < WATCH_EVERY then
 		return
 	end
+	local step = watched
 	watched = 0
 	if talk.kind and not closeTimer and not TalkWindowOpen() then
 		ScheduleClose()
+	end
+	if talk.kind and not closeTimer and not gameWindow and TalkWindowOpen() and not Answerable() then
+		unseen = CameraMoving() and 0 or unseen + step
+		hiddenFor = hiddenFor + step
+		if unseen >= LOCKOUT_WAIT or hiddenFor >= LOCKOUT_MOVING then
+			ns.Log("questtalk", ("locked out: nothing to answer with for %.1fs (%.1fs of it still), the game's"
+				.. " window back: %s"):format(hiddenFor, unseen, TalkState()))
+			unseen, hiddenFor = 0, 0
+			ShowGameWindow("locked out")
+		end
+	else
+		unseen, hiddenFor = 0, 0
+	end
+	local parkedShown = false
+	if not talk.kind then
+		for _, name in ipairs(WINDOWS) do
+			local frame = _G[name]
+			if frame and parked[frame] and ns.Flag(frame:IsShown()) then
+				parkedShown = true
+			end
+		end
+	end
+	stray = parkedShown and stray + step or 0
+	if stray >= LOCKOUT_WAIT then
+		stray = 0
+		ns.Log("questtalk", ("locked out: the game's window parked with no talk of ours, back: %s"):format(TalkState()))
+		ParkWindows(false)
 	end
 end)
 
@@ -2050,6 +2262,14 @@ follower:SetScript("OnUpdate", function(_, elapsed)
 	elseif up and bubble.onPlate and moving and (mode == "fade" or mode == "dim") then
 		want = mode == "fade" and 0 or MOVE_DIM
 	end
+	if want ~= camMove.want then
+		camMove.want = want
+		if up and ns.LogDetailOn() then
+			ns.LogDetail("questtalk", ("fading to %.2f (%s): %s"):format(want,
+				move and (bubble.waiting and "waiting over: to the plate" or "camera moving: off the plate")
+				or want < 1 and "camera moving" or "still", TalkState()))
+		end
+	end
 	if camMove.alpha ~= want then
 		local step = elapsed / (want < camMove.alpha and FADE_OUT or FADE_IN)
 		camMove.alpha = want < camMove.alpha and math.max(want, camMove.alpha - step)
@@ -2064,34 +2284,65 @@ follower:SetScript("OnUpdate", function(_, elapsed)
 end)
 
 -- A plate came or went while ours show. A quest accepted refreshes the
--- NPC's plate (its mark goes) as the talk ends, when "npc" is gone: ours go
--- at once then, not to the middle for the moment till the close (the next
--- screen, if one opens, shows them again). A plate just swapped comes back
--- a moment later, so only still gone after that is it the middle.
+-- NPC's plate (its mark goes) as the talk ends, when "npc" is gone: ours
+-- stay just where they are then, off the plate, not to the middle for the
+-- moment till the close (the close hides them; the next screen, if one
+-- opens, places them again). Hiding them meanwhile made them blink between
+-- a quest turned in and the next one offered. A plate just swapped comes
+-- back a moment later, so only still gone after that is it the middle.
 -- ("npc" gone counts only if the talk began with it: some NPCs' never do,
--- and a plate coming or going nearby then hid ours mid-talk.) Hidden for an
+-- and a plate coming or going nearby then hid ours mid-talk.) Held for an
 -- end that doesn't come (the window still open a moment later, no close
--- on its way): ours back.
+-- on its way): ours back over them.
 local REPLATE_WAIT = 0.1
 local ENDING_WAIT = 0.3
 local function Ending()
 	return closeTimer ~= nil or not TalkWindowOpen()
 		or talk.hadNpc and not ns.Flag(UnitExists("npc"))
 end
-local function HideForEnd()
-	bubble:Hide()
-	panel:Hide()
+local function HoldForEnd()
+	if bubble.onPlate then
+		-- (Where it is on the screen now, in its own units, as SetPoint takes them.)
+		local ok, left, bottom = pcall(function() return bubble:GetLeft(), bubble:GetBottom() end)
+		left, bottom = ok and Plain(left), ok and Plain(bottom)
+		if type(left) == "number" and type(bottom) == "number" then
+			bubble:ClearAllPoints()
+			bubble:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left, bottom)
+			bubble.onPlate = nil
+		else
+			-- (Can't be measured over a plate: hidden till the close, as before.)
+			bubble:Hide()
+			panel:Hide()
+		end
+	end
+	ns.LogDetail("questtalk", ("held for the end (%s)"):format(panel:IsShown() and "in place" or "hidden"))
 	local kind, opened = talk.kind, talk.opened
 	C_Timer.After(ENDING_WAIT, function()
 		if talk.kind == kind and talk.opened == opened and not gameWindow
-			and not closeTimer and TalkWindowOpen() and not panel:IsShown() then
-			pcall(Show, true)
+			and not closeTimer and TalkWindowOpen() then
+			if panel:IsShown() then
+				Place()
+				PlacePanel()
+			else
+				Reshow("no end came")
+			end
+			if ns.LogDetailOn() then
+				ns.LogDetail("questtalk", ("no end came, ours back: %s"):format(TalkState()))
+			end
+		elseif ns.LogDetailOn() then
+			ns.LogDetail("questtalk", ("end held: %s"):format(talk.kind ~= kind and "talk " .. tostring(talk.kind)
+				or talk.opened ~= opened and "another screen" or gameWindow and "game window"
+				or closeTimer and "closing" or "window shut"))
 		end
 	end)
 end
-local function Replace()
+local function Replace(event)
 	if Ending() then
-		HideForEnd()
+		if ns.LogDetailOn() then
+			ns.LogDetail("questtalk", ("%s, talk ending (%s): %s"):format(event, closeTimer and "close due"
+				or not TalkWindowOpen() and "window shut" or "npc gone", TalkState()))
+		end
+		HoldForEnd()
 		return
 	end
 	if PlaceMode() == "head" and not NpcPlate() then
@@ -2100,11 +2351,15 @@ local function Replace()
 				return
 			end
 			if Ending() then
-				HideForEnd()
+				ns.LogDetail("questtalk", ("%s, talk ending after the replate wait"):format(event))
+				HoldForEnd()
 				return
 			end
 			Place()
 			PlacePanel()
+			if ns.LogDetailOn() then
+				ns.LogDetail("questtalk", ("%s, placed after the replate wait: %s"):format(event, TalkState()))
+			end
 		end)
 		return
 	end
@@ -2123,15 +2378,20 @@ events:SetScript("OnEvent", function(_, event)
 	if event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED" then
 		-- (Their plate gone, or handed to someone else: over them again, or the middle.)
 		if Shown() and bubble then
-			Replace()
+			Replace(event)
 		end
 	elseif OPENS[event] then
 		-- (A frame later: the game's windows have shown and set themselves up.)
 		-- Only while the game's window is really open (it may not open at all).
 		C_Timer.After(0, function()
-			if TalkWindowOpen() then Open(OPENS[event]) end
+			if TalkWindowOpen() then
+				Open(OPENS[event])
+			else
+				ns.LogDetail("questtalk", ("%s: no window open a frame later, not opened"):format(event))
+			end
 		end)
 	elseif CLOSES[event] then
+		ns.LogDetail("questtalk", event)
 		ScheduleClose()
 	elseif panel then
 		-- Keys: none held back in a fight (the game doesn't let us choose then).
@@ -2150,8 +2410,10 @@ local function HookWindows()
 			-- (Parked as it shows, so it doesn't flash up for a frame first.)
 			frame:HookScript("OnShow", function(self)
 				if ns.db and Setting("questTalk") and not gameWindow then Park(self) end
+				ns.LogDetail("questtalk", ("%s shown%s"):format(name, parked[self] and ", parked" or ""))
 			end)
 			frame:HookScript("OnHide", function()
+				ns.LogDetail("questtalk", name .. " hidden")
 				if Shown() then ScheduleClose() end
 			end)
 		end
@@ -2177,8 +2439,116 @@ end
 function ns.RefreshQuestTalk()
 	if not Setting("questTalk") or not TalkWindowOpen() then
 		-- (Off, or no conversation going on: nothing of ours left up.)
-		if talk.kind then Hide() end
+		if talk.kind then Hide("turned off, or no conversation") end
 	elseif talk.kind then
 		Show(true)
 	end
+end
+
+-- The Style hub's Quest talk page changed: dressed again, if it's up.
+function ns.RefreshQuestTalkStyle()
+	if talk.kind then Show(true) end
+end
+
+---------------------------------------------------------------------------
+-- The Style hub's Quest talk page's preview: an NPC's words in a bubble and
+-- the list of replies under it, dressed as quest talk dresses its own (Dress,
+-- Font): the bubble in the page's look, the list in it too or its own dark one
+-- (questTalkCardSame). Gives the holder; :Refresh() dresses them again.
+
+local PREVIEW_ROWS = {
+	{ icon = QUEST_ICONS.available, text = "The Turnip Thief" },
+	{ icon = QUEST_ICONS.complete, text = "Fence Mending" },
+	{ text = "Goodbye" },
+}
+
+function ns.MakeQuestTalkPreview(parent, width)
+	local holder = CreateFrame("Frame", nil, parent)
+	holder:SetSize(width, 300)
+	if holder.SetClipsChildren then holder:SetClipsChildren(true) end
+	local caption = holder:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	caption:SetPoint("TOPLEFT", 6, -5)
+	caption:SetText(L["Preview"])
+	caption.searchSkip = true
+	local inner = width - 100 -- (the bubble's and the list's width)
+	local sample = CreateFrame("Frame", nil, holder, BackdropTemplateMixin and "BackdropTemplate")
+	sample:SetWidth(inner)
+	sample:SetPoint("TOP", holder, "TOP", 0, -26)
+	Dressable(sample)
+	local name = sample:CreateFontString(nil, "OVERLAY")
+	name:SetPoint("TOPLEFT", PAD_X, -PAD_Y)
+	local text = sample:CreateFontString(nil, "OVERLAY")
+	text:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -4)
+	text:SetWidth(inner - 2 * PAD_X)
+	text:SetJustifyH("LEFT")
+	text:SetWordWrap(true)
+	local list = CreateFrame("Frame", nil, holder, BackdropTemplateMixin and "BackdropTemplate")
+	list:SetWidth(inner)
+	list:SetPoint("TOP", sample, "BOTTOM", 0, -FOLLOW_GAP)
+	Dressable(list)
+	local lines = {}
+	for i, entry in ipairs(PREVIEW_ROWS) do
+		local line = { key = list:CreateFontString(nil, "OVERLAY"), icon = list:CreateTexture(nil, "ARTWORK"),
+			text = list:CreateFontString(nil, "OVERLAY") }
+		line.icon:SetSize(16, 16)
+		line.icon:SetTexture(entry.icon)
+		line.icon:SetShown(entry.icon ~= nil)
+		line.words = entry.text
+		lines[i] = line
+	end
+	function holder:Refresh()
+		local look = CurrentLook()
+		-- The bubble: their name, then their words, in the look's fonts.
+		Dress(sample, look)
+		name:SetFontObject("GameFontNormalSmall")
+		text:SetFontObject(_G[look.font] or GameFontHighlight)
+		Font(name)
+		Font(text)
+		name:SetTextColor(unpack(look.name))
+		text:SetTextColor(unpack(look.text))
+		name:SetText(L["Farmer Brennick"])
+		text:SetText(L["Something has been taking the turnips at night, and nobody here is brave enough to " ..
+			"keep watch. Would you?"])
+		local high = (Plain(name:GetStringHeight()) or 12) + 4 + (Plain(text:GetStringHeight()) or 40) + PAD_Y * 2
+		sample:SetHeight(high)
+		local art = sample.page:IsShown() and PageArt()
+		if art then SetArtFitted(sample.page, art, inner - 6, high - 6, "top") end
+		-- The list: as its card is dressed (questTalkCardSame), its words to suit.
+		local cardLook = Styled("questTalkCardSame") and look or nil
+		Dress(list, cardLook)
+		local colors = cardLook == LOOKS.parchment and INK.parchment or INK.dark
+		local rowHeight = ROW_HEIGHT * math.max(1, Styled("questTalkTextSize"))
+		local y = -12
+		for i, line in ipairs(lines) do
+			line.key:SetFontObject(colors == INK.parchment and "QuestFont" or "GameFontDisableSmall")
+			line.text:SetFontObject(colors == INK.parchment and "QuestFont" or "GameFontHighlight")
+			Font(line.key)
+			Font(line.text)
+			if colors == INK.parchment then
+				line.key:SetShadowOffset(0, 0)
+				line.text:SetShadowOffset(0, 0)
+			end
+			line.key:SetTextColor(unpack(colors.dim))
+			line.text:SetTextColor(unpack(colors.text))
+			line.key:SetText(Setting("questTalkKeys") and tostring(i) or "")
+			line.text:SetText(L[line.words])
+			line.key:ClearAllPoints()
+			line.key:SetPoint("TOPLEFT", 10, y - (rowHeight - 12) / 2)
+			line.icon:ClearAllPoints()
+			line.icon:SetPoint("LEFT", list, "TOPLEFT", 30, y - rowHeight / 2)
+			line.text:ClearAllPoints()
+			line.text:SetPoint("LEFT", list, "TOPLEFT", 52, y - rowHeight / 2)
+			y = y - rowHeight
+		end
+		local listHigh = -y + 12
+		list:SetHeight(listHigh)
+		art = list.page:IsShown() and PageArt()
+		if art then SetArtFitted(list.page, art, inner - 6, listHigh - 6, "bottom") end
+		local total = 26 + high + FOLLOW_GAP + listHigh + 14
+		if holder:GetHeight() ~= total or not holder.styleScene then
+			holder:SetHeight(total)
+			if ns.StyleScene then ns.StyleScene(holder) end
+		end
+	end
+	return holder
 end

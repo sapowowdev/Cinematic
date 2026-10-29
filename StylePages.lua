@@ -53,6 +53,19 @@ function ns.StyleToggle(button, on)
 	button:SetNormalFontObject(on and "GameFontNormal" or "GameFontDisable")
 end
 
+-- A Visions hub page's link to its Style hub page: a small Style button right
+-- of the page's title, past its "?" (PageIntro). page: the Style page's name,
+-- as ns.OpenOptions takes it. Tooltip: the page's (Options.lua's).
+function ns.StyleLink(content, title, page, tip, Tooltip)
+	local button = ns.PanelButton(content)
+	button:SetSize(70, 20)
+	button:SetText(ns.L["Style"])
+	button:SetPoint("LEFT", title, "RIGHT", 44, 0)
+	Tooltip(button, tip)
+	button:SetScript("OnClick", function() ns.OpenOptions(page) end)
+	return button
+end
+
 -- The Scene button above a preview: the scene behind every preview, or a
 -- plain ground (one setting for them all). Tooltip, AddControl: the page's
 -- (Options.lua's, as the kit has them). Works with the page's switch off too.

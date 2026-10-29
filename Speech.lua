@@ -35,62 +35,30 @@ local function Font()
 	return _G.ChatBubbleFont or _G.GameFontHighlightLarge
 end
 
--- The look the chat bubbles have now: in a bubble (the game's own, or the
--- page's with Text only unticked) or not, outline thickness (1-3, nil none)
--- and size.
+-- The look the chat bubbles have now (the Style hub's Chat bubbles page,
+-- Bubbles.lua): in a bubble or not, outline thickness (1-3, nil none), size,
+-- and the look itself.
+local function Styled()
+	return ns.BubbleLook and ns.BubbleLook() or ns.DEFAULTS
+end
 local function Look()
-	local db = ns.db
-	local textOnly = db.handleBubbles and db.bubblesTextOnly
-	local outline = textOnly and db.bubblesTextOutline and (tonumber(db.bubblesTextOutlineSize) or 2) or nil
-	local scale = db.handleBubbles and tonumber(db.bubblesTextScale) or 1
-	return not textOnly, outline, scale
+	local look = Styled()
+	local outline = tonumber(look.bubblesOutline) or 0
+	return look.bubblesBack ~= "none", outline > 0 and outline or nil, tonumber(look.bubblesTextScale) or 1, look
 end
 
--- How these lines tell they're from behind you (the Chat bubbles page's
--- Behind you, which works with that page off too): rising up from below the
--- screen, quieter than a bubble overhead (smaller, fainter), and a bubble's
--- tail on top, pointing up, if ticked.
+-- How these lines tell they're from behind you (the Style hub's Chat bubbles
+-- page too): rising up from below the screen, quieter than a bubble overhead
+-- (smaller, fainter), and a bubble's tail on top, pointing up, if ticked.
 local function Behind()
-	local db = ns.db
+	local db = Styled()
 	return db.speechBehindRise, tonumber(db.speechBehindScale) or 1, tonumber(db.speechBehindAlpha) or 1,
 		db.speechBehindTailTop
 end
 
--- A bubble like the game's: its nine-slice where the client has one, else
--- the older bubble textures.
+-- A bubble like the game's (Bubbles.lua).
 local function Bubble(parent)
-	local bubble
-	if _G.NineSliceUtil and _G.NineSliceUtil.ApplyLayoutByName then
-		bubble = CreateFrame("Frame", nil, parent, "NineSlicePanelTemplate")
-		if not pcall(_G.NineSliceUtil.ApplyLayoutByName, bubble, "ChatBubble") then
-			bubble:Hide()
-			bubble = nil
-		end
-	end
-	if not bubble and BackdropTemplateMixin then
-		bubble = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-		bubble:SetBackdrop({
-			bgFile = "Interface\\Tooltips\\ChatBubble-Background",
-			edgeFile = "Interface\\Tooltips\\ChatBubble-Backdrop",
-			tile = true, tileSize = 16, edgeSize = 16,
-			insets = { left = 16, right = 16, top = 16, bottom = 16 },
-		})
-	end
-	if bubble then
-		bubble:SetFrameLevel(parent:GetFrameLevel() + 1)
-		-- Its tail (placed by TailAt).
-		local tail = bubble:CreateTexture(nil, "OVERLAY")
-		if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("ChatBubble-Tail") then
-			tail:SetAtlas("ChatBubble-Tail", true)
-			bubble.tailInto = 5 -- (how far it overlaps the bubble's edge)
-		else
-			tail:SetTexture("Interface\\Tooltips\\ChatBubble-Tail")
-			tail:SetSize(16, 16)
-			bubble.tailInto = 3
-		end
-		bubble.tail = tail
-	end
-	return bubble
+	return ns.MakeGameBubble(parent)
 end
 
 -- The tail under the bubble pointing down, or on top turned to point up.
@@ -111,23 +79,24 @@ end
 
 local OUTLINE_FLAGS = { "OUTLINE", "THICKOUTLINE", "THICKOUTLINE" }
 
--- The Chat bubbles page's Max width (db.speechBehindWidth) and Align
--- (db.speechBehindAlign: "LEFT", "CENTER", "RIGHT", or "auto": by which side
+-- The Style hub's Chat bubbles page's Max width (speechBehindWidth) and Align
+-- (speechBehindAlign: "LEFT", "CENTER", "RIGHT", or "auto": by which side
 -- of the screen the Move box is on).
 local function MaxWidth()
-	return math.max(200, tonumber(ns.db.speechBehindWidth) or 480)
+	return math.max(200, tonumber(Styled().speechBehindWidth) or 480)
 end
 
 local function Align()
-	local align = ns.db.speechBehindAlign
+	local align = Styled().speechBehindAlign
 	return ANCHOR[align] and align or side
 end
 
 local function SetLook(line, words)
-	local boxed, outline, scale = Look()
+	local boxed, outline, scale, look = Look()
 	scale = scale * select(2, Behind())
 	local text, font = line.text, Font()
 	local file, size = font:GetFont()
+	if file and ns.BubbleFont then file = ns.BubbleFont(look, file, "") end
 	local most = MaxWidth()
 	line.frame:SetWidth(most)
 	text:SetWidth(most)
@@ -156,10 +125,17 @@ local function SetLook(line, words)
 		local rows = math.ceil(wide / most)
 		text:SetWidth(math.min(most, math.ceil(wide / rows) + 40))
 	end
-	if boxed and not line.bubble then
+	-- (The game's bubble, or a back of our own: Dark, Custom.)
+	local own = ns.BubbleBackColor and ns.BubbleBackColor(look)
+	if boxed and own and not line.skin and ns.MakeBubbleSkin then
+		line.skin = ns.MakeBubbleSkin(line.frame)
+		line.skin:SetFrameLevel(line.frame:GetFrameLevel() + 1)
+	end
+	if boxed and not own and not line.bubble then
 		line.bubble = Bubble(line.frame) or false
 	end
-	line.boxed = boxed and line.bubble and true or false
+	local back = boxed and (own and line.skin or not own and line.bubble) or nil
+	line.boxed = back and true or false
 	local tailTop = select(4, Behind())
 	-- (The tail's room is under the bubble, or over it with the tail on top.)
 	-- (Lined up with the Move box's side; a bubble's edge, not its words', on it.)
@@ -171,13 +147,21 @@ local function SetLook(line, words)
 	text:SetPoint(point, line.frame, point, line.boxed and inset or 0,
 		line.boxed and PAD_Y + (tailTop and 0 or TAIL_SPACE) or 0)
 	line.point = point
-	if line.bubble then
-		TailAt(line.bubble, tailTop)
-		line.bubble:ClearAllPoints()
-		line.bubble:SetPoint("TOPLEFT", text, "TOPLEFT", -PAD_X, PAD_Y)
-		line.bubble:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", PAD_X, -PAD_Y)
-		line.bubble:SetShown(line.boxed)
+	for _, frame in ipairs({ line.bubble or false, line.skin or false }) do
+		if frame then
+			TailAt(frame, tailTop)
+			frame:ClearAllPoints()
+			frame:SetPoint("TOPLEFT", text, "TOPLEFT", -PAD_X, PAD_Y)
+			frame:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", PAD_X, -PAD_Y)
+		end
 	end
+	if line.skin then ns.DressBubbleSkin(line.skin, look) end
+	if line.bubble then
+		line.bubble:SetAlpha(tonumber(look.bubblesAlpha) or 1)
+		line.bubble.tail:SetShown(look.bubblesTail and true or false)
+	end
+	if line.skin then line.skin:SetShown(back == line.skin) end
+	if line.bubble then line.bubble:SetShown(back == line.bubble) end
 end
 
 local function NewLine()
@@ -394,7 +378,7 @@ end
 -- A player's name in their class colour (db.speechBehindClassColor), as the
 -- chat window shows it; NPCs' and unknown ones as they are.
 local function ClassColoured(name, guid)
-	if not ns.db.speechBehindClassColor or type(guid) ~= "string" or (issecretvalue and issecretvalue(guid))
+	if not Styled().speechBehindClassColor or type(guid) ~= "string" or (issecretvalue and issecretvalue(guid))
 			or not guid:find("^Player%-") or not _G.GetPlayerInfoByGUID then
 		return name
 	end
@@ -425,7 +409,7 @@ function ns.ShowSpeechBehind(event, author, text, guid)
 
 	local chatType = event:gsub("^CHAT_MSG_", "")
 	local words = text
-	if ns.db.speechBehindName and type(author) == "string" and author ~= ""
+	if Styled().speechBehindName and type(author) == "string" and author ~= ""
 			and not (issecretvalue and issecretvalue(author)) then
 		-- (A player's in brackets, as the chat window shows it, the brackets in
 		-- the chat's colour; an NPC's without, as there too.)

@@ -36,7 +36,7 @@ end
 -- Its look: the Style hub's Quest item button page (questItemStyle: on; off,
 -- these defaults, whatever the page's set to).
 local DEFAULTS = ns.DEFAULTS
-DEFAULTS.questItemStyle = false
+DEFAULTS.questItemStyle = true
 DEFAULTS.questItemSize = 52            -- its width and height
 DEFAULTS.questItemShape = "square"     -- or "round"
 DEFAULTS.questItemFrame = "game"       -- round it: "game" (the extra action button's art), "thin" (black), "none"

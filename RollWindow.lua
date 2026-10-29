@@ -44,7 +44,7 @@ end
 -- Its look: the Style hub's Roll Vision page (rollStyle: on; off, these
 -- defaults, whatever the page's set to). Colors as R, G, B keys.
 local DEFAULTS = ns.DEFAULTS
-DEFAULTS.rollStyle = false
+DEFAULTS.rollStyle = true
 DEFAULTS.rollPanel = "rounded"     -- cards on: "rounded" (the game's roll frame's edge), "flat" (a thin line), "none"
 DEFAULTS.rollAlpha = 0.88          -- ...their background's opacity
 DEFAULTS.rollDensity = "roomy"     -- player rows: "roomy" or "compact"

@@ -1,6 +1,6 @@
 -- Cinematic: chat bubbles. Where the game shows them (say and yell, party; by
--- place, as the page's grid says), and how they look (text only, outline,
--- text size).
+-- place, as the page's grid says), and how they look (the Style hub's Chat
+-- bubbles page: their back, font, outline and text size).
 local _, ns = ...
 
 -- Where the bubbles show is the game's own two settings, written as you
@@ -35,67 +35,182 @@ local function RestoreCVars()
 	end
 end
 
--- The look: each bubble's background and border (every texture in it) faded
--- out for text only (its text outlined in black, if ticked), and its text
--- scaled. Bubbles are reused, so each is
--- looked at again as it shows. Bubbles the game keeps from addons (in
--- instances, on retail) are left as they are.
-local hidden = setmetatable({}, { __mode = "k" }) -- texture -> true, while faded out
-local scaled = setmetatable({}, { __mode = "k" }) -- font string -> true, while scaled
--- font string -> its own font flags and shadow, while outlined
-local outlined = setmetatable({}, { __mode = "k" })
+-- The look: the Style hub's Chat bubbles page (bubblesStyle: on; off, these
+-- defaults, whatever the page's set to). It works with the UI Manager's Chat
+-- bubbles page off too. Speech from behind you (Speech.lua) has it as well.
+local DEFAULTS = ns.DEFAULTS
+DEFAULTS.bubblesStyle = true
+DEFAULTS.bubblesBack = "game"   -- behind the words: "game" (the game's bubble), "dark", "custom" (bubblesBackR/G/B), "none"
+DEFAULTS.bubblesBackR, DEFAULTS.bubblesBackG, DEFAULTS.bubblesBackB = 0.2, 0.12, 0.3
+DEFAULTS.bubblesAlpha = 1       -- ...its opacity
+DEFAULTS.bubblesEdge = "thin"   -- ...Dark and Custom's edge: "thin" (a line round it) or "none"
+DEFAULTS.bubblesTail = true     -- ...the tail pointing at who's talking
+DEFAULTS.bubblesFont = "game"   -- the words' font (ns.QUEST_ITEM_FONTS' names)
+DEFAULTS.bubblesOutline = 0     -- ...outline: 0 none, 1 thin, 2 thick, 3 thick with a drop shadow
+-- (and bubblesTextScale, their size: Core.lua)
 
--- Outline thickness (bubblesTextOutlineSize) -> the font flags, and whether
--- it has a drop shadow too.
-local OUTLINE_FLAGS = { "OUTLINE", "THICKOUTLINE", "THICKOUTLINE" }
-local SHADOW_X, SHADOW_Y = 2, -2
+local function Look()
+	return ns.db and ns.db.bubblesStyle and ns.db or DEFAULTS
+end
+ns.BubbleLook = Look
 
--- size: 1-3 outlines it (see OUTLINE_FLAGS); nil puts its own look back.
-local function Outline(region, size)
-	local file, height, flags = region:GetFont()
-	if not file then return end
-	local own = outlined[region]
-	if size then
-		if not own then
-			local x, y = region:GetShadowOffset()
-			own = { flags = flags or "", x = x, y = y, color = { region:GetShadowColor() } }
-			outlined[region] = own
-		end
-		local want = OUTLINE_FLAGS[size] or OUTLINE_FLAGS[1]
-		if flags ~= want then -- (the game can set the font again as it reuses a bubble)
-			region:SetFont(file, height, want)
-		end
-		if size == 3 then
-			region:SetShadowColor(0, 0, 0, 1)
-			region:SetShadowOffset(SHADOW_X, SHADOW_Y)
-		else
-			region:SetShadowColor(unpack(own.color))
-			region:SetShadowOffset(own.x, own.y)
-		end
-	elseif own then
-		region:SetFont(file, height, own.flags)
-		region:SetShadowColor(unpack(own.color))
-		region:SetShadowOffset(own.x, own.y)
-		outlined[region] = nil
+-- The back's color, if it's one of ours (Dark, Custom).
+local DARK = { 0.04, 0.05, 0.06 }
+function ns.BubbleBackColor(look)
+	if look.bubblesBack == "custom" then
+		return look.bubblesBackR, look.bubblesBackG, look.bubblesBackB
+	elseif look.bubblesBack == "dark" then
+		return unpack(DARK)
 	end
 end
 
-local function Style(textOnly, outline, scale, ...)
+-- The words' font file and flags, from the font's own (file, flags): the
+-- look's file unless the client's language needs the game's (Cyrillic,
+-- Korean, Chinese: boxes in the others).
+local ROMAN = not ({ ruRU = true, koKR = true, zhCN = true, zhTW = true })[GetLocale and GetLocale() or ""]
+function ns.BubbleFont(look, file, flags)
+	if ROMAN then
+		for _, font in ipairs(ns.QUEST_ITEM_FONTS or {}) do
+			if font[1] == look.bubblesFont and font[3] then file = font[3] end
+		end
+	end
+	local outline = tonumber(look.bubblesOutline) or 0
+	return file, ns.OutlinedFlags and ns.OutlinedFlags(flags, math.min(outline, 2)) or flags
+end
+
+-- A back of our own, for Dark and Custom: a flat color, a thin line round
+-- it, and a tail like the game's in the same color (skin.tail: placed by
+-- whoever makes it).
+local WHITE = "Interface\\Buttons\\WHITE8X8"
+local SIDES = { { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" }, { "TOPLEFT", "BOTTOMLEFT" },
+	{ "TOPRIGHT", "BOTTOMRIGHT" } }
+function ns.MakeBubbleSkin(parent)
+	local skin = CreateFrame("Frame", nil, parent)
+	skin.back = skin:CreateTexture(nil, "BACKGROUND")
+	skin.back:SetAllPoints()
+	skin.back:SetTexture(WHITE)
+	skin.edges = {}
+	for i, side in ipairs(SIDES) do
+		local edge = skin:CreateTexture(nil, "BORDER")
+		edge:SetTexture(WHITE)
+		edge:SetPoint(side[1])
+		edge:SetPoint(side[2])
+		if i <= 2 then edge:SetHeight(1) else edge:SetWidth(1) end
+		skin.edges[i] = edge
+	end
+	local tail = skin:CreateTexture(nil, "BORDER")
+	if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("ChatBubble-Tail") then
+		tail:SetAtlas("ChatBubble-Tail", true)
+		skin.tailInto = 5 -- (how far it overlaps the edge)
+	else
+		tail:SetTexture("Interface\\Tooltips\\ChatBubble-Tail")
+		tail:SetSize(16, 16)
+		skin.tailInto = 3
+	end
+	tail:SetDesaturated(true)
+	skin.tail = tail
+	return skin
+end
+
+-- A skin dressed as look says (shown only for Dark and Custom).
+function ns.DressBubbleSkin(skin, look)
+	local r, g, b = ns.BubbleBackColor(look)
+	skin:SetShown(r ~= nil)
+	if not r then return end
+	local alpha = tonumber(look.bubblesAlpha) or 1
+	skin.back:SetVertexColor(r, g, b, alpha)
+	local edged = look.bubblesEdge == "thin"
+	for _, edge in ipairs(skin.edges) do
+		edge:SetShown(edged)
+		edge:SetVertexColor(0.65, 0.65, 0.65, 0.7 * alpha)
+	end
+	skin.tail:SetVertexColor(r, g, b, alpha)
+	skin.tail:SetShown(look.bubblesTail and true or false)
+end
+
+-- On the game's bubbles: their background, border and tail (every texture
+-- in them) at the look's opacity, or faded out for a back of our own (drawn
+-- behind instead) or none; their words' font, outline and size. Bubbles are
+-- reused, so each is looked at again as it shows. Bubbles the game keeps
+-- from addons (in instances, on retail) are left as they are.
+local faded = setmetatable({}, { __mode = "k" }) -- texture -> true, while faded
+local scaled = setmetatable({}, { __mode = "k" }) -- font string -> true, while scaled
+-- font string -> its own font, flags and shadow, while restyled
+local restyled = setmetatable({}, { __mode = "k" })
+local skins = setmetatable({}, { __mode = "k" }) -- bubble -> our skin behind it
+local ours = setmetatable({}, { __mode = "k" }) -- (our skins: left as they are)
+
+local SHADOW_X, SHADOW_Y = 2, -2
+
+local function IsTail(region, inside)
+	if region == inside.Tail then return true end
+	local atlas = region.GetAtlas and region:GetAtlas()
+	if type(atlas) == "string" and atlas:find("Tail") then return true end
+	local file = region:GetTexture()
+	return type(file) == "string" and file:find("Tail") ~= nil
+end
+
+local function SetAlphaOf(region, alpha)
+	if alpha ~= 1 then
+		faded[region] = true
+		if region:GetAlpha() ~= alpha then region:SetAlpha(alpha) end
+	elseif faded[region] then
+		faded[region] = nil
+		region:SetAlpha(1)
+	end
+end
+
+-- look nil: its own font back.
+local function StyleText(region, look)
+	local own = restyled[region]
+	if not look or (look.bubblesFont == "game" and (tonumber(look.bubblesOutline) or 0) == 0) then
+		if own then
+			region:SetFont(own.file, own.height, own.flags)
+			region:SetShadowColor(unpack(own.color))
+			region:SetShadowOffset(own.x, own.y)
+			restyled[region] = nil
+		end
+		return
+	end
+	if not own then
+		local file, height, flags = region:GetFont()
+		if not file then return end
+		local x, y = region:GetShadowOffset()
+		own = { file = file, height = height, flags = flags or "", x = x, y = y, color = { region:GetShadowColor() } }
+		restyled[region] = own
+	end
+	local file, flags = ns.BubbleFont(look, own.file, own.flags)
+	local nowFile, nowHeight, nowFlags = region:GetFont()
+	-- (The game can set the font again as it reuses a bubble.)
+	if nowFile ~= file or nowHeight ~= own.height or (nowFlags or "") ~= flags then
+		region:SetFont(file, own.height, flags)
+	end
+	if look.bubblesOutline == 3 then
+		region:SetShadowColor(0, 0, 0, 1)
+		region:SetShadowOffset(SHADOW_X, SHADOW_Y)
+	else
+		region:SetShadowColor(unpack(own.color))
+		region:SetShadowOffset(own.x, own.y)
+	end
+end
+
+local function Style(inside, look, ...)
+	local game = look and look.bubblesBack == "game"
+	local alpha = game and tonumber(look.bubblesAlpha) or 1
+	local scale = look and tonumber(look.bubblesTextScale) or 1
 	for i = 1, select("#", ...) do
 		local region = select(i, ...)
 		local kind = region:GetObjectType()
 		if kind == "Texture" then
-			if textOnly and not hidden[region] then
-				hidden[region] = true
-				region:SetAlpha(0)
-			elseif not textOnly and hidden[region] then
-				hidden[region] = nil
-				region:SetAlpha(1)
+			if not look then
+				SetAlphaOf(region, 1)
+			elseif not game or (not look.bubblesTail and IsTail(region, inside)) then
+				SetAlphaOf(region, 0)
+			else
+				SetAlphaOf(region, alpha)
 			end
 		elseif kind == "FontString" then
-			if outline or outlined[region] then
-				Outline(region, outline)
-			end
+			StyleText(region, look)
 			if region.SetTextScale and (scale ~= 1 or scaled[region]) then
 				region:SetTextScale(scale)
 				scaled[region] = scale ~= 1 or nil
@@ -104,13 +219,47 @@ local function Style(textOnly, outline, scale, ...)
 	end
 end
 
-local function StyleFrame(frame, textOnly, outline, scale)
-	Style(textOnly, outline, scale, frame:GetRegions())
+local function StyleFrame(frame, inside, look)
+	Style(inside, look, frame:GetRegions())
 	for i = 1, select("#", frame:GetChildren()) do
 		local child = select(i, frame:GetChildren())
-		if not (child.IsForbidden and child:IsForbidden()) then
-			StyleFrame(child, textOnly, outline, scale)
+		if not ours[child] and not (child.IsForbidden and child:IsForbidden()) then
+			StyleFrame(child, inside, look)
 		end
+	end
+end
+
+-- Our back behind a bubble's inside (Dark, Custom), its tail where the
+-- game's is (faded out, it still says where).
+local SKIN_INSET = 4
+local function Skin(bubble, inside, look)
+	local skin = skins[bubble]
+	if not skin then
+		if not (look and ns.BubbleBackColor(look)) then return end
+		skin = ns.MakeBubbleSkin(bubble)
+		ours[skin] = true
+		skins[bubble] = skin
+		skin:SetPoint("TOPLEFT", inside, "TOPLEFT", SKIN_INSET, -SKIN_INSET)
+		skin:SetPoint("BOTTOMRIGHT", inside, "BOTTOMRIGHT", -SKIN_INSET, SKIN_INSET)
+	end
+	if not look then
+		skin:Hide()
+		return
+	end
+	skin:SetFrameLevel(math.max(0, inside:GetFrameLevel() - 1))
+	ns.DressBubbleSkin(skin, look)
+	local gameTail = inside.Tail
+	if not gameTail then
+		for i = 1, select("#", inside:GetRegions()) do
+			local region = select(i, inside:GetRegions())
+			if region:GetObjectType() == "Texture" and IsTail(region, inside) then gameTail = region end
+		end
+	end
+	skin.tail:ClearAllPoints()
+	if gameTail then
+		skin.tail:SetAllPoints(gameTail)
+	else
+		skin.tail:Hide()
 	end
 end
 
@@ -118,19 +267,62 @@ local function StyleBubbles()
 	if not (C_ChatBubbles and C_ChatBubbles.GetAllChatBubbles) then
 		return
 	end
-	local db = ns.db
-	local on = db.handleBubbles
-	local textOnly = on and db.bubblesTextOnly or false
-	local outline = textOnly and db.bubblesTextOutline and (tonumber(db.bubblesTextOutlineSize) or 2) or nil
-	local scale = on and tonumber(db.bubblesTextScale) or 1
-	if not on and not next(hidden) and not next(scaled) and not next(outlined) then
+	local look = ns.db and ns.db.bubblesStyle and ns.db or nil
+	if not look and not next(faded) and not next(scaled) and not next(restyled) and not next(skins) then
 		return
 	end
 	for _, bubble in ipairs(C_ChatBubbles.GetAllChatBubbles(false)) do
 		if not (bubble.IsForbidden and bubble:IsForbidden()) then
-			StyleFrame(bubble, textOnly, outline, scale)
+			local inside = bubble:GetChildren()
+			if inside and not (inside.IsForbidden and inside:IsForbidden()) then
+				StyleFrame(bubble, inside, look)
+				Skin(bubble, inside, look)
+			end
 		end
 	end
+end
+
+-- A bubble like the game's: its nine-slice where the client has one, else
+-- the older bubble textures. (Speech from behind you, the Style page's preview.)
+function ns.MakeGameBubble(parent)
+	local bubble
+	if _G.NineSliceUtil and _G.NineSliceUtil.ApplyLayoutByName then
+		bubble = CreateFrame("Frame", nil, parent, "NineSlicePanelTemplate")
+		if not pcall(_G.NineSliceUtil.ApplyLayoutByName, bubble, "ChatBubble") then
+			bubble:Hide()
+			bubble = nil
+		end
+	end
+	if not bubble and BackdropTemplateMixin then
+		bubble = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+		bubble:SetBackdrop({
+			bgFile = "Interface\\Tooltips\\ChatBubble-Background",
+			edgeFile = "Interface\\Tooltips\\ChatBubble-Backdrop",
+			tile = true, tileSize = 16, edgeSize = 16,
+			insets = { left = 16, right = 16, top = 16, bottom = 16 },
+		})
+	end
+	if bubble then
+		bubble:SetFrameLevel(parent:GetFrameLevel() + 1)
+		-- Its tail (placed by TailAt).
+		local tail = bubble:CreateTexture(nil, "OVERLAY")
+		if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("ChatBubble-Tail") then
+			tail:SetAtlas("ChatBubble-Tail", true)
+			bubble.tailInto = 5 -- (how far it overlaps the bubble's edge)
+		else
+			tail:SetTexture("Interface\\Tooltips\\ChatBubble-Tail")
+			tail:SetSize(16, 16)
+			bubble.tailInto = 3
+		end
+		bubble.tail = tail
+	end
+	return bubble
+end
+
+-- Whether any bubble is still styled from before (the game hides bubbles and
+-- reuses them: those only come back as they show again).
+local function Styled()
+	return next(faded) or next(scaled) or next(restyled) or next(skins)
 end
 
 -- Kept off the top of the screen: the game pins a bubble to the screen's top
@@ -332,11 +524,91 @@ end
 watcher:SetScript("OnEvent", ns.Profiled("chat bubbles event", function(self, event)
 	if event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" or SITUATION_EVENTS[event] then
 		ns.ApplyBubbles()
-	-- (Also while any bubble is still styled from before: the game hides
-	-- bubbles and reuses them, and those only come back as they show again.)
-	-- (And while the page is on at all, to keep new bubbles off the top.)
-	elseif ns.db and (ns.db.handleBubbles or next(hidden) or next(scaled) or next(outlined)) then
+	-- (Also while the Style page is on, or any bubble is still styled from
+	-- before.) (And while the page is on at all, to keep new bubbles off the top.)
+	elseif ns.db and (ns.db.handleBubbles or ns.db.bubblesStyle or Styled()) then
 		watchLeft = WATCH_FOR
 		self:SetScript("OnUpdate", OnUpdate)
 	end
 end))
+
+-- The Style hub's Chat bubbles page's preview: a say and a yell in bubbles
+-- dressed as the look says, over the Style pages' scene.
+local PREVIEW_PAD_X, PREVIEW_PAD_Y = 14, 10
+local function PreviewBubble(holder)
+	local frame = CreateFrame("Frame", nil, holder)
+	frame.game = ns.MakeGameBubble(frame)
+	frame.skin = ns.MakeBubbleSkin(frame)
+	for _, back in ipairs({ frame.game or false, frame.skin }) do
+		if back then
+			back:SetAllPoints()
+			back:SetFrameLevel(frame:GetFrameLevel() + 1)
+			back.tail:ClearAllPoints()
+			back.tail:SetPoint("TOP", back, "BOTTOM", -20, back.tailInto)
+		end
+	end
+	local words = CreateFrame("Frame", nil, frame)
+	words:SetAllPoints()
+	words:SetFrameLevel(frame:GetFrameLevel() + 5)
+	frame.text = words:CreateFontString(nil, "OVERLAY")
+	frame.text:SetPoint("TOPLEFT", PREVIEW_PAD_X, -PREVIEW_PAD_Y)
+	frame.text:SetJustifyH("LEFT")
+	frame.text:SetWordWrap(true)
+	return frame
+end
+
+local function DressPreviewBubble(frame, look, words, color, most)
+	local font = _G.ChatBubbleFont or _G.GameFontHighlightLarge
+	local file, height, flags = font:GetFont()
+	local text = frame.text
+	if file and height then
+		local outline = tonumber(look.bubblesOutline) or 0
+		file, flags = ns.BubbleFont(look, file, flags)
+		text:SetFont(file, height * (tonumber(look.bubblesTextScale) or 1), flags)
+		if outline == 3 then
+			text:SetShadowColor(0, 0, 0, 1)
+			text:SetShadowOffset(SHADOW_X, SHADOW_Y)
+		else
+			text:SetShadowColor(font:GetShadowColor())
+			text:SetShadowOffset(font:GetShadowOffset())
+		end
+	end
+	text:SetTextColor(color.r or 1, color.g or 1, color.b or 1)
+	text:SetWidth(most)
+	text:SetText(words)
+	local wide = text:GetStringWidth()
+	if type(wide) == "number" and wide < most then text:SetWidth(math.ceil(wide) + 2) end
+	frame:SetSize(text:GetWidth() + PREVIEW_PAD_X * 2, text:GetStringHeight() + PREVIEW_PAD_Y * 2)
+	local own = ns.BubbleBackColor(look)
+	local boxed = look.bubblesBack ~= "none"
+	ns.DressBubbleSkin(frame.skin, look)
+	frame.skin:SetShown(boxed and own ~= nil)
+	if frame.game then
+		frame.game:SetShown(boxed and not own)
+		frame.game:SetAlpha(tonumber(look.bubblesAlpha) or 1)
+		frame.game.tail:SetShown(look.bubblesTail and true or false)
+	end
+end
+
+function ns.MakeBubblePreview(parent, width)
+	local holder = CreateFrame("Frame", nil, parent)
+	holder:SetSize(width, 190)
+	if holder.SetClipsChildren then holder:SetClipsChildren(true) end
+	local caption = holder:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	caption:SetPoint("TOPLEFT", 6, -5)
+	caption:SetText(ns.L["Preview"])
+	caption.searchSkip = true
+	local say, yell = PreviewBubble(holder), PreviewBubble(holder)
+	say:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 40, 80)
+	yell:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", -40, 40)
+	function holder:Refresh()
+		ns.StyleScene(self, 0.5, 0.85)
+		local look = Look()
+		local info = _G.ChatTypeInfo or {}
+		DressPreviewBubble(say, look, ns.L["Has anyone seen my turnip? It was right here a moment ago."],
+			info.SAY or { r = 1, g = 1, b = 1 }, 220)
+		DressPreviewBubble(yell, look, ns.L["For the Alliance!"], info.YELL or { r = 1, g = 0.25, b = 0.25 }, 220)
+	end
+	holder:SetScript("OnShow", holder.Refresh)
+	return holder
+end

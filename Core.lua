@@ -71,7 +71,7 @@ local DEFAULTS = {
 	letterboxAlpha = 1,    -- bar opacity
 	-- The bars' look: the Style hub's Letterbox page (letterboxStyle: on; off,
 	-- these defaults, whatever the page's set to). Size and opacity are its too.
-	letterboxStyle = false,
+	letterboxStyle = true,
 	letterboxSizeBy = "height", -- "height" (letterboxSize) or "aspect": what a film's frame leaves
 	letterboxAspect = 2.39,     -- ...that frame's width over its height
 	letterboxColor = "black",   -- "black" or "custom" (letterboxR/G/B)
@@ -954,7 +954,7 @@ DEFAULTS.questItemButton = true
 DEFAULTS.questObjectGlow = true -- the quest object soft targeting picks glows (see QuestGlow; changes interact settings)
 -- Talking to an NPC: their words in a bubble over them, the replies in a list,
 -- instead of the game's gossip and quest windows (see QuestTalk).
-DEFAULTS.questTalk = true
+DEFAULTS.questTalk = false
 DEFAULTS.questTalkStyle = "parchment" -- or "bubble" (the game's chat bubble)
 -- Where the bubble goes: "head" (over their nameplate), "fixed" (where you
 -- drag it) or "opposite" (across the screen from where you clicked them).
@@ -992,10 +992,7 @@ for _, kind in ipairs({ "Say", "Party" }) do
 		DEFAULTS["bubbles" .. kind .. "OffIn" .. where] = false
 	end
 end
-DEFAULTS.bubblesTextOnly = false -- no background or border, just the text
-DEFAULTS.bubblesTextOutline = true -- with text only: a black outline round the letters
-DEFAULTS.bubblesTextOutlineSize = 2 -- 1 thin, 2 thick, 3 thick with a drop shadow
-DEFAULTS.bubblesTextScale = 1
+DEFAULTS.bubblesTextScale = 1 -- their words' size (the Style hub's Chat bubbles page; the rest: Bubbles.lua)
 -- Graphics+ page (Graphics.lua): on, each setting ticked. Each slider's value
 -- (graphicsPlus<name>) has no default: nil until it's moved, it changes
 -- nothing, so on changes nothing either till then. Not in profiles.
@@ -4383,14 +4380,46 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			ns.db.healVisionDefaultsV1 = true
 		end
 		-- The letterbox's height and opacity moved to the Style hub's Letterbox
-		-- page, which is off to start with: a height or opacity of your own turns
-		-- it on, to keep them. Once.
+		-- page: a height or opacity of your own turns it on, to keep them. Once.
 		if not ns.db.letterboxStyleV1 then
 			if (ns.db.letterboxSize or DEFAULTS.letterboxSize) ~= DEFAULTS.letterboxSize
 				or (ns.db.letterboxAlpha or 1) ~= DEFAULTS.letterboxAlpha then
 				ns.db.letterboxStyle = true
 			end
 			ns.db.letterboxStyleV1 = true
+		end
+		-- The chat bubbles' look moved to the Style hub's Chat bubbles page:
+		-- Text only or a text size of your own (with the UI Manager's page on,
+		-- as they needed) carry over. Once.
+		if not ns.db.bubblesStyleV1 then
+			local db = ns.db
+			if db.handleBubbles and (db.bubblesTextOnly or (db.bubblesTextScale or 1) ~= 1) then
+				db.bubblesStyle = true
+				if db.bubblesTextOnly then
+					db.bubblesBack = "none"
+					if db.bubblesTextOutline ~= false then db.bubblesOutline = db.bubblesTextOutlineSize or 2 end
+				end
+			end
+			db.bubblesStyleV1 = true
+		end
+		-- Quest talk (Quest Vision's Custom dialogue frames) is off to start with
+		-- now, on in the Cinema profile: it goes as your profile has it, and
+		-- saved profiles drop theirs, to follow their base. Once.
+		if not ns.db.questTalkProfileV1 then
+			local base = ns.ProfileBase and ns.ProfileBase() or DEFAULTS
+			ns.db.questTalk = base.questTalk and true or false
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then saved.questTalk = nil end
+			end
+			ns.db.questTalkProfileV1 = true
+		end
+		-- The Style hub's pages are on to start with now (their defaults look
+		-- as the page off did: the switch is there to compare). Once.
+		if not ns.db.stylePagesOnV1 then
+			for _, key in ipairs({ "letterboxStyle", "questItemStyle", "rollStyle", "plateCastStyle", "bubblesStyle" }) do
+				ns.db[key] = true
+			end
+			ns.db.stylePagesOnV1 = true
 		end
 		-- Always show tanks (healVisionTanks) is now the tank slider at 100%:
 		-- unticked, tanks went by the members' health, so they still do. Once,

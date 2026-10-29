@@ -300,6 +300,8 @@ function ns.CreateCombatVisionPanel(kit)
 		L["A cue for a few seconds as you go into a fight and come out of it: a word on the screen or in a " ..
 		"letterbox bar, a pulse round the screen's edges, an icon and a sound. How it looks: the Style hub's " ..
 		"Combat Vision page."])
+	ns.StyleLink(content, title, "Combat Style", L["Opens the Style hub's Combat Vision page: how the cue " ..
+		"looks."], kit.Tooltip)
 	local function Changed() end
 	local switch = kit.PageSwitch(content, "combatVision", L["Enable page"],
 		L["On: the cue shows as this page says. Off: never. Each setting keeps its value for when you turn " ..

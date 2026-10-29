@@ -400,7 +400,8 @@ local function Choice(parent, key, value, label, tip)
 	return cb
 end
 
--- A dropdown for a db key with a fixed set of choices ({ value, text }), or
+-- A dropdown for a db key with a fixed set of choices ({ value, text,
+-- enabled = optional test(db): greyed in the menu unless it holds }), or
 -- a function giving them each time the menu opens.
 -- Returns nil on clients without the modern dropdown template.
 local function Dropdown(parent, key, choices, width, onChange)
@@ -412,7 +413,7 @@ local function Dropdown(parent, key, choices, width, onChange)
 	dropdown.searchSkip = true -- (it shows the current choice, not a label)
 	dropdown:SetupMenu(function(_, rootDescription)
 		for _, choice in ipairs(type(choices) == "function" and choices() or choices) do
-			rootDescription:CreateRadio(choice.text,
+			local radio = rootDescription:CreateRadio(choice.text,
 				-- SetupMenu builds the menu right away, before saved settings load.
 				function()
 					local db = ns.GetDB()
@@ -423,6 +424,10 @@ local function Dropdown(parent, key, choices, width, onChange)
 					if onChange then onChange(choice.value) end
 					Refresh()
 				end)
+			local db = ns.GetDB()
+			if choice.enabled and db and radio and radio.SetEnabled then
+				radio:SetEnabled(choice.enabled(db) and true or false)
+			end
 		end
 	end)
 	dropdown.Refresh = function(self) self:GenerateMenu() end
@@ -1201,13 +1206,21 @@ do
 			{ "Tint", "Interface\\Icons\\INV_Misc_Gem_Variety_02" },
 			{ "Graphics+", "Interface\\Icons\\INV_Misc_Gem_Pearl_04" },
 		} },
+		-- (section: a row of its own, its name before it: the game's frames,
+		-- then Cinematic's own)
 		{ name = "Style", pages = {
-			{ "Nameplate Style", "Interface\\Icons\\Ability_Marksmanship", label = "Nameplates" },
-			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names" },
-			{ "Letterbox Style", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", label = "Letterbox" },
-			{ "Quest Item Style", "Interface\\Icons\\INV_Misc_Key_03", label = "Quest item button" },
-			{ "Roll Style", "Interface\\Icons\\INV_Misc_Dice_02", label = "Roll Vision" },
-			{ "Combat Style", "Interface\\Icons\\Ability_DualWield", label = "Combat Vision" },
+			{ "Nameplate Style", "Interface\\Icons\\Ability_Marksmanship", label = "Nameplates", section = "Game" },
+			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names", section = "Game" },
+			{ "Cast Bar Style", "Interface\\Icons\\Spell_Nature_Lightning", label = "Cast bars", section = "Game" },
+			{ "Bubble Style", "Interface\\Icons\\Ability_Warrior_RallyingCry", label = "Chat bubbles",
+				section = "Game" },
+			{ "Letterbox Style", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", label = "Letterbox",
+				section = "Cinematic" },
+			{ "Quest Talk Style", "Interface\\Icons\\INV_Scroll_02", label = "Quest talk", section = "Cinematic" },
+			{ "Quest Item Style", "Interface\\Icons\\INV_Misc_Key_03", label = "Quest item button",
+				section = "Cinematic" },
+			{ "Roll Style", "Interface\\Icons\\INV_Misc_Dice_02", label = "Roll Vision", section = "Cinematic" },
+			{ "Combat Style", "Interface\\Icons\\Ability_DualWield", label = "Combat Vision", section = "Cinematic" },
 		} },
 		{ name = "Visions", pages = {
 			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl", label = "General" },
@@ -1250,18 +1263,42 @@ do
 	local BAR = 30 -- (the search box and Reset page, above the icons)
 	local byName = {} -- tile by the name its page was registered under (English or shown)
 
+	local SECTION_W = 80 -- (a section's name, before its row)
+
 	-- Icons in rows across the page's width, the picked page filling the rest.
-	-- A group's pages get a row of their own below, while one of them is shown.
+	-- A group's pages get a row of their own below, while one of them is shown;
+	-- a section's pages start a row of their own, its name before them.
 	local function Layout(hub)
 		local width = hub.frame:GetWidth()
 		if not width or width <= 0 then return end
-		local perRow = math.max(1, math.floor((width - 2 * EDGE + TILE_GAP) / (TILE + TILE_GAP)))
-		local column, row = 0, 0
+		local left = EDGE
+		for _, tile in ipairs(hub.tiles) do
+			if tile.section then left = EDGE + SECTION_W break end
+		end
+		local perRow = math.max(1, math.floor((width - left - EDGE + TILE_GAP) / (TILE + TILE_GAP)))
+		local column, row, section = 0, 0, nil
+		hub.sectionNames = hub.sectionNames or {}
 		local function Place(tile)
-			if column >= perRow then column, row = 0, row + 1 end
+			if column >= perRow or (tile.section and tile.section ~= section and column > 0) then
+				column, row = 0, row + 1
+			end
+			local y = -BAR - EDGE - row * (TILE + TILE_GAP)
+			if tile.section and tile.section ~= section then
+				local name = hub.sectionNames[tile.section]
+				if not name then
+					name = hub.frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+					name:SetWidth(SECTION_W - 8)
+					name:SetJustifyH("LEFT")
+					name:SetText(L[tile.section])
+					name.searchSkip = true
+					hub.sectionNames[tile.section] = name
+				end
+				name:ClearAllPoints()
+				name:SetPoint("LEFT", hub.frame, "TOPLEFT", EDGE, y - TILE / 2)
+			end
+			section = tile.section
 			tile:ClearAllPoints()
-			tile:SetPoint("TOPLEFT", hub.frame, "TOPLEFT", EDGE + column * (TILE + TILE_GAP),
-				-BAR - EDGE - row * (TILE + TILE_GAP))
+			tile:SetPoint("TOPLEFT", hub.frame, "TOPLEFT", left + column * (TILE + TILE_GAP), y)
 			tile:Show()
 			column = column + 1
 		end
@@ -1432,7 +1469,7 @@ do
 					for i, tab in ipairs(tabs) do
 						local tile = CreateTile(hub, canvas, tab.name, tab.icon, tab.label)
 						tile.order = order + i / 100
-						tile.under = page.under
+						tile.under, tile.section = page.under, page.section
 						tile.onSelect, tile.resetContent = tab.onSelect, tab.resetContent
 						if tab.setSelect then
 							tab.setSelect(function() Select(tile) end)
@@ -5324,7 +5361,7 @@ local function CreatePortraitsPanel()
 	RegisterSubpage(canvas, "Unit Frames")
 end
 
--- Sub-page: chat bubbles (where they show, and how they look).
+-- Sub-page: chat bubbles (where they show; how they look: BubbleStyle.lua).
 local function CreateBubblesPanel()
 	local canvas, content = CreateScrollPage()
 
@@ -5332,19 +5369,22 @@ local function CreateBubblesPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = PageIntro(content, title,
-		L["Where chat bubbles show, and how they look."])
+		L["Where chat bubbles show. How they look: the Style hub's Chat bubbles page."])
+	-- Their look: the Style hub's Chat bubbles page (BubbleStyle.lua), a
+	-- button away, right of the page's title (past its "?").
+	local styleButton = ns.PanelButton(content)
+	styleButton:SetSize(120, 22)
+	styleButton:SetText(L["Style"])
+	Tooltip(styleButton, L["Opens the Style hub's Chat bubbles page: how the bubbles and speech from behind " ..
+		"you look."])
+	styleButton:SetScript("OnClick", function() ns.OpenOptions("Bubble Style") end)
+	styleButton:SetPoint("LEFT", title, "RIGHT", 34, 0)
 
 	local function Changed() if ns.ApplyBubbles then ns.ApplyBubbles() end end
-	local function BubbleCheck(key, label, tip)
-		return Check(content, key, label, tip, function(value)
-			ns.GetDB()[key] = value
-			Changed()
-		end)
-	end
 
 	local switch = PageSwitch(content, "handleBubbles", L["Enable page"],
-		L["On: chat bubbles show where this page says, and look as it says. Off: the game's own " ..
-		"chat bubble settings, as you had them."], subtitle, Changed)
+		L["On: chat bubbles show where this page says. Off: the game's own chat bubble settings, as " ..
+		"you had them."], subtitle, Changed)
 	-- Show in: a row per kind of bubble, as the Standard Frames page's
 	-- (GridRows.lua): where and when each shows.
 	local stack = Stack(switch, "check")
@@ -5364,40 +5404,15 @@ local function CreateBubblesPanel()
 	end
 	stack:Continue(ShowTable(content, bubbleTop, bubbleRows, L["Chat bubbles"]), "label")
 
-	stack:Header(content, L["Look"])
-	local textOnly = stack:Add(BubbleCheck("bubblesTextOnly", L["Text only (no background or border)"],
-		L["Bubbles show just their text, floating over the speaker. (Not in instances on retail: " ..
-		"the game doesn't let addons change bubbles there.)"]), "check")
-	textOnly:HookScript("OnClick", Refresh) -- grey out / enable the outline
-	local outline = stack:Add(BubbleCheck("bubblesTextOutline", L["Black outline round the text"],
-		L["A thin black border round the letters, so the text stands out against the world."]), "check", 24)
-	GreyUnless(outline, function(db) return db.bubblesTextOnly end)
-	outline:HookScript("OnClick", Refresh) -- grey out / enable the thickness
-	-- Its thickness, on the same line: the game's two outlines, then the
-	-- thick one with a drop shadow. The value shows to its right.
-	local OUTLINE_SIZES = { L["Thin"], L["Thick"], L["Thick + shadow"] }
-	local thickness = Slider(content, "bubblesTextOutlineSize", "", 1, 3, 1,
-		function(value) return OUTLINE_SIZES[value] or "" end, 1, Changed)
-	thickness:SetWidth(90)
-	thickness:SetPoint("LEFT", outline.Text or outline.text, "RIGHT", 16, 0)
-	thickness.title:ClearAllPoints()
-	thickness.title:SetPoint("LEFT", thickness, "RIGHT", 10, 0)
-	Tooltip(thickness, L["How thick the outline is. Thick + shadow also drops a shadow below and to " ..
-		"the right of the letters."])
-	GreyUnless(thickness, function(db) return db.bubblesTextOnly and db.bubblesTextOutline end)
-	local size = stack:Add(Slider(content, "bubblesTextScale", L["Text size"], 50, 200, 5, "%d%%", 100,
-		Changed), "slider")
-	Tooltip(size, L["How big the bubbles' text is. (Not in instances on retail.)"])
-	stack:Note(content, L["Bubbles already showing change with the next thing said."])
 
 	-- Speech from behind you (Speech.lua): says and yells with no bubble on
 	-- screen, shown low on the screen. It works with the page off too, so
 	-- this section doesn't grey out with the page switch (pageSwitch = false).
 	stack:Header(content, L["Behind you"])
 	stack:Help(content, L["Says and yells with no bubble on your screen (the speaker is behind you, or out of " ..
-		"view) can show low on the screen, looking like the bubbles above, instead of bringing up chat. " ..
+		"view) can show low on the screen, looking like the chat bubbles, instead of bringing up chat. " ..
 		"This works with the page off too. It needs the Chat page's Show chat when a message arrives and " ..
-		"Hide speech you can see as a bubble."])
+		"Hide speech you can see as a bubble. How the lines look: the Style hub's Chat bubbles page."])
 	local behindControls = {}
 	local function Behind(control)
 		behindControls[#behindControls + 1] = control
@@ -5406,7 +5421,7 @@ local function CreateBubblesPanel()
 	local speechBehind = stack:Add(Behind(Check(content, "chatSpeechBehind", L["Show speech from behind you at the bottom"],
 		L["Says and yells with no bubble on your screen (the speaker is behind you, or out of view) show as " ..
 		"a line of text low on the screen, with the speaker's name, instead of bringing up chat. " ..
-		"It uses the outline and text size above while this page is on."])), "check")
+		"It looks like the bubbles (the Style hub's Chat bubbles page)."])), "check")
 	GreyUnless(speechBehind, function(db) return db.chatPeek and db.chatHideBubbled end)
 	local moveSpeech = Behind(ns.PanelButton(content))
 	moveSpeech:SetSize(70, 20)
@@ -5421,59 +5436,12 @@ local function CreateBubblesPanel()
 	GreyUnless(moveSpeech, IfSpeechBehind)
 	speechBehind:HookScript("OnClick", Refresh) -- grey out / enable the choices under it
 
-	local speechName = stack:Add(Behind(Check(content, "speechBehindName", L["Show who said it"],
-		L["Speech from behind you starts with the speaker's name (\"Name says: ...\"). Unticked, just their words show."])),
-		"check", 24)
-	GreyUnless(speechName, IfSpeechBehind)
-	-- (On the same line as Show who said it.)
-	local speechClass = Behind(Check(content, "speechBehindClassColor", L["In class color"],
-		L["Players' names show in their class color, as in the chat window. NPCs' don't have one."]))
-	speechClass:SetPoint("LEFT", speechName.Text or speechName.text, "RIGHT", 16, 0)
-	GreyUnless(speechClass, function(db) return IfSpeechBehind(db) and db.speechBehindName end)
-	speechName:HookScript("OnClick", Refresh) -- grey out / enable the class colour
 	local speechChatShown = stack:Add(Behind(Check(content, "speechBehindChatShown", L["Also while chat is showing"],
 		L["Speech from behind you shows low on the screen even while the chat window is up (when you hover " ..
 		"it, type, or a message brought it up). Unticked, it shows only while chat is faded, and goes to chat otherwise."])),
 		"check", 24)
 	GreyUnless(speechChatShown, IfSpeechBehind)
 
-	local rise = stack:Add(Behind(Check(content, "speechBehindRise", L["Rise up from below the screen"],
-		L["Each line slides up from below the bottom of the screen, as if from behind the camera, " ..
-		"instead of just fading in."])), "check")
-	GreyUnless(rise, IfSpeechBehind)
-	local behindSize = stack:Add(Behind(Slider(content, "speechBehindScale", L["Size"], 50, 100, 5, "%d%%", 100)),
-		"slider")
-	Tooltip(behindSize, L["How big speech from behind you is, next to a bubble overhead: smaller sounds " ..
-		"further away."])
-	GreyUnless(behindSize, IfSpeechBehind)
-	local behindAlpha = stack:Add(Behind(Slider(content, "speechBehindAlpha", L["Opacity"], 30, 100, 5, "%d%%", 100)),
-		"slider")
-	Tooltip(behindAlpha, L["How solid speech from behind you is: fainter sounds muffled, out of view."])
-	GreyUnless(behindAlpha, IfSpeechBehind)
-	local tailTop = stack:Add(Behind(Check(content, "speechBehindTailTop", L["Tail on top"],
-		L["The bubble's tail sits on top, pointing up, instead of under it pointing down. (In a bubble only: " ..
-		"not with Text only.)"])), "check")
-	GreyUnless(tailTop, function(db) return IfSpeechBehind(db) and not (db.handleBubbles and db.bubblesTextOnly) end)
-
-	-- How wide a line gets before it wraps, and which way the lines line up.
-	local speechWidth = stack:Add(Behind(Slider(content, "speechBehindWidth", L["Max width"], 200, 1000, 20, "%d")),
-		"slider")
-	Tooltip(speechWidth, L["How wide a line of speech from behind you can get. A longer one wraps into rows " ..
-		"of about the same length."])
-	GreyUnless(speechWidth, IfSpeechBehind)
-	local speechAlign = Dropdown(content, "speechBehindAlign", {
-		{ value = "auto", text = L["By where it's moved to"] },
-		{ value = "LEFT", text = L["Left"] },
-		{ value = "CENTER", text = L["Center"] },
-		{ value = "RIGHT", text = L["Right"] },
-	}, 200)
-	if speechAlign then
-		stack:Add(Label(content, "GameFontHighlight", L["Align"]), "label")
-		stack:Add(Behind(speechAlign), "dropdown")
-		Tooltip(speechAlign, L["Which way the lines line up: their left edges, their middles or their right " ..
-			"edges. By where it's moved to: by which side of the screen the Move box is on."])
-		GreyUnless(speechAlign, IfSpeechBehind)
-	end
 	for _, control in ipairs(behindControls) do
 		control.pageSwitch = false -- (not greyed with the page off)
 	end
@@ -10049,102 +10017,56 @@ local function CreateVisionPanel()
 		end
 		local function TalkOn(db) return db.questTalk end
 		questStack:Header(content, L["Talking to NPCs"])
-		questStack:Add(Check(content, "questTalk", L["Custom dialogue frames"],
+		-- Quest talk itself (questTalk; off to start with, on in the Cinema
+		-- profile). How it looks, the "Show the game's window" link and the
+		-- number keys: the Style hub's Quest talk page (QuestTalkStyle.lua), a
+		-- button away, by the title.
+		ns.StyleLink(content, title, "Quest Talk Style", L["Opens the Style hub's Quest talk page: how the " ..
+			"speech bubbles and reply list look, the \"Show the game's window\" link and the number keys."], Tooltip)
+		local talk = questStack:Add(Check(content, "questTalk", L["Custom dialogue frames"],
 			L["Talking to an NPC, what they say shows in a speech bubble over their head, and what you can say " ..
 			"back in a list near the bottom of the screen, instead of the game's gossip and quest windows. " ..
 			"The list has everything the window would: quests to turn in, pick up or still in progress, " ..
 			"and every other option (vendor, trainer, inn, flight master...). A quest offered or turned in " ..
 			"shows its objective and rewards on a card, with its buttons; click a reward to choose it. " ..
 			"\"Show the game's window\" on the card brings the game's window back for that conversation. " ..
-			"The game's popups (a cost to confirm, a party member's escort quest) come up as usual."],
-			function(value)
+			"The game's popups (a cost to confirm, a party member's escort quest) come up as usual."] ..
+			L[" Its look: the Style hub's Quest talk page."], function(value)
 				ns.GetDB().questTalk = value
 				ApplyTalk()
-				Refresh()
 			end), "check")
-		local portrait = questStack:Add(Check(content, "questTalkPortrait", L["The NPC's portrait"],
-			L["Their portrait, round, on the bubble's top left corner, as on the game's quest window. Not " ..
-			"for a quest from an item, with nobody to show."], function(value)
-				ns.GetDB().questTalkPortrait = value
-				ApplyTalk()
-			end), "check", 24)
-		GreyUnless(portrait, TalkOn)
-		local gameButton = questStack:Add(Check(content, "questTalkGameButton", L["\"Show the game's window\" link"],
-			L["A small link at the bottom of the quest card that brings back the game's own quest window for the " ..
-			"rest of that conversation (for a long quest text, or to read it the usual way)."], function(value)
-				ns.GetDB().questTalkGameButton = value
-				ApplyTalk()
-			end), "check", 24)
-		GreyUnless(gameButton, TalkOn)
-		local keys = questStack:Add(Check(content, "questTalkKeys", L["Number keys and Space"],
-			L["1 to 9 and 0 pick from the list, as numbered. Space shows the next paragraph, and on the last " ..
-			"one does the card's first button (Accept, Continue, Complete Quest). Only keys that do something " ..
-			"there are held back from your action bars, and none in a fight."]), "check", 24)
-		GreyUnless(keys, TalkOn)
-		-- How they look.
-		questStack:Add(Label(content, "GameFontNormal", L["Look"]), "header", 24)
-		local STYLES = {
-			{ value = "parchment", text = L["Parchment"] },
-			{ value = "bubble", text = L["Chat bubble"] },
-		}
-		local STYLE_TIP = L["How the bubble looks: parchment like the quest window's, or the game's own chat bubble."]
-		questStack:Add(Label(content, "GameFontHighlight", L["Bubble look"]), "label", 24)
-		local style = Dropdown(content, "questTalkStyle", STYLES, 200, ApplyTalk)
-		if style then
-			questStack:Add(style, "dropdown", 24)
-			Tooltip(style, STYLE_TIP)
-			GreyUnless(style, TalkOn)
-		else
-			for _, choice in ipairs(STYLES) do
-				local check = questStack:Add(Choice(content, "questTalkStyle", choice.value, choice.text, STYLE_TIP),
-					"check", 24)
-				GreyUnless(check, TalkOn)
-			end
-		end
-		local same = questStack:Add(Check(content, "questTalkCardSame", L["Quest card on the bubble's background"],
-			L["The quest card has the bubble's look (parchment, or the chat bubble) instead of its own dark " ..
-			"one, its words in colors that suit it."], function(value)
-				ns.GetDB().questTalkCardSame = value
-				ApplyTalk()
-			end), "check", 24)
-		GreyUnless(same, TalkOn)
-		local lines = questStack:Add(Slider(content, "questTalkLines", L["Bubble height"], 3, 15, 1,
-			L["%d lines"], nil, ApplyTalk), "slider", 24)
-		Tooltip(lines, L["How many lines of their words the bubble holds. It's always this tall, however " ..
-			"little is on the page; more words go on the next page."])
-		GreyUnless(lines, TalkOn)
-		local size = questStack:Add(Slider(content, "questTalkScale", L["Size"], 70, 150, 5, "%d%%", 100,
-			ApplyTalk), "slider", 24)
-		Tooltip(size, L["The size of the bubble and the list."])
-		GreyUnless(size, TalkOn)
-		-- Where they go.
-		questStack:Add(Label(content, "GameFontNormal", L["Where they go"]), "header", 24)
+		talk:HookScript("OnClick", Refresh) -- (grey out / enable what needs it)
+		-- Where they go (the bubble and list; with quest talk off, the game's windows).
 		local PLACES = {
-			{ value = "head", text = L["Over the head"] },
-			{ value = "fixed", text = L["Fixed"] },
+			{ value = "fixed", text = L["Default"] },
+			{ value = "head", text = L["Over the head"], enabled = TalkOn },
 			{ value = "opposite", text = L["Opposite Clicked"] },
 		}
 		local PLACE_TIP = L["Where the bubble goes. Over the head: over the NPC's nameplate, following them on " ..
-			"the screen. Fixed: above the middle of the screen, or wherever you drag it. Opposite Clicked: " ..
+			"the screen. Default: above the middle of the screen, or wherever you drag it. Opposite Clicked: " ..
 			"wherever you drag it, but when you clicked the NPC on that half of the screen, at the same spot on " ..
 			"the other half (they stand where you clicked, so that half is clearer), the quest card beside it. " ..
 			"With nobody to stand over or no click (a quest from an item, or the interact key), it goes where " ..
-			"Fixed would."]
-		local placeLabel = questStack:Add(Label(content, "GameFontHighlight", L["Bubble position"]), "label", 24)
+			"Default would."] .. "\n\n" .. L["With Custom dialogue frames unticked, it places the game's own gossip and " ..
+			"quest window instead. Default: wherever you drag it (else where the game puts it). Opposite Clicked: " ..
+			"the same, but on the other half of the screen from where you clicked the NPC. Over the head isn't " ..
+			"for a whole window (it would cover them): the game's window is left where the game puts it."]
+		local placeLabel = questStack:Add(Label(content, "GameFontHighlight", L["Bubble position"]), "label")
 		local place = Dropdown(content, "questTalkPlace", PLACES, 200, ApplyTalk)
 		if place then
-			questStack:Add(place, "dropdown", 24)
+			questStack:Add(place, "dropdown")
 			Tooltip(place, PLACE_TIP)
-			GreyUnless(place, TalkOn)
 		else
 			for _, choice in ipairs(PLACES) do
 				local check = questStack:Add(Choice(content, "questTalkPlace", choice.value, choice.text, PLACE_TIP),
-					"check", 24)
-				GreyUnless(check, TalkOn)
+					"check")
+				if choice.enabled then
+					GreyUnless(check, choice.enabled)
+				end
 			end
 		end
 		-- The bubble position's own settings, in a column to its right: only
-		-- those for the position picked show (Fixed has none).
+		-- those for the position picked show (Default has none).
 		local column = CreateFrame("Frame", nil, content)
 		column:SetSize(1, 1)
 		column:SetPoint("TOPLEFT", placeLabel, "TOPLEFT", 260, 0)
@@ -10176,7 +10098,7 @@ local function CreateVisionPanel()
 		local TURN_TIP = L["What the bubble and card do while the camera moves: the quest camera's swing, zoom " ..
 			"and turn (its drift is Hold the camera still's), or you turning it. Follow: they stay over the " ..
 			"NPC's nameplate, sliding with it. Fade out: they fade out, and back in over the NPC once it's " ..
-			"still. Dim: they fade down, still readable. Wait to the side: they stay still where Fixed would " ..
+			"still. Dim: they fade down, still readable. Wait to the side: they stay still where Default would " ..
 			"put them, and fade over to the NPC once the camera's still."]
 		Own("head", headStack:Add(Label(content, "GameFontHighlight", L["While the camera moves"]), "label"))
 		local turning = Dropdown(content, "questTalkCamMove", TURNS, 200, ApplyTalk)
@@ -10204,50 +10126,20 @@ local function CreateVisionPanel()
 				end
 			end,
 		}
-		local SIDES = {
-			{ value = "below", text = L["Below"] },
-			{ value = "side", text = L["Side"] },
-			{ value = "right", text = L["Right"] },
-			{ value = "left", text = L["Left"] },
-		}
-		local SIDE_TIP = L["Where the quest card (the objective, rewards and buttons, or the list of replies) " ..
-			"goes beside the bubble. Below: as wide as the bubble, which moves up to make room for it. Side: " ..
-			"with Opposite Clicked, on the bubble's outer side (away from the middle of the screen), else on " ..
-			"the right. Right or Left: always that side. Beside it, it's as tall as the bubble."]
-		local function SideOn(db) return db.questTalk and db.questTalkPlace ~= "fixed" end
-		questStack:Add(Label(content, "GameFontHighlight", L["Quest card beside the bubble"]), "label", 24)
-		local side = Dropdown(content, "questTalkCardSide", SIDES, 200, ApplyTalk)
-		if side then
-			questStack:Add(side, "dropdown", 24)
-			Tooltip(side, SIDE_TIP)
-			GreyUnless(side, SideOn)
-		else
-			for _, choice in ipairs(SIDES) do
-				local check = questStack:Add(Choice(content, "questTalkCardSide", choice.value, choice.text, SIDE_TIP),
-					"check", 24)
-				GreyUnless(check, SideOn)
-			end
-		end
-		local listY = questStack:Add(Slider(content, "questTalkListY", L["List height on the screen"], 20, 80, 1,
-			"%d%%", 100, function()
-				ns.GetDB().questTalkSpot = nil -- (the slider decides again)
-				ApplyTalk()
-			end), "slider", 24)
-		Tooltip(listY, L["How far up the screen the list of replies starts: its top edge, from the bottom of " ..
-			"the screen. Moving this also forgets where you dragged the list to."])
-		GreyUnless(listY, TalkOn)
 		-- (Drag the list to move it; this forgets where.)
 		local putBack = ns.PanelButton(content)
 		putBack:SetSize(160, 22)
 		putBack:SetText(L["Put them back"])
 		Tooltip(putBack, L["Drag the list of replies to move it, and the bubble while it isn't over an NPC. " ..
-			"This forgets where you dropped them: each opens in its usual place again."])
+			"This forgets where you dropped them: each opens in its usual place again."] .. "\n\n" ..
+			L["With quest talk off, it forgets where you dragged the game's gossip and quest window."])
 		putBack:SetScript("OnClick", function()
 			ns.GetDB().questTalkSpot = nil
 			ns.GetDB().questTalkBubbleSpot = nil
+			if ns.ForgetTalkWindowSpot then ns.ForgetTalkWindowSpot() end
 			ApplyTalk()
 		end)
-		questStack:Add(putBack, "label", 24)
+		questStack:Add(putBack, "label")
 	end
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -10265,6 +10157,8 @@ local function CreateVisionPanel()
 			"for the time left, and everyone's pick (need, greed, transmog) and number, the winner lit at the top. " ..
 			"It opens as an item drops, just under the game's roll frame, so you can see who's picked what before you choose, and takes its place once you have. Each item fades a few seconds after it's won (point at them to keep them). It stays with the game's roll frames: with \"Drag windows to move them\" on, dragging either moves both. " ..
 			"/cine rolls shows the latest rolls."])
+		ns.StyleLink(content, title, "Roll Style", L["Opens the Style hub's Roll Vision page: how the roll " ..
+			"window looks."], Tooltip)
 		local rollSwitch = PageSwitch(content, "rollWindow", L["Enable page"],
 			L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
 			"when you turn this back on."], note, function() ns.RefreshRollWindow() end)
@@ -12764,6 +12658,12 @@ ns.OnLanguage(function()
 	end
 	if ns.CreateCombatStylePanel then -- (CombatVision.lua)
 		ns.CreateCombatStylePanel(ns.lowHealthKit)
+	end
+	if ns.CreateQuestTalkStylePanel then -- (QuestTalkStyle.lua)
+		ns.CreateQuestTalkStylePanel(ns.lowHealthKit)
+	end
+	if ns.CreateBubbleStylePanel then -- (BubbleStyle.lua)
+		ns.CreateBubbleStylePanel(ns.lowHealthKit)
 	end
 	CreateEffectsPanel()
 	CreateTintPanel()

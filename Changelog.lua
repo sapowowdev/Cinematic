@@ -11,6 +11,14 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-29", page = "Bubble Style", title = "Chat bubbles style",
+		text = "Chat bubbles have a page of their own in the Style hub: the game's bubble, a dark one, a color " ..
+		"of your own or just the words, the tail, the font, size and outline, for speech from behind you too, " ..
+		"with presets and a preview." },
+	{ date = "2026-10-29", page = "Quest Talk Style", title = "Quest talk style",
+		text = "Quest talk's speech bubbles and reply list have a page of their own in the Style hub: parchment, " ..
+		"the game's chat bubble, dark panels or none, their opacity, the words' font, size and outline, with " ..
+		"presets and a preview." },
 	{ date = "2026-10-29", page = "Combat Vision", title = "Combat Vision",
 		text = "A cue as you go into a fight and come out of it: a word on the screen or in a letterbox bar, a " ..
 		"pulse round the edges, an icon, and sounds you pick for each kind of fight, like horns for a raid boss. " ..

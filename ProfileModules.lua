@@ -357,6 +357,12 @@ ns.PROFILE_MODULES = {
 			set("cineShow", { target = true })
 			set("targetQuestIcon", false)
 		end },
+	{ key = "quest-talk", name = "Quest talk", scope = { "Quest Vision/Talking to NPCs" },
+		tip = "Custom dialogue frames: speech bubbles and a reply list instead of the game's gossip and " ..
+		"quest windows.",
+		apply = function(set)
+			set("questTalk", true)
+		end },
 	{ key = "pure-tooltips", name = "Pure: tooltips", scope = { "Tooltips" },
 		tip = "The Tooltips page on: hidden in RP walk and the quest camera, friendlies' shown, nothing hidden " ..
 		"just for a fight; the border on first hover, no health bar later; no Mouse still.",

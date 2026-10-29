@@ -87,8 +87,7 @@ function ns.CreateRollStylePanel(kit)
 	end, 200, Changed)
 	if font then
 		local fontName = stack:Add(kit.Label(content, "GameFontHighlight", L["Font:"]), "label")
-		fontName:SetWidth(150)
-		font:SetPoint("LEFT", fontName, "RIGHT", 4, 0)
+		font:SetPoint("LEFT", fontName, "RIGHT", 10, 0) -- (just after the word: a lone dropdown, no column to line up with)
 		kit.GreyUnless(font, rows.On)
 		kit.Tooltip(font, L["Names in Russian, Korean or Chinese keep the game's font, so their letters show."])
 	end

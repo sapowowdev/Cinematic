@@ -93,6 +93,8 @@ RollStyle.lua
 CombatSounds.lua
 CombatSoundRules.lua
 CombatVision.lua
+QuestTalkStyle.lua
+BubbleStyle.lua
 Focus.lua
 Tracking.lua
 NodeSweep.lua
