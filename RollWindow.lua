@@ -1506,7 +1506,7 @@ local function FakeItem(quality)
 	local Container = C_Container
 	if Container and Container.GetContainerItemInfo then
 		for bag = 0, NUM_BAG_SLOTS or 4 do
-			for slot = 1, Container.GetContainerNumSlots(bag) or 0 do
+			for slot = 1, tonumber(Container.GetContainerNumSlots(bag)) or 0 do
 				local info = Container.GetContainerItemInfo(bag, slot)
 				if info and info.quality == quality and type(info.hyperlink) == "string"
 						and not Secret(info.hyperlink) and info.hyperlink:find("|Hitem:") then
