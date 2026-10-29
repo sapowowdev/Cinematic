@@ -35,17 +35,6 @@ local DEFAULTS = {
 	fadeUI = true,            -- CineMode fades the UI (off: just the visual effects, over the normal UI)
 	minimapButton = true,     -- show the minimap button
 	minimapAngle = 205,       -- its position around the minimap, in degrees (clear of the dungeon finder's eye)
-	-- In CineMode, hide every tooltip in each camera mode ticked (the Tooltips page):
-	tooltipHideInFlight = true,
-	tooltipHideInIdle = true,   -- standing still
-	tooltipHideInCozy = true,
-	tooltipHideInVista = true,  -- /stare
-	tooltipHideInFish = true,   -- fishing
-	tooltipHideInWalk = false,  -- RP walking
-	tooltipHideInRun = false,   -- auto-running
-	tooltipHideInTele = true,   -- Hearthstone and teleports
-	tooltipHideInDeath = true,  -- the death camera
-	tooltipHideInQuest = false, -- the quest camera
 	hideCombatText = false,   -- no floating combat text (heals, regen) in cinematic mode out of combat (after the Calm Timer)
 	hideErrorsInCombat = false,    -- no red error text ("Target not in line of sight") in fights (and the Calm Timer after)
 	hideErrorsOutOfCombat = false, -- nor out of them (CineMode or not, either)
@@ -208,18 +197,10 @@ local DEFAULTS = {
 	nameKeepEnemyMinions = false,
 	nameKeepGuild = false,
 	handleTooltips = false,   -- the Tooltips page's master switch (off: every tooltip shows as the game has it)
-	-- In CineMode, always (in and out of fights) hide the tooltips of (world ones and unit frames')...
-	tooltipHideEnemy = false,   -- ...units you can attack
-	tooltipHideFriendly = true, -- ...units you can't
-	tooltipHideGather = false,  -- ...something gatherable (herb, ore, skinnable)
-	tooltipHideQuest = false,   -- ...one showing a quest objective
-	tooltipHideElse = false,    -- ...everything else: objects, action bars, bags, menus
-	-- In CineMode, in combat, hide...
-	tooltipHideCombatEnemy = false,   -- ...units you can attack
-	tooltipHideCombatFriendly = true, -- ...units you can't
-	tooltipHideCombatGather = true,   -- ...something gatherable (Everything else, before it had a line)
-	tooltipHideCombatQuest = true,    -- ...one showing a quest objective (the same)
-	tooltipHideCombatElse = true,     -- ...everything else
+	-- In CineMode, hide tooltips always / in combat (old settings, gone over
+	-- into the Tooltips row, tooltip:All: see OFF_GRID_ROWS).
+	tooltipHideElse = false,
+	tooltipHideCombatElse = true,
 	tooltipStillMode = "hide", -- "hide": Hide when the mouse is still; "show": Hide until the mouse is still; "off"
 	tooltipHideStill = 10,    -- seconds a world or unit tooltip stays up with the mouse still (0: off)
 	tooltipShowStill = 2,     -- seconds the mouse is still before a world or unit tooltip shows (0: off)
@@ -523,11 +504,11 @@ ns.EFFECT_OFF_WHERE = ns.CAMERA_OFF_WHERE
 ns.EFFECT_GRID = { "letterbox", "tint", "vignette", "weather" }
 -- The Tooltips page's parts grid (TooltipParts.lua): each part shows on
 -- first hover (tooltipShow<part>First) and after tooltipFullAfter seconds
--- (...Later). To start with, none at first and all after.
+-- (...Later). To start with, just the border at first and all after.
 ns.TOOLTIP_PARTS = { "Border", "Health", "Guild", "Level", "Spec", "Type", "Corpse", "Faction", "Rep", "Threat",
 	"Quest", "ObjQuest" }
 for _, part in ipairs(ns.TOOLTIP_PARTS) do
-	DEFAULTS["tooltipShow" .. part .. "First"] = false
+	DEFAULTS["tooltipShow" .. part .. "First"] = part == "Border"
 	DEFAULTS["tooltipShow" .. part .. "Later"] = true
 end
 for _, effect in ipairs(ns.EFFECT_GRID) do
@@ -1454,10 +1435,11 @@ do
 				OFF_GRID_ROWS[#OFF_GRID_ROWS + 1] = { key = "bubble:" .. kind, always = "bubbles" .. kind .. "Always",
 					offAlways = "bubbles" .. kind .. "OffAlways", places = Places("bubbles" .. kind .. "OffIn") }
 			end
-			for _, kind in ipairs({ "Enemy", "Friendly", "Gather", "Quest", "Else" }) do
-				OFF_GRID_ROWS[#OFF_GRID_ROWS + 1] = { key = "tooltip:" .. kind, always = "tooltipAlways" .. kind,
-					offAlways = "tooltipHide" .. kind, offCombat = "tooltipHideCombat" .. kind }
-			end
+			-- (One row for every tooltip now: its rule tells them apart by kind,
+			-- the words tipenemy and the rest. Everything else's settings were
+			-- the ones for most tooltips.)
+			OFF_GRID_ROWS[#OFF_GRID_ROWS + 1] = { key = "tooltip:All", always = "tooltipAlways",
+				offAlways = "tooltipHideElse", offCombat = "tooltipHideCombatElse" }
 			-- (The letterbox, vignette and weather: off altogether by their own
 			-- switches, which stay, kept on while their rows show anywhere.)
 			local SWITCHES = { letterbox = "letterbox", vignette = "vignette", weather = "weatherTint" }
@@ -4866,6 +4848,129 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				end
 			end
 			ns.db.offGridsV1 = true
+		end
+		-- The Tooltips page's five rows (tooltip:<kind>) became one, tooltip:All,
+		-- whose rule can name the kinds (tipenemy and the rest). Rows all alike:
+		-- its ticks, rule and roles are theirs. Otherwise a rule saying what each
+		-- kind's row did, its ticks Everything else's. Once, in every profile.
+		if not ns.db.tooltipOneRowV1 then
+			local KINDS = { { "Enemy", "tipenemy" }, { "Friendly", "tipfriendly" }, { "Gather", "tipgather" },
+				{ "Quest", "tipquest" }, { "Else", "tipother" } }
+			local LISTS = { { "combatShow", "combat" }, { "calmShow", "calm" }, { "quietShow", "nocombat" },
+				{ "camShow", "camera" }, { "worldShow", "world" }, { "cityShow", "city" }, { "bgShow", "bg" },
+				{ "instanceShow", "instance" }, { "groupShow", "group" }, { "enemyShow", "enemy" },
+				{ "friendlyShow", "friendly" } }
+			local ROLES = { { "tankHide", "tank" }, { "healerHide", "healer" }, { "damageHide", "damage" } }
+			-- (What the rows started as: Enemies always, Friendlies never, the rest out of combat.)
+			local function Started(kind, list)
+				if kind == "Enemy" or kind == "Friendly" then return false end
+				return list == "quietShow" or list == "calmShow"
+			end
+			local function MergeTooltipRows(t)
+				local rules = type(t.frameRules) == "table" and t.frameRules or nil
+				local function Listed(list, kind)
+					local value = type(t[list]) == "table" and t[list]["tooltip:" .. kind]
+					if value == nil then return Started(kind, list) end
+					return value and true or false
+				end
+				local any = false
+				for _, kind in ipairs(KINDS) do
+					local key = "tooltip:" .. kind[1]
+					any = any or t["tooltipAlways" .. kind[1]] ~= nil or (rules and rules[key]) ~= nil
+					for _, list in ipairs(LISTS) do any = any or (type(t[list[1]]) == "table" and t[list[1]][key]) ~= nil end
+					for _, role in ipairs(ROLES) do any = any or (type(t[role[1]]) == "table" and t[role[1]][key]) ~= nil end
+				end
+				if any then
+					-- Each row as a rule (its own, or its ticks'), with its roles.
+					local texts, alike = {}, true
+					for i, kind in ipairs(KINDS) do
+						local key = "tooltip:" .. kind[1]
+						local rule = rules and rules[key]
+						local always = t["tooltipAlways" .. kind[1]]
+						if always == nil then always = kind[1] == "Enemy" end
+						local text
+						if type(rule) == "string" and rule:find("%S") then
+							text = "(" .. rule .. ")"
+						elseif always then
+							text = "always"
+						else
+							local words = {}
+							for _, list in ipairs(LISTS) do
+								if Listed(list[1], kind[1]) then words[#words + 1] = list[2] end
+							end
+							text = #words > 0 and "(" .. table.concat(words, " or ") .. ")" or "never"
+						end
+						if text ~= "never" then
+							for _, role in ipairs(ROLES) do
+								if type(t[role[1]]) == "table" and t[role[1]][key] then text = text .. " and not " .. role[2] end
+							end
+						end
+						texts[i] = text
+						alike = alike and text == texts[1]
+					end
+					-- (The ticks: the first row's when alike, else Everything else's, for Reset to grid.)
+					local from = alike and KINDS[1][1] or "Else"
+					local fromAlways = t["tooltipAlways" .. from]
+					if fromAlways == nil then fromAlways = from == "Enemy" end
+					t.tooltipAlways = alike and fromAlways or false
+					-- (A list a profile hasn't of its own stays its built-in's.)
+					for _, list in ipairs(LISTS) do
+						if type(t[list[1]]) == "table" then t[list[1]]["tooltip:All"] = Listed(list[1], from) end
+					end
+					if alike then
+						local rule = rules and rules["tooltip:" .. from]
+						if rule then rules["tooltip:All"] = rule end
+						for _, role in ipairs(ROLES) do
+							if type(t[role[1]]) == "table" and t[role[1]]["tooltip:" .. from] then
+								t[role[1]]["tooltip:All"] = true
+							end
+						end
+					else
+						-- (Kinds whose rows said the same share a piece.)
+						local pieces, kindsOf = {}, {}
+						for i, text in ipairs(texts) do
+							if text ~= "never" then
+								if not kindsOf[text] then
+									kindsOf[text] = {}
+									pieces[#pieces + 1] = text
+								end
+								table.insert(kindsOf[text], KINDS[i][2])
+							end
+						end
+						for i, text in ipairs(pieces) do
+							local kinds = kindsOf[text]
+							local which = #kinds > 1 and "(" .. table.concat(kinds, " or ") .. ")" or kinds[1]
+							pieces[i] = text:find("^always") and which .. text:sub(7) or which .. " and " .. text
+						end
+						t.frameRules = rules or {}
+						t.frameRules["tooltip:All"] = #pieces > 0 and table.concat(pieces, " or ") or "never"
+					end
+				end
+				-- (The old rows' settings out, and the old kinds' hide settings.)
+				for _, kind in ipairs(KINDS) do
+					local key = "tooltip:" .. kind[1]
+					t["tooltipAlways" .. kind[1]] = nil
+					if type(t.frameRules) == "table" then t.frameRules[key] = nil end
+					for _, list in ipairs(LISTS) do
+						if type(t[list[1]]) == "table" then t[list[1]][key] = nil end
+					end
+					for _, role in ipairs(ROLES) do
+						if type(t[role[1]]) == "table" then t[role[1]][key] = nil end
+					end
+					if kind[1] ~= "Else" then
+						t["tooltipHide" .. kind[1]], t["tooltipHideCombat" .. kind[1]] = nil, nil
+					end
+				end
+				-- (Hide in camera modes went too: the row's In a camera mode, or its rule's camera, says.)
+				for _, mode in ipairs({ "Flight", "Idle", "Cozy", "Vista", "Fish", "Walk", "Run", "Tele", "Death", "Quest" }) do
+					t["tooltipHideIn" .. mode] = nil
+				end
+			end
+			MergeTooltipRows(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then MergeTooltipRows(saved) end
+			end
+			ns.db.tooltipOneRowV1 = true
 		end
 		-- Rules' "arena" is arenas only now (bg: battlegrounds and arenas both;
 		-- battleground: battlegrounds only), so a rule written before says bg,

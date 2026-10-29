@@ -56,6 +56,10 @@ function ns.RulePieces()
 		{ L["You"], { 0.8, 0.6, 1 }, { { "mounted", L["Mounted"] }, { "flagged", L["PvP flagged"] },
 			{ "group", L["Grouped"] }, { "cinemode", L["In CineMode"] } } },
 		{ L["Role"], { 0.4, 0.85, 0.5 }, { { "tank", L["Tank"] }, { "healer", L["Healer"] }, { "damage", L["Damage"] } } },
+		-- (Last: the editor shows it only for the Tooltips row, tooltip:All.)
+		{ L["Tooltip"], { 0.95, 0.95, 0.6 }, { { "tipenemy", L["Enemy"] }, { "tipfriendly", L["Friendly"] },
+			{ "tipgather", L["Gatherable"] }, { "tipquest", L["Quest objective"] }, { "tipother", L["Anything else"] } },
+			tooltipOnly = true },
 	}
 end
 
@@ -351,9 +355,13 @@ local function BuildEditor()
 		return button
 	end
 	local GOLD = { 1, 0.82, 0 }
+	-- (The Tooltip line's name and buttons, and the palette's height without it.)
+	local tipLine, heightWithout = {}, nil
 	for g, group in ipairs(ns.RulePieces()) do
+		if group.tooltipOnly then heightWithout = -py + 22 end
 		if g > 1 then px, py = LINE_X, py - 26 end
 		local name = palette:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+		if group.tooltipOnly then tipLine[#tipLine + 1] = name end
 		name:SetText(group[1])
 		name:SetTextColor(group[2][1], group[2][2], group[2][3])
 		name:SetPoint("TOPLEFT", palette, "TOPLEFT", 0, py - 6)
@@ -361,7 +369,12 @@ local function BuildEditor()
 			local word = piece[1]
 			local field = ns.RULE_WORDS[word]
 			local button = Piece(piece[2], function() Insert(word) end, group[2], field ~= nil)
-			if field then
+			if group.tooltipOnly then tipLine[#tipLine + 1] = button end
+			if field and group.tooltipOnly then
+				wordButtons[word] = button
+				Tip(button, (L["Adds \"%s\": true for a tooltip of this kind (one can be more than one: a quest mob " ..
+					"is an enemy too). Anything else: none of the others, and every tooltip of the UI."]):format(word))
+			elseif field then
 				wordButtons[word] = button
 				Tip(button, (L["Adds \"%s\". A green dot: true where you are now."]):format(word))
 			end
@@ -377,7 +390,15 @@ local function BuildEditor()
 			end, GOLD), L["Empties the rule."])
 		end
 	end
-	palette:SetHeight(-py + 22)
+	local heightWith = -py + 22
+	heightWithout = heightWithout or heightWith
+	-- Shows the Tooltip line or not, the editor's height to match.
+	local function ShowTipLine(shown)
+		for _, widget in ipairs(tipLine) do widget:SetShown(shown) end
+		palette:SetHeight(shown and heightWith or heightWithout)
+		editor:SetHeight(34 + 64 + 6 + 32 + 12 + palette:GetHeight() + 50)
+	end
+	palette:SetHeight(heightWith)
 
 	-- Along the bottom: Reset to grid (when it can't go back by itself), Done.
 	local done = ns.PanelButton(editor)
@@ -448,6 +469,7 @@ local function BuildEditor()
 	end)
 	editor.Open = function(newTarget)
 		target = newTarget
+		ShowTipLine(newTarget.key ~= nil and newTarget.key:find("^tooltip:") ~= nil)
 		heading:SetText((L["Rule: %s"]):format(newTarget.label))
 		local text = newTarget.Text()
 		box:SetText(text)
@@ -774,7 +796,7 @@ function ns.GridRow(kit, parent, labelWidth, layout, spec)
 			-- (No rule yet: its dropdowns' or ticks' words to start from.)
 			local start = before or (rule.grid and ns.GridRule(AlwaysOn(), rule.words()))
 				or (spec.liveRule and spec.liveRule()) or ""
-			return { label = rule.label(), grid = rule.grid,
+			return { label = rule.label(), grid = rule.grid, key = RuleKey(),
 				Text = function() return start end,
 				SetText = function(typed) SetRule(typed) Refresh() end,
 				Close = function(typed)

@@ -10524,8 +10524,7 @@ local function CreateTooltipPanel()
 	Tooltip(still, STILL_TIP)
 	GreyUnless(still, function(db) return db.tooltipStillMode ~= "off" end)
 
-	-- A header, then its ticks under it, each on a line of its own (or a
-	-- grid or slider: lined up by sectionX, not as ticks are).
+	-- A header, then what's under it (a grid or slider: lined up by sectionX).
 	local previous = mode
 	local function Section(text)
 		local x = previous == mode and -4 or previous.sectionX or -10
@@ -10533,12 +10532,6 @@ local function CreateTooltipPanel()
 		header:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", x, previous == mode and -16 or -14)
 		previous = header
 		return header
-	end
-	local function Row(key, label, tip, first)
-		local check = Check(content, key, label, tip)
-		check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", first and 10 or 0, first and -6 or -2)
-		previous = check
-		return check
 	end
 
 	-- A grid of rows ({ label, tip, keys = column -> setting, tips = column
@@ -10582,30 +10575,21 @@ local function CreateTooltipPanel()
 		return last, headings
 	end
 
-	-- Show tooltips: a row per kind, as the Standard Frames page's
-	-- (GridRows.lua): where and when each shows in CineMode.
+	-- Show tooltips: one row, as the Standard Frames page's (GridRows.lua):
+	-- where and when tooltips show in CineMode. Its rule can tell them apart
+	-- by kind (the editor's Tooltip line: tipenemy and the rest).
 	local hideHeader = Section(L["Show tooltips"])
 	local hideNote = PageIntro(content, hideHeader,
-		L["In CineMode, where and when each kind of tooltip shows; the rest of the time it's hidden. Something " ..
-		"that's more than one kind (a quest mob is an enemy too) shows while any of its kinds does."])
-	local tooltipRows = { opts = { quiet = true, cam = true, anyFight = true } }
-	for _, kind in ipairs({
-		{ "Enemy", L["Enemies"], L["Players and NPCs you can attack (neutral mobs too), and their pets, minions and totems."] },
-		{ "Friendly", L["Friendlies"], L["Players and NPCs you can't attack, and their pets, minions and totems."] },
-		{ "Gather", L["Gatherables (herbs, ore, skinnable)"], L["Herbs, ore and creatures you can skin."] },
-		{ "Quest", L["Quest objectives"],
-			L["Tooltips listing one of your quest objectives (like \"5/7 Thistle Boar slain\")."] },
-		{ "Else", L["Everything else"],
-			L["Objects in the world, and the UI's tooltips: action bars, buffs and debuffs, bags, " ..
-			"menus and the rest."] },
-	}) do
-		local alwaysKey = "tooltipAlways" .. kind[1]
-		tooltipRows[#tooltipRows + 1] = { key = "tooltip:" .. kind[1], label = kind[2], tip = kind[3],
-			alwaysKey = alwaysKey,
-			alwaysOn = function() return ns.GetDB()[alwaysKey] end,
-			setAlways = function(value) ns.GetDB()[alwaysKey] = value end,
-			alwaysTip = L["These tooltips show all through CineMode. (The other columns then have nothing to add.)"] }
-	end
+		L["In CineMode, where and when tooltips show; the rest of the time they're hidden. For some kinds " ..
+		"only (enemies, friendlies, gatherables, quest objectives, anything else), Edit its rule: the " ..
+		"Tooltip line has a word for each."])
+	local tooltipRows = { opts = { quiet = true, cam = true, anyFight = true },
+		{ key = "tooltip:All", label = L["Tooltips"],
+			tip = L["Every tooltip: units, things in the world and the UI's (action bars, bags, menus and the rest)."],
+			alwaysKey = "tooltipAlways",
+			alwaysOn = function() return ns.GetDB().tooltipAlways end,
+			setAlways = function(value) ns.GetDB().tooltipAlways = value end,
+			alwaysTip = L["Tooltips show all through CineMode. (The other columns then have nothing to add.)"] } }
 	previous = ShowTable(content, hideNote, tooltipRows, L["Tooltips"])
 	previous.sectionX = 0
 
@@ -10703,32 +10687,6 @@ local function CreateTooltipPanel()
 		local value = ns.GetDB().tooltipFullAfter or 0
 		laterOn = value > 0
 		LaterHeading(value)
-	end
-
-	-- The camera modes, in two columns of five, down the first then the second.
-	Section(L["Hide in camera modes"])
-	local firstOfColumn
-	for i, mode in ipairs({
-		{ "Flight", L["On flights"] },
-		{ "Idle", L["AFK camera (standing still or AFK)"] },
-		{ "Cozy", L["Cozy (campfire, sitting, emotes)"] },
-		{ "Tele", L["Tele (Hearthstone, teleports)"] },
-		{ "Vista", L["Vista (/stare)"] },
-		{ "Fish", L["Fish (fishing)"] },
-		{ "Walk", L["RP walking"] },
-		{ "Run", L["Auto-running"] },
-		{ "Death", L["Death camera"] },
-		{ "Quest", L["Quest camera (talking to quest givers)"] },
-	}) do
-		local tip = L["Every tooltip in the world and on unit frames is hidden while this camera mode is running."]
-		if i == 6 then
-			local check = Check(content, "tooltipHideIn" .. mode[1], mode[2], tip)
-			check:SetPoint("TOPLEFT", firstOfColumn, "TOPLEFT", 280, 0)
-			previous = check
-		else
-			local check = Row("tooltipHideIn" .. mode[1], mode[2], tip, i == 1)
-			firstOfColumn = firstOfColumn or check
-		end
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))

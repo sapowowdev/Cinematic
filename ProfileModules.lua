@@ -364,18 +364,10 @@ ns.PROFILE_MODULES = {
 			set("questTalk", true)
 		end },
 	{ key = "pure-tooltips", name = "Pure: tooltips", scope = { "Tooltips" },
-		tip = "The Tooltips page on: hidden in RP walk and the quest camera, friendlies' shown, nothing hidden " ..
-		"just for a fight; the border on first hover, no health bar later; no Mouse still.",
+		tip = "The Tooltips page on: shown all through CineMode, fights too; no Mouse still.",
 		apply = function(set)
 			set("handleTooltips", true)
-			set("tooltipHideFriendly", false)
-			for _, kind in ipairs({ "Friendly", "Gather", "Quest", "Else" }) do
-				set("tooltipHideCombat" .. kind, false)
-			end
-			set("tooltipHideInWalk", true)
-			set("tooltipHideInQuest", true)
-			set("tooltipShowBorderFirst", true)
-			set("tooltipShowHealthLater", false)
+			set("tooltipHideCombatElse", false) -- (Always, as it goes over: ns.ConvertOffGrids)
 			set("tooltipStillMode", "off")
 			set("tooltipShowStill", 1)
 		end },

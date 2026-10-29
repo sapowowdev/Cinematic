@@ -3297,26 +3297,6 @@ local function WorldOwned()
 	return owner == nil or owner == UIParent or owner == WorldFrame
 end
 
--- Tooltips hide in the camera modes ticked (tooltipHideIn*).
-local TOOLTIP_HIDE_IN = {
-	flight = "tooltipHideInFlight", idle = "tooltipHideInIdle", cozy = "tooltipHideInCozy",
-	tele = "tooltipHideInTele", walk = "tooltipHideInWalk", run = "tooltipHideInRun",
-	vista = "tooltipHideInVista", fish = "tooltipHideInFish", death = "tooltipHideInDeath",
-	quest = "tooltipHideInQuest",
-}
-
--- The camera mode running now, for the tooltip settings: the death, quest and
--- tele cameras as well as the ones ns.CameraMode knows (it counts tele as cozy).
-local function TooltipCameraMode()
-	if ns.IsDeathCinematic and ns.IsDeathCinematic() then
-		return "death"
-	elseif ns.QuestCamActive and ns.QuestCamActive() then
-		return "quest"
-	elseif ns.IsTele and ns.IsTele() then
-		return "tele"
-	end
-	return ns.CameraMode and ns.CameraMode()
-end
 -- The Tooltips page's master switch (handleTooltips, off to start with): off,
 -- every tooltip shows as the game has it.
 local function Handling()
@@ -3526,19 +3506,16 @@ local function ShowsFriend(tooltip)
 	return TooltipUnitIsEnemy(tooltip) == false
 end
 
--- The kinds, each a Show in row (tooltip:<kind>, its Always tooltipAlways<kind>):
--- hidden while it's off. One that's more than one kind (a quest mob is an
--- enemy too) hides only if every kind it is is off.
-local TOOLTIP_ROW = setmetatable({}, { __index = function(rows, kind)
-	rows[kind] = "tooltip:" .. kind
-	return rows[kind]
-end })
+-- The kinds a tooltip can be, each a word of the Tooltips row's rule
+-- (tooltip:All, its Always tooltipAlways): one can be more than one (a quest
+-- mob is an enemy too); none of them, tipother.
 local HIDE_KINDS = {
-	{ kind = "Quest", test = ShowsQuestObjective, why = "quest objective" },
-	{ kind = "Gather", test = ShowsGatheringNode, why = "gatherable" },
-	{ kind = "Enemy", test = ShowsEnemy, why = "enemy" },
-	{ kind = "Friendly", test = ShowsFriend, why = "friendly" },
+	{ word = "tipquest", test = ShowsQuestObjective, why = "quest objective" },
+	{ word = "tipgather", test = ShowsGatheringNode, why = "gatherable" },
+	{ word = "tipenemy", test = ShowsEnemy, why = "enemy" },
+	{ word = "tipfriendly", test = ShowsFriend, why = "friendly" },
 }
+local tooltipKinds = {}
 
 -- Optional trace for /cine debug tooltip: what the tooltip did and why.
 local function Trace(what, ...)
@@ -3567,12 +3544,10 @@ local function StillWaiting()
 end
 
 -- Whether the tooltip should be hidden now, and why. Only in CineMode, with
--- the key not held, and never a minimap blip's. In a camera mode ticked
--- (tooltipHideIn*), every world and unit frame tooltip; otherwise the kinds
--- ticked (HIDE_KINDS, Always or, in fights, In combat), a world or unit frame
--- one only with each of its kinds ticked, and everything else (the UI's
--- too) with Everything else ticked. Then a world or unit frame one until
--- the mouse has been still a while, with Hide until the mouse is still.
+-- the key not held, and never a minimap blip's. While the Tooltips row is
+-- off, its rule reading the tooltip's kinds (HIDE_KINDS; a UI one is always
+-- tipother). Then a world or unit frame one until the mouse has been still
+-- a while, with Hide until the mouse is still.
 local function HidesByKind(tooltip)
 	if not Handling() or not ns.lastCinematic or ShowKeyDown() then
 		return false
@@ -3582,29 +3557,24 @@ local function HidesByKind(tooltip)
 		return false
 	end
 	local unitOrWorld = world or TooltipHasUnit(tooltip)
-	local mode = TooltipCameraMode()
-	if unitOrWorld and mode and ns.db[TOOLTIP_HIDE_IN[mode]] then
-		return true, mode
-	end
-	-- (Hidden: its Show in row, tooltip:<kind>, off here and now.)
-	local function Ticked(kind)
-		return not ns.RowOnNow(TOOLTIP_ROW[kind], ns.db["tooltipAlways" .. kind], true)
-	end
+	-- (Hidden: the Tooltips row, tooltip:All, off here and now for its kinds.)
 	local why
+	wipe(tooltipKinds)
 	if unitOrWorld then
 		for _, kind in ipairs(HIDE_KINDS) do
 			if kind.test(tooltip) then
-				if not Ticked(kind.kind) then
-					return false
-				end
-				why = kind.why
+				tooltipKinds[kind.word] = true
+				why = why and why .. ", " .. kind.why or kind.why
 			end
 		end
 	end
 	if why == nil then
-		return Ticked("Else"), "else"
+		tooltipKinds.tipother, why = true, "else"
 	end
-	return true, why
+	ns.tooltipKinds = tooltipKinds
+	local hide = not ns.RowOnNow("tooltip:All", ns.db.tooltipAlways, true)
+	ns.tooltipKinds = nil
+	return hide, why
 end
 
 local function Hides(tooltip)
@@ -3631,7 +3601,7 @@ local checked
 
 local function CheckState()
 	return ("%s:%s:%s:%s"):format(tostring(ns.lastCinematic), tostring(InCombat()),
-		tostring(TooltipCameraMode()), tostring(ShowKeyDown()))
+		tostring(ns.activeCam ~= nil), tostring(ShowKeyDown()))
 end
 
 local function StillChecked(tooltip)

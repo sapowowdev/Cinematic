@@ -2329,6 +2329,9 @@ ns.RULE_WORDS = {
 	-- (A fight starting or ending: only Combat Vision's row is read then.)
 	entering = "entering", enter = "entering", leaving = "leaving", leave = "leaving",
 	boss = "boss",
+	-- (The tooltip being decided on, by kind: only the Tooltips row's rule reads them.)
+	tipenemy = "tipenemy", tipfriendly = "tipfriendly", tipgather = "tipgather", tipquest = "tipquest",
+	tipother = "tipother",
 	tank = "tank", healer = "healer", heal = "healer", damage = "damage", dps = "damage",
 }
 do
@@ -2657,6 +2660,11 @@ do
 		else
 			facts.cinemode = ns.lastCinematic and true or false
 		end
+		-- (The tooltip's kinds, while Effects asks about one: ns.tooltipKinds.)
+		local tip = ns.tooltipKinds
+		facts.tipenemy, facts.tipfriendly = tip and tip.tipenemy or false, tip and tip.tipfriendly or false
+		facts.tipgather, facts.tipquest = tip and tip.tipgather or false, tip and tip.tipquest or false
+		facts.tipother = tip and tip.tipother or false
 		if factsAt == now and factsCombat == inCombat then
 			return facts
 		end
