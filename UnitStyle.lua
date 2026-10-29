@@ -299,6 +299,9 @@ local function DressName(text, view, unit)
 	saved.fonted = true
 end
 
+-- (For the Raid frames page, RaidStyle.lua: its own look read as these keys.)
+ns.UnitStyleDressBar, ns.UnitStyleDressName, ns.UnitStyleColor = DressBar, DressName, UnitColor
+
 -- The portrait: a player's class icon, or their face (the game's).
 local CLASS_ICONS = "Interface\\TargetingFrame\\UI-Classes-Circles"
 local function DressPortrait(portrait, view, unit)

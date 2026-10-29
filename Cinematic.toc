@@ -99,6 +99,7 @@ TooltipStyle.lua
 PersonalStyle.lua
 PlateCastStyle.lua
 UnitStyle.lua
+RaidStyle.lua
 GeneralStyle.lua
 Focus.lua
 Tracking.lua

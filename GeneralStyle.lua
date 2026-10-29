@@ -10,6 +10,7 @@ local L = ns.L
 -- open (ns.OpenOptions), its shared settings.
 local PAGES = {
 	{ "Unit frames", "Unit Style", { "ufTexture", "ufFont", "ufOutline", "ufBorder" } },
+	{ "Raid frames", "Raid Style", { "rfTexture", "rfFont", "rfOutline", "rfBorder" } },
 	{ "Personal resources", "Personal Style", { "prdTexture", "prdBorder" } },
 	{ "Tooltips", "Tooltip Style", { "tooltipBarTexture", "tooltipFont", "tooltipOutline", "tooltipEdge" } },
 	{ "Cast bars", "Cast Bar Style", { "plateCastFill", "plateCastFont", "plateCastOutline", "plateCastBorder" } },

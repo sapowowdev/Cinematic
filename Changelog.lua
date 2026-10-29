@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-29", page = "Raid Style", title = "Raid frames style",
+		text = "Raid frames, raid-style party frames and arena frames have a page of their own in the Style hub: " ..
+		"their health bar's texture, border and color, their background, and their names, with a Default tab " ..
+		"and a tab for each that can have its own look." },
 	{ date = "2026-10-29", page = "Unit Style", title = "Unit frames style",
 		text = "Your player, target, focus, pet and target of target frames have a page of their own in the Style " ..
 		"hub: their bars' texture and border, health and name colors, the name's font, and class icons for " ..

@@ -91,6 +91,7 @@ TooltipStyle.lua
 PersonalStyle.lua
 PlateCastStyle.lua
 UnitStyle.lua
+RaidStyle.lua
 GeneralStyle.lua
 WindGuideStyles.lua
 WindGuide.lua

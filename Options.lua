@@ -1327,6 +1327,7 @@ do
 			{ "Tooltip Style", "Interface\\Icons\\INV_Misc_Note_05", label = "Tooltips", section = "Game" },
 			{ "Unit Style", "Interface\\Icons\\INV_Misc_Head_Human_01", label = "Unit frames",
 				section = "Game" },
+			{ "Raid Style", "Interface\\Icons\\INV_Misc_GroupNeedMore", label = "Raid frames", section = "Game" },
 			{ "Personal Style", "Interface\\Icons\\Spell_Holy_SealOfVengeance", label = "Personal resources",
 				section = "Game" },
 			{ "Letterbox Style", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", label = "Letterbox",
@@ -12751,6 +12752,9 @@ ns.OnLanguage(function()
 	end
 	if ns.CreateUnitStylePanel then -- (UnitStyle.lua)
 		ns.CreateUnitStylePanel(ns.lowHealthKit)
+	end
+	if ns.CreateRaidStylePanel then -- (RaidStyle.lua)
+		ns.CreateRaidStylePanel(ns.lowHealthKit)
 	end
 	if ns.CreateGeneralStylePanel then -- (GeneralStyle.lua)
 		ns.CreateGeneralStylePanel(ns.lowHealthKit)
