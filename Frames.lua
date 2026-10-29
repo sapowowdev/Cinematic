@@ -4772,56 +4772,81 @@ end
 -- Utility bars): the icons it shows sit together in their
 -- order, centered on the bar's rows (or columns), instead of faded ones
 -- leaving gaps; the faded ones wait after the last shown. Each icon's place
--- in the game's own layout is read off it while it's where the game put it:
--- found anywhere but where it was last put here, the game laid the bar out
--- again. Not in Edit Mode. (The others slide; one coming back from faded is
--- put straight in its place.)
+-- in the game's own layout is caught as the game sets it (a hook on the
+-- icon's SetPoint: comparing with where it was last put here missed some,
+-- leaving the Essential bar's places from two different layouts), and the
+-- icon goes straight back where it showed, on to its new goal next pass.
+-- Not in Edit Mode. (The others slide; one coming back from faded is put
+-- straight in its place.)
 do
 	local SLIDE_RATE = 12 -- (share of the distance left, a second)
 	local slotOf = setmetatable({}, { __mode = "k" }) -- icon -> the game's place: { point, relativeTo, relativePoint, x, y }
 	local putAt = setmetatable({}, { __mode = "k" }) -- icon -> { x, y }, where it was last put here
 	local goal = setmetatable({}, { __mode = "k" }) -- icon -> { x, y }, where it's going
 	local placeOf = setmetatable({}, { __mode = "k" }) -- icon -> its place in its bar (layoutIndex)
+	local watched = setmetatable({}, { __mode = "k" }) -- icon -> true once its SetPoint is hooked
 	local barIcons, lineCross, wanted, shownIn = {}, {}, {}, {}
+	local putting = false -- (our own SetPoint: not the game's place)
 
 	local function Movable(icon)
 		return not IsForbidden(icon)
 			and not (InCombatLockdown() and icon.IsProtected and ns.Flag(icon:IsProtected()))
 	end
 
-	-- The game's place for an icon (read again if it's not where it was put here), or nil.
-	local function ReadSlot(icon)
+	-- Reads an icon's one point into its slot; false if it can't be read.
+	local function ReadPoint(icon)
 		local okCount, count = pcall(icon.GetNumPoints, icon)
-		if not okCount or Secret(count) or count ~= 1 then return slotOf[icon] end
+		if not okCount or Secret(count) or count ~= 1 then return false end
 		local ok, point, relativeTo, relativePoint, x, y = pcall(icon.GetPoint, icon, 1)
 		if not ok or Secret(point, relativeTo, relativePoint, x, y) or type(x) ~= "number" or type(y) ~= "number" then
-			return slotOf[icon]
+			return false
 		end
-		local at = putAt[icon]
-		if at and math.abs(at[1] - x) < 0.01 and math.abs(at[2] - y) < 0.01 then
-			return slotOf[icon]
-		end
-		putAt[icon] = nil
 		local slot = slotOf[icon] or {}
 		slot[1], slot[2], slot[3], slot[4], slot[5] = point, relativeTo, relativePoint, x, y
 		slotOf[icon] = slot
-		return slot
+		return true
 	end
 
 	local function Put(icon, x, y)
 		local slot = slotOf[icon]
 		if not slot or not Movable(icon) then return end
+		putting = true
 		icon:SetPoint(slot[1], slot[2], slot[3], x, y)
+		putting = false
 		local at = putAt[icon] or {}
 		at[1], at[2] = x, y
 		putAt[icon] = at
+	end
+
+	-- The game placed an icon: that's its slot now; one that was put here
+	-- goes straight back where it showed.
+	local function GameSetPoint(icon)
+		if putting or not ReadPoint(icon) then return end
+		local at = putAt[icon]
+		putAt[icon] = nil
+		if at and goal[icon] then Put(icon, at[1], at[2]) end
+	end
+
+	-- The game's place for an icon, or nil. (Before its hook, read while it's
+	-- not been put here.)
+	local function ReadSlot(icon)
+		if not watched[icon] then
+			if not putAt[icon] then ReadPoint(icon) end
+			if slotOf[icon] and type(icon.SetPoint) == "function" then
+				watched[icon] = true
+				hooksecurefunc(icon, "SetPoint", GameSetPoint)
+			end
+		end
+		return slotOf[icon]
 	end
 
 	local function PutBack(icon)
 		ReadSlot(icon)
 		local slot = slotOf[icon]
 		if slot and putAt[icon] and Movable(icon) then
+			putting = true
 			icon:SetPoint(slot[1], slot[2], slot[3], slot[4], slot[5])
+			putting = false
 		end
 		putAt[icon], goal[icon] = nil, nil
 	end
@@ -4896,25 +4921,14 @@ do
 		end
 	end
 
-	-- The game just laid a bar out again, putting its icons back in their
-	-- places (maybe new ones: it reuses icons for other spells): those places
-	-- are read again, and the icons go straight back where they showed and
-	-- on to their goals, the same frame, so they don't jump back and forth.
-	local hooked, seenAt, relaying = {}, {}, false
+	-- The game just laid a bar out again (maybe with new icons: it reuses
+	-- them for other spells; their places were caught by GameSetPoint): new
+	-- goals the same frame.
+	local hooked, relaying = {}, false
 	local function LaidOut()
 		if relaying then return end
 		relaying = true
-		for icon, at in pairs(putAt) do
-			local was = seenAt[icon] or {}
-			was[1], was[2] = at[1], at[2]
-			seenAt[icon] = was
-			putAt[icon] = nil
-		end
 		ns.CenterCooldownIcons()
-		for icon, was in pairs(seenAt) do
-			if goal[icon] then Put(icon, was[1], was[2]) end
-			seenAt[icon] = nil
-		end
 		relaying = false
 	end
 
@@ -4980,6 +4994,44 @@ do
 	function ns.UncenterCooldownIcons()
 		for icon in pairs(putAt) do PutBack(icon) end
 		wipe(goal)
+	end
+
+	-- /cine debug cooldowns: what Close the gaps sees in each bar.
+	function ns.ReportCenteredIcons()
+		local function Num(value)
+			if Secret(value) then return "secret" end
+			return type(value) == "number" and ("%.1f"):format(value) or tostring(value)
+		end
+		local editMode = _G.EditModeManagerFrame
+		ns.Print(("close the gaps: edit mode %s, in combat %s"):format(
+			tostring(editMode and editMode.IsEditModeActive and ns.Flag(editMode:IsEditModeActive()) or false),
+			tostring(InCombatLockdown())))
+		for bar, group in pairs(ns.COOLDOWN_BAR_GROUPS) do
+			local viewer = _G[bar]
+			print(("  %s (%s): on=%s, viewer %s, Layout hooked %s"):format(bar, group,
+				tostring(ns.CooldownGroupCentered(group)), type(viewer),
+				tostring(hooked[bar] or false)))
+		end
+		local count = 0
+		EachCooldownIcon(function(icon, id, bar)
+			local group = ns.COOLDOWN_BAR_GROUPS[bar]
+			if not group then return end
+			count = count + 1
+			if count > 30 then return end
+			local okCount, points = pcall(icon.GetNumPoints, icon)
+			local ok, point, relativeTo, _, x, y = pcall(icon.GetPoint, icon, 1)
+			local slot, at, to = slotOf[icon], putAt[icon], goal[icon]
+			local relName = ok and not Secret(relativeTo) and type(relativeTo) == "table" and relativeTo.GetName
+				and relativeTo:GetName() or "?"
+			print(("  %s spell=%s place=%s points=%s now %s %s,%s on %s | slot %s | put %s | goal %s | target %s, movable %s")
+				:format(group, tostring(id), Num(icon.layoutIndex), okCount and Num(points) or "?",
+				ok and tostring(point) or "?", ok and Num(x) or "?", ok and Num(y) or "?", tostring(relName),
+				slot and (Num(slot[4]) .. "," .. Num(slot[5])) or "none",
+				at and (Num(at[1]) .. "," .. Num(at[2])) or "none",
+				to and (Num(to[1]) .. "," .. Num(to[2])) or "none",
+				tostring(readyTargets[icon]), tostring(Movable(icon))))
+		end)
+		if count == 0 then print("  (no Essential or Utility icons found)") end
 	end
 end
 
@@ -5340,6 +5392,7 @@ function ns.ReportCooldowns()
 	if not any then
 		ns.Print("no Cooldown Manager frames found among the faded frames")
 	end
+	ns.ReportCenteredIcons()
 	cooldownCheckedAt = 0
 	ns.Print(("recharging now: essential %s, utility %s"):format(tostring(AnyCooldownRecharging(now, "essential")),
 		tostring(AnyCooldownRecharging(now, "utility"))))
