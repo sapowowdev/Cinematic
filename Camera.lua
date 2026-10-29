@@ -1034,7 +1034,7 @@ local function MoveAxis(axis, degreesPerSecond, positive)
 	-- (While a fly-by holds the turn speed setting, or is about to put yours
 	-- back, the speed is worked out from yours: worked out from the fly-by's,
 	-- it would jump as yours came back.)
-	local held = axis == ns.yawAxis and ns.flyByHoldsYawSpeed and tonumber(ns.db.savedCVars[axis.speedCVar])
+	local held = axis == ns.yawAxis and ns.flyByHoldsYawSpeed and ns.YourSpeed(axis.speedCVar)
 	local speed = degreesPerSecond / (held or tonumber(GetCVar(axis.speedCVar)) or axis.defaultSpeed)
 	-- Every MoveView*Start call restarts the camera move, which hitches if done
 	-- every frame. Skip imperceptible changes, and while already moving the same
@@ -2215,7 +2215,8 @@ end
 -- (re-sending it showed as a snap). It stops once it has covered the distance;
 -- your setting then comes back.
 local DEATH_TILT_TIME = 3 -- seconds for the full tilt, up or down
-local TILT_SPEED_CVAR = "cameraPitchMoveSpeed"
+-- Your tilt speed setting, and the tilt's hold on it (ns.HoldSpeed, Core.lua).
+local TILT = { CVAR = "cameraPitchMoveSpeed", WHO = "modes:tilt" }
 local TILT_EASE = 0.35     -- share of the tilt spent speeding up (and again slowing down)
 local TILT_STEP = 0.1      -- seconds between speed changes, at most
 local TILT_MIN_SPEED = 1   -- degrees per second: the slowest step sent
@@ -2242,7 +2243,7 @@ local function StopDeathTilt()
 	ns.orbit.tiltRestoreAt = GetTime() + TILT_RESTORE_DELAY
 	C_Timer.After(TILT_RESTORE_DELAY, function()
 		if not ns.orbit.tilting then
-			ns.RestoreCVar(TILT_SPEED_CVAR)
+			ns.ReleaseSpeed(TILT.WHO, TILT.CVAR)
 		end
 	end)
 end
@@ -2260,11 +2261,11 @@ end)
 
 local function StartDeathTilt(delta, T)
 	StopDeathTilt()
-	ns.SaveCVar(TILT_SPEED_CVAR)
+	ns.HoldSpeed(TILT.WHO, TILT.CVAR)
 	ns.orbit.tilting = true
 	ns.DeathTestLog(("tilt %s %.0f° over %.1fs (zoom %.1f, combat %s, your tilt speed %s)"):format(
 		delta > 0 and "up" or "down", math.abs(delta), T, GetCameraZoom and GetCameraZoom() or -1,
-		tostring(InCombatLockdown()), tostring(ns.db.savedCVars[TILT_SPEED_CVAR])))
+		tostring(InCombatLockdown()), tostring(ns.YourSpeed(TILT.CVAR))))
 end
 
 -- Send the tilt at this speed (degrees per second), if it's changed enough.
@@ -2276,7 +2277,7 @@ local function SendTiltSpeed(tilt, speed, positive, live)
 	local now = GetTime()
 	if live and tilt.sent then
 		if math.abs(speed - tilt.sent) > tilt.sent * TILT_LIVE_CHANGE then
-			SetCVar(TILT_SPEED_CVAR, ("%.2f"):format(speed))
+			ns.SetHeldSpeed(TILT.WHO, TILT.CVAR, speed)
 			tilt.sent = speed
 		end
 		return
@@ -2284,10 +2285,10 @@ local function SendTiltSpeed(tilt, speed, positive, live)
 	if tilt.sent and (now - tilt.sentAt < TILT_STEP or math.abs(speed - tilt.sent) <= tilt.sent * 0.1) then
 		return
 	end
-	SetCVar(TILT_SPEED_CVAR, ("%.2f"):format(speed))
-	if not tilt.sent and math.abs((tonumber(GetCVar(TILT_SPEED_CVAR)) or 0) - speed) > 0.1 then
+	ns.SetHeldSpeed(TILT.WHO, TILT.CVAR, speed)
+	if not tilt.sent and math.abs((tonumber(GetCVar(TILT.CVAR)) or 0) - speed) > 0.1 then
 		ns.DeathTestLog(("tilt speed didn't take: asked %.2f, got %s"):format(speed,
-			tostring(GetCVar(TILT_SPEED_CVAR))))
+			tostring(GetCVar(TILT.CVAR))))
 	end
 	local axis = ns.pitchAxis
 	axis.positive, axis.moving, axis.speed, axis.lastStart = positive, true, 1, now
@@ -3427,6 +3428,7 @@ local FLYBY = {
 	SETTLE_TURN = 12,   -- seconds before it must be done that the arrival's turn behind you starts (UpdateTaxi)
 	SETTLE_ZOOM = 3,    -- seconds the zoom glides back first, just before that
 	SPEED_CVAR = "cameraYawMoveSpeed",
+	WHO = "modes:flyby", -- (its hold on your turn speed: ns.HoldSpeed, Core.lua)
 	MIN_SETTING = 1,    -- the lowest turn speed setting sent (lower, the game uses its full speed)
 	SETTING_CHANGE = 0.02, -- speed setting changes smaller than this share aren't sent
 	PRIME_TIME = 0.2,   -- seconds the starting speed is set before the turn starts
@@ -3493,7 +3495,7 @@ local function StopTurn()
 		flyby.turning, flyby.sent = false, nil
 		C_Timer.After(FLYBY.RESTORE_DELAY, function()
 			if not flyby.turning then
-				ns.RestoreCVar(FLYBY.SPEED_CVAR)
+				ns.ReleaseSpeed(FLYBY.WHO, FLYBY.SPEED_CVAR)
 				ns.flyByHoldsYawSpeed = false
 			end
 		end)
@@ -3512,12 +3514,11 @@ local function BeginStep(phase, turn, T)
 	if math.abs(turn) < 0.5 then
 		return
 	end
-	ns.SaveCVar(FLYBY.SPEED_CVAR)
 	ns.flyByHoldsYawSpeed = true
-	local yours = tonumber(ns.db.savedCVars[FLYBY.SPEED_CVAR]) or ns.yawAxis.defaultSpeed
+	local yours = ns.HoldSpeed(FLYBY.WHO, FLYBY.SPEED_CVAR)
 	flyby.cruise = math.abs(turn) / (T * 0.5) -- top speed of one smooth swell (EaseShape, ease 0.5)
 	flyby.share = flyby.cruise / yours
-	SetCVar(FLYBY.SPEED_CVAR, ("%.2f"):format(FLYBY.MIN_SETTING))
+	ns.SetHeldSpeed(FLYBY.WHO, FLYBY.SPEED_CVAR, FLYBY.MIN_SETTING)
 	flyby.primedUntil = GetTime() + FLYBY.PRIME_TIME
 	flyby.turning, flyby.sent = true, nil
 end
@@ -3720,7 +3721,7 @@ local function StepFlyBy(now, elapsed)
 			CallCameraFunction(axis.positive and axis.positiveStart or axis.negativeStart, flyby.share)
 			flyby.sent = FLYBY.MIN_SETTING
 		elseif math.abs(setting - flyby.sent) > flyby.sent * FLYBY.SETTING_CHANGE then
-			SetCVar(FLYBY.SPEED_CVAR, ("%.2f"):format(setting))
+			ns.SetHeldSpeed(FLYBY.WHO, FLYBY.SPEED_CVAR, setting)
 			flyby.sent = setting
 		end
 	end

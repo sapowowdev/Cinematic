@@ -2323,15 +2323,131 @@ do
 		end
 	end
 
+	-- Your turn, tilt and zoom speed settings (and camera follow's swing
+	-- speeds). There's no asking the game for a slow camera move, so our
+	-- cameras lower one of your speed settings and step it. They change them
+	-- only here: a piece of a camera holds a setting while it has it lowered
+	-- (ns.SetHeldSpeed, who = "camera:piece") and lets go once done
+	-- (ns.ReleaseSpeed). Yours is noted as the first takes it (a setting left
+	-- stuck low doesn't count: your last good one, or the game's default) and
+	-- goes back as the last lets go, in whatever order they stop. Each camera
+	-- kept its own copy before, and every slip (two at once, the watch below
+	-- putting yours back mid-tilt) left a crawl behind as yours, which the
+	-- game then saved: 15.14 for tilting, after the death tilt.
+	-- Stuck: lower than you'd ever set it (the death tilt peaks near 15 deg/s;
+	-- the quest camera's zoom crawls at 0.3-0.5 yards a second).
+	local SPEEDS = { cameraYawMoveSpeed = 180, cameraPitchMoveSpeed = 90, cameraZoomSpeed = 20,
+		cameraYawSmoothSpeed = 180, cameraPitchSmoothSpeed = 45 }
+	local STUCK_SPEED = { cameraYawMoveSpeed = 60, cameraPitchMoveSpeed = 30, cameraZoomSpeed = 1,
+		cameraYawSmoothSpeed = 10, cameraPitchSmoothSpeed = 10 }
+	local getDefault = (C_CVar and C_CVar.GetCVarDefault) or GetCVarDefault
+	local holders = {} -- [cvar] = { [who] = true }
+
+	local function DefaultSpeed(cvar)
+		return getDefault and tonumber(getDefault(cvar)) or SPEEDS[cvar]
+	end
+
+	local function Sane(cvar, value)
+		value = tonumber(value)
+		return value and value >= (STUCK_SPEED[cvar] or 0) and value or nil
+	end
+
+	local function Held(cvar)
+		return holders[cvar] ~= nil and next(holders[cvar]) ~= nil
+	end
+
+	-- Your setting (a number): as noted while one of ours holds it, else as
+	-- it is now (or your last good one, or the game's default, if stuck low).
+	function ns.YourSpeed(cvar)
+		local noted = ns.db.heldSpeeds[cvar]
+		if noted then
+			return tonumber(noted)
+		end
+		return Sane(cvar, GetCVar(cvar)) or Sane(cvar, ns.db.goodSpeeds[cvar]) or DefaultSpeed(cvar)
+	end
+
+	-- who takes the setting (yours noted if it's the first); returns yours.
+	function ns.HoldSpeed(who, cvar)
+		if not Held(cvar) and not ns.db.heldSpeeds[cvar] then
+			local yours = ns.YourSpeed(cvar)
+			ns.db.heldSpeeds[cvar] = tostring(yours)
+			ns.db.goodSpeeds[cvar] = tostring(yours)
+			ns.LogDetail("cvar", ("%s taken by %s (yours %s)"):format(cvar, who, tostring(yours)))
+		end
+		holders[cvar] = holders[cvar] or {}
+		holders[cvar][who] = true
+		return tonumber(ns.db.heldSpeeds[cvar])
+	end
+
+	-- Sets it (degrees, or yards, a second), held for who.
+	function ns.SetHeldSpeed(who, cvar, value)
+		ns.HoldSpeed(who, cvar)
+		SetCVar(cvar, ("%.2f"):format(value))
+	end
+
+	-- who's done with it; the last one done puts yours back.
+	function ns.ReleaseSpeed(who, cvar)
+		if holders[cvar] then
+			holders[cvar][who] = nil
+		end
+		if Held(cvar) then
+			return
+		end
+		local yours = ns.db.heldSpeeds[cvar]
+		if yours then
+			ns.db.heldSpeeds[cvar] = nil
+			ns.LogDetail("cvar", ("%s back to %s"):format(cvar, yours))
+			SetCVar(cvar, yours)
+		end
+	end
+
+	-- Whether who (or, with no who, any of ours) holds it.
+	function ns.SpeedHeld(cvar, who)
+		if who then
+			return holders[cvar] ~= nil and holders[cvar][who] == true
+		end
+		return Held(cvar)
+	end
+
+	-- Everything back at once (logging out; and at login, anything a reload
+	-- or crash left held).
+	function ns.ReleaseAllSpeeds(why)
+		for cvar in pairs(holders) do
+			holders[cvar] = nil
+		end
+		for cvar, yours in pairs(ns.db.heldSpeeds) do
+			ns.Log("cvar", ("%s back to %s (%s)"):format(cvar, yours, why))
+			SetCVar(cvar, yours)
+			ns.db.heldSpeeds[cvar] = nil
+		end
+	end
+
+	-- One of ours moving the view or holding a speed setting, whether or not
+	-- you're on the camera too (CameraHolder says "you" first). A hold by
+	-- something that isn't a camera (the test commands) counts too.
+	local function OursBusy()
+		local now = GetTime()
+		for who, camera in pairs(cameras) do
+			if now - (claims[who] or -math.huge) < CLAIM_HOLD or camera.busy() then
+				return true
+			end
+		end
+		for _, held in pairs(holders) do
+			for who in pairs(held) do
+				if not cameras[who:match("^[^:]+")] then
+					return true
+				end
+			end
+		end
+		return false
+	end
+
 	-- And a watch, should anything still slip through: once none of ours has
-	-- held the view for FREE_WAIT, a speed setting of ours still saved goes
-	-- back, and one stuck at the lowest our moves step from (as that clash
-	-- left yours: the game's own settings don't go near it) gets the game's
-	-- default. Your mouse held on the camera counts as camera input too.
-	-- Zoom speed counts as stuck lower down: the quest camera's zoom crawls
-	-- at 0.3-0.5 yards a second, and 0.5 left behind made your zoom a crawl.
-	local SPEEDS = { cameraYawMoveSpeed = 180, cameraPitchMoveSpeed = 90, cameraZoomSpeed = 20 }
-	local STUCK_SPEED = { cameraYawMoveSpeed = 10, cameraPitchMoveSpeed = 10, cameraZoomSpeed = 1 }
+	-- been busy for FREE_WAIT, a setting still held is let go (a camera that
+	-- stopped without saying), and one stuck low gets the game's default.
+	-- Your mouse held on the camera counts as camera input too.
+	-- (Not "nothing holds the view": that's you while you touch the camera,
+	-- and putting yours back then, mid death tilt, left the tilt's own.)
 	local FREE_WAIT = 1
 	local WATCH_EVERY = 0.25
 	local freeSince, watched, mouseWas = nil, 0, false
@@ -2351,8 +2467,7 @@ do
 		end
 		watched = 0
 		local now = GetTime()
-		local holder = ns.CameraHolder()
-		if holder and holder ~= "you" then
+		if OursBusy() then
 			freeSince = nil
 			return
 		end
@@ -2360,14 +2475,23 @@ do
 		if now - freeSince < FREE_WAIT then
 			return
 		end
-		for cvar, default in pairs(SPEEDS) do
-			if ns.db.savedCVars[cvar] ~= nil then
+		for cvar, held in pairs(holders) do
+			for who in pairs(held) do
+				ns.Log("cvar", ("%s still held by %s with no camera moving: let go"):format(cvar, who))
+				ns.ReleaseSpeed(who, cvar)
+			end
+		end
+		for cvar in pairs(SPEEDS) do
+			-- (From before the keeper: a camera's copy of yours.)
+			if ns.db.savedCVars[cvar] ~= nil and not activeCVars[cvar] then
 				ns.Log("cvar", ("%s left over with no camera moving: put back"):format(cvar))
 				ns.RestoreCVar(cvar)
 			end
 			local value = tonumber(GetCVar(cvar))
-			if value and value < STUCK_SPEED[cvar] then
-				ns.Log("cvar", ("%s was %s (left over from a camera move): back to %d"):format(cvar, tostring(value), default))
+			if value and value < STUCK_SPEED[cvar] and not activeCVars[cvar] and not Held(cvar) then
+				local default = DefaultSpeed(cvar)
+				ns.Log("cvar", ("%s was %s (left over from a camera move): back to %s"):format(cvar,
+					tostring(value), tostring(default)))
 				SetCVar(cvar, default)
 			end
 		end
@@ -2846,6 +2970,10 @@ function ns.EnsureTables()
 	-- Options pages' sections opened or closed with a click: "page/section" -> true or false.
 	ns.db.sectionsOpen = ns.db.sectionsOpen or {}
 	ns.db.savedCVars = ns.db.savedCVars or {}
+	-- Your camera speed settings while one of ours holds them, and your last
+	-- good ones (the speed keeper, ns.HoldSpeed): cvar -> value.
+	ns.db.heldSpeeds = ns.db.heldSpeeds or {}
+	ns.db.goodSpeeds = ns.db.goodSpeeds or {}
 	ns.db.chatPeekTypes = ns.db.chatPeekTypes or {}
 	ns.db.chatPeekChannelList = ns.db.chatPeekChannelList or { General = false, LocalDefense = false }
 	ns.db.flightTimes = ns.db.flightTimes or {}
@@ -5073,6 +5201,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 	elseif event == "PLAYER_LOGIN" then
 		ns.MusicTrace(("LOGIN volume %s music %s"):format(GetCVar("Sound_MusicVolume"), GetCVar("Sound_EnableMusic")))
 		RestoreSavedCVars()
+		ns.ReleaseAllSpeeds("left held when the game last closed")
 		if ns.musicBackOn and GetCVar("Sound_EnableMusic") == "0" then
 			SetCVar("Sound_EnableMusic", 1)
 		end
@@ -5234,6 +5363,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		ns.StopOrbitNow()
 		ns.ApplyCVarSet(ns.FLIGHT_CVARS, false)
 		ns.ApplyCVarSet(ns.RECENTER_CVARS, false)
+		ns.ReleaseAllSpeeds("logging out")
 		ns.MusicTrace(("LOGOUT done volume %s music %s"):format(GetCVar("Sound_MusicVolume"), GetCVar("Sound_EnableMusic")))
 	elseif event == "PLAYER_LEVEL_UP" then
 		ns.levelUpUntil = GetTime() + ns.LEVEL_UP_WINDOW

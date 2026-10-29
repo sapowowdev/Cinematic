@@ -77,6 +77,7 @@ local MOVE_CHANGE = 0.02 -- speed changes smaller than this share aren't sent
 local MOVE_PRIME_TIME = 0.2 -- seconds the starting speed is set before the move starts
 local SPEED_RESTORE_DELAY = 0.3 -- seconds after stopping before your speed setting comes back
 local ZOOM_CVAR = "cameraZoomSpeed"
+local WHO = "quest" -- (its holds on your speed settings: ns.HoldSpeed, Core.lua)
 local ZOOM_MIN_SPEED = 0.3 -- yards per second: the slowest step sent
 local ZOOM_DONE = 0.05     -- yards: arrived
 local ZOOM_GIVE_UP = 4     -- extra seconds to settle before a zoom that can't get there stops
@@ -188,9 +189,9 @@ end
 
 -- A speed setting put back (noted for the log).
 local function RestoreSpeed(cvar)
-	if ns.db.savedCVars[cvar] ~= nil then
+	if ns.SpeedHeld(cvar, WHO) then
 		Note(cvar .. " back")
-		ns.RestoreCVar(cvar)
+		ns.ReleaseSpeed(WHO, cvar)
 	end
 end
 
@@ -253,16 +254,15 @@ local function MoveTo(m, target, T, ease, tail)
 		m.amount = final
 		return
 	end
-	ns.SaveCVar(m.cvar)
 	-- The share of the speed setting the move is sent at: your setting is
 	-- then its top speed.
-	local yours = tonumber(ns.db.savedCVars[m.cvar]) or m.default
+	local yours = ns.HoldSpeed(WHO, m.cvar)
 	m.ease = ease or MOVE_EASE
 	m.cruise = math.abs(target - m.amount) / (m.T * (1 - m.ease))
 	m.limit = m.T + 1 + (tail and (math.abs(final - target) / tail.speed + tail.R) or 0)
 	m.share = math.max(m.cruise, m.tail and m.tail.speed or 0) / yours
 	-- The setting goes to its lowest a moment before the move starts.
-	SetCVar(m.cvar, ("%.2f"):format(MOVE_MIN_SETTING))
+	ns.SetHeldSpeed(WHO, m.cvar, MOVE_MIN_SETTING)
 	m.primedUntil = GetTime() + MOVE_PRIME_TIME
 	m.growing = final > m.amount
 	m.lastGrowing = m.growing
@@ -349,7 +349,7 @@ local function StepMove(m, elapsed)
 		Send(Command(m) .. "Start", m.share)
 		m.sent = MOVE_MIN_SETTING
 	elseif math.abs(setting - m.sent) > m.sent * MOVE_CHANGE then
-		SetCVar(m.cvar, ("%.2f"):format(setting))
+		ns.SetHeldSpeed(WHO, m.cvar, setting)
 		m.sent = setting
 	end
 	-- How far it's come, at the speed actually sent.
@@ -395,7 +395,7 @@ local function StopZoom(restoreNow)
 		return
 	end
 	zoomer.moving = false
-	local yours = tonumber(ns.db.savedCVars[ZOOM_CVAR])
+	local yours = ns.SpeedHeld(ZOOM_CVAR, WHO) and ns.YourSpeed(ZOOM_CVAR)
 	if yours and zoomer.sent and yours > zoomer.sent then
 		zoomer.release = { from = zoomer.sent, to = yours, t = 0 }
 		Note("zoom speed easing back")
@@ -420,19 +420,18 @@ local function StepZoomRelease(elapsed)
 	local f = release.t / ZOOM_RELEASE_TIME
 	-- (Yours already put back by something else, the camera watch say: stop,
 	-- or the next step would leave it at a crawl with nothing to restore.)
-	if f >= 1 or ns.db.savedCVars[ZOOM_CVAR] == nil then
+	if f >= 1 or not ns.SpeedHeld(ZOOM_CVAR, WHO) then
 		zoomer.release, zoomer.sent = nil, nil
 		RestoreSpeed(ZOOM_CVAR)
 		return
 	end
 	-- (Geometric, so it creeps up from the crawl rather than leaping.)
-	SetCVar(ZOOM_CVAR, ("%.2f"):format(release.from * (release.to / release.from) ^ (f * f)))
+	ns.SetHeldSpeed(WHO, ZOOM_CVAR, release.from * (release.to / release.from) ^ (f * f))
 end
 
 local function SetZoomSpeed(speed)
 	if not zoomer.sent or math.abs(speed - zoomer.sent) > zoomer.sent * MOVE_CHANGE then
-		ns.SaveCVar(ZOOM_CVAR) -- (again if yours was put back mid-zoom: no crawl left behind)
-		SetCVar(ZOOM_CVAR, ("%.2f"):format(speed))
+		ns.SetHeldSpeed(WHO, ZOOM_CVAR, speed)
 		zoomer.sent = speed
 	end
 end
@@ -474,7 +473,7 @@ local function ZoomTo(distance, T)
 		return
 	end
 	zoomer.release, cam.zoomBy = nil, nil
-	ns.SaveCVar(ZOOM_CVAR)
+	ns.HoldSpeed(WHO, ZOOM_CVAR)
 	Note(("zoom to %.2f"):format(distance))
 	zoomer.from, zoomer.goal, zoomer.t, zoomer.T = now, distance, 0, math.max(MOVE_MIN_TIME, T)
 	zoomer.cruise = math.abs(distance - now) / (zoomer.T * (1 - MOVE_EASE))
@@ -979,7 +978,7 @@ local function OnEvent(_, event)
 		-- No time to glide: everything goes straight back (the zoom isn't saved).
 		for _, m in pairs(movers) do
 			StopMove(m)
-			ns.RestoreCVar(m.cvar)
+			ns.ReleaseSpeed(WHO, m.cvar)
 		end
 		StopZoom(true)
 		ns.ApplyCVarSet(FOLLOW_CVARS, false)
@@ -1341,6 +1340,7 @@ do
 	local TEST_TIME, TEST_PEAK, TEST_WAIT = 4, 12, 1 -- seconds, degrees per second at most, seconds first
 	local KINDS = { setting = true, share = true, steady = true, nomove = true, gentle = true, tilt = true }
 	local PITCH = "cameraPitchMoveSpeed"
+	local TEST = "test:quest" -- (not a camera: the watch leaves its holds alone)
 	local test
 	local runner = CreateFrame("Frame")
 
@@ -1352,8 +1352,8 @@ do
 		end
 		runner:SetScript("OnUpdate", nil)
 		C_Timer.After(SPEED_RESTORE_DELAY, function()
-			ns.RestoreCVar(YAW)
-			ns.RestoreCVar(PITCH)
+			ns.ReleaseSpeed(TEST, YAW)
+			ns.ReleaseSpeed(TEST, PITCH)
 		end)
 		ns.Print("start test (" .. test.kind .. "): done")
 		test = nil
@@ -1365,12 +1365,12 @@ do
 		if t < 0 then
 			return
 		end
-		local yours = tonumber(ns.db.savedCVars[YAW] or GetCVar(YAW)) or 180
+		local yours = ns.YourSpeed(YAW)
 		local speed = math.max(MOVE_MIN_SPEED, TEST_PEAK * EaseShape(t, TEST_TIME, MOVE_EASE))
 		local now = GetTime()
 		if test.kind == "setting" then
 			if not test.primedAt then
-				SetCVar(YAW, ("%.2f"):format(MOVE_MIN_SPEED))
+				ns.SetHeldSpeed(TEST, YAW, MOVE_MIN_SPEED)
 				test.primedAt = now
 			elseif not test.sent then
 				if now - test.primedAt >= MOVE_PRIME_TIME then
@@ -1378,7 +1378,7 @@ do
 					test.sent = MOVE_MIN_SPEED
 				end
 			elseif math.abs(speed - test.sent) > test.sent * MOVE_CHANGE then
-				SetCVar(YAW, ("%.2f"):format(speed))
+				ns.SetHeldSpeed(TEST, YAW, speed)
 				test.sent = speed
 			end
 		elseif test.kind == "share" then
@@ -1394,10 +1394,10 @@ do
 		elseif test.kind == "gentle" or test.kind == "tilt" then
 			local cvar = test.kind == "tilt" and PITCH or YAW
 			local peak = test.kind == "tilt" and TEST_PEAK * 2 / 3 or TEST_PEAK
-			local share = peak / (tonumber(ns.db.savedCVars[cvar]) or (cvar == PITCH and 90 or 180))
+			local share = peak / ns.YourSpeed(cvar)
 			local setting = math.max(MOVE_MIN_SETTING, peak * EaseShape(t, TEST_TIME, MOVE_EASE) / share)
 			if not test.primedAt then
-				SetCVar(cvar, ("%.2f"):format(MOVE_MIN_SETTING))
+				ns.SetHeldSpeed(TEST, cvar, MOVE_MIN_SETTING)
 				test.primedAt = now
 			elseif not test.sent then
 				if now - test.primedAt >= MOVE_PRIME_TIME then
@@ -1405,11 +1405,11 @@ do
 					test.sent = MOVE_MIN_SETTING
 				end
 			elseif math.abs(setting - test.sent) > test.sent * MOVE_CHANGE then
-				SetCVar(cvar, ("%.2f"):format(setting))
+				ns.SetHeldSpeed(TEST, cvar, setting)
 				test.sent = setting
 			end
 		elseif not test.sent then -- nomove
-			SetCVar(YAW, ("%.2f"):format(MOVE_MIN_SPEED))
+			ns.SetHeldSpeed(TEST, YAW, MOVE_MIN_SPEED)
 			test.sent = MOVE_MIN_SPEED
 		end
 		if t >= TEST_TIME then
@@ -1429,9 +1429,9 @@ do
 			return false, "not while the quest cam is moving"
 		end
 		if kind == "setting" or kind == "nomove" or kind == "gentle" then
-			ns.SaveCVar(YAW)
+			ns.HoldSpeed(TEST, YAW)
 		elseif kind == "tilt" then
-			ns.SaveCVar(PITCH)
+			ns.HoldSpeed(TEST, PITCH)
 		end
 		test = { kind = kind, t = 0 }
 		runner:SetScript("OnUpdate", OnTestUpdate)

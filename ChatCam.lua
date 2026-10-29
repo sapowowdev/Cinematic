@@ -154,7 +154,8 @@ local ZOOM_MARGIN = 0.5 -- yards: already about this close, so no zoom in
 local ZOOM_EDGE = 0.7   -- the zoom in eases to a stop once the speaker's bubble middle is this near an edge (-1 to 1)
 local ZOOM_STOP_TIME = 0.8 -- ...over this many seconds
 local ZOOM_YOURS = 1.5  -- yards from where it zoomed to: you've zoomed yourself, so no zoom back out
-local CVAR, DEFAULT_SPEED = "cameraYawMoveSpeed", 180
+local CVAR = "cameraYawMoveSpeed"
+local WHO = "chatcam" -- (its hold on your turn speed: ns.HoldSpeed, Core.lua)
 
 local FOLLOW_CVARS = { values = { cameraSmoothStyle = "0" } } -- (camera follow would pull the view back)
 
@@ -287,20 +288,19 @@ local function StopMove()
 	end
 	turn.moving, turn.sent, turn.stopping, turn.stoppedAt = false, nil, nil, GetTime()
 	-- (Your setting back a moment later, so the end of the move can't run at
-	-- full speed; not if a new move has started, or someone else has changed it.
+	-- full speed; not if a new move has started.
 	-- Held till then: see the camera lock.)
-	local last = turn.setting
 	turn.restoring = (turn.restoring or 0) + 1
 	C_Timer.After(SPEED_RESTORE_DELAY, function()
 		turn.restoring = turn.restoring - 1
-		if not turn.moving and last and tonumber(GetCVar(CVAR)) == tonumber(("%.2f"):format(last)) then
-			ns.RestoreCVar(CVAR)
+		if not turn.moving then
+			ns.ReleaseSpeed(WHO, CVAR)
 		end
 	end)
 end
 
 local function SendSetting(setting)
-	SetCVar(CVAR, ("%.2f"):format(setting))
+	ns.SetHeldSpeed(WHO, CVAR, setting)
 	turn.setting = setting
 end
 
@@ -367,8 +367,7 @@ local function MoveTo(target, T, ease, kind, from)
 	turn.right = target > turn.amount
 	turn.from, turn.speed, turn.cruise = from, from, cruise
 	-- The share of your speed setting it's sent at: your setting is then its top speed.
-	ns.SaveCVar(CVAR)
-	turn.share = turn.cruise / (tonumber(ns.db.savedCVars[CVAR]) or DEFAULT_SPEED)
+	turn.share = turn.cruise / ns.HoldSpeed(WHO, CVAR)
 	if carrying and turn.sent then
 		-- (Carrying on from a move under way: sent again at the new share, the
 		-- setting moved so the speed holds.)
@@ -391,8 +390,7 @@ end
 local function StartTrack(right, want)
 	StopMove()
 	turn.kind, turn.right, turn.want, turn.speed, turn.t = "track", right, want, 0, 0
-	ns.SaveCVar(CVAR)
-	turn.share = ns.db.chatCamSwingSpeed / (tonumber(ns.db.savedCVars[CVAR]) or DEFAULT_SPEED)
+	turn.share = ns.db.chatCamSwingSpeed / ns.HoldSpeed(WHO, CVAR)
 	SendSetting(SPEED_MIN_SETTING)
 	turn.primedUntil = GetTime() + SPEED_PRIME_TIME
 	turn.stopping = nil
