@@ -42,7 +42,8 @@ function ns.RulePieces()
 	return {
 		{ L["Logic"], { 1, 1, 1 }, { { "and", "AND" }, { "or", "OR" }, { "not", "NOT" }, { "(", "(" }, { ")", ")" } } },
 		{ L["Combat"], { 1, 0.45, 0.4 }, { { "combat", L["In combat"] }, { "calm", L["Calm Timer"] },
-			{ "nocombat", L["Out of combat"] }, { "camera", L["In a camera mode"] } } },
+			{ "nocombat", L["Out of combat"] }, { "camera", L["In a camera mode"] },
+			{ "entering", L["Entering combat"] }, { "leaving", L["Leaving combat"] }, { "boss", L["Boss fight"] } } },
 		{ L["Target"], { 1, 0.65, 0.25 }, { { "enemy", L["Enemy targeted"] }, { "friendly", L["Friend targeted"] },
 			{ "target", L["Anything targeted"] }, { "targetself", L["You"] }, { "enemyplayer", L["Enemy Players"] },
 			{ "hostilenpc", L["Hostile NPCs"] }, { "neutralplayer", L["Neutral Players"] },
@@ -53,7 +54,7 @@ function ns.RulePieces()
 			{ "elite28", L["Elite near (28 yards)"] }, { "elite40", L["Elite near (40 yards)"] } } },
 		{ L["Location"], { 0.45, 0.75, 1 }, location },
 		{ L["You"], { 0.8, 0.6, 1 }, { { "mounted", L["Mounted"] }, { "flagged", L["PvP flagged"] },
-			{ "group", L["Grouped"] } } },
+			{ "group", L["Grouped"] }, { "cinemode", L["In CineMode"] } } },
 		{ L["Role"], { 0.4, 0.85, 0.5 }, { { "tank", L["Tank"] }, { "healer", L["Healer"] }, { "damage", L["Damage"] } } },
 	}
 end
@@ -1035,6 +1036,12 @@ function ns.ListRowParts(Key, columns, columnTips, setAlways, opts)
 				function() SetExtra("camShow", not ExtraOn("camShow")) end, nil,
 				L["On while a camera mode runs (flights, AFK, cozy and the rest)."] }
 		end
+	end
+	-- (A row's own items at the Combat dropdown's end: opts.combatItems, each
+	-- { name, isOn(), toggle(), usable() or nil, tip }. Not words of the
+	-- row's rule: the row reads them itself.)
+	for _, item in ipairs(opts.combatItems or {}) do
+		menus[1][#menus[1] + 1] = item
 	end
 	local function Words()
 		local words = {}

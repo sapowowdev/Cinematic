@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-29", page = "Combat Vision", title = "Combat Vision",
+		text = "A cue as you go into a fight and come out of it: a word on the screen or in a letterbox bar, a " ..
+		"pulse round the edges, an icon, and sounds you pick for each kind of fight, like horns for a raid boss. " ..
+		"Its look has a page in the Style hub, with presets and a preview." },
 	{ date = "2026-10-29", page = "Roll Style", title = "Roll Vision style",
 		text = "The loot roll window has a page of its own in the Style hub: its cards, text, the time bar, " ..
 		"picks as icons or colored words, and how the winner shows, with presets and a preview." },

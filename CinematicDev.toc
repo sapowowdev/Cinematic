@@ -82,6 +82,9 @@ StylePages.lua
 LetterboxStyle.lua
 QuestItemStyle.lua
 RollStyle.lua
+CombatSounds.lua
+CombatSoundRules.lua
+CombatVision.lua
 WindGuideStyles.lua
 WindGuide.lua
 Focus.lua

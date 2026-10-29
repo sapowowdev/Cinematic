@@ -1207,11 +1207,13 @@ do
 			{ "Letterbox Style", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", label = "Letterbox" },
 			{ "Quest Item Style", "Interface\\Icons\\INV_Misc_Key_03", label = "Quest item button" },
 			{ "Roll Style", "Interface\\Icons\\INV_Misc_Dice_02", label = "Roll Vision" },
+			{ "Combat Style", "Interface\\Icons\\Ability_DualWield", label = "Combat Vision" },
 		} },
 		{ name = "Visions", pages = {
 			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl", label = "General" },
 			{ "Heal Vision", "Interface\\Icons\\Spell_Holy_FlashHeal" },
 			{ "Quest Vision", "Interface\\Icons\\INV_Misc_Head_Dragon_01" },
+			{ "Combat Vision", "Interface\\Icons\\Ability_Warrior_OffensiveStance" },
 			{ "Roll Vision", "Interface\\Icons\\INV_Misc_Dice_01" },
 			{ "Vitals Vision", "Interface\\Icons\\Spell_Shadow_LifeDrain02" },
 			{ "Wind Guide", "Interface\\Icons\\Spell_Nature_Cyclone" },
@@ -12738,6 +12740,9 @@ ns.OnLanguage(function()
 	if ns.CreateVitalsVisionPanel then -- (LowHealth.lua)
 		ns.CreateVitalsVisionPanel(ns.lowHealthKit)
 	end
+	if ns.CreateCombatVisionPanel then -- (CombatVision.lua)
+		ns.CreateCombatVisionPanel(ns.lowHealthKit)
+	end
 	if ns.CreateWindGuidePanel then -- (WindGuide.lua: the dev copy only, CinematicDev.toc)
 		ns.CreateWindGuidePanel(ns.lowHealthKit)
 	end
@@ -12756,6 +12761,9 @@ ns.OnLanguage(function()
 	end
 	if ns.CreateRollStylePanel then -- (RollStyle.lua)
 		ns.CreateRollStylePanel(ns.lowHealthKit)
+	end
+	if ns.CreateCombatStylePanel then -- (CombatVision.lua)
+		ns.CreateCombatStylePanel(ns.lowHealthKit)
 	end
 	CreateEffectsPanel()
 	CreateTintPanel()

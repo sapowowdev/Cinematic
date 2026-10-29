@@ -2324,6 +2324,11 @@ ns.RULE_WORDS = {
 	world = "world", group = "group", grouped = "group", instance = "instance",
 	dungeon = "dungeon", raid = "raid", city = "city", inn = "inn",
 	flagged = "flagged", mounted = "mounted",
+	-- (CineMode on: always so for the rows read in it, the frames'; Combat Vision's is read any time.)
+	cinemode = "cinemode", cine = "cinemode",
+	-- (A fight starting or ending: only Combat Vision's row is read then.)
+	entering = "entering", enter = "entering", leaving = "leaving", leave = "leaving",
+	boss = "boss",
 	tank = "tank", healer = "healer", heal = "healer", damage = "damage", dps = "damage",
 }
 do
@@ -2643,6 +2648,15 @@ do
 	function ns.RuleFacts(inCombat)
 		local now = GetTime()
 		inCombat = inCombat and true or false
+		-- (A fight starting or ending: only while Combat Vision reads its row
+		-- then, ns.combatEdge "enter" or "leave"; CineMode as the fight began.)
+		local edge = ns.combatEdge
+		facts.entering, facts.leaving = edge == "enter", edge == "leave"
+		if edge then
+			facts.cinemode = ns.combatEdgeCine and true or false
+		else
+			facts.cinemode = ns.lastCinematic and true or false
+		end
 		if factsAt == now and factsCombat == inCombat then
 			return facts
 		end
@@ -2691,6 +2705,15 @@ do
 		facts.group = ns.InGroup() and true or false
 		facts.flagged = ns.IsPvPFlagged() and true or false
 		facts.mounted = ns.Flag(IsMounted()) and true or false
+		-- (A boss fight: an encounter on, the game's boss frames up, or a boss targeted.)
+		local rank, level
+		if hasTarget and enemy then
+			rank, level = UnitClassification("target"), UnitLevel("target")
+			if issecretvalue and (issecretvalue(rank) or issecretvalue(level)) then rank, level = nil, nil end
+		end
+		local encounter = _G.IsEncounterInProgress
+		facts.boss = (encounter and ns.Flag(encounter())) or ns.Flag(UnitExists("boss1"))
+			or rank == "worldboss" or level == -1 or false
 		local role = ns.PlayerRole()
 		facts.tank, facts.healer, facts.damage = role == "TANK", role == "HEALER", role == "DAMAGER"
 		return facts
