@@ -78,6 +78,7 @@ Tint.lua
 LowHealthThemes.lua
 LowHealth.lua
 PersonalResources.lua
+LetterboxStyle.lua
 WindGuideStyles.lua
 WindGuide.lua
 Focus.lua

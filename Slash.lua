@@ -228,6 +228,7 @@ local function HandleSlash(msg)
 		end
 	elseif cmd == "size" and num and num >= 0 and num <= 40 then
 		ns.db.letterboxSize = num / 100
+		ns.db.letterboxStyle, ns.db.letterboxSizeBy = true, "height" -- (the Style hub's Letterbox page's)
 		ns.letterboxDirty = true
 		ns.Print(L["letterbox size set to %s%%"]:format(num))
 	elseif cmd == "add" then

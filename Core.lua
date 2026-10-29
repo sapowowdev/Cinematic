@@ -69,6 +69,19 @@ local DEFAULTS = {
 	letterbox = true,
 	letterboxSize = 0.03,  -- fraction of screen height per bar
 	letterboxAlpha = 1,    -- bar opacity
+	-- The bars' look: the Style hub's Letterbox page (letterboxStyle: on; off,
+	-- these defaults, whatever the page's set to). Size and opacity are its too.
+	letterboxStyle = false,
+	letterboxSizeBy = "height", -- "height" (letterboxSize) or "aspect": what a film's frame leaves
+	letterboxAspect = 2.39,     -- ...that frame's width over its height
+	letterboxColor = "black",   -- "black" or "custom" (letterboxR/G/B)
+	letterboxR = 0.06, letterboxG = 0.09, letterboxB = 0.13,
+	letterboxEdge = "hard",     -- "hard" or "soft": feathered into the scene past the bar
+	letterboxFeather = 20,      -- ...over this many UI units
+	letterboxLine = "none",     -- a line along the inner edge: "none", "gold" or "custom"
+	letterboxLineR = 1, letterboxLineG = 0.82, letterboxLineB = 0,
+	letterboxMotion = "slide",  -- "slide" in, or "fade" in at full height
+	letterboxTime = 0,          -- seconds to come in or go (0: with the UI's fades)
 	-- The Visual Effects page's "Turn off in" grid for the letterbox, tint,
 	-- vignette and weather:
 	-- <effect>OffIn<where> (ns.EFFECT_OFF_WHERE), <effect>OffInCombat (gone in
@@ -4368,6 +4381,16 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				end
 			end
 			ns.db.healVisionDefaultsV1 = true
+		end
+		-- The letterbox's height and opacity moved to the Style hub's Letterbox
+		-- page, which is off to start with: a height or opacity of your own turns
+		-- it on, to keep them. Once.
+		if not ns.db.letterboxStyleV1 then
+			if (ns.db.letterboxSize or DEFAULTS.letterboxSize) ~= DEFAULTS.letterboxSize
+				or (ns.db.letterboxAlpha or 1) ~= DEFAULTS.letterboxAlpha then
+				ns.db.letterboxStyle = true
+			end
+			ns.db.letterboxStyleV1 = true
 		end
 		-- Always show tanks (healVisionTanks) is now the tank slider at 100%:
 		-- unticked, tanks went by the members' health, so they still do. Once,

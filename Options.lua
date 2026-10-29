@@ -1204,6 +1204,7 @@ do
 		{ name = "Style", pages = {
 			{ "Nameplate Style", "Interface\\Icons\\Ability_Marksmanship", label = "Nameplates" },
 			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names" },
+			{ "Letterbox Style", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", label = "Letterbox" },
 		} },
 		{ name = "Visions", pages = {
 			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl", label = "General" },
@@ -3049,19 +3050,16 @@ local function CreateEffectsPanel()
 	local letterboxHeader = Header(content, L["Letterbox"], lastGridRow, -20)
 	letterboxHeader:SetPoint("TOPLEFT", lastGridRow, "BOTTOMLEFT", 0, -20)
 
-	-- (Switched on and off in the grid's Always column, as are the vignette and weather.)
-	local size = Slider(content, "letterboxSize", L["Bar height"], 0, 25, 1, "%d%%", 100, ns.RefreshLetterbox)
-	size:SetPoint("TOPLEFT", letterboxHeader, "BOTTOMLEFT", 2, -26)
-	Tooltip(size, L["Black bars slide in at the top and bottom of the screen."])
-	GreyUnless(size, function(db) return db.letterbox end)
-
-	local opacity = Slider(content, "letterboxAlpha", L["Bar opacity"], 10, 100, 5, "%d%%", 100, ns.RefreshLetterbox)
-	opacity:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, -34)
-	GreyUnless(opacity, function(db) return db.letterbox end)
+	-- (Switched on and off in the grid's Always column, as are the vignette
+	-- and weather; their size and look on the Style hub's Letterbox page.)
+	local letterboxNote = Label(content, "GameFontHighlightSmall",
+		L["Black bars at the top and bottom of the screen. Their size and look: the Style hub's Letterbox page."])
+	letterboxNote:SetWidth(460)
+	letterboxNote:SetPoint("TOPLEFT", letterboxHeader, "BOTTOMLEFT", 0, -8)
 
 	-- Vignette
-	local vignetteHeader = Header(content, L["Vignette"], opacity, -24)
-	vignetteHeader:SetPoint("TOPLEFT", opacity, "BOTTOMLEFT", -2, -24)
+	local vignetteHeader = Header(content, L["Vignette"], letterboxNote, -24)
+	vignetteHeader:SetPoint("TOPLEFT", letterboxNote, "BOTTOMLEFT", 0, -24)
 
 	local vignetteStrength = Slider(content, "vignetteStrength", L["Vignette strength"], 10, 100, 5, "%d%%", 100,
 		ns.RefreshTint)
@@ -12668,7 +12666,8 @@ ns.lowHealthKit = { CreateScrollPage = CreateScrollPage, Label = Label, PageShow
 	Check = Check, Slider = Slider, GreyUnless = GreyUnless, Refresh = Refresh, Dropdown = Dropdown,
 	PageSwitch = PageSwitch, AddControl = function(control) controls[#controls + 1] = control end,
 	Header = Header, CreateKeybindButton = CreateKeybindButton, RefreshKeybinds = RefreshKeybinds,
-	StopListening = StopListening, IconPicker = IconPicker, FitContentHeight = FitContentHeight }
+	StopListening = StopListening, IconPicker = IconPicker, FitContentHeight = FitContentHeight,
+	Choice = Choice, OpenColorPicker = OpenColorPicker }
 
 -- The pages are built once the language is known (Locales.lua): first the
 -- text this file made as it ran is translated again.
@@ -12746,6 +12745,9 @@ ns.OnLanguage(function()
 	-- (their hub, Style, listed after Visions)
 	CreateNameStylePanel()
 	CreateTargetArrowPanel()
+	if ns.CreateLetterboxStylePanel then -- (LetterboxStyle.lua)
+		ns.CreateLetterboxStylePanel(ns.lowHealthKit)
+	end
 	CreateEffectsPanel()
 	CreateTintPanel()
 	CreateGraphicsPanel()

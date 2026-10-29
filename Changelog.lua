@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-29", page = "Letterbox Style", title = "Letterbox style",
+		text = "The letterbox bars have a page of their own in the Style hub: size them by height or a film's " ..
+		"frame, color them, feather their edges, add a line along them and choose how they come in, with " ..
+		"presets and a preview." },
 	{ date = "2026-10-28", page = "Cameras", title = "Cameras page",
 		text = "Camera Modes and Camera Triggers are now one Cameras page: a row for each trigger (an emote, " ..
 		"a campfire, going AFK, a flight...) with the camera it starts, its music and CineMode, and where it " ..

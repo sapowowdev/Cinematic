@@ -3902,22 +3902,113 @@ function ns.UpdateTooltip()
 	end
 end
 
+-- The letterbox's look: the Style hub's Letterbox page's settings while
+-- it's on, else Cinematic's own (the defaults: thin black bars sliding in
+-- with the UI's fade).
+function ns.LetterboxLook()
+	return ns.db.letterboxStyle and ns.db or ns.DEFAULTS
+end
+
+-- A vertical fade of one colour, opaque at the top (or at the bottom).
+local function Feather(texture, r, g, b, opaqueTop)
+	local top, bottom = opaqueTop and 1 or 0, opaqueTop and 0 or 1
+	texture:SetColorTexture(1, 1, 1, 1)
+	if texture.SetGradient and CreateColor then
+		texture:SetGradient("VERTICAL", CreateColor(r, g, b, bottom), CreateColor(r, g, b, top))
+	elseif texture.SetGradientAlpha then
+		texture:SetGradientAlpha("VERTICAL", r, g, b, bottom, r, g, b, top)
+	else
+		texture:SetColorTexture(r, g, b, 0.5)
+	end
+end
+
+-- A letterbox on frame: its top and bottom bars (top, bottom: kept as the
+-- solid bars, what other parts read for their height), each with a feather
+-- past its inner edge and a line along it. The real one and the Style page's
+-- preview are both made by this and drawn by ns.DrawLetterbox.
+function ns.MakeLetterboxBars(frame)
+	local function Side(point, inner)
+		local bar = frame:CreateTexture(nil, "BACKGROUND")
+		bar:SetColorTexture(0, 0, 0, 1)
+		bar:SetPoint(point .. "LEFT")
+		bar:SetPoint(point .. "RIGHT")
+		local feather = frame:CreateTexture(nil, "BACKGROUND")
+		feather:SetPoint(point .. "LEFT", bar, inner .. "LEFT")
+		feather:SetPoint(point .. "RIGHT", bar, inner .. "RIGHT")
+		local line = frame:CreateTexture(nil, "BORDER")
+		line:SetPoint(point .. "LEFT", bar, inner .. "LEFT")
+		line:SetPoint(point .. "RIGHT", bar, inner .. "RIGHT")
+		return bar, feather, line
+	end
+	frame.top, frame.topFeather, frame.topLine = Side("TOP", "BOTTOM")
+	frame.bottom, frame.bottomFeather, frame.bottomLine = Side("BOTTOM", "TOP")
+end
+
+-- Draws frame's bars (ns.MakeLetterboxBars) as look says, on a screen
+-- width x height, t of the way in (0-1, eased). scale: the frame's size next
+-- to the real screen's (the preview's smaller), for the feather. Gives the
+-- bars' height now.
+function ns.DrawLetterbox(frame, look, width, height, t, scale)
+	local bar
+	if look.letterboxSizeBy == "aspect" then
+		bar = math.max(0, (height - width / look.letterboxAspect) / 2)
+	else
+		bar = height * look.letterboxSize
+	end
+	local slide = look.letterboxMotion ~= "fade"
+	local shown = math.max(slide and t * bar or bar, 0.01)
+	local r, g, b = 0, 0, 0
+	if look.letterboxColor == "custom" then
+		r, g, b = look.letterboxR, look.letterboxG, look.letterboxB
+	end
+	local feather = look.letterboxEdge == "soft" and look.letterboxFeather * (scale or 1) * (slide and t or 1) or 0
+	local line
+	if look.letterboxLine == "gold" then
+		line = { 1, 0.82, 0 }
+	elseif look.letterboxLine == "custom" then
+		line = { look.letterboxLineR, look.letterboxLineG, look.letterboxLineB }
+	end
+	-- (The line one screen pixel thick, or the preview's own.)
+	local px = 1
+	if PixelUtil and PixelUtil.GetPixelToUIUnitFactor then
+		local effective = frame:GetEffectiveScale()
+		if effective and effective > 0 then px = PixelUtil.GetPixelToUIUnitFactor() / effective end
+	end
+	for _, side in ipairs({ "top", "bottom" }) do
+		frame[side]:SetHeight(shown)
+		frame[side]:SetColorTexture(r, g, b, 1)
+		local fade = frame[side .. "Feather"]
+		fade:SetShown(feather > 0)
+		if feather > 0 then
+			fade:SetHeight(feather)
+			Feather(fade, r, g, b, side == "top")
+		end
+		local edge = frame[side .. "Line"]
+		edge:SetShown(line ~= nil)
+		if line then
+			edge:SetHeight(px)
+			edge:SetColorTexture(line[1], line[2], line[3], 1)
+		end
+	end
+	frame:SetAlpha(look.letterboxAlpha * (slide and 1 or t))
+	return shown
+end
+
+-- How long the bars take to come in (or go): the page's time, else the UI's fades.
+function ns.LetterboxTime(look, coming)
+	if (look.letterboxTime or 0) > 0 then
+		return look.letterboxTime
+	end
+	return coming and ns.FadeOutTime() or ns.FadeInTime()
+end
+
 function ns.CreateLetterbox()
 	ns.letterbox = CreateFrame("Frame", "CinematicLetterbox", UIParent)
 	ns.letterbox:SetAllPoints(UIParent)
 	ns.letterbox:SetFrameStrata("BACKGROUND")
 	ns.letterbox:SetFrameLevel(0)
 	ns.letterbox:EnableMouse(false)
-
-	ns.letterbox.top = ns.letterbox:CreateTexture(nil, "BACKGROUND")
-	ns.letterbox.top:SetColorTexture(0, 0, 0, 1)
-	ns.letterbox.top:SetPoint("TOPLEFT")
-	ns.letterbox.top:SetPoint("TOPRIGHT")
-
-	ns.letterbox.bottom = ns.letterbox:CreateTexture(nil, "BACKGROUND")
-	ns.letterbox.bottom:SetColorTexture(0, 0, 0, 1)
-	ns.letterbox.bottom:SetPoint("BOTTOMLEFT")
-	ns.letterbox.bottom:SetPoint("BOTTOMRIGHT")
+	ns.MakeLetterboxBars(ns.letterbox)
 
 	ns.letterbox:Hide()
 	ns.AddOverlay(ns.letterbox)
@@ -3977,15 +4068,13 @@ function ns.UpdateLetterbox(cinematic, elapsed)
 		return
 	end
 	ns.letterboxDirty = false
-	local duration = target > letterboxProgress and ns.FadeOutTime() or ns.FadeInTime()
-	letterboxProgress = ns.Approach(letterboxProgress, target, elapsed, duration)
+	local look = ns.LetterboxLook()
+	letterboxProgress = ns.Approach(letterboxProgress, target, elapsed,
+		ns.LetterboxTime(look, target > letterboxProgress))
 
 	-- Smoothstep so the bars ease in and out.
 	local t = letterboxProgress * letterboxProgress * (3 - 2 * letterboxProgress)
-	local height = math.max(t * UIParent:GetHeight() * ns.db.letterboxSize, 0.01)
-	ns.letterbox.top:SetHeight(height)
-	ns.letterbox.bottom:SetHeight(height)
-	ns.letterbox:SetAlpha(ns.db.letterboxAlpha)
+	local height = ns.DrawLetterbox(ns.letterbox, look, UIParent:GetWidth(), UIParent:GetHeight(), t)
 	ns.letterbox:SetShown(letterboxProgress > 0)
 	LiftFramerate(letterboxProgress > 0 and height or 0)
 end
