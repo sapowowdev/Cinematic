@@ -436,6 +436,12 @@ local function ShowLater(tooltip)
 		HideBar(bar)
 	end
 	local unit = TooltipUnit(tooltip)
+	-- (Not in a fight: the game's refill then reads secret line colors and
+	-- errors, blamed on us; securecallfunction reports it past our pcall.
+	-- The lines stay as they are.)
+	if linesCut and InCombatLockdown() then
+		return
+	end
 	if linesCut then
 		linesCut = false
 		refilling = true

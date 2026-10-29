@@ -89,6 +89,7 @@ QuestTalkStyle.lua
 BubbleStyle.lua
 TooltipStyle.lua
 PersonalStyle.lua
+PersonalMana.lua
 PlateCastStyle.lua
 UnitStyle.lua
 RaidStyle.lua
@@ -113,3 +114,4 @@ ChangelogCommits.lua
 ChangelogCommits.dev.lua
 WhatsNew.lua
 MinimapButton.lua
+Reload.lua

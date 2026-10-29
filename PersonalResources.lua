@@ -27,7 +27,7 @@ local personalPower = _G.CinematicPersonalPower
 -- No change for this long: at rest. (Regeneration ticks every 2 seconds.)
 local REST_WINDOW = 3
 
-local lastChange = { health = -math.huge, power = -math.huge }
+local lastChange = { health = -math.huge, power = -math.huge, mana = -math.huge }
 -- In a fight: whether each is still at rest since it started (nil: not in one).
 local waiting
 
@@ -37,7 +37,7 @@ watcher:RegisterUnitEvent("UNIT_POWER_UPDATE", "player")
 watcher:RegisterUnitEvent("UNIT_DISPLAYPOWER", "player") -- (a druid's form: a power of its own)
 watcher:RegisterEvent("PLAYER_REGEN_DISABLED")
 watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
-watcher:SetScript("OnEvent", function(_, event)
+watcher:SetScript("OnEvent", function(_, event, _, powerToken)
 	-- (Each fight looks afresh, on the first check in it.)
 	if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
 		waiting = nil
@@ -47,6 +47,13 @@ watcher:SetScript("OnEvent", function(_, event)
 	lastChange[kind] = GetTime()
 	if waiting then
 		waiting[kind] = false
+	end
+	-- (Mana apart, for the mana bar's row. A secret token: maybe mana.)
+	if event == "UNIT_POWER_UPDATE" and (issecretvalue and issecretvalue(powerToken) or powerToken == "MANA") then
+		lastChange.mana = GetTime()
+		if waiting then
+			waiting.mana = false
+		end
 	end
 end)
 
@@ -61,6 +68,7 @@ local ROW_WAIT = {
 	player = { "fightWaitPortrait", "health", "power" },
 	prd = { "fightWaitHealth", "health" },
 	prdpower = { "fightWaitPower", "power" },
+	prdmana = { "fightWaitPower", "mana" },
 }
 function ns.FightHold(row)
 	local wait = ROW_WAIT[row]
@@ -70,7 +78,7 @@ function ns.FightHold(row)
 	local now = GetTime()
 	if InCombatLockdown() or ns.Flag(UnitAffectingCombat("player")) then
 		if not waiting then
-			waiting = { health = RestedNow("health", now), power = RestedNow("power", now) }
+			waiting = { health = RestedNow("health", now), power = RestedNow("power", now), mana = RestedNow("mana", now) }
 		end
 		return waiting[wait[2]] and (not wait[3] or waiting[wait[3]])
 	end
@@ -96,16 +104,25 @@ local function PowerDraining()
 	return not RestedNow("power", GetTime())
 end
 
--- Mana (while it's the power you're showing) under the Low mana share.
--- Secret: can't tell, so no.
-local function LowMana()
+-- Mana (while it's the power you're showing, or any: with a mana bar of
+-- its own) under the Low mana share. Secret: can't tell, so no.
+local function LowMana(any)
 	local share = ns.db.lowManaShare or 0
 	local powerType = UnitPowerType("player")
-	if share <= 0 or not Readable(powerType) or powerType ~= 0 then
+	if share <= 0 or not any and (not Readable(powerType) or powerType ~= 0) then
 		return false
 	end
 	local mana, maxMana = UnitPower("player", 0), UnitPowerMax("player", 0)
 	return Readable(mana) and Readable(maxMana) and maxMana > 0 and mana / maxMana < share
+end
+
+-- Mana not full, for the mana bar's row. Secret: still changing.
+local function ManaRecovering()
+	local mana, maxMana = UnitPower("player", 0), UnitPowerMax("player", 0)
+	if Readable(mana) and Readable(maxMana) then
+		return maxMana > 0 and mana < maxMana
+	end
+	return not RestedNow("mana", GetTime())
 end
 
 -- Whether your player frame, personal resource display or pet frame stays up
@@ -121,13 +138,19 @@ function ns.KeepYourFrameUp(setting, entry, afterFight, fighting)
 		return false
 	end
 	local row = setting == "prdWhenNotFull" and entry.group or "player"
-	-- (No resource display: low mana is the player frame's.)
-	if (row == "prdpower" or row == "player" and (db.lowManaPortrait or not personalPower))
-		and LowMana() then
+	-- (No resource display: low mana is the player frame's. With the mana bar
+	-- of ours up, it's that bar's row, not the power bar's.)
+	local manaBar = ns.PersonalManaShown and ns.PersonalManaShown()
+	if (row == (manaBar and "prdmana" or "prdpower") or row == "player" and (db.lowManaPortrait or not personalPower))
+		and LowMana(manaBar) then
 		return true
 	end
 	if not (db[setting] and afterFight) or fighting and ns.FightHold(row) then
 		return false
+	end
+	-- (The mana bar's row: until your mana's full.)
+	if row == "prdmana" then
+		return manaBar and ManaRecovering() or false
 	end
 	return ns.IsPlayerRecovering() or db.drainWhenNotEmpty and PowerDraining() or false
 end

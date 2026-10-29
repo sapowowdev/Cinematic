@@ -288,58 +288,75 @@ local function Load(name)
 	ns.EnsureTables()
 end
 
--- The game's Cooldown Manager for profiles that use it (db.cooldownManagerOn,
--- the CDM part): its switch (cooldownViewerEnabled, the same on both
--- clients) turned on if it's off, and back off on switching to a profile
--- without it, if Cinematic turned it on (db.cdmTurnedOn). The player's own
--- choice stands: switched by them meanwhile, it's left as they put it
--- (db.cdmLeftAlone) until they're on a profile without it again. Not in
--- fights: once one ends.
-local CDM_CVAR = "cooldownViewerEnabled"
-local cdmFrame = CreateFrame("Frame")
-local cdmWritten -- (the value just written: its CVAR_UPDATE isn't the player's)
-local function ApplyCooldownManager()
+-- Game switches for profiles that use them: the Cooldown Manager
+-- (db.cooldownManagerOn, the CDM part; cooldownViewerEnabled, the same on
+-- both clients) and the personal resource display (db.prdOn, the Personal
+-- Resource Centered layout; nameplateShowSelf). Each turned on if it's off,
+-- and back off on switching to a profile without it, if Cinematic turned it
+-- on (db[turnedOn]). The player's own choice stands: switched by them
+-- meanwhile, it's left as they put it (db[leftAlone]) until they're on a
+-- profile without it again. Not in fights: once one ends.
+local PROFILE_SWITCHES = {
+	{ key = "cooldownManagerOn", cvar = "cooldownViewerEnabled", turnedOn = "cdmTurnedOn",
+		leftAlone = "cdmLeftAlone", name = "cooldown manager" },
+	{ key = "prdOn", cvar = "nameplateShowSelf", turnedOn = "prdTurnedOn",
+		leftAlone = "prdLeftAlone", name = "personal resource display" },
+}
+local switchFrame = CreateFrame("Frame")
+local switchWritten = {} -- (by cvar, the value just written: its CVAR_UPDATE isn't the player's)
+local function ApplyProfileSwitches()
 	local db = ns.db
-	if not db or GetCVar(CDM_CVAR) == nil then return end
+	if not db then return end
 	if InCombatLockdown() then
-		cdmFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+		switchFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 		return
 	end
-	local on = GetCVar(CDM_CVAR) == "1"
-	local want
-	if db.cooldownManagerOn and db.enabled then
-		if not on and not db.cdmTurnedOn and not db.cdmLeftAlone then want = "1" end
-	else
-		db.cdmLeftAlone = nil
-		if db.cdmTurnedOn then
-			db.cdmTurnedOn = nil
-			if on then want = "0" end
+	for _, switch in ipairs(PROFILE_SWITCHES) do
+		local cvar = switch.cvar
+		if GetCVar(cvar) ~= nil then
+			local on = GetCVar(cvar) == "1"
+			local want
+			if db[switch.key] and db.enabled then
+				if not on and not db[switch.turnedOn] and not db[switch.leftAlone] then want = "1" end
+			else
+				db[switch.leftAlone] = nil
+				if db[switch.turnedOn] then
+					db[switch.turnedOn] = nil
+					if on then want = "0" end
+				end
+			end
+			if want then
+				switchWritten[cvar] = want
+				SetCVar(cvar, want)
+				db[switch.turnedOn] = want == "1" or nil
+				ns.Log("state", switch.name .. (want == "1" and " turned on for the profile" or " back off"))
+			end
 		end
-	end
-	if want then
-		cdmWritten = want
-		SetCVar(CDM_CVAR, want)
-		db.cdmTurnedOn = want == "1" or nil
-		ns.Log("state", "cooldown manager " .. (want == "1" and "turned on for the profile" or "back off"))
 	end
 end
-cdmFrame:RegisterEvent("PLAYER_LOGIN")
-cdmFrame:RegisterEvent("CVAR_UPDATE")
-cdmFrame:SetScript("OnEvent", function(self, event, name)
+switchFrame:RegisterEvent("PLAYER_LOGIN")
+switchFrame:RegisterEvent("CVAR_UPDATE")
+switchFrame:SetScript("OnEvent", function(self, event, name)
 	if event == "CVAR_UPDATE" then
-		if type(name) ~= "string" or name:lower() ~= CDM_CVAR:lower() or not ns.db then return end
-		if cdmWritten and GetCVar(CDM_CVAR) == cdmWritten then
-			cdmWritten = nil -- (ours)
-			return
+		if type(name) ~= "string" or not ns.db then return end
+		for _, switch in ipairs(PROFILE_SWITCHES) do
+			local cvar = switch.cvar
+			if name:lower() == cvar:lower() then
+				if switchWritten[cvar] and GetCVar(cvar) == switchWritten[cvar] then
+					switchWritten[cvar] = nil -- (ours)
+					return
+				end
+				-- (the player switching it themselves: theirs from now on)
+				switchWritten[cvar] = nil
+				ns.db[switch.turnedOn] = nil
+				if ns.db[switch.key] then ns.db[switch.leftAlone] = true end
+				return
+			end
 		end
-		-- (the player switching it themselves: theirs from now on)
-		cdmWritten = nil
-		ns.db.cdmTurnedOn = nil
-		if ns.db.cooldownManagerOn then ns.db.cdmLeftAlone = true end
 		return
 	end
 	if event == "PLAYER_REGEN_ENABLED" then self:UnregisterEvent(event) end
-	ApplyCooldownManager()
+	ApplyProfileSwitches()
 end)
 
 -- Everything that reads settings once picks up the new ones.
@@ -351,7 +368,7 @@ local function SettingsChanged()
 	if ns.ApplyBubbles then ns.ApplyBubbles() end
 	if ns.ApplyUnitFrameParts then ns.ApplyUnitFrameParts() end
 	if ns.SwitchProfileLayout then ns.SwitchProfileLayout() end
-	ApplyCooldownManager()
+	ApplyProfileSwitches()
 	if ns.RefreshOptions then ns.RefreshOptions() end
 end
 
@@ -627,8 +644,11 @@ function ns.ResetAddon()
 		ns.Print(L["can't reset Cinematic in a fight: try again once it's over"])
 		return
 	end
-	-- The Cooldown Manager off again if a CDM profile turned it on.
-	if ns.db.cdmTurnedOn and GetCVar(CDM_CVAR) == "1" then SetCVar(CDM_CVAR, "0") end
+	-- The Cooldown Manager and personal resource display off again if a
+	-- profile turned them on.
+	for _, switch in ipairs(PROFILE_SWITCHES) do
+		if ns.db[switch.turnedOn] and GetCVar(switch.cvar) == "1" then SetCVar(switch.cvar, "0") end
+	end
 	CinematicDB, CinematicCharDB = nil, nil
 	ns.db.profiles = {} -- (so logout's ns.SaveProfile writes into nothing kept)
 	ReloadUI()

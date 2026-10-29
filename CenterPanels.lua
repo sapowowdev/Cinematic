@@ -186,9 +186,19 @@ local function SaveSpot(name, spot)
 	ns.db.panelSpots[shared or name] = spot
 end
 
+-- Whether the window can be dragged: all of them with dragPanels; the
+-- talking ones also while Quest Vision's Where they go places them (Custom
+-- dialogue frames off: ns.TalkWindowPlace).
+local function CanDrag(frame)
+	if ns.Setting("dragPanels") then
+		return true
+	end
+	return TALK[frame:GetName() or ""] and ns.TalkWindowPlace and ns.TalkWindowPlace() ~= nil or false
+end
+
 -- Where the window was last dropped, or nil.
 local function Spot(frame)
-	if not ns.Setting("dragPanels") then
+	if not CanDrag(frame) then
 		return nil
 	end
 	local name = frame:GetName()
@@ -297,7 +307,7 @@ end)
 
 local function DragStart(frame)
 	Log(frame, "drag start")
-	if ns.Setting("dragPanels") and not Locked(frame) then
+	if CanDrag(frame) and not Locked(frame) then
 		local left, top = Number(frame:GetLeft()), Number(frame:GetTop())
 		if not left or not top then
 			return
@@ -407,7 +417,11 @@ local function OpenPanels()
 	return open, row
 end
 
-local function CenterRow()
+-- keepClear: Quest Vision's Opposite Clicked (Custom dialogue frames off),
+-- the half of the screen the NPC's on ("left" or "right"): a talking row on
+-- it goes to the mirror of its spot on the other half. center: centerPanels
+-- (else the row stays where the game put it, but for that).
+local function CenterRow(keepClear, center)
 	if #row == 0 then
 		return
 	end
@@ -439,14 +453,19 @@ local function CenterRow()
 		rowBottom = rowBottom and math.min(rowBottom, bottom) or bottom
 	end
 	local side = talk or rowRight - rowLeft < NARROW
-	local target = (talk and screenWidth * TALK_LEFT) or (side and screenWidth * NARROW_LEFT)
+	local target = not center and rowLeft or (talk and screenWidth * TALK_LEFT) or (side and screenWidth * NARROW_LEFT)
 		or screenWidth * (1 - WIDE_RIGHT) - (rowRight - rowLeft)
+	if talk and keepClear and (target + (rowRight - rowLeft) / 2 > screenWidth / 2) == (keepClear == "right") then
+		target = screenWidth - target - (rowRight - rowLeft)
+	end
 	-- A row wider than the screen keeps its left edge on it.
 	local shift = math.max(target - rowLeft, -rowLeft)
 	-- To the side, centered top to bottom (a row taller than the screen keeps
 	-- its top on it).
 	local rise
-	if side then
+	if not center then
+		rise = 0
+	elseif side then
 		rise = math.min((screenHeight + rowTop - rowBottom) / 2, screenHeight) - rowTop
 	else
 		-- (A row too tall for that keeps its bottom on the screen, and its top.)
@@ -467,11 +486,11 @@ local function CenterRow()
 	end
 end
 
--- Every open window can be dragged, wherever it is.
+-- Every open window can be dragged, wherever it is (CanDrag).
 local function HookOpen()
 	for _, area in ipairs(AREAS) do
 		local ok, frame = pcall(GetUIPanel, area)
-		if ok and type(frame) == "table" and frame.GetPoint and ns.Flag(frame:IsShown()) then
+		if ok and type(frame) == "table" and frame.GetPoint and ns.Flag(frame:IsShown()) and CanDrag(frame) then
 			MakeDraggable(frame)
 		end
 	end
@@ -482,19 +501,43 @@ end
 local sized = {}
 local Placed
 
+-- A talk window dropped (Spot) on the NPC's half (keepClear, see CenterRow)
+-- goes to the mirror of that spot on the other half.
+local function Mirrored(frame, spot, keepClear)
+	local width, scale = Number(frame:GetWidth()), Number(frame:GetEffectiveScale())
+	local screenWidth, uiScale = Number(UIParent:GetWidth()), Number(UIParent:GetEffectiveScale())
+	if spot[1] ~= "TOPLEFT" or spot[2] ~= "BOTTOMLEFT" or not width or not scale or scale <= 0
+		or not screenWidth or not uiScale then
+		return spot
+	end
+	screenWidth = screenWidth * uiScale / scale -- (in the window's own units)
+	if (spot[3] + width / 2 > screenWidth / 2) ~= (keepClear == "right") then
+		return spot
+	end
+	return { spot[1], spot[2], screenWidth - spot[3] - width, spot[4] }
+end
+
+-- Whether a talk window was open last time (a new conversation starts when
+-- one opens with none: its click is read then).
+local talking = false
+
 local function Arrange()
 	if not ns.db then
 		return
 	end
-	if ns.Setting("dragPanels") then
-		HookOpen()
-	end
-	for _, handle in pairs(handles) do
-		handle:SetShown(ns.Setting("dragPanels") and true or false)
+	HookOpen()
+	for frame, handle in pairs(handles) do
+		handle:SetShown(CanDrag(frame))
 	end
 	if not OpenPanels() then
 		return
 	end
+	local talkOpen = false
+	for _, frame in ipairs(open) do
+		talkOpen = talkOpen or TALK[frame:GetName() or ""] or false
+	end
+	local keepClear = talkOpen and ns.TalkWindowSide and ns.TalkWindowSide(not talking) or nil
+	talking = talkOpen
 	for _, frame in ipairs(open) do
 		if not sized[frame] then
 			sized[frame] = true
@@ -503,13 +546,16 @@ local function Arrange()
 			end)
 		end
 		local spot = Spot(frame)
+		if spot and keepClear and TALK[frame:GetName() or ""] then
+			spot = Mirrored(frame, spot, keepClear)
+		end
 		if spot and not Held(frame) then
 			frame:ClearAllPoints()
 			frame:SetPoint(spot[1], UIParent, spot[2], spot[3], spot[4])
 		end
 	end
-	if ns.Setting("centerPanels") then
-		CenterRow()
+	if ns.Setting("centerPanels") or keepClear then
+		CenterRow(keepClear, ns.Setting("centerPanels"))
 	end
 end
 
@@ -630,7 +676,8 @@ local function ArrangeAgain()
 end
 
 function Placed()
-	if not (ns.db and (ns.Setting("centerPanels") or ns.Setting("dragPanels") or next(handles))) then
+	if not (ns.db and (ns.Setting("centerPanels") or ns.Setting("dragPanels") or next(handles)
+		or ns.TalkWindowPlace and ns.TalkWindowPlace())) then
 		return
 	end
 	Arrange()
@@ -647,6 +694,9 @@ function ns.PrintPanelsDebug()
 	local db = ns.db or {}
 	ns.Print(("windows: centering %s, dragging %s, screen %s x %s"):format(db.centerPanels and "on" or "off",
 		db.dragPanels and "on" or "off", tostring(Number(UIParent:GetWidth())), tostring(Number(UIParent:GetHeight()))))
+	ns.Print(("talk windows (Quest Vision, custom frames %s): placed %s, keep clear %s, talking %s"):format(
+		db.questTalk and "on" or "off", tostring(ns.TalkWindowPlace and ns.TalkWindowPlace()),
+		tostring(ns.TalkWindowSide and ns.TalkWindowSide()), tostring(talking)))
 	if not GetUIPanel then
 		ns.Print("no GetUIPanel on this client")
 		return
@@ -754,6 +804,17 @@ function ns.SavePanelSpot(name, spot, width, height)
 	local shares = spot[1] == "TOPLEFT" and spot[2] == "BOTTOMLEFT" and ns.SpotShares(frame, spot[3], spot[4], width, height)
 	SaveSpot(name, shares or spot)
 	Placed()
+end
+
+-- Quest Vision's Put them back: the talk windows open in their usual place
+-- again (their spot is the same one Quality of life's dragging keeps).
+function ns.ForgetTalkWindowSpot()
+	local spots = ns.db and ns.db.panelSpots
+	if type(spots) == "table" then
+		for name in pairs(TALK) do
+			spots[name] = nil
+		end
+	end
 end
 
 -- Put windows back: every window opens in its usual place again (the open

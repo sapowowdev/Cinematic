@@ -1828,15 +1828,25 @@ end
 -- own last); the game's: none.
 local partKinds = {}
 local PART_KEYS = { name = "ColorName", bar = "ColorBar", border = "ColorBorder" }
+-- (The page's own Width and Height, every plate's: 1, 1 for none.)
+local function MasterSize()
+	return Style("plateStyleWidth") or 1, Style("plateStyleHeight") or 1
+end
+local function MasterSizeOn()
+	local width, height = MasterSize()
+	return ns.isRetail and (math.abs(width - 1) > 0.001 or math.abs(height - 1) > 0.001)
+end
 local function PlateLook(plate, unit)
 	wipe(partKinds)
 	local kind, at = FittingRow(plate, unit)
+	local masterWidth, masterHeight = MasterSize()
 	if not kind then
-		return nil, partKinds, false, nil, nil
+		return nil, partKinds, false, nil, MasterSizeOn() and { width = masterWidth, height = masterHeight } or nil
 	end
 	local mark = ArrowSetting("Style", kind) ~= "none" and kind or nil
 	local alpha = ArrowSetting("Alpha", kind) or 1
-	local width, height = ArrowSetting("PlateWidth", kind) or 1, ArrowSetting("PlateHeight", kind) or 1
+	local width = (ArrowSetting("PlateWidth", kind) or 1) * masterWidth
+	local height = (ArrowSetting("PlateHeight", kind) or 1) * masterHeight
 	local colorRow = kind
 	while colorRow do
 		local tintKind = TintKind(colorRow)
@@ -1898,60 +1908,120 @@ local function DistanceRowsOn()
 	end
 	return false
 end
--- Each plate's health bar size from its rows (retail: Forever's plates
--- don't size): its own width and height times the row's Width and Height,
--- about its own middle, and its own anchors put back after. [bar] = { its
--- points, width, height, middle from the unit frame's } while ours is on;
--- nows.width/height[plate] = ours on it now (nil: its own).
+-- Each plate's size from its rows (retail: Forever's plates don't size):
+-- its own width and height times the row's Width and Height. Retail's
+-- plates won't say where their parts are, but Blizzard's layout is known
+-- (NamePlateUnitFrameMixin:UpdateAnchors): the cast bar container's held
+-- in from the unit frame's bottom corners by the plate's inset, the health
+-- bar container sits on it as wide, its height set, and the name, debuffs,
+-- raid mark, level and border hang off that. So the width's the cast bar
+-- container's inset (more in, narrower; less, wider, about its middle),
+-- the height the health bar container's (growing up off the cast bar, the
+-- name and debuffs riding on top), and everything follows. Its own put
+-- back after: the inset from the widths (they can be read), the height.
+-- [health bar container] = { inset, width, height, cast bar container,
+-- unit frame, plate } while ours is on; nows.width/height[plate] = ours on
+-- it now (nil: its own).
 local ownSizes, nows = {}, { width = {}, height = {} }
 local function Number(ok, value)
 	return ok and type(value) == "number" and Known(value) and value or nil
 end
+-- (reanchoring: while we lay it out, our UpdateAnchors hook leaves it be.)
+local reanchoring, reanchorHooked = false, {}
+-- (Why a plate isn't sized, for /cine debug marks: [plate] = reason.)
+local sizeSkipped = {}
+local function SetInset(cast, unitFrame, inset)
+	pcall(cast.ClearAllPoints, cast)
+	pcall(cast.SetPoint, cast, "BOTTOMLEFT", unitFrame, "BOTTOMLEFT", inset, 0)
+	pcall(cast.SetPoint, cast, "BOTTOMRIGHT", unitFrame, "BOTTOMRIGHT", -inset, 0)
+end
+local function ReanchorSized(bar, own, width, height)
+	reanchoring = true
+	SetInset(own.cast, own.frame, own.inset + own.width * (1 - width) / 2)
+	pcall(bar.SetHeight, bar, own.height * height)
+	reanchoring = false
+end
+local function RestoreSize(bar, own)
+	reanchoring = true
+	SetInset(own.cast, own.frame, own.inset)
+	pcall(bar.SetHeight, bar, own.height)
+	reanchoring = false
+end
+-- (Its own: the widths and height now, the inset from them; nil and why
+-- while it's not laid out yet or isn't retail's layout.)
+local function SizeOwn(plate, unitFrame, bar)
+	local cast = unitFrame.CastBarsContainer
+	if not Usable(cast) then
+		return nil, "no cast bar container"
+	end
+	local frameWidth = Number(pcall(unitFrame.GetWidth, unitFrame))
+	local castWidth = Number(pcall(cast.GetWidth, cast))
+	local ownWidth, ownHeight = Number(pcall(bar.GetWidth, bar)), Number(pcall(bar.GetHeight, bar))
+	if not (frameWidth and castWidth and ownWidth and ownHeight and ownWidth > 0 and ownHeight > 0) then
+		return nil, "no size yet"
+	end
+	if math.abs(castWidth - ownWidth) > 0.5 then
+		return nil, ("health bar %s wide, cast bar %s: not the layout we know"):format(ownWidth, castWidth)
+	end
+	return { inset = (frameWidth - castWidth) / 2, width = ownWidth, height = ownHeight, cast = cast,
+		frame = unitFrame, plate = plate }
+end
+-- (The quest mark's spot goes by the bar's width, not its edge: put in it
+-- again as the bar changes, each step of the way. The class and role icons
+-- hang off the bar's left edge and go with it.)
+local function FollowSize(plate)
+	local icon = questIcons[plate]
+	if icon and icon:IsShown() then
+		RefreshQuestIcon(plate)
+	end
+end
 local function ApplySize(plate)
 	local unitFrame = plate and plate.UnitFrame
-	local bar = unitFrame and (unitFrame.HealthBarsContainer or unitFrame.healthBar)
+	local bar = unitFrame and unitFrame.HealthBarsContainer
 	if not (Usable(unitFrame) and Usable(bar)) then
 		return
 	end
 	local width, height = nows.width[plate] or 1, nows.height[plate] or 1
 	local own = ownSizes[bar]
 	if math.abs(width - 1) < 0.001 and math.abs(height - 1) < 0.001 then
-		nows.width[plate], nows.height[plate] = nil, nil
+		nows.width[plate], nows.height[plate], sizeSkipped[plate] = nil, nil, nil
 		if own then
 			ownSizes[bar] = nil
-			pcall(bar.ClearAllPoints, bar)
-			for _, point in ipairs(own.points) do
-				pcall(bar.SetPoint, bar, unpack(point, 1, 5))
-			end
-			pcall(bar.SetSize, bar, own.width, own.height)
+			RestoreSize(bar, own)
+			FollowSize(plate)
 		end
 		return
 	end
 	if not own then
-		-- (Not laid out yet, or the game won't say: left as it is, tried
-		-- again on the next look.)
-		local ownWidth, ownHeight = Number(pcall(bar.GetWidth, bar)), Number(pcall(bar.GetHeight, bar))
-		local okBar, x, y = pcall(bar.GetCenter, bar)
-		local okFrame, frameX, frameY = pcall(unitFrame.GetCenter, unitFrame)
-		x, y, frameX, frameY = Number(okBar, x), Number(okBar, y), Number(okFrame, frameX), Number(okFrame, frameY)
-		local count = Number(pcall(bar.GetNumPoints, bar))
-		if not (ownWidth and ownHeight and ownWidth > 0 and ownHeight > 0 and x and y and frameX and frameY
-			and count) then
+		-- (Not laid out yet, or no way to: left as it is, tried again on the
+		-- next look.)
+		local why
+		own, why = SizeOwn(plate, unitFrame, bar)
+		sizeSkipped[plate] = why
+		if not own then
 			return
-		end
-		own = { points = {}, width = ownWidth, height = ownHeight, x = x - frameX, y = y - frameY }
-		for i = 1, count do
-			local point = { pcall(bar.GetPoint, bar, i) }
-			if not point[1] then
-				return
-			end
-			own.points[i] = { unpack(point, 2, 6) }
 		end
 		ownSizes[bar] = own
 	end
-	pcall(bar.ClearAllPoints, bar)
-	pcall(bar.SetPoint, bar, "CENTER", unitFrame, "CENTER", own.x, own.y)
-	pcall(bar.SetSize, bar, own.width * width, own.height * height)
+	ReanchorSized(bar, own, width, height)
+	FollowSize(plate)
+	-- (The game laying the plate out again (its options changed): its own
+	-- taken again from what it just set, then ours on it.)
+	if not reanchorHooked[unitFrame] and unitFrame.UpdateAnchors then
+		reanchorHooked[unitFrame] = true
+		pcall(hooksecurefunc, unitFrame, "UpdateAnchors", function(self)
+			local container = self.HealthBarsContainer
+			local mine = container and ownSizes[container]
+			if mine and not reanchoring then
+				local fresh = SizeOwn(mine.plate, self, container)
+				if fresh then
+					ownSizes[container] = fresh
+					mine = fresh
+				end
+				ReanchorSized(container, mine, nows.width[mine.plate] or 1, nows.height[mine.plate] or 1)
+			end
+		end)
+	end
 end
 local function ApplyOpacity(plate, opacity)
 	if opacity and opacity >= 0.999 then
@@ -2155,22 +2225,28 @@ function ns.ReportTargetMarks()
 	if not any then
 		ns.Print("  no mark showing: target, focus or hover a unit first")
 	end
-	-- (Each plate's health bar size: the row it goes by and its Width and
-	-- Height, the bar's size now, its own, and how many points it has now:
-	-- more than 1 while ours is on, the game's anchored it again.)
+	-- (Each plate's size: the row it goes by and its Width and Height, the
+	-- health bar container's size now and its own, the cast bar container's
+	-- width and its inset now (own: the game's), or why it's not sized.)
+	ns.Print(("  page Width %s Height %s (every plate's)"):format(Num(Style("plateStyleWidth")),
+		Num(Style("plateStyleHeight"))))
 	for _, plate in ipairs(C_NamePlate.GetNamePlates()) do
 		local unitFrame = plate.UnitFrame
 		local unit = plate.namePlateUnitToken or (unitFrame and unitFrame.unit)
 		local row = (levels.TargetArrow or 0) > 0 and unit and FittingRow(plate, unit)
-		local bar = unitFrame and (unitFrame.HealthBarsContainer or unitFrame.healthBar)
+		local bar = unitFrame and unitFrame.HealthBarsContainer
+		local cast = unitFrame and unitFrame.CastBarsContainer
 		local own = bar and ownSizes[bar]
 		local width, height = Number(pcall(bar and bar.GetWidth or error, bar)), Number(pcall(bar and bar.GetHeight or error, bar))
-		local points = Number(pcall(bar and bar.GetNumPoints or error, bar))
-		ns.Print(("  size %s: row %s, its Width %s Height %s; bar %sx%s, own %s, ours %s/%s, points %s%s"):format(
+		local frameWidth = Number(pcall(unitFrame and unitFrame.GetWidth or error, unitFrame))
+		local castWidth = Number(pcall(cast and cast.GetWidth or error, cast))
+		ns.Print(("  size %s: row %s, its Width %s Height %s; bar %sx%s, own %s, cast bar %s inset %s (own %s), ours %s/%s%s%s"):format(
 			tostring(unit), tostring(row), row and Num(ArrowSetting("PlateWidth", row)) or "-",
 			row and Num(ArrowSetting("PlateHeight", row)) or "-", Num(width), Num(height),
-			own and (Num(own.width) .. "x" .. Num(own.height) .. " (" .. #own.points .. " points)") or "-",
-			Num(nows.width[plate]), Num(nows.height[plate]), Num(points),
+			own and (Num(own.width) .. "x" .. Num(own.height)) or "-", Num(castWidth),
+			frameWidth and castWidth and Num((frameWidth - castWidth) / 2) or "-", own and Num(own.inset) or "-",
+			Num(nows.width[plate]), Num(nows.height[plate]),
+			sizeSkipped[plate] and ", not sized: " .. sizeSkipped[plate] or "",
 			ns.isRetail and "" or " (Forever: not sized)"))
 	end
 end
@@ -2332,7 +2408,7 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 	plateClass[plate], plateRole[plate] = nil, nil
 	if AnyClassIcons() or icons[plate] or roleIcons[plate] or questIcons[plate] or arrows[plate]
 		or opacities[plate] or nows.width[plate] or nows.height[plate]
-		or ((levels.TargetArrow or 0) > 0 and (OthersOn() or TypeRowsOn())) then
+		or ((levels.TargetArrow or 0) > 0 and (OthersOn() or TypeRowsOn() or MasterSizeOn())) then
 		ns.RefreshClassIcon(plate)
 	end
 	-- (Looked at or not, a plate's settled now: from here on it moves.)
@@ -2626,6 +2702,9 @@ local function Entry(name, value)
 			return nil
 		end
 		local r, g, b = value:GetVertexColor()
+		if not (Known(r) and Known(g) and Known(b)) then
+			return "secret"
+		end
 		return ("%.2f/%.2f/%.2f"):format(r, g, b)
 	end)
 	return name .. ":" .. (okType and tostring(kind) or "?")
@@ -2640,7 +2719,7 @@ local function ListFields(frame)
 	local children, named = {}, {}
 	for field, value in pairs(frame) do
 		-- (Some tables can't even be looked into: a locked one on a group member's plate.)
-		if type(field) == "string" and type(value) == "table"
+		if type(field) == "string" and type(value) == "table" and Known(value)
 			and select(2, pcall(function() return value.GetObjectType ~= nil end)) == true then
 			named[value] = true
 			children[#children + 1] = Entry(field, value)
@@ -2693,10 +2772,12 @@ function ns.DescribePlateParts(unitFrame)
 		local names = {}
 		EachPartFrame(unitFrame, part, function(frame)
 			-- (With its alpha now, and @ ours while held.)
-			local ok, alpha = pcall(function() return ("%.2f"):format(frame:GetAlpha()) end)
+			-- (A secret alpha or name formats to a secret string, which concat refuses.)
+			local ok, alpha = pcall(frame.GetAlpha, frame)
 			local wanted = held[frame]
 			local okName, name = pcall(frame.GetDebugName, frame)
-			names[#names + 1] = (okName and tostring(name):match("[^.]*%.?[^.]+$") or "?") .. " " .. (ok and alpha or "?")
+			names[#names + 1] = (okName and Known(name) and tostring(name):match("[^.]*%.?[^.]+$") or "?") .. " "
+				.. (ok and (Known(alpha) and ("%.2f"):format(alpha) or "secret") or "?")
 				.. (wanted and ("@" .. ("%.2f"):format(wanted)) or "")
 		end)
 		found[#found + 1] = part .. "=" .. (#names > 0 and table.concat(names, "+") or "NONE")
@@ -2740,6 +2821,9 @@ function ns.DescribePlateParts(unitFrame)
 	local seen = {}
 	for _, field in ipairs(SIDE_ICONS) do
 		local frame = unitFrame[field]
+		if not Known(frame) then
+			frame = nil
+		end
 		seen[frame or field] = true
 		sides[#sides + 1] = field .. " " .. (Usable(frame) and Spot(frame) or "none")
 	end
@@ -2747,7 +2831,9 @@ function ns.DescribePlateParts(unitFrame)
 		for _, owner in ipairs({ unitFrame, unitFrame.HealthBarsContainer }) do
 			if type(owner) == "table" and owner.GetObjectType then
 				for field, value in pairs(owner) do
-					if type(field) == "string" and not seen[value] and Usable(value) and value.GetLeft then
+					-- (Some fields hold secret values, which can't be a table's key.)
+					if type(field) == "string" and type(value) == "table" and Known(value) and not seen[value]
+						and Usable(value) and value.GetLeft then
 						seen[value] = true
 						local left, scale = Measure(value, "GetLeft"), Measure(value, "GetEffectiveScale")
 						local okVisible, visible = pcall(value.IsVisible, value)

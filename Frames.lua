@@ -27,6 +27,8 @@ local FRAME_GROUPS = {
 	-- nameplate, so a stand-in fades for it (see below).
 	prd = { "PersonalResourceDisplayFrame", "CinematicPersonalResource" },
 	prdpower = { "CinematicPersonalPower" },
+	-- Our mana bar under them (PersonalMana.lua), by its own stand-in.
+	prdmana = { "CinematicPersonalMana" },
 	totems = {
 		"MultiCastActionBarFrame", "MultiCastSummonSpellButton", "MultiCastRecallSpellButton",
 		"MultiCastFlyoutFrame", "MultiCastSlotButton1", "MultiCastSlotButton2",
@@ -56,6 +58,12 @@ local FRAME_GROUPS = {
 	quests = { "QuestWatchFrame", "WatchFrame", "ObjectiveTrackerFrame" },
 	-- Classic's quest timer box: its own group, so it can stay up without the tracker.
 	questtimer = { "QuestTimerFrame" },
+	-- The boxes the game puts under the minimap for a scenario's or quest's
+	-- step ("Stay a while", a capture bar...): made as they come, inside this.
+	belowminimap = { "UIWidgetBelowMinimapContainerFrame" },
+	-- Their kin at the top of the screen: a zone event's timer bar and
+	-- text ("Incoming Aqir monstrosity in:"), a scenario's progress.
+	topcenter = { "UIWidgetTopCenterContainerFrame" },
 	misc = { "DurabilityFrame" },
 	swing = { "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" },
 	-- Your cast bars: retail's, Classic's, the pet's (vehicles, mind control)
@@ -116,12 +124,17 @@ local FRAME_GROUPS = {
 -- too: while either row fades, those bars stop taking the health bar's fade
 -- (their parent's) and take this one (see personalPower.Apply). (One table:
 -- this file is near Lua's 200 locals.)
-local personalPower = { level = 1, health = 1, held = {}, pass = 0 }
+local personalPower = { level = 1, health = 1, mana = 1, held = {}, pass = 0 }
 if not ns.isRetail and GetCVar("nameplateShowSelf") ~= nil then
 	personalPower.healthStandIn = CreateFrame("Frame", "CinematicPersonalResource", UIParent)
 end
 if personalPower.healthStandIn or _G.PersonalResourceDisplayFrame then
 	personalPower.standIn = CreateFrame("Frame", "CinematicPersonalPower", UIParent)
+end
+-- (Retail's mana bar of ours, when mana isn't your power, PersonalMana.lua:
+-- a row of its own too.)
+if ns.isRetail and _G.PersonalResourceDisplayFrame then
+	CreateFrame("Frame", "CinematicPersonalMana", UIParent)
 end
 
 -- The queue eye (dungeon finder, battlegrounds): Forever pins it to the
@@ -1574,6 +1587,10 @@ ns.COMBAT_SHOW = {
 	{ key = "prdpower", label = L["Personal resource bar"], default = true, frames = { "CinematicPersonalPower" },
 		tip = L["Mana, rage, energy, focus or runic power under your character, and class resources " ..
 			"such as combo points."] },
+	-- Follows the resource bar's ticks until set (see ROW_FALLBACK).
+	{ key = "prdmana", label = L["Personal mana bar"], default = true, frames = { "CinematicPersonalMana" },
+		tip = L["Your mana under your character when it isn't your power (Elemental Shaman, Shadow Priest...): " ..
+			"with the Style hub's Personal resources page showing it."] },
 	{ key = "target", label = L["Target"], default = true, frames = { "TargetFrame" } },
 	{ key = "tot", label = L["Target of target"], default = true, frames = { "TargetFrameToT" } },
 	{ key = "focus", label = L["Focus"], default = true, frames = { "FocusFrame" } },
@@ -1675,6 +1692,17 @@ ns.COMBAT_SHOW = {
 	-- show the quest waypoint" (CINE_SHOW_SETTING).
 	{ key = "waypoint", label = L["Quest waypoint"], default = false, retail = true, groups = { "waypoint" },
 		morePage = "Minimap" },
+	-- Always ticked to start with (CINE_SHOW_DEFAULT); its other columns follow
+	-- the quest tracker's until set (see ROW_FALLBACK).
+	{ key = "belowminimap", label = L["Objective boxes (below the minimap)"], default = false,
+		frames = FRAME_GROUPS.belowminimap,
+		tip = L["The boxes the game puts under the minimap for a scenario's or quest's current step, " ..
+			"such as a capture bar. Always shown to start with."] },
+	-- Follows the quest tracker's ticks until set too.
+	{ key = "topcenter", label = L["Event boxes (top of the screen)"], default = false,
+		frames = FRAME_GROUPS.topcenter,
+		tip = L["The bars and boxes the game puts at the top of the screen for a zone event or scenario, " ..
+			"such as a timer to the next event. Until you change its ticks it does what the quest tracker's row does."] },
 	{ key = "buffs", label = L["Buffs and debuffs"], default = true, morePage = "Buffs/debuffs",
 		frames = { "BuffFrame", "DebuffFrame", "TemporaryEnchantFrame" } },
 	{ key = "swing", label = L["Swing timer"], default = true, retail = false,
@@ -1766,7 +1794,7 @@ ns.COMBAT_SHOW = {
 -- The Standard Frames page's sections (page) for the rows not given one
 -- above. (Kept in the order above within each.)
 local ROW_SECTIONS = {
-	player = "units", petframe = "units", prd = "units", prdpower = "units", target = "units", tot = "units", focus = "units", focustot = "units",
+	player = "units", petframe = "units", prd = "units", prdpower = "units", prdmana = "units", target = "units", tot = "units", focus = "units", focustot = "units",
 	targetcircle = "units",
 	buffs = "combat", swing = "combat", castbar = "combat", meters = "combat", cooldowns = "combat",
 	cooldownsutility = "combat", cooldownsbuffs = "combat", cooldownsbars = "combat", encounter = "combat",
@@ -1775,7 +1803,7 @@ local ROW_SECTIONS = {
 	right1 = "extrabars", right2 = "extrabars", bar6 = "extrabars", bar7 = "extrabars", bar8 = "extrabars",
 	minimap = "minimap", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
 	minimapzone = "minimap", minimapclock = "minimap", minimapdial = "minimap",
-	quests = "interface", waypoint = "interface", micro = "interface", bags = "interface", xp = "interface",
+	quests = "interface", waypoint = "interface", belowminimap = "interface", topcenter = "interface", micro = "interface", bags = "interface", xp = "interface",
 	voice = "interface",
 }
 for _, item in ipairs(ns.COMBAT_SHOW) do
@@ -1862,7 +1890,7 @@ end
 -- bar with action bar 1, the minimap's clock with the minimap...); an
 -- addon's or added frame's row is its fade group ("addon:<key>", "extra:<name>").
 local HOVER_ROW_BY_GROUP = {
-	bars = "mainbar", sidebars = "right1", player = "player", prd = "prd", prdpower = "prdpower", totems = "totems", target = "target",
+	bars = "mainbar", sidebars = "right1", player = "player", prd = "prd", prdpower = "prdpower", prdmana = "prdmana", totems = "totems", target = "target",
 	party = "party",
 	raidplayers = "raidplayers", raidpets = "raidpets", raidmanager = "raidmanager", flags = "flags",
 	raidroles = "raidroles", raidnames = "raidnames", raidpetnames = "raidpetnames", raidtitles = "raidtitles",
@@ -1916,7 +1944,7 @@ ns.HOVER_GROUPS_DEFAULT = {
 	{ preset = "player", icon = "Interface\\Icons\\INV_Misc_Head_Human_01", name = L["Player"],
 		members = { "player", "petframe", "totemtimers", "castbar" } },
 	{ preset = "prd", icon = "Interface\\Icons\\Spell_Nature_Rejuvenation", name = L["Personal resource bars"],
-		members = { "prd", "prdpower" } },
+		members = { "prd", "prdpower", "prdmana" } },
 	{ preset = "target", icon = "Interface\\Icons\\Ability_Hunter_SniperShot", name = L["Target and focus"],
 		members = { "target", "tot", "focus" } },
 	-- (Raid-style party frames are the raid frames. The Raid Frame Manager
@@ -2112,7 +2140,8 @@ end
 local TARGET_SHOW_DEFAULT = { target = true, tot = true }
 -- Enemy targeted: also the action bars, buffs and the like.
 local ENEMY_SHOW_DEFAULT = {
-	player = true, prd = true, prdpower = true, target = true, tot = true, focus = true, buffs = true, mainbar = true,
+	player = true, prd = true, prdpower = true, prdmana = true, target = true, tot = true, focus = true, buffs = true,
+	mainbar = true,
 	bottomleft = true, bottomright = true, pet = true, stance = true, totems = true, micro = true, bags = true, xp = true,
 	gamepadbars = true, gamepadreticle = true,
 }
@@ -2144,8 +2173,9 @@ end
 -- and the minimap header and its buttons the minimap, so profiles and lists
 -- from before it was a row (the Cooldown Manager profile's: no action bars) still hold.
 local ROW_FALLBACK = {
-	art = "mainbar", petframe = "player", prdpower = "prd", focustot = "focus", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
+	art = "mainbar", petframe = "player", prdpower = "prd", prdmana = "prdpower", focustot = "focus", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
 	minimapzone = "minimap", minimapclock = "minimap", minimapdial = "minimap", bags = "micro",
+	belowminimap = "quests", topcenter = "quests",
 	cooldownsutility = "cooldowns", cooldownsbuffs = "cooldowns", cooldownsbars = "cooldowns",
 	["addon:fecmAuras"] = "addon:fecm",
 }
@@ -2198,7 +2228,7 @@ local CINE_SHOW_DEFAULT = {
 	flags = true, castbar = true, partyroles = true, partynames = true, partystatus = true,
 	raidroles = true, raidnames = true, raidpetnames = true, raidtitles = true, raidbuffs = true,
 	raiddebuffs = true, raidthreat = true, raidtarget = true, raidready = true, extra = true, voice = true,
-	encounter = true, targetcircle = true, focustot = true,
+	encounter = true, targetcircle = true, focustot = true, belowminimap = true,
 }
 function ns.IsCineShowOn(key)
 	local setting = ns.CINE_SHOW_SETTING[key]
@@ -2314,11 +2344,14 @@ ns.RULE_WORDS = {
 	always = "always", ["true"] = "always", never = "never", ["false"] = "never",
 	combat = "combat", fighting = "combat", calm = "calm", nocombat = "nocombat", camera = "camera", cam = "camera",
 	enemy = "enemy", friendly = "friendly", target = "target",
-	-- (Your target by what it is, as the Target Nameplate rows have it.)
+	-- (Your target by what it is, as Effects' TargetRow has it.)
 	targetself = "targetself", enemyplayer = "enemyplayer", hostilenpc = "hostilenpc", neutralplayer = "neutralplayer",
 	neutralnpc = "neutralnpc", friendlyplayer = "friendlyplayer", friendlynpc = "friendlynpc",
 	noplate = "noplate", plateoff = "noplate", offscreen = "noplate", near = "near", close = "near", near28 = "near28",
-	near40 = "near40",
+	-- (Spell range bands: see RANGE_BANDS. spellrange, from before the bands,
+	-- and near40, its name before that, read as the nearest band.)
+	range5to10 = "range5to10", range20to25 = "range20to25", range30to35 = "range30to35", range40plus = "range40plus",
+	spellrange = "range30to35", range = "range30to35", near40 = "range40plus",
 	elite11 = "elite11", elite = "elite28", elite28 = "elite28", elite40 = "elite40",
 	bg = "bg", bgs = "bg", pvp = "bg", battleground = "battleground", arena = "arena", arenas = "arena",
 	world = "world", group = "group", grouped = "group", instance = "instance",
@@ -2333,6 +2366,10 @@ ns.RULE_WORDS = {
 	tipenemy = "tipenemy", tipfriendly = "tipfriendly", tipgather = "tipgather", tipquest = "tipquest",
 	tipother = "tipother",
 	tank = "tank", healer = "healer", heal = "healer", damage = "damage", dps = "damage",
+	-- (Your class: its file name, lower case. All of them, so a rule reads on every client.)
+	warrior = "warrior", paladin = "paladin", hunter = "hunter", rogue = "rogue", priest = "priest",
+	deathknight = "deathknight", dk = "deathknight", shaman = "shaman", mage = "mage", warlock = "warlock",
+	monk = "monk", druid = "druid", demonhunter = "demonhunter", dh = "demonhunter", evoker = "evoker",
 }
 do
 	local OPERATORS = { ["and"] = "and", ["&"] = "and", ["&&"] = "and", ["or"] = "or", ["|"] = "or", ["||"] = "or",
@@ -2454,46 +2491,96 @@ do
 	end
 
 	-- Whether a unit is within an interact distance (the rules' near: 2,
-	-- about 11 yards; near28: 4, about 28). Plain in fights too on retail
-	-- (tested; Auto Attack's range was nil there). False when it can't say.
-	local function UnitWithin(unit, index)
+	-- about 11 yards; near28: 4, about 28). False when it can't say.
+	-- Never asked in a fight: retail blocks it there and blames us, for
+	-- nameplate units (dozens of times a second) and for "target" too, asked
+	-- from the game's code or from a frame of our own alike (tested 2026-10-29).
+	-- True or false; nil when nothing can say.
+	local function InteractDistance(unit, index)
+		if InCombatLockdown() then
+			return nil
+		end
 		local ok, near = pcall(CheckInteractDistance, unit, index)
-		return ok and near ~= nil and not (issecretvalue and issecretvalue(near)) and near and true or false
+		if ok and near ~= nil and not (issecretvalue and issecretvalue(near)) then
+			return near and true or false
+		end
+	end
+	local function UnitWithin(unit, index)
+		return InteractDistance(unit, index) or false
 	end
 	local function TargetWithin(index)
 		return UnitWithin("target", index)
 	end
 
-	-- near40: no interact distance goes past 28, so a 40-yard spell's range
-	-- from your action bars (harmful for enemies, helpful for friends; plain in
-	-- retail fights, tested with Lightning Bolt). Looked for again every few
-	-- seconds (bars and talents change). False with no such spell.
+	-- The 40-yard bands (elite40, In40, Past40): no interact distance goes
+	-- past 28, so a 40-yard spell's range from your action bars (harmful for
+	-- enemies, helpful for friends; plain in retail fights, tested with
+	-- Lightning Bolt). Looked for again every few seconds (bars and talents
+	-- change). False with no such spell.
+	-- The rules' Spell range bands, the same words on every class: your
+	-- target within reach of your shortest spell in the band (a range up to
+	-- the next band's start counts in it: 28 yards goes in 20-25). A class
+	-- with none in it falls back to the next band down, never up, so a band
+	-- never counts further than it says; with none below either, false.
+	-- Attack spells for enemies, helpful ones for friends, each on its own.
 	local RANGE_YARDS, RANGE_LOOK_EVERY = 40, 3
+	local RANGE_BANDS = {
+		{ field = "range5to10", from = 0, label = "5-10" },
+		{ field = "range20to25", from = 20, label = "20-25" },
+		{ field = "range30to35", from = 30, label = "30-35" },
+		{ field = "range40plus", from = 40, label = "40+" },
+	}
+	ns.RANGE_BANDS = RANGE_BANDS
 	local rangeSpells, rangeLookAt = {}, -math.huge
 	local RANGE_TESTS = {
 		harmful = C_Spell and C_Spell.IsSpellHarmful or IsHarmfulSpell,
 		helpful = C_Spell and C_Spell.IsSpellHelpful or IsHelpfulSpell,
 	}
+	-- (Each band's shortest spell: bandSpells[i].harmful = id, its yards
+	-- in bandSpells[i].harmfulYards.)
+	local bandSpells = {}
+	for i = 1, #RANGE_BANDS do bandSpells[i] = {} end
+	local function BandOf(yards)
+		for i = #RANGE_BANDS, 1, -1 do
+			if yards >= RANGE_BANDS[i].from then return i end
+		end
+	end
 	local function FindRangeSpells()
 		rangeSpells.harmful, rangeSpells.helpful = nil, nil
+		for _, band in ipairs(bandSpells) do wipe(band) end
 		local best = {}
 		for slot = 1, 180 do
 			local ok, kind, id = pcall(GetActionInfo, slot)
 			if ok and kind == "spell" and type(id) == "number" and not (issecretvalue and issecretvalue(id)) then
-				local maxRange
+				local maxRange, minRange
 				if C_Spell and C_Spell.GetSpellInfo then
 					local okInfo, info = pcall(C_Spell.GetSpellInfo, id)
-					maxRange = okInfo and type(info) == "table" and info.maxRange
+					if okInfo and type(info) == "table" then
+						maxRange, minRange = info.maxRange, info.minRange
+					end
 				elseif GetSpellInfo then
-					maxRange = select(6, GetSpellInfo(id))
+					minRange, maxRange = select(5, GetSpellInfo(id))
 				end
-				-- (The nearest range at or past 40, so the word means about 40.)
+				-- (Classic Era, game 11509, gives Auto Shot's the wrong way round,
+				-- 35 as its least and 0 as its most (tested): the larger is the range.)
+				if type(minRange) == "number" and not (issecretvalue and issecretvalue(minRange))
+					and (type(maxRange) ~= "number" or (not (issecretvalue and issecretvalue(maxRange)) and minRange > maxRange)) then
+					maxRange = minRange
+				end
 				if type(maxRange) == "number" and not (issecretvalue and issecretvalue(maxRange))
-					and maxRange >= RANGE_YARDS then
+					and maxRange > 0 then
 					for key, test in pairs(RANGE_TESTS) do
 						local okTest, is = pcall(test, id)
-						if okTest and is == true and (not best[key] or maxRange < best[key]) then
-							rangeSpells[key], best[key] = id, maxRange
+						if okTest and is == true then
+							-- (The nearest range at or past 40, so the word means about 40.)
+							if maxRange >= RANGE_YARDS and (not best[key] or maxRange < best[key]) then
+								rangeSpells[key], best[key] = id, maxRange
+							end
+							local band = bandSpells[BandOf(maxRange)]
+							local had = band[key .. "Yards"]
+							if not had or maxRange < had then
+								band[key], band[key .. "Yards"] = id, maxRange
+							end
 						end
 					end
 				end
@@ -2526,29 +2613,94 @@ do
 		end
 		return answer or false
 	end
-	local function TargetWithin40()
-		return UnitWithin40("target")
+	-- A band's spell of a kind (harmful or helpful), falling back down:
+	-- its id, its yards and the band it's from; nil with none at or below.
+	local function BandSpell(index, key)
+		for i = index, 1, -1 do
+			local band = bandSpells[i]
+			if band[key] then return band[key], band[key .. "Yards"], i end
+		end
+	end
+	local function TargetInBand(index)
+		local answer = SpellReaches((BandSpell(index, "harmful")), "target")
+		if answer == nil then
+			answer = SpellReaches((BandSpell(index, "helpful")), "target")
+		end
+		return answer or false
+	end
+	-- What a band measures with on this character, for its button's tip.
+	function ns.RangeBandInfo(field)
+		LookForRangeSpells()
+		local index
+		for i, band in ipairs(RANGE_BANDS) do
+			if band.field == field then index = i end
+		end
+		if not index then return "" end
+		-- (Just the spell and its range: the attack one, then a helpful one.)
+		local lines = {}
+		for _, kind in ipairs({ "harmful", "helpful" }) do
+			local id, yards = BandSpell(index, kind)
+			if id then
+				local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id)
+					or GetSpellInfo and GetSpellInfo(id) or tostring(id)
+				lines[#lines + 1] = (L["%s, %d yards"]):format(name, yards)
+			end
+		end
+		return #lines > 0 and table.concat(lines, "\n") or L["No spell"]
+	end
+	-- /cine debug spellrange: what the finder sees on your bars.
+	function ns.ReportSpellRange()
+		local function Show(fn, ...)
+			if not fn then return "no api" end
+			local ok, value = pcall(fn, ...)
+			if not ok then return "error" end
+			if issecretvalue and issecretvalue(value) then return "secret" end
+			return tostring(value)
+		end
+		ns.Print(("spellrange: game %s, in combat %s, target %s (%s)"):format(tostring((select(4, GetBuildInfo()))),
+			tostring(InCombatLockdown()), Show(UnitName, "target"), ns.HasTarget() and "enemy " .. tostring(ns.IsEnemyUnit("target")) or "none"))
+		local kinds, spells = {}, 0
+		for slot = 1, 180 do
+			local ok, kind, id = pcall(GetActionInfo, slot)
+			if ok and kind then
+				kinds[kind] = (kinds[kind] or 0) + 1
+				if kind == "spell" and spells < 20 then
+					spells = spells + 1
+					local name, maxRange, minRange = "?", "?", "?"
+					if C_Spell and C_Spell.GetSpellInfo then
+						local okInfo, info = pcall(C_Spell.GetSpellInfo, id)
+						if okInfo and type(info) == "table" then
+							name, maxRange, minRange = tostring(info.name), tostring(info.maxRange), tostring(info.minRange)
+						end
+					end
+					local inRange = C_Spell and C_Spell.IsSpellInRange or IsSpellInRange
+					ns.Print(("  slot %d: %s %s, range %s-%s, harmful %s, helpful %s, reaches target %s"):format(slot,
+						tostring(id), name, minRange, maxRange, Show(RANGE_TESTS.harmful, id), Show(RANGE_TESTS.helpful, id),
+						Show(inRange, id, "target")))
+				end
+			end
+		end
+		local list = {}
+		for kind, count in pairs(kinds) do list[#list + 1] = kind .. " " .. count end
+		ns.Print("  action kinds: " .. (#list > 0 and table.concat(list, ", ") or "none"))
+		rangeLookAt = -math.huge
+		LookForRangeSpells()
+		for i, band in ipairs(RANGE_BANDS) do
+			local harmful, harmfulYards, harmfulFrom = BandSpell(i, "harmful")
+			local helpful, helpfulYards, helpfulFrom = BandSpell(i, "helpful")
+			ns.Print(("  %s: harmful %s (%s yd, band %s), helpful %s (%s yd, band %s), target in it %s"):format(band.label,
+				tostring(harmful), tostring(harmfulYards), tostring(harmfulFrom), tostring(helpful), tostring(helpfulYards),
+				tostring(helpfulFrom), ns.HasTarget() and tostring(TargetInBand(i)) or "no target"))
+		end
+		ns.Print(("  40-yard (elite40, Distance rows): harmful %s, helpful %s"):format(
+			tostring(rangeSpells.harmful), tostring(rangeSpells.helpful)))
 	end
 	-- Whether a unit's that far from you, for the Nameplates page's rows with
 	-- a Distance (Core's MARK_DISTANCES): In11, In28 and In40 within about 11,
 	-- 28 or 40 yards, Past28 and Past40 further. True or false; nil when
-	-- nothing can say (40: no 40-yard spell on your bars that can).
-	-- (In a fight retail blocks it for nameplate units, blamed on us dozens
-	-- of times a second (tested): then only your target's is asked, as
-	-- "target".)
-	local function Within(unit, index)
-		if InCombatLockdown() and unit ~= "target" then
-			local okSame, same = pcall(UnitIsUnit, unit, "target")
-			if not (okSame and same ~= nil and not (issecretvalue and issecretvalue(same)) and same) then
-				return nil
-			end
-			unit = "target"
-		end
-		local ok, near = pcall(CheckInteractDistance, unit, index)
-		if ok and near ~= nil and not (issecretvalue and issecretvalue(near)) then
-			return near and true or false
-		end
-	end
+	-- nothing can say (40: no 40-yard spell on your bars that can). In a
+	-- fight, as InteractDistance has it.
+	local Within = InteractDistance
 	local function Within40(unit)
 		if Within(unit, 4) then
 			return true
@@ -2614,7 +2766,7 @@ do
 	end
 
 	-- elite11, elite28, elite40: a living elite enemy within about 11, 28 or
-	-- 40 yards of you, measured as near, near28 and near40 measure your
+	-- 40 yards of you, measured as near, near28 and the 40-yard bands measure your
 	-- target. Only units with a plate count (the game makes them for units in
 	-- view, up to its plate distance). Looked at four times a second.
 	local ELITE_EVERY = 0.25
@@ -2681,8 +2833,7 @@ do
 		facts.target = hasTarget and true or false
 		facts.enemy = enemy and true or false
 		facts.friendly = (hasTarget and not enemy) and true or false
-		-- Your target by what it is: yourself, else as the Target Nameplate rows
-		-- go (Effects.lua: players and NPCs, enemy, neutral or friendly; the dead friendly).
+		-- Your target by what it is: yourself, else as Effects' TargetRow has it (Effects.lua: players and NPCs, enemy, neutral or friendly; the dead friendly).
 		local targetSelf = hasTarget and ns.Flag(UnitIsUnit("target", "player")) and true or false
 		local row = hasTarget and not targetSelf and ns.TargetNameRow and ns.TargetNameRow("target")
 		facts.targetself = targetSelf
@@ -2698,7 +2849,10 @@ do
 		-- (Your target up close, where its plate goes to the top: see TargetWithin.)
 		facts.near = hasTarget and not targetSelf and TargetWithin(2) or false
 		facts.near28 = hasTarget and not targetSelf and TargetWithin(4) or false
-		facts.near40 = hasTarget and not targetSelf and TargetWithin40() or false
+		LookForRangeSpells()
+		for i, band in ipairs(RANGE_BANDS) do
+			facts[band.field] = hasTarget and not targetSelf and TargetInBand(i) or false
+		end
 		local elites = ElitesNear()
 		facts.elite11, facts.elite28, facts.elite40 = elites[11], elites[28], elites[40]
 		facts.bg = place == "pvp"
@@ -2724,6 +2878,9 @@ do
 			or rank == "worldboss" or level == -1 or false
 		local role = ns.PlayerRole()
 		facts.tank, facts.healer, facts.damage = role == "TANK", role == "HEALER", role == "DAMAGER"
+		-- (Your class: true for its word; the others never set, so nil.)
+		local _, class = UnitClass("player")
+		if class then facts[class:lower()] = true end
 		return facts
 	end
 	-- The same, in a fight only while really in one (the nameplates and unit frame parts).
@@ -3578,10 +3735,46 @@ do
 	-- Fades every quest not in focus.quests, the headers and the background
 	-- to alpha; true if any focused quest has a block in the tracker. (Relative
 	-- to their own alpha: the background's is Edit Mode's opacity.)
-	local blockAlphas = {} -- [block] = the alpha it's faded to, for its bars
+	local blockAlphas = {} -- [block] = the alpha it's faded to, for its bars and buttons
 	local BAR_KINDS = { "usedProgressBars", "usedTimerBars" }
-	local function ApplyFocus(tracker, alpha)
+	-- The block a quest's item or group finder button belongs to: those sit
+	-- at the block's right edge, anchored to it (or to the button before),
+	-- but aren't its children. Nil for anything else.
+	local function AnchorBlock(frame)
+		for _ = 1, 4 do
+			if not (frame.GetPoint and frame:GetNumPoints() > 0) then
+				return nil
+			end
+			local ok, _, relativeTo = pcall(frame.GetPoint, frame, 1)
+			if not ok or type(relativeTo) ~= "table" or IsForbidden(relativeTo) then
+				return nil
+			end
+			if blockAlphas[relativeTo] then
+				return relativeTo
+			end
+			local parent = relativeTo.GetParent and relativeTo:GetParent()
+			if parent and blockAlphas[parent] then
+				return parent
+			end
+			frame = relativeTo
+		end
+	end
+	local function FadeEdgeButtons(holder)
+		if type(holder) ~= "table" or not holder.GetChildren or IsForbidden(holder) then
+			return
+		end
+		for _, child in ipairs({ holder:GetChildren() }) do
+			if not blockAlphas[child] and child.SetAlpha and not IsForbidden(child) then
+				local block = AnchorBlock(child)
+				if block then
+					ns.FadeRelative(child, blockAlphas[block])
+				end
+			end
+		end
+	end
+	local function ApplyFocus(tracker, alpha, timers)
 		local found = false
+		wipe(blockAlphas)
 		for _, section in ipairs(TrackerSections(tracker)) do
 			if type(section) == "table" and type(section.usedBlocks) == "table" and not IsForbidden(section) then
 				local sectionHas = false
@@ -3589,7 +3782,7 @@ do
 				local sectionAlpha = alpha
 				if scenarioSection then
 					-- (Its stage and other blocks aren't all in usedBlocks.)
-					sectionHas = focus.quests[SCENARIO] and true or false
+					sectionHas = (focus.quests[SCENARIO] or timers and timers[SCENARIO]) and true or false
 					sectionAlpha = sectionHas and 1 or alpha
 					for _, child in ipairs({ section:GetChildren() }) do
 						if child.SetAlpha and not IsForbidden(child) then
@@ -3597,7 +3790,6 @@ do
 						end
 					end
 				end
-				wipe(blockAlphas)
 				for _, blocks in pairs(section.usedBlocks) do
 					if type(blocks) == "table" then
 						for id, block in pairs(blocks) do
@@ -3605,7 +3797,7 @@ do
 								local blockAlpha = alpha
 								if scenarioSection then
 									blockAlpha = sectionAlpha
-								elseif focus.quests[id] then
+								elseif focus.quests[id] or timers and timers[id] then
 									sectionHas = true
 									blockAlpha = 1
 								end
@@ -3630,6 +3822,10 @@ do
 						end
 					end
 				end
+				if not scenarioSection then
+					FadeEdgeButtons(section)
+					FadeEdgeButtons(section.ContentsFrame)
+				end
 				found = found or sectionHas
 				local header = section.Header
 				if type(header) == "table" and header.SetAlpha and not IsForbidden(header) then
@@ -3637,6 +3833,7 @@ do
 				end
 			end
 		end
+		FadeEdgeButtons(tracker) -- (in case the game parents them to the tracker)
 		for _, part in ipairs({ tracker.Header, tracker.NineSlice }) do
 			if type(part) == "table" and part.SetAlpha and not IsForbidden(part) then
 				ns.FadeRelative(part, alpha)
@@ -3652,7 +3849,7 @@ do
 		local entry = focus.entry
 		if focus.on and (questRevealUntil > GetTime() or (entry and entry.alpha > 0)) then
 			focus.quests[questID] = true
-		elseif entry and entry.alpha == 0 then
+		elseif entry and (entry.alpha == 0 or focus.timers) then -- (up for just a timer: still focus)
 			focus.on, focus.since = true, GetTime()
 			wipe(focus.quests)
 			focus.quests[questID] = true
@@ -3660,22 +3857,127 @@ do
 			focus.on = false -- (up already for something else: all of it stays)
 		end
 	end
+	-- A timer counting down in a retail-style tracker (Show the quest timer
+	-- while one is running): the scenario's (a header timer like an assault's
+	-- "Deploy Defenses 01:14", a dungeon's or Proving Grounds' clock, a timed
+	-- objective's bar), keyed SCENARIO, or a quest's timer bar, keyed by its
+	-- quest. Nil with none. Looked at twice a second.
+	local timerKeys, timerCheckedAt, timerAny = {}, -math.huge, false
+	local TIMER_CHECK = 0.5
+	local function HeaderTimerUp(section)
+		local widgets = C_UIWidgetManager
+		local timerType = Enum and Enum.UIWidgetVisualizationType and Enum.UIWidgetVisualizationType.ScenarioHeaderTimer
+		if not (timerType and widgets) then
+			return false
+		end
+		local container = type(section.StageBlock) == "table" and section.StageBlock.WidgetContainer
+		if type(container) == "table" and type(container.widgetFrames) == "table" then
+			for _, widget in pairs(container.widgetFrames) do
+				if type(widget) == "table" and widget.widgetType == timerType and widget.IsShown
+					and not IsForbidden(widget) and ns.Flag(widget:IsShown()) then
+					return true
+				end
+			end
+		end
+		local step = C_ScenarioInfo and C_ScenarioInfo.GetScenarioStepInfo and C_ScenarioInfo.GetScenarioStepInfo()
+		local setID = step and step.widgetSetID
+		if type(setID) ~= "number" or IsSecretValue(setID) or setID == 0
+			or not (widgets.GetAllWidgetsBySetID and widgets.GetScenarioHeaderTimerWidgetVisualizationInfo) then
+			return false
+		end
+		for _, widget in ipairs(widgets.GetAllWidgetsBySetID(setID) or {}) do
+			if widget.widgetType == timerType then
+				local info = widgets.GetScenarioHeaderTimerWidgetVisualizationInfo(widget.widgetID)
+				local shown = info and info.shownState
+				if type(shown) == "number" and not IsSecretValue(shown) and shown ~= 0 then
+					return true
+				end
+			end
+		end
+		return false
+	end
+	local function ClockUp()
+		if not (GetWorldElapsedTimers and GetWorldElapsedTime) then
+			return false
+		end
+		for _, id in ipairs({ GetWorldElapsedTimers() }) do
+			local _, _, kind = GetWorldElapsedTime(id)
+			if type(kind) == "number" and not IsSecretValue(kind) and kind ~= 0 then
+				return true
+			end
+		end
+		return false
+	end
+	local function TrackerTimers(tracker)
+		local now = GetTime()
+		if now - timerCheckedAt < TIMER_CHECK then
+			return timerAny and timerKeys or nil
+		end
+		timerCheckedAt = now
+		wipe(timerKeys)
+		timerAny = false
+		if not ns.isRetail or type(tracker) ~= "table" or IsForbidden(tracker) then
+			return nil
+		end
+		for _, section in ipairs(TrackerSections(tracker)) do
+			if type(section) == "table" and not IsForbidden(section) then
+				local scenarioSection = IsScenarioSection(section)
+				if scenarioSection and (HeaderTimerUp(section) or ClockUp()) then
+					timerKeys[SCENARIO], timerAny = true, true
+				end
+				local bars = section.usedTimerBars
+				if type(bars) == "table" and next(bars) then
+					for line, bar in pairs(bars) do
+						local owner = type(bar) == "table" and bar.IsShown and not IsForbidden(bar) and ns.Flag(bar:IsShown())
+							and type(line) == "table" and line.GetParent and not IsForbidden(line) and line:GetParent()
+						if owner and scenarioSection then
+							timerKeys[SCENARIO], timerAny = true, true
+						elseif owner and type(section.usedBlocks) == "table" then
+							for _, blocks in pairs(section.usedBlocks) do
+								if type(blocks) == "table" then
+									for id, block in pairs(blocks) do
+										if block == owner then
+											timerKeys[id], timerAny = true, true
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+		return timerAny and timerKeys or nil
+	end
+	function ns.TrackerTimerKeys()
+		return TrackerTimers(_G.ObjectiveTrackerFrame)
+	end
+	function ns.HasTrackerTimer()
+		return TrackerTimers(_G.ObjectiveTrackerFrame) ~= nil
+	end
 	-- Each tick, with the tracker's entry: showAll when something besides the
-	-- reveal has it up (hovered, a fight, out of CineMode).
-	function ns.QuestFocusTick(entry, showAll, elapsed)
+	-- reveal has it up (hovered, a fight, out of CineMode); timerOnly when
+	-- nothing but a running timer has it up: just the timer's quest or the
+	-- scenario shows (with any quest a reveal focuses).
+	function ns.QuestFocusTick(entry, showAll, elapsed, timerOnly)
 		local now = GetTime()
 		focus.entry = entry
+		local timers = timerOnly and TrackerTimers(entry.frame) or nil
+		if timers and not focus.timers and not focus.on then
+			wipe(focus.quests) -- (a reveal's quests gone: just the timer's)
+		end
+		focus.timers = timers
 		if focus.on and (showAll or (questRevealUntil <= now and entry.alpha == 0)) then
 			focus.on = false
 		end
-		local want = focus.on and 0 or 1
+		local want = (focus.on or timers) and 0 or 1
 		if want == 1 and focus.othersAlpha == 1 then
 			return
 		end
 		-- (Hidden with the tracker: no fade to see.)
 		focus.othersAlpha = entry.alpha == 0 and want
 			or ns.Approach(focus.othersAlpha, want, elapsed, want > 0 and ns.FadeInTime() or ns.FadeOutTime())
-		if not ApplyFocus(entry.frame, focus.othersAlpha) and focus.on and now - focus.since > FOCUS_FIND_TIME then
+		if not ApplyFocus(entry.frame, focus.othersAlpha, timers) and focus.on and now - focus.since > FOCUS_FIND_TIME then
 			focus.on = false
 		end
 	end
@@ -4460,7 +4762,7 @@ ns.COOLDOWN_BUFF_GROUPS = { BuffIconCooldownViewer = "buffs", BuffBarCooldownVie
 -- recharging brings each up.)
 ns.COOLDOWN_MEMBER_BAR = { cooldowns = "essential", ["addon:fecm"] = "essential", cooldownsutility = "utility" }
 -- The bars with Close the gaps on until it's set (below: CenterCooldownIcons).
-ns.COOLDOWN_GROUP_CENTER = { utility = true }
+ns.COOLDOWN_GROUP_CENTER = { essential = true, utility = true }
 
 -- Whether a bar's Close the gaps is on.
 function ns.CooldownGroupCentered(group)
@@ -4489,9 +4791,9 @@ function ns.CooldownSpellMode(id, group)
 	elseif db.cooldownAlwaysShow[id] then
 		return "always", true
 	end
-	-- (Its group's mode not set: the Smart Set pick, if it has one.)
+	-- (Its group's mode not set: the Smart Set pick, if it has one and Smart Set's ticked.)
 	local set = db.cooldownGroupDefaults[group or "other"]
-	if not (set and set.mode) and ns.COOLDOWN_SMART_GROUPS[group] then
+	if db.cooldownSmartDefaults and not (set and set.mode) and ns.COOLDOWN_SMART_GROUPS[group] then
 		local pick = ns.SmartCooldownMode(id)
 		if pick == "power" then
 			return "ready", false, true, true, set and set.early
@@ -4585,7 +4887,7 @@ end
 -- best as. "power" (When Ready with Resources) when it costs a resource you
 -- build up, like Maelstrom; "proc" when it costs nothing or only one that's
 -- always there (mana, rage, energy, focus: an instant Lightning Bolt). nil
--- for a spell with a cooldown or charges, or when the game won't say.
+-- for a spell with a cooldown or charges (more than one), or when the game won't say.
 -- It's also what those spells are by default (ns.CooldownSpellMode), until
 -- you set their group's mode.
 do
@@ -4603,7 +4905,12 @@ do
 		if C_Spell and C_Spell.GetSpellCharges then
 			local okCharges, charges = pcall(C_Spell.GetSpellCharges, id)
 			if not okCharges or Secret(charges) then return nil, false end
-			if type(charges) == "table" then return nil, true end
+			-- (One charge and no base cooldown is no cooldown: Elemental Blast says 1/1.)
+			if type(charges) == "table" then
+				local most = charges.maxCharges
+				if Secret(most) then return nil, false end
+				if type(most) ~= "number" or most > 1 then return nil, true end
+			end
 		end
 		local GetCosts = (C_Spell and C_Spell.GetSpellPowerCost) or _G.GetSpellPowerCost
 		if not GetCosts then return nil, true end
@@ -4703,6 +5010,141 @@ do
 			return a.seen < b.seen
 		end)
 		return found
+	end
+end
+
+-- The Cooldown Manager page's Show keybinds (db.cooldownKeybinds): each
+-- spell's key in the top right corner of its icon in the Essential and
+-- Utility bars, as on an action button. The key is the first action bar
+-- button's holding the spell (or a macro casting it) that has one bound,
+-- the main bar first. The bars are read again when a binding, a button or
+-- the stance changes; the icons are looked at twice a second while it's on.
+do
+	local VIEWERS = { "EssentialCooldownViewer", "UtilityCooldownViewer" }
+	-- Each bar's first action slot and its buttons' binding (the main bar's
+	-- slot moves with a stance or form: below).
+	local SLOT_BARS = {
+		{ 1, "ACTIONBUTTON" }, { 61, "MULTIACTIONBAR1BUTTON" }, { 49, "MULTIACTIONBAR2BUTTON" },
+		{ 25, "MULTIACTIONBAR3BUTTON" }, { 37, "MULTIACTIONBAR4BUTTON" }, { 145, "MULTIACTIONBAR5BUTTON" },
+		{ 157, "MULTIACTIONBAR6BUTTON" }, { 169, "MULTIACTIONBAR7BUTTON" },
+	}
+	local keyOf = {} -- spell ID -> its key text
+	local labels = setmetatable({}, { __mode = "k" }) -- icon -> its key's font string
+	local dirty = true
+	local watcher = CreateFrame("Frame")
+
+	-- The plain number a call gives, or nil.
+	local function Number(func, ...)
+		if type(func) ~= "function" then return nil end
+		local ok, value = pcall(func, ...)
+		if ok and not Secret(value) and type(value) == "number" and value > 0 then return value end
+	end
+
+	local function Store(id, text)
+		if id and not keyOf[id] then keyOf[id] = text end
+	end
+
+	local function Rebuild()
+		dirty = false
+		wipe(keyOf)
+		local offset = Number(GetBonusBarOffset)
+		for _, bar in ipairs(SLOT_BARS) do
+			local first, command = bar[1], bar[2]
+			if command == "ACTIONBUTTON" and offset then
+				first = 72 + (offset - 1) * 12 + 1
+			end
+			for i = 1, 12 do
+				local ok, kind, id = pcall(GetActionInfo, first + i - 1)
+				local key = ok and not Secret(kind, id) and GetBindingKey(command .. i)
+				if key and (kind == "spell" or kind == "macro") then
+					if kind == "macro" then
+						id = Number(GetMacroSpell, id) or id
+					end
+					if type(id) == "number" then
+						local text = GetBindingText and GetBindingText(key, true) or key
+						-- (The icon may show the spell's base or what it's
+						-- turned into now.)
+						Store(id, text)
+						Store(Number(FindBaseSpellByID, id), text)
+						Store(C_Spell and Number(C_Spell.GetOverrideSpell, id), text)
+					end
+				end
+			end
+		end
+	end
+
+	local function Label(icon)
+		local text = labels[icon]
+		if not text then
+			local ok, holder = pcall(CreateFrame, "Frame", nil, icon)
+			if not ok then return nil end
+			holder:SetAllPoints()
+			holder:SetFrameLevel(icon:GetFrameLevel() + 10)
+			text = holder:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmallGray")
+			text:SetPoint("TOPRIGHT", -2, -3)
+			text:SetJustifyH("RIGHT")
+			labels[icon] = text
+		end
+		return text
+	end
+
+	local function ShowIcon(icon)
+		if IsForbidden(icon) then return end
+		local id = ItemSpell(icon) or iconSpell[icon]
+		local key = id and keyOf[id]
+		if key then
+			local text = Label(icon)
+			if text then
+				text:SetText(key)
+				text:Show()
+			end
+		elseif labels[icon] then
+			labels[icon]:Hide()
+		end
+	end
+
+	local function Update()
+		if not (ns.db.cooldownKeybinds and ns.PageOn("handleCooldowns")) then
+			for _, text in pairs(labels) do text:Hide() end
+			return
+		end
+		if dirty then Rebuild() end
+		for _, name in ipairs(VIEWERS) do
+			local viewer = _G[name]
+			local pool = viewer and viewer.itemFramePool
+			if type(pool) == "table" and type(pool.EnumerateActive) == "function" then
+				for icon in pool:EnumerateActive() do ShowIcon(icon) end
+			elseif viewer then
+				EachCooldownPart(viewer, 3, function(part, kind)
+					if kind == "item" then ShowIcon(part) end
+				end, true)
+			end
+		end
+	end
+
+	local since = 0
+	watcher:SetScript("OnUpdate", function(_, elapsed)
+		since = since + elapsed
+		if since < 0.5 then return end
+		since = 0
+		Update()
+	end)
+	watcher:Hide()
+	watcher:SetScript("OnEvent", function(_, event)
+		dirty = true
+		if event == "PLAYER_ENTERING_WORLD" then ns.ApplyCooldownKeybinds() end
+	end)
+	for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "UPDATE_BINDINGS", "ACTIONBAR_SLOT_CHANGED",
+		"UPDATE_BONUS_ACTIONBAR", "UPDATE_SHAPESHIFT_FORM", "UPDATE_MACROS", "SPELLS_CHANGED" }) do
+		pcall(watcher.RegisterEvent, watcher, event)
+	end
+
+	-- Starts or stops it as the page says (its tick box).
+	function ns.ApplyCooldownKeybinds()
+		if not ns.db then return end
+		dirty = true
+		Update()
+		watcher:SetShown(ns.db.cooldownKeybinds and true or false)
 	end
 end
 
@@ -4925,6 +5367,31 @@ do
 		end
 		local lastLine = math.max(0, math.floor((count - 1) / lineLength))
 		local inLast = count - lastLine * lineLength
+		-- The faded ones stay inside the game's own grid: the game sizes the
+		-- bar to its icons when it lays it out again (centered on its anchor),
+		-- so ones queued past its edge widened it and pulled the shown ones
+		-- off center. First the game's lines after the last shown, then the
+		-- whole places either side of the shown in theirs; any left over
+		-- share the first faded one's place (or, with none, go just after
+		-- the shown: on one line that's still inside the bar's width).
+		local below = count == 0 and 0 or math.max(0, #lineCross - 1 - lastLine) * lineLength
+		local start = (lineLength - inLast) / 2
+		local side = math.floor(start)
+		local function FadedGoal(icon, k)
+			if count == 0 then
+				Goal(icon, math.floor(k / lineLength), k % lineLength)
+			elseif k < below then
+				Goal(icon, lastLine + 1 + math.floor(k / lineLength), k % lineLength)
+			elseif k - below < side then
+				Goal(icon, lastLine, start + inLast + (k - below))
+			elseif k - below < 2 * side then
+				Goal(icon, lastLine, start - 1 - (k - below - side))
+			elseif below + 2 * side > 0 then
+				FadedGoal(icon, 0)
+			else
+				Goal(icon, lastLine, start + inLast + (k - below - 2 * side))
+			end
+		end
 		local shown, faded = 0, 0
 		for _, icon in ipairs(icons) do
 			wanted[icon] = true
@@ -4934,7 +5401,7 @@ do
 				Goal(icon, line, shown % lineLength + (lineLength - inLine) / 2)
 				shown = shown + 1
 			else
-				Goal(icon, lastLine, count == 0 and faded or (lineLength - inLast) / 2 + inLast + faded)
+				FadedGoal(icon, faded)
 				faded = faded + 1
 			end
 		end
@@ -5039,9 +5506,24 @@ do
 			tostring(InCombatLockdown())))
 		for bar, group in pairs(ns.COOLDOWN_BAR_GROUPS) do
 			local viewer = _G[bar]
+			local geometry = "?"
+			if type(viewer) == "table" and viewer.GetCenter then
+				local okC, cx, cy = pcall(viewer.GetCenter, viewer)
+				local okW, width = pcall(viewer.GetWidth, viewer)
+				local okS, scale = pcall(viewer.GetEffectiveScale, viewer)
+				local okP, point, relativeTo, relativePoint, px, py = pcall(viewer.GetPoint, viewer, 1)
+				local relName = okP and not Secret(relativeTo) and type(relativeTo) == "table" and relativeTo.GetName
+					and relativeTo:GetName() or "?"
+				geometry = ("center %s,%s width %s scale %s | %s on %s %s %s,%s | stride %s, horizontal %s"):format(
+					okC and Num(cx) or "?", okC and Num(cy) or "?", okW and Num(width) or "?", okS and Num(scale) or "?",
+					okP and tostring(point) or "?", tostring(relName), okP and tostring(relativePoint) or "?",
+					okP and Num(px) or "?", okP and Num(py) or "?",
+					Num(viewer.stride or viewer.iconLimit), tostring(viewer.isHorizontal))
+			end
 			print(("  %s (%s): on=%s, viewer %s, Layout hooked %s"):format(bar, group,
 				tostring(ns.CooldownGroupCentered(group)), type(viewer),
 				tostring(hooked[bar] or false)))
+			print("    " .. geometry)
 		end
 		local count = 0
 		EachCooldownIcon(function(icon, id, bar)
@@ -5054,9 +5536,11 @@ do
 			local slot, at, to = slotOf[icon], putAt[icon], goal[icon]
 			local relName = ok and not Secret(relativeTo) and type(relativeTo) == "table" and relativeTo.GetName
 				and relativeTo:GetName() or "?"
-			print(("  %s spell=%s place=%s points=%s now %s %s,%s on %s | slot %s | put %s | goal %s | target %s, movable %s")
+			local okC, cx = pcall(icon.GetCenter, icon)
+			print(("  %s spell=%s place=%s points=%s now %s %s,%s on %s screen x %s | slot %s | put %s | goal %s | target %s, movable %s")
 				:format(group, tostring(id), Num(icon.layoutIndex), okCount and Num(points) or "?",
 				ok and tostring(point) or "?", ok and Num(x) or "?", ok and Num(y) or "?", tostring(relName),
+				okC and Num(cx) or "?",
 				slot and (Num(slot[4]) .. "," .. Num(slot[5])) or "none",
 				at and (Num(at[1]) .. "," .. Num(at[2])) or "none",
 				to and (Num(to[1]) .. "," .. Num(to[2])) or "none",
@@ -5225,10 +5709,15 @@ do
 			return "no personal resource bars on this client"
 		end
 		local names = {}
+		-- (A secret alpha or name formats to a secret string, which concat refuses.)
+		local function Plain(ok, value)
+			return ok and not (issecretvalue and issecretvalue(value)) and value ~= nil
+		end
 		EachPowerBar(function(bar)
 			local okName, name = pcall(bar.GetDebugName, bar)
-			local ok, alpha = pcall(function() return ("%.2f"):format(bar:GetAlpha()) end)
-			names[#names + 1] = (okName and tostring(name):match("[^.]*%.?[^.]+$") or "?") .. " " .. (ok and alpha or "?")
+			local okAlpha, alpha = pcall(bar.GetAlpha, bar)
+			names[#names + 1] = (Plain(okName, name) and tostring(name):match("[^.]*%.?[^.]+$") or "?") .. " "
+				.. (Plain(okAlpha, alpha) and ("%.2f"):format(alpha) or (okAlpha and "secret" or "?"))
 				.. (held[bar] and " (ours)" or "")
 		end)
 		-- (And the nameplate driver's bars wherever they are, by their parents.)
@@ -5236,12 +5725,12 @@ do
 		for field, bar in pairs(type(_G.NamePlateDriverFrame) == "table" and _G.NamePlateDriverFrame or {}) do
 			if NamedLikePower(field) and type(bar) == "table" and bar.GetParent then
 				local okParent, parent = pcall(function() return bar:GetParent():GetDebugName() end)
-				driver[#driver + 1] = field .. " in " .. (okParent and tostring(parent) or "?")
+				driver[#driver + 1] = field .. " in " .. (Plain(okParent, parent) and tostring(parent) or "?")
 			end
 		end
 		local frame, plate = Roots()
-		return ("health row %.2f, resource row %.2f, frame %s, plate %s, bars: %s; driver: %s"):format(
-			personalPower.health, personalPower.level, frame and (ns.Flag(frame:IsShown()) and "shown" or "hidden") or "none",
+		return ("health row %.2f, resource row %.2f, mana row %.2f, frame %s, plate %s, bars: %s; driver: %s"):format(
+			personalPower.health, personalPower.level, personalPower.mana, frame and (ns.Flag(frame:IsShown()) and "shown" or "hidden") or "none",
 			plate and "up" or "none", #names > 0 and table.concat(names, ", ") or "NONE found",
 			#driver > 0 and table.concat(driver, ", ") or "none")
 	end
@@ -5805,6 +6294,19 @@ function ns.ReportQuestTimer()
 	ns.Print(("quest timer: running=%s option=%s retail=%s timers=%s"):format(tostring(HasQuestTimer()),
 		tostring(ns.db.questTimerShow), tostring(ns.isRetail),
 		GetQuestTimers and table.concat(timers, ",") or "no API"))
+	if ns.isRetail then
+		-- (Retail: timers in the tracker, each the quest or scenario kept up.)
+		local keys = {}
+		for key in pairs(ns.TrackerTimerKeys() or {}) do
+			keys[#keys + 1] = tostring(key)
+		end
+		local tracker = _G.ObjectiveTrackerFrame
+		ns.Print(("tracker timers: %s page=%s combat=%s tracker alpha=%s scenario=%s"):format(
+			#keys > 0 and table.concat(keys, ",") or "none", tostring(ns.PageOn("handleQuests")),
+			tostring(ns.Flag(InCombatLockdown())), tracker and ("%.2f"):format(tracker:GetAlpha()) or "no tracker",
+			tostring(_G.ScenarioObjectiveTracker and ns.Flag(_G.ScenarioObjectiveTracker:IsShown()))))
+		return
+	end
 	if not frame then
 		ns.Print("no QuestTimerFrame")
 		return
@@ -5844,7 +6346,7 @@ end
 local PORTRAIT_FRAMES = {
 	PlayerFrame = "portraitWhenNotFull",
 	PersonalResourceDisplayFrame = "prdWhenNotFull", CinematicPersonalResource = "prdWhenNotFull",
-	CinematicPersonalPower = "prdWhenNotFull",
+	CinematicPersonalPower = "prdWhenNotFull", CinematicPersonalMana = "prdWhenNotFull",
 }
 
 -- Swing timer page (Classic clients' own swing timer): a bar fades out once
@@ -6198,6 +6700,8 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local keepForGathering, keepForCreatures = ns.IsKeepingMinimapForTracking(now)
 	-- (Quest tracker page, its switch on.)
 	local questTimerUp = ns.PageOn("handleQuests") and ns.db.questTimerShow and HasQuestTimer()
+	-- (Retail: a timer in the quest tracker keeps just that part up.)
+	local trackerTimerUp = ns.isRetail and ns.PageOn("handleQuests") and ns.db.questTimerShow and ns.HasTrackerTimer()
 	-- (Hide in camera modes: not while one is running, it goes with the rest.)
 	local durabilityUp = ns.PageOn("handleQuests") and ns.db.durabilityShow and not (ns.db.durabilityHideInCam and ns.activeCam)
 		and ns.HasDurabilityAlert()
@@ -6358,10 +6862,12 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local keepIndoors = minimapPage and (ns.db.minimapIndoors and IsIndoors and ns.Flag(IsIndoors())
 		or ns.db.minimapKeepQuest and ns.HasTrackedQuest()
 			-- (Only after progress: 0 is off.)
-			and ((ns.db.minimapKeepQuestFor or 0) <= 0 or now - ns.questActivityAt < ns.db.minimapKeepQuestFor * 60))
+			and ((ns.db.minimapKeepQuestFor or 0) <= 0 or now - ns.questActivityAt < ns.db.minimapKeepQuestFor * 60)
+		-- (Zones you picked: not on flight paths, where Not on flight paths is ticked.)
+		or not taxiHidesMinimap and ns.IsMinimapKeptInZone())
 
 	-- (Up unless their rows' frames are faded below: let go, they're up.)
-	personalPower.health, personalPower.level = 1, 1
+	personalPower.health, personalPower.level, personalPower.mana = 1, 1, 1
 	local chatButtonsAlpha
 	for _, entry in ipairs(ns.managed) do
 		if entry.ownAlpha then
@@ -6387,6 +6893,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		local tracking = ((ns.db.alwaysShowMinimap or keepIndoors) and entry.group == "minimap")
 			or (ns.db.alwaysShowWaypoint and entry.group == "waypoint")
 			or (questTimerUp and entry.group == "questtimer")
+			or (trackerTimerUp and entry.group == "quests" and entry.frame == _G.ObjectiveTrackerFrame)
 			or (durabilityUp and entry.group == "misc")
 			or (petUnhappyUp and entry.name == "PetFrame")
 			or (triggered[row] and not (debuffsOnly and auraOnly[row]
@@ -6409,7 +6916,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		-- (Vitals Vision's health bars: up as far as your health says, LowHealth.lua.)
 		entry.vitalsSecret = nil
 		if target == 0 and cinematic and not deathFade and PORTRAIT_FRAMES[entry.name]
-			and entry.name ~= "CinematicPersonalPower" then
+			and entry.name ~= "CinematicPersonalPower" and entry.name ~= "CinematicPersonalMana" then
 			local vitals = ns.VitalsFrameAlpha(PORTRAIT_FRAMES[entry.name] == "prdWhenNotFull" and "prd" or "portrait",
 				entry.frame == personalPower.healthStandIn)
 			if vitals == "secret" then
@@ -6457,8 +6964,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 		end
 		-- (Show just that quest, Quest tracker page.)
 		if entry.frame == _G.ObjectiveTrackerFrame and entry.group == "quests" then
-			ns.QuestFocusTick(entry, not cinematic or not ns.db.questRevealOnlyThat or hovered[row] or fightingShown
-				or ns.previewRows, elapsed)
+			local shownAnyway = not cinematic or hovered[row] or fightingShown or ns.previewRows
+			ns.QuestFocusTick(entry, shownAnyway or not ns.db.questRevealOnlyThat, elapsed,
+				trackerTimerUp and not shownAnyway and (not triggered[row] or (questReveal and ns.db.questRevealOnlyThat)))
 		end
 		if typingShown and entry.alpha < 1 then
 			-- Pressing Enter shows the chat input (and its window) at once.
@@ -6530,10 +7038,15 @@ function ns.UpdateFrames(cinematic, elapsed)
 			personalPower.health = entry.alpha
 		elseif entry.group == "prdpower" then
 			personalPower.level = entry.alpha
+		elseif entry.group == "prdmana" then
+			personalPower.mana = entry.alpha
 		end
 	end
 	if personalPower.standIn then
 		personalPower.Apply()
+	end
+	if ns.FadePersonalMana then
+		ns.FadePersonalMana(personalPower.health, personalPower.mana)
 	end
 	-- A chat window's button column (inside the window on Classic clients)
 	-- draws a strip of the window's dark background: it comes and goes with

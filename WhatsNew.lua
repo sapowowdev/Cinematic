@@ -22,7 +22,7 @@ end
 local PAGE_ICONS = {
 	["CineMode"] = "Interface\\Icons\\INV_Misc_Spyglass_02",
 	["Profiles"] = "Interface\\Icons\\INV_Misc_Note_02",
-	-- (the Visual Effects hub: its General tab's)
+	-- (the Atmosphere hub's General tab's)
 	["Visual Effects"] = "Interface\\Icons\\Spell_Holy_Restoration",
 	["Audio"] = "Interface\\Icons\\INV_Misc_Drum_01",
 	["Keybinds"] = "Interface\\Icons\\INV_Misc_Key_03",

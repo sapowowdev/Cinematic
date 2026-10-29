@@ -594,18 +594,33 @@ def sprites():
     # Rain: a thin streak.
     rain = smoothstep(10, 3, np.abs(xx - c)) * smoothstep(0, 120, yy) * smoothstep(BIG, BIG - 60, yy)
     cells["Rain"] = rain * 0.8
-    # Bolt: lightning, jagged, top to bottom.
+    # Bolt: lightning, jagged, top to bottom, thinning to a point at each end
+    # (it ran off the image's top and bottom at full width: flat ends).
     image = cell_image()
     draw = ImageDraw.Draw(image)
     px, py = c, 0
+    TIP = 90  # (how far from each end it thins over)
+
+    def thick(y, most):
+        return max(1, round(most * min(1, max(0, y) / TIP, max(0, BIG - y) / TIP)))
     while py < BIG:
         nx, ny = px + rng.uniform(-60, 60), py + rng.uniform(30, 60)
-        draw.line((px, py, nx, ny), fill=255, width=10)
+        draw.line((px, py, nx, ny), fill=255, width=thick((py + ny) / 2, 10))
         if rng.random() < 0.3:
-            draw.line((nx, ny, nx + rng.uniform(-90, 90), ny + rng.uniform(40, 90)), fill=200, width=5)
+            ex, ey = nx + rng.uniform(-90, 90), ny + rng.uniform(40, 90)
+            # (A branch thinning to a point too: in steps, each narrower.)
+            steps = 6
+            for k in range(steps):
+                t0, t1 = k / steps, (k + 1) / steps
+                x0, y0 = nx + (ex - nx) * t0, ny + (ey - ny) * t0
+                x1, y1 = nx + (ex - nx) * t1, ny + (ey - ny) * t1
+                draw.line((x0, y0, x1, y1), fill=200, width=thick((y0 + y1) / 2, max(1, round(5 * (1 - t0)))))
         px, py = nx, ny
     bolt = mask_from(image)
-    cells["Bolt"] = np.clip(bolt + mask_from(image.filter(ImageFilter.GaussianBlur(14))) * 1.5, 0, 1)
+    glow = mask_from(image.filter(ImageFilter.GaussianBlur(14))) * 1.5
+    # (Gone by the image's top and bottom, so the tips end in a point.)
+    ends = smoothstep(0, TIP * 0.6, yy) * smoothstep(BIG, BIG - TIP * 0.6, yy)
+    cells["Bolt"] = np.clip(bolt + glow, 0, 1) * ends
     # Ripple: a ring.
     d = np.hypot(xx - c, yy - c) / (BIG / 2)
     cells["Ripple"] = np.exp(-((d - 0.8) / 0.05) ** 2) + 0.4 * np.exp(-((d - 0.6) / 0.04) ** 2)

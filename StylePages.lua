@@ -822,7 +822,18 @@ function ns.StyleRows(kit, content, stack, changed, switchKey, fieldOf)
 
 	-- A row of preset buttons, width wide: { name, tip, settings } each; a
 	-- pick turns the page on and sets keys as its settings say, the rest as
-	-- their defaults.
+	-- their defaults. The one the settings match now is lit, its name gold
+	-- (the rest white).
+	local function Matches(preset, keys)
+		local db = ns.GetDB()
+		if not (db and db[switchKey]) then return false end
+		for _, key in ipairs(keys) do
+			local value = preset[3][key]
+			if value == nil then value = ns.DEFAULTS[key] end
+			if db[key] ~= value then return false end
+		end
+		return true
+	end
 	function rows.Presets(presets, keys, width)
 		local row = CreateFrame("Frame", nil, content)
 		row:SetSize(width, 24)
@@ -849,7 +860,11 @@ function ns.StyleRows(kit, content, stack, changed, switchKey, fieldOf)
 				changed()
 				kit.Refresh()
 			end)
-			button.Refresh = function() end
+			button.Refresh = function(self)
+				local on = Matches(preset, keys)
+				self:SetNormalFontObject(on and "GameFontNormal" or "GameFontHighlight")
+				if on then self:LockHighlight() else self:UnlockHighlight() end
+			end
 			kit.GreyUnless(button, On)
 			kit.AddControl(button)
 			last = button

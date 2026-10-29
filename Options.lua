@@ -320,7 +320,9 @@ end
 -- a slider each (the Nameplate Style page's W and H boxes): the mouse wheel
 -- steps a box, or a number's typed and Enter pressed. `scale` and `fmt` as
 -- Slider's; a name may be blank (the box beside the one before); unit: a
--- word after the box (sec), the number alone in it.
+-- word after the box (sec), the number alone in it. Without one, a
+-- slider's fmt ("%d%%", "%.2fs") is split so: the number in the box, the
+-- rest after it. key: a setting's name, or { get, set } as Slider's.
 local function BoxLine(parent)
 	local line = CreateFrame("Frame", nil, parent)
 	line:SetSize(10, 22)
@@ -328,6 +330,12 @@ local function BoxLine(parent)
 	function line.Box(_, label, key, minV, maxV, step, fmt, scale, tip, onChange, width, unit)
 		scale = scale or 1
 		RecordKey(parent, key)
+		if type(fmt) == "string" and not unit then
+			local number, after = fmt:match("^(%%[%d%.]*[df])%s*(.*)$")
+			if number and after ~= "" then
+				fmt, unit = number, (after:gsub("%%%%", "%%"))
+			end
+		end
 		local name = Label(line, "GameFontHighlight", label)
 		name:SetPoint("LEFT", line, "LEFT", right, 0)
 		name.searchSkip = true
@@ -344,18 +352,33 @@ local function BoxLine(parent)
 			local after = Label(line, "GameFontHighlight", unit)
 			after:SetPoint("LEFT", box, "RIGHT", 4, 0)
 			after.searchSkip = true
+			box.unitLabel = after
 			right = right + after:GetStringWidth() + 4
 		end
 		line:SetWidth(right)
+		-- (Greyed, the box and its words dim: a disabled box alone looks the same.)
+		local setEnabled = box.SetEnabled
+		function box.SetEnabled(self, enabled)
+			if setEnabled then setEnabled(self, enabled) end
+			local alpha = enabled and 1 or 0.5
+			self:SetAlpha(alpha)
+			name:SetAlpha(alpha)
+			if self.unitLabel then self.unitLabel:SetAlpha(alpha) end
+		end
 		local function Now()
-			return (ns.GetDB()[key] or 0) * scale
+			local value = type(key) == "table" and key.get() or ns.GetDB()[key]
+			return (value or 0) * scale
 		end
 		local function Shown(value)
 			return type(fmt) == "function" and fmt(value) or fmt:format(value)
 		end
 		local function Set(value)
 			value = math.max(minV, math.min(maxV, math.floor(value / step + 0.5) * step))
-			ns.GetDB()[key] = value / scale
+			if type(key) == "table" then
+				key.set(value / scale)
+			else
+				ns.GetDB()[key] = value / scale
+			end
 			box:SetText(box:HasFocus() and tostring(value) or Shown(value))
 			box.edited = nil
 			if onChange then onChange(value) end
@@ -1284,40 +1307,54 @@ do
 	-- Each hub (by English name) and its pages in order, with their icons
 	-- (or a function that gives one).
 	local HUBS = {
-		{ name = "UI Manager", pages = {
+		-- (sections: the frames as a whole, fight frames, the world's, then chat)
+		{ name = "UI Manager", colors = {
+			Frames = { 0.75, 0.65, 0.45 }, Combat = { 0.85, 0.3, 0.25 }, World = { 0.35, 0.6, 0.9 },
+			Chat = { 0.3, 0.7, 0.5 },
+		}, pages = {
 			-- (A standard: your faction's battle banner.)
 			{ "Standard Frames", function()
 				return UnitFactionGroup("player") == "Horde" and "Interface\\Icons\\INV_BannerPVP_01"
 					or "Interface\\Icons\\INV_BannerPVP_02"
-			end },
-			{ "Advanced Frames", "Interface\\Icons\\INV_Misc_Gear_01" },
-			{ "Nameplates", "Interface\\Icons\\Ability_Hunter_SniperShot" },
-			{ "Unit Frames", "Interface\\Icons\\INV_Misc_Head_Dwarf_01" },
-			{ "Personal Resources", "Interface\\Icons\\Ability_Racial_BloodRage" }, -- (Bloodrage: health into power)
-			{ "Mouseover groups", "Interface\\Icons\\Spell_Holy_MindVision" },
-			{ "Minimap", "Interface\\Icons\\INV_Misc_Map_01" },
-			{ "Quest tracker", "Interface\\Icons\\INV_Misc_Note_01" },
-			{ "Swing timer", "Interface\\Icons\\INV_Sword_04" },
-			{ "Cooldown Manager", "Interface\\Icons\\INV_Misc_PocketWatch_01" },
-			{ "Tooltips", "Interface\\Icons\\INV_Misc_Book_09" },
-			{ "Buffs/debuffs", "Interface\\Icons\\Spell_Holy_WordFortitude" },
-			{ "Chat", "Interface\\Icons\\INV_Scroll_03" },
-			{ "Chat bubbles", "Interface\\Icons\\Ability_Warrior_BattleShout" },
-			{ "Gamepad", "Interface\\Icons\\INV_Gizmo_01" },
+			end, section = "Frames" },
+			{ "Advanced Frames", "Interface\\Icons\\INV_Misc_Gear_01", section = "Frames" },
+			{ "Mouseover groups", "Interface\\Icons\\Spell_Holy_MindVision", section = "Frames" },
+			{ "Gamepad", "Interface\\Icons\\INV_Gizmo_01", section = "Frames" },
+			{ "Nameplates", "Interface\\Icons\\Ability_Hunter_SniperShot", label = "Nameplate & Names",
+				section = "Combat" },
+			{ "Unit Frames", "Interface\\Icons\\INV_Misc_Head_Dwarf_01", section = "Combat" },
+			{ "Personal Resources", "Interface\\Icons\\Ability_Racial_BloodRage", -- (Bloodrage: health into power)
+				section = "Combat" },
+			{ "Buffs/debuffs", "Interface\\Icons\\Spell_Holy_WordFortitude", section = "Combat" },
+			{ "Cooldown Manager", "Interface\\Icons\\INV_Misc_PocketWatch_01", section = "Combat" },
+			{ "Swing timer", "Interface\\Icons\\INV_Sword_04", section = "Combat" },
+			{ "Minimap", "Interface\\Icons\\INV_Misc_Map_01", section = "World" },
+			{ "Quest tracker", "Interface\\Icons\\INV_Misc_Note_01", section = "World" },
+			{ "Tooltips", "Interface\\Icons\\INV_Misc_Book_09", section = "World" },
+			{ "Chat", "Interface\\Icons\\INV_Scroll_03", section = "Chat" },
+			{ "Chat bubbles", "Interface\\Icons\\Ability_Warrior_BattleShout", section = "Chat" },
 		} },
-		{ name = "Camera", pages = {
-			{ "Cameras", "Interface\\Icons\\INV_Misc_Spyglass_03" },
+		-- (Camera Settings' icons, one per camera, name their sections themselves)
+		{ name = "Camera", colors = {
+			["At rest"] = { 0.3, 0.7, 0.5 }, Travel = { 0.35, 0.6, 0.9 }, Moments = { 0.65, 0.45, 0.9 },
+		}, pages = {
+			{ "Cameras", "Interface\\Icons\\INV_Misc_Spyglass_03", label = "General" },
 			{ "Camera Settings", "Interface\\Icons\\Trade_Engineering" }, -- (an icon per camera instead)
 		} },
 		-- (label: the name on its icon, when the page is registered under another)
-		{ name = "Visual Effects", pages = {
-			{ "Effects", "Interface\\Icons\\Spell_Holy_Restoration", label = "General" },
-			{ "Tint", "Interface\\Icons\\INV_Misc_Gem_Variety_02" },
-			{ "Graphics+", "Interface\\Icons\\INV_Misc_Gem_Pearl_04" },
+		-- (the look and the sound: the visual effects' pages, then Audio)
+		{ name = "Atmosphere", colors = { Visuals = { 0.65, 0.45, 0.9 }, Audio = { 0.3, 0.7, 0.5 } }, pages = {
+			{ "Effects", "Interface\\Icons\\Spell_Holy_Restoration", label = "General", section = "Visuals" },
+			{ "Tint", "Interface\\Icons\\INV_Misc_Gem_Variety_02", section = "Visuals" },
+			{ "Graphics+", "Interface\\Icons\\INV_Misc_Gem_Pearl_04", section = "Visuals" },
+			{ "Audio", "Interface\\Icons\\INV_Misc_Drum_01", section = "Audio" },
 		} },
-		-- (section: a row of its own, its name before it: the game's frames,
-		-- then Cinematic's own)
-		{ name = "Style", pages = {
+		-- (section: its pages on a band in its color, its name above it; all in
+		-- one row: the game's frames (the nameplates' parts first), then
+		-- Cinematic's own. The picked page's band in gold, the rest faded.)
+		{ name = "Style", colors = {
+			Game = { 0.35, 0.6, 0.9 }, Cinematic = { 0.65, 0.45, 0.9 },
+		}, pages = {
 			{ "Style General", "Interface\\Icons\\INV_Misc_Gear_08", label = "General" },
 			{ "Nameplate Style", "Interface\\Icons\\Ability_Marksmanship", label = "Nameplates", section = "Game" },
 			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names", section = "Game" },
@@ -1337,40 +1374,38 @@ do
 				section = "Cinematic" },
 			{ "Roll Style", "Interface\\Icons\\INV_Misc_Dice_02", label = "Roll Vision", section = "Cinematic" },
 			{ "Combat Style", "Interface\\Icons\\Ability_DualWield", label = "Combat Vision", section = "Cinematic" },
+			{ "Vitals Style", "Interface\\Icons\\Spell_Shadow_LifeDrain02", label = "Vitals Vision",
+				section = "Cinematic" },
 		} },
-		{ name = "Visions", pages = {
+		-- (General and the dev copy's Wind Guide in no section: plain icons)
+		{ name = "Visions", colors = { Combat = { 0.85, 0.3, 0.25 }, World = { 0.35, 0.6, 0.9 } }, pages = {
 			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl", label = "General" },
-			{ "Heal Vision", "Interface\\Icons\\Spell_Holy_FlashHeal" },
-			{ "Quest Vision", "Interface\\Icons\\INV_Misc_Head_Dragon_01" },
-			{ "Combat Vision", "Interface\\Icons\\Ability_Warrior_OffensiveStance" },
-			{ "Roll Vision", "Interface\\Icons\\INV_Misc_Dice_01" },
-			{ "Vitals Vision", "Interface\\Icons\\Spell_Shadow_LifeDrain02" },
+			{ "Heal Vision", "Interface\\Icons\\Spell_Holy_FlashHeal", section = "Combat" },
+			{ "Combat Vision", "Interface\\Icons\\Ability_Warrior_OffensiveStance", section = "Combat" },
+			{ "Vitals Vision", "Interface\\Icons\\Spell_Shadow_LifeDrain02", section = "Combat" },
+			{ "Quest Vision", "Interface\\Icons\\INV_Misc_Head_Dragon_01", section = "World" },
+			{ "Roll Vision", "Interface\\Icons\\INV_Misc_Dice_01", section = "World" },
 			{ "Wind Guide", "Interface\\Icons\\Spell_Nature_Cyclone" },
 		} },
-		{ name = "Audio", pages = {
-			{ "Audio", "Interface\\Icons\\INV_Misc_Drum_01" },
-		} },
-		-- (group: an icon of its own that opens a second row with the pages
-		-- under it; the wheels are WheelsPage.lua's pages)
-		{ name = "Quality of life", pages = {
+		-- (the wheels are WheelsPage.lua's pages)
+		{ name = "Quality of life", colors = { Helpers = { 0.3, 0.7, 0.5 }, Wheels = { 0.65, 0.45, 0.9 } }, pages = {
 			{ "General", "Interface\\Icons\\INV_Misc_Bag_07" },
-			{ "Fishing", "Interface\\Icons\\Trade_Fishing" },
-			{ "Hunter", "Interface\\Icons\\INV_Weapon_Bow_07" },
-			{ "Wheels", "Interface\\Icons\\INV_Jewelry_Ring_03", group = true },
-			{ "Master wheel", "Interface\\Icons\\Spell_Nature_WispSplode", under = "Wheels" },
-			{ "Your wheels", "Interface\\Icons\\INV_Misc_Note_01", under = "Wheels" },
-			{ "Camera wheel", "Interface\\Icons\\INV_Misc_Spyglass_03", under = "Wheels" },
-			{ "Menu wheel", "Interface\\Icons\\INV_Misc_Gear_01", under = "Wheels" },
-			{ "Marker wheel", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8", under = "Wheels" },
-			{ "Ground marker wheel", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_6", under = "Wheels" },
-			{ "Vision wheel", "Interface\\Icons\\Ability_EyeOfTheOwl", under = "Wheels" },
+			{ "Fishing", "Interface\\Icons\\Trade_Fishing", section = "Helpers" },
+			{ "Hunter", "Interface\\Icons\\INV_Weapon_Bow_07", section = "Helpers" },
+			{ "Master wheel", "Interface\\Icons\\Spell_Nature_WispSplode", section = "Wheels" },
+			{ "Your wheels", "Interface\\Icons\\INV_Misc_Note_01", section = "Wheels" },
+			{ "Camera wheel", "Interface\\Icons\\INV_Misc_Spyglass_03", section = "Wheels" },
+			{ "Menu wheel", "Interface\\Icons\\INV_Misc_Gear_01", section = "Wheels" },
+			{ "Marker wheel", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8", section = "Wheels" },
+			{ "Ground marker wheel", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_6", section = "Wheels" },
+			{ "Vision wheel", "Interface\\Icons\\Ability_EyeOfTheOwl", section = "Wheels" },
 		} },
 		-- (WhatsNew.lua's pages, after Keybinds)
-		{ name = "Community", pages = {
-			{ "New features", "Interface\\Icons\\INV_Misc_Gift_01" },
-			{ "All changes", "Interface\\Icons\\INV_Misc_Book_11" },
-			{ "Socials", "Interface\\Icons\\INV_Letter_15" },
-			{ "Thanks", "Interface\\Icons\\INV_ValentinesCard02" },
+		{ name = "Community", colors = { Updates = { 0.35, 0.6, 0.9 }, People = { 0.3, 0.7, 0.5 } }, pages = {
+			{ "New features", "Interface\\Icons\\INV_Misc_Gift_01", section = "Updates" },
+			{ "All changes", "Interface\\Icons\\INV_Misc_Book_11", section = "Updates" },
+			{ "Socials", "Interface\\Icons\\INV_Letter_15", section = "People" },
+			{ "Thanks", "Interface\\Icons\\INV_ValentinesCard02", section = "People" },
 		} },
 	}
 	-- Pages still being worked on: "(WIP)" after the name on their icon's mouseover.
@@ -1379,58 +1414,122 @@ do
 	local BAR = 30 -- (the search box and Reset page, above the icons)
 	local byName = {} -- tile by the name its page was registered under (English or shown)
 
-	local SECTION_W = 80 -- (a section's name, before its row)
+	local LABEL_H, BAND_PAD, SECTION_GAP = 14, 4, 10 -- (a section's name above its band; bands apart)
+	local BELOW = 10 -- (room under the icons, above the line to the page)
+	local GOLD = { 1, 0.82, 0 }
+
+	local PLAIN = { 0.6, 0.55, 0.45 } -- (a band of pages in no section)
+
+	-- A section's band: a fill and an edge in its color (gold while one of its
+	-- pages is shown, faded otherwise), its name above in the same color.
+	local function PaintBands(hub)
+		if not hub.bands then return end
+		for _, band in pairs(hub.bands) do
+			local lit = hub.current and band.tiles[hub.current]
+			local c = lit and GOLD or hub.colors and hub.colors[band.section] or PLAIN
+			band:SetColorTexture(c[1], c[2], c[3], lit and 0.14 or 0.08)
+			for _, line in ipairs(band.edges) do line:SetColorTexture(c[1], c[2], c[3], lit and 0.45 or 0.25) end
+			if lit then band.label:SetTextColor(c[1], c[2], c[3])
+			else band.label:SetTextColor(c[1] * 0.6 + 0.15, c[2] * 0.6 + 0.15, c[3] * 0.6 + 0.15) end
+		end
+	end
+
+	-- (key: the section, or the place of a run of pages in none, its band unnamed)
+	local function Band(hub, key, section)
+		hub.bands = hub.bands or {}
+		local band = hub.bands[key]
+		if band then return band end
+		band = hub.frame:CreateTexture(nil, "BACKGROUND")
+		band.section = section
+		band.edges = {}
+		for i, sides in ipairs({ { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" },
+			{ "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+			local line = hub.frame:CreateTexture(nil, "BORDER")
+			line:SetPoint(sides[1], band)
+			line:SetPoint(sides[2], band)
+			if i <= 2 then line:SetHeight(1) else line:SetWidth(1) end
+			band.edges[i] = line
+		end
+		band.label = hub.frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+		band.label:SetPoint("BOTTOMLEFT", band, "TOPLEFT", 2, 2)
+		band.label:SetText(section and L[section] or "")
+		band.label.searchSkip = true
+		hub.bands[key] = band
+		return band
+	end
+
+	-- A hub with sections: each section's pages on its band, the bands in one
+	-- row (a band that won't fit starts another).
+	local function SectionLayout(hub, width)
+		local runs = {}
+		for _, tile in ipairs(hub.tiles) do
+			local run = runs[#runs]
+			if not run or run.section ~= tile.section then
+				run = { section = tile.section }
+				runs[#runs + 1] = run
+			end
+			run[#run + 1] = tile
+		end
+		local high = TILE + BAND_PAD * 2
+		local x, y = EDGE, -BAR - EDGE
+		local used = {}
+		-- (pages in no section: a band of their own too, with no name)
+		for index, run in ipairs(runs) do
+			local wide = #run * (TILE + TILE_GAP) - TILE_GAP + BAND_PAD * 2
+			if x > EDGE and x + wide > width - EDGE then
+				x, y = EDGE, y - LABEL_H - high - TILE_GAP
+			end
+			local band = Band(hub, run.section or index, run.section)
+			band:ClearAllPoints()
+			band:SetPoint("TOPLEFT", hub.frame, "TOPLEFT", x, y - LABEL_H)
+			band:SetSize(wide, high)
+			band.tiles, used[band] = {}, true
+			for i, tile in ipairs(run) do
+				band.tiles[tile] = true
+				tile:ClearAllPoints()
+				tile:SetPoint("TOPLEFT", band, "TOPLEFT", BAND_PAD + (i - 1) * (TILE + TILE_GAP), -BAND_PAD)
+				tile:Show()
+			end
+			x = x + wide + SECTION_GAP
+		end
+		-- (a band left over from an earlier layout, pages since added: put away)
+		for _, band in pairs(hub.bands or {}) do
+			local shown = used[band] or false
+			band:SetShown(shown)
+			band.label:SetShown(shown)
+			for _, line in ipairs(band.edges) do line:SetShown(shown) end
+		end
+		PaintBands(hub)
+		hub.host:ClearAllPoints()
+		hub.host:SetPoint("TOPLEFT", hub.frame, "TOPLEFT", 0, y - LABEL_H - high - BELOW)
+		hub.host:SetPoint("BOTTOMRIGHT")
+	end
 
 	-- Icons in rows across the page's width, the picked page filling the rest.
-	-- A group's pages get a row of their own below, while one of them is shown;
-	-- a section's pages start a row of their own, its name before them.
 	local function Layout(hub)
 		local width = hub.frame:GetWidth()
 		if not width or width <= 0 then return end
-		local left = EDGE
 		for _, tile in ipairs(hub.tiles) do
-			if tile.section then left = EDGE + SECTION_W break end
+			if tile.section then return SectionLayout(hub, width) end
 		end
+		local left = EDGE
 		local perRow = math.max(1, math.floor((width - left - EDGE + TILE_GAP) / (TILE + TILE_GAP)))
-		local column, row, section = 0, 0, nil
-		hub.sectionNames = hub.sectionNames or {}
+		local column, row = 0, 0
 		local function Place(tile)
-			if column >= perRow or (tile.section and tile.section ~= section and column > 0) then
+			if column >= perRow then
 				column, row = 0, row + 1
 			end
 			local y = -BAR - EDGE - row * (TILE + TILE_GAP)
-			if tile.section and tile.section ~= section then
-				local name = hub.sectionNames[tile.section]
-				if not name then
-					name = hub.frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-					name:SetWidth(SECTION_W - 8)
-					name:SetJustifyH("LEFT")
-					name:SetText(L[tile.section])
-					name.searchSkip = true
-					hub.sectionNames[tile.section] = name
-				end
-				name:ClearAllPoints()
-				name:SetPoint("LEFT", hub.frame, "TOPLEFT", EDGE, y - TILE / 2)
-			end
-			section = tile.section
 			tile:ClearAllPoints()
 			tile:SetPoint("TOPLEFT", hub.frame, "TOPLEFT", left + column * (TILE + TILE_GAP), y)
 			tile:Show()
 			column = column + 1
 		end
-		for _, tile in ipairs(hub.tiles) do
-			if not tile.under then Place(tile) end
-		end
-		if hub.openGroup then column = perRow end -- (its pages on a new row)
-		for _, tile in ipairs(hub.tiles) do
-			if tile.under then
-				if tile.under == hub.openGroup then Place(tile) else tile:Hide() end
-			end
-		end
+		for _, tile in ipairs(hub.tiles) do Place(tile) end
 		local rows = #hub.tiles > 0 and row + 1 or 0
 		hub.host:ClearAllPoints()
 		hub.host:SetPoint("TOPLEFT", hub.frame, "TOPLEFT", 0,
-			-BAR - EDGE - rows * (TILE + TILE_GAP) + TILE_GAP - 4)
+			-BAR - EDGE - rows * (TILE + TILE_GAP) + TILE_GAP - BELOW)
 		hub.host:SetPoint("BOTTOMRIGHT")
 	end
 
@@ -1442,17 +1541,6 @@ do
 
 	local function Select(tile)
 		local hub = tile.hub
-		-- (a group's icon: the page last shown under it, or its first)
-		if tile.group then
-			local pick = tile.lastPicked
-			if not pick then
-				for _, other in ipairs(hub.tiles) do
-					if other.under == tile.group then pick = other break end
-				end
-			end
-			if pick then Select(pick) end
-			return
-		end
 		if hub.current == tile then return end
 		local previous = hub.current
 		if previous then
@@ -1461,20 +1549,11 @@ do
 		end
 		hub.current = tile
 		Light(tile, true)
+		PaintBands(hub)
 		if tile.onSelect then tile.onSelect() end
 		tile.canvas:Show()
 		-- (Reset page: for a page with settings of its own)
 		hub.reset:SetShown(pageKeys[tile.resetContent or tile.canvas.content] ~= nil)
-		-- Its group's icon lit and its row shown; another group's put away.
-		local groupTile = tile.under and hub.groupTiles[tile.under]
-		if groupTile then groupTile.lastPicked = tile end
-		if hub.openGroup ~= tile.under then
-			local was = hub.openGroup and hub.groupTiles[hub.openGroup]
-			if was then Light(was, false) end
-			hub.openGroup = tile.under
-			if groupTile then Light(groupTile, true) end
-			Layout(hub)
-		end
 	end
 
 	-- (made when its first page comes, so it's listed where that page would be)
@@ -1482,10 +1561,16 @@ do
 		local frame = CreateFrame("Frame")
 		frame.name = L[hub.name]
 		frame.parent = "Cinematic"
-		hub.frame, hub.tiles, hub.groupTiles = frame, {}, {}
+		hub.frame, hub.tiles = frame, {}
 		hub.host = CreateFrame("Frame", nil, frame)
 		hub.host:SetPoint("TOPLEFT", 0, -EDGE)
 		hub.host:SetPoint("BOTTOMRIGHT")
+		-- A line between the icons and the page, for its content to scroll under.
+		local divider = frame:CreateTexture(nil, "ARTWORK")
+		divider:SetHeight(1)
+		divider:SetPoint("BOTTOMLEFT", hub.host, "TOPLEFT", EDGE, 0)
+		divider:SetPoint("BOTTOMRIGHT", hub.host, "TOPRIGHT", -EDGE, 0)
+		divider:SetColorTexture(0.45, 0.38, 0.2, 0.8)
 		-- Reset page (the page shown), and left of it a search box for all its pages.
 		local reset = ns.PanelButton(frame)
 		reset:SetSize(100, 22)
@@ -1561,31 +1646,20 @@ do
 		for _, hub in ipairs(HUBS) do
 			for order, page in ipairs(hub.pages) do
 				local english = page[1]
-				if not page.group and (name == english or name == L[english]) then
+				if name == english or name == L[english] then
 					if not hub.frame then CreateHub(hub) end
-					-- (its group's icon, made with the group's first page)
-					if page.under and not hub.groupTiles[page.under] then
-						for groupOrder, group in ipairs(hub.pages) do
-							if group.group and group[1] == page.under then
-								local groupTile = CreateTile(hub, nil, group[1], group[2])
-								groupTile.group, groupTile.order = group[1], groupOrder
-								hub.groupTiles[group[1]] = groupTile
-								hub.tiles[#hub.tiles + 1] = groupTile
-							end
-						end
-					end
 					canvas:SetParent(hub.host)
 					canvas:ClearAllPoints()
 					canvas:SetAllPoints(hub.host)
 					canvas:Hide()
 					-- An icon for the page, or one for each of its tabs (canvas.hubTabs:
-					-- { name, icon, onSelect, resetContent, setSelect }, sharing the page).
+					-- { name, icon, onSelect, resetContent, setSelect, section }, sharing the page).
 					local icon = type(page[2]) == "function" and page[2]() or page[2]
 					local tabs = canvas.hubTabs or { { name = english, icon = icon, label = page.label } }
 					for i, tab in ipairs(tabs) do
 						local tile = CreateTile(hub, canvas, tab.name, tab.icon, tab.label)
 						tile.order = order + i / 100
-						tile.under, tile.section = page.under, page.section
+						tile.section = tab.section or page.section
 						tile.onSelect, tile.resetContent = tab.onSelect, tab.resetContent
 						if tab.setSelect then
 							tab.setSelect(function() Select(tile) end)
@@ -2079,7 +2153,7 @@ end
 -- The camera modes' switch, on the Cameras page: off, no camera mode
 -- starts, and it and the Camera Settings page grey out.
 local function CameraModesSwitch(content, anchor)
-	return PageSwitch(content, "cameraModes", L["Enable page"],
+	return PageSwitch(content, "cameraModes", L["Enable cameras"],
 		L["On: the cameras start as the rows below say. Off: none of them ever starts, and the camera is " ..
 		"left to you; CineMode still fades the UI. The Camera Settings page greys out with it."], anchor)
 end
@@ -3101,14 +3175,22 @@ local function CreateCameraSettingsPanel()
 		["Quest Cam"] = "Interface\\Icons\\INV_Misc_Book_08",
 		["Chat Cam"] = "Interface\\Icons\\Ability_Warrior_BattleShout",
 	}
+	-- (and its group in the hub's row: at rest, travel, then moments)
+	local GROUPS = {
+		["AFK Cam"] = "At rest", ["Cozy Cam"] = "At rest", ["Vista Cam"] = "At rest",
+		["Flight Cam"] = "Travel", ["Tele Cam"] = "Travel", ["Auto-run Cam"] = "Travel", ["RP Walk Cam"] = "Travel",
+		["Quest Cam"] = "Moments", ["Chat Cam"] = "Moments", ["Fish Cam"] = "Moments", ["Death Cam"] = "Moments",
+	}
+	local GROUP_ORDER = { ["At rest"] = 1, Travel = 2, Moments = 3 }
 	canvas.hubTabs = {}
-	for _, section in ipairs(cameraSections) do
+	for index, section in ipairs(cameraSections) do
 		local english = section.name
 		for key in pairs(ICONS) do
 			if section.name == L[key] then english = key end
 		end
 		canvas.hubTabs[#canvas.hubTabs + 1] = {
 			name = english, icon = ICONS[english], resetContent = section.body,
+			section = GROUPS[english], index = index,
 			onSelect = function()
 				cameraSections.focus = section
 				canvas.scroll:SetVerticalScroll(0)
@@ -3117,6 +3199,11 @@ local function CreateCameraSettingsPanel()
 			setSelect = function(select) section.selectTab = select end,
 		}
 	end
+	table.sort(canvas.hubTabs, function(a, b)
+		local groupA, groupB = GROUP_ORDER[a.section] or 4, GROUP_ORDER[b.section] or 4
+		if groupA ~= groupB then return groupA < groupB end
+		return a.index < b.index
+	end)
 	RegisterSubpage(canvas, "Camera Settings")
 end
 
@@ -3144,13 +3231,13 @@ local function OpenColorPicker(r, g, b, onChange)
 end
 ns.OpenColorPicker = OpenColorPicker
 
--- Sub-page: the visual effects' General tab (the Visual Effects hub's first):
+-- Sub-page: the visual effects' General tab (the Atmosphere hub's first):
 -- the master switch, the Turn off in grid, the letterbox, vignette, inns,
 -- weather and depth of field.
 -- The master switch, on both tabs: off, none of the effects show (each keeps
 -- its own setting), and the tab's other controls grey out.
 local function VisualEffectsSwitch(content, anchor)
-	local master = Check(content, "visualEffects", L["Enable page"],
+	local master = Check(content, "visualEffects", L["Enable visual effects"],
 		L["Turns every visual effect on or off at once, these and the Tint tab's: the letterbox, tint, time " ..
 		"of day, zone tints, vignette, inn glow, weather and depth of field. Each keeps its own settings for " ..
 		"when you turn this back on."], function(value)
@@ -3285,7 +3372,7 @@ local function CreateTintPanel()
 
 	local subtitle = PageIntro(content, title,
 		L["The color grading over the game world: a preset, the time of day and each zone's mood. The " ..
-		"Enable page switch (the General tab's too) turns it off with the rest, and the General tab's " ..
+		"Enable visual effects switch (the General tab's too) turns it off with the rest, and the General tab's " ..
 		"Turn off in grid says where it doesn't show. The UI isn't tinted."])
 	local master = VisualEffectsSwitch(content, subtitle)
 
@@ -4199,7 +4286,7 @@ ns.GRID_KIT = { controls = controls, rolesMenu = ROLES_MENU, Label = Label, Tool
 local function CreateCamerasPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", L["Cameras"])
+	local title = Label(content, "GameFontNormalLarge", L["General"]) -- (the Camera hub's first page)
 	title:SetPoint("TOPLEFT", 16, -16)
 	local subtitle = PageIntro(content, title,
 		L["While CineMode is on, the camera comes alive when something happens: an emote, a campfire, " ..
@@ -5680,6 +5767,14 @@ local function CreateQualityPanel()
 		L["%.1f yards"]), "slider", 24)
 	Tooltip(loginDistance, L["The camera distance to start at. The game's furthest out may be less than this."])
 	GreyUnless(loginDistance, function(db) return db.loginZoom end)
+	-- (Reload.lua.)
+	stack:Add(Check(content, "reloadButton", L["Reload button on the screen"],
+		L["A small Reload button at the top of the screen reloads the UI in one click. It stays up with " ..
+		"the UI hidden. Drag it to move it. There's a key for it too (Keybinds page)."]), "check")
+	stack:Add(Check(content, "reloadKeepWindows", L["Keep windows open across a reload"],
+		L["After a reload (/reload, the Reload button or its key), what you had open opens again: these " ..
+		"settings at the page you were on, your bags, the character window, map, spellbook and the game's " ..
+		"other windows, and Cinematic's own."]), "check")
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
 	-- (Quality of life's first page: "General" there.)
@@ -5927,7 +6022,7 @@ end
 local function CreatePlatesPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", L["Nameplates"])
+	local title = Label(content, "GameFontNormalLarge", L["Nameplate & Names"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = PageIntro(content, title,
@@ -6119,35 +6214,19 @@ local function CreatePlatesPanel()
 	}
 	local tip = L[" Also turns these nameplates on in the game's options."]
 	local UNIT_ROW_TIPS = {
-		MyEnemyPlayerTarget = L[" Your target's nameplate while it's a player you can attack, whatever the " ..
-			"Nameplates grid says."],
-		MyEnemyNPCTarget = L[" Your target's nameplate while it's a hostile NPC, whatever the Nameplates grid says."],
-		MyNeutralPlayerTarget = L[" Your target's nameplate while it's the other faction's player but you can't " ..
-			"attack them, whatever the Nameplates grid says."],
-		MyNeutralNPCTarget = L[" Your target's nameplate while it's a neutral NPC, whatever the Nameplates grid says."],
-		MyFriendlyPlayerTarget = L[" Your target's nameplate while it's a friendly or dead player, whatever the " ..
-			"Nameplates grid says."],
-		MyFriendlyNPCTarget = L[" Your target's nameplate while it's a friendly or dead NPC, whatever the " ..
-			"Nameplates grid says."],
+		YourTarget = L[" Your target's nameplate, whatever the Nameplates grid says. For some kinds only, name " ..
+			"them in its rule (Edit): Enemy Players, Hostile NPCs, Neutral Players... In dungeons and raids, " ..
+			"friendly targets go by Friendly Plates in Dungeons and Raids."],
 		MyPet = L[" Your pet's nameplate, whatever the Minions rows say, grouped or not."],
 		GroupMembers = L[" Your party or raid members' nameplates, whatever Friendly Players says. Not in dungeons " ..
 			"and raids: there, Friendly Plates in Dungeons and Raids decides."],
 		GroupMinions = L[" Your party or raid members' pets, whatever the Minions rows say."],
 	}
-	-- The Target Nameplate grid's rows, below (your target, by what it is).
-	local TARGET_KINDS = {
-		{ "MyEnemyPlayerTarget", L["Enemy Player"] },
-		{ "MyEnemyNPCTarget", L["Enemy NPC"] },
-		{ "MyNeutralPlayerTarget", L["Neutral Player"] },
-		{ "MyNeutralNPCTarget", L["Neutral NPC"] },
-		{ "MyFriendlyPlayerTarget", L["Friendly Player"] },
-		{ "MyFriendlyNPCTarget", L["Friendly NPC"] },
-	}
 	-- Friendly rows: in dungeons and raids, Friendly Plates in Dungeons and
 	-- Raids decides (below the Nameplates grid), so they have no Instances box.
 	local INSTANCE_LOCKED = {
 		Friends = true, FriendlyMinions = true, FriendlyNPCs = true, MyPet = true, GroupMembers = true,
-		GroupMinions = true, MyFriendlyPlayerTarget = true, MyFriendlyNPCTarget = true,
+		GroupMinions = true,
 	}
 	local lastLabel
 	local function AddPlateRow(top, r, kind)
@@ -6283,15 +6362,6 @@ local function CreatePlatesPanel()
 	end
 	EndSection(enemySection, lastLabel)
 
-	-- Your target's plate, laid out the same way.
-	local targetSection = Section(L["Target Nameplate"], "Target")
-	BeginSection(targetSection)
-	local targetTop = TableTop(targetSection.frame, PLATE_LAYOUT)
-	for r, kind in ipairs(TARGET_KINDS) do
-		AddPlateRow(targetTop, r, kind)
-	end
-	EndSection(targetSection, lastLabel)
-
 	-- The parts of the plates that are up (see PlateParts), laid out the same
 	-- way. Retail's plates have no level.
 	local partTip = L[" In CineMode, on the nameplates that are up."]
@@ -6371,7 +6441,7 @@ local function CreatePlatesPanel()
 	-- (Units with plates show a kept name on theirs in CineMode: see Effects.)
 	local plateNameTip = L[" In CineMode, away from dungeons and raids, the name shows on the unit's nameplate instead, with the rest of the plate hidden."]
 	-- A row of boxes (keys name<column><key>) for a names group: the Target
-	-- group's are the Target Names grid's rows, below.
+	-- group's is the Target section's Names row, below.
 	local function AddNameRow(top, r, group, key, label, indent, tip)
 		local function Set(setting, value)
 			ns.GetDB()[setting] = value
@@ -6447,29 +6517,29 @@ local function CreatePlatesPanel()
 	AddPlateRow(namesTop, r + 1, { "PartMarker", L["Raid Marker"], rulePath = "Raid markers" })
 	EndSection(namesSection, lastLabel)
 
-	-- Your target's name, by what it is (the Target Nameplate grid's kinds),
-	-- laid out the same way: the Names grid's Target row, split.
-	local targetNamesSection = Section(L["Target Names"], "TargetNames")
-	BeginSection(targetNamesSection)
-	local targetNamesTop = TableTop(targetNamesSection.frame, NAME_LAYOUT)
-	local targetNameTip = L[" Your target's name while it's this kind, even with its kind's names off in the Names grid. " ..
-		"On a nameplate showing just the name in CineMode, your target's kind decides; beyond nameplate range, and " ..
-		"in dungeons and raids, the game has one setting for your target's name: it follows your target's kind out " ..
-		"of fights, and in fights shows while any row here does."] .. nameTip
-	for i, kind in ipairs(TARGET_KINDS) do
-		AddNameRow(targetNamesTop, i, targetGroup, "Target" .. kind[1]:match("^My(.-)Target$"), kind[2], nil,
-			targetNameTip)
-	end
-	EndSection(targetNamesSection, lastLabel)
+	-- Your target: its plate and its name, whatever its kind's rows say, a
+	-- row each (their rules naming kinds of target where they differ). Made
+	-- here, after the Names grid's rows, and laid out at the top.
+	local targetSection = Section(L["Target"], "Target")
+	table.insert(sections, 1, table.remove(sections))
+	BeginSection(targetSection)
+	local targetTop = TableTop(targetSection.frame, PLATE_LAYOUT)
+	AddPlateRow(targetTop, 1, { "YourTarget", L["Nameplates"] })
+	local targetNameTip = L[" Your target's name, even with its kind's names off in the Names grid. For some kinds " ..
+		"only, name them in its rule (Edit): Enemy Players, Hostile NPCs, Neutral Players... Beyond nameplate range, " ..
+		"and in dungeons and raids, the game has one setting for your target's name, which can't change in fights: " ..
+		"it stays as the fight found it."] .. nameTip
+	AddNameRow(targetTop, 2, targetGroup, "YourTarget", L["Names"], nil, targetNameTip)
+	EndSection(targetSection, lastLabel)
 
-	for _, top in ipairs({ columnTop, enemyTop, targetTop, partsTop, ourPartsTop, namesTop, targetNamesTop }) do
+	for _, top in ipairs({ targetTop, columnTop, enemyTop, partsTop, ourPartsTop, namesTop }) do
 		ns.GridDots(content, top.rows or {})
 	end
 
-	-- Laid out top to bottom: the master switch, then the sections (friendly
-	-- nameplates, friendly plates in dungeons and raids, enemy nameplates,
-	-- your target's, their parts, then names and raid markers, and your
-	-- target's name).
+	-- Laid out top to bottom: the master switch, then the sections (your
+	-- target's plate and name, friendly nameplates, friendly plates in
+	-- dungeons and raids, enemy nameplates, their parts, then names and raid
+	-- markers).
 	LayoutSections()
 
 	canvas:SetScript("OnShow", PageShown(function()
@@ -6477,7 +6547,7 @@ local function CreatePlatesPanel()
 		LayoutSections() -- (as last left, once the settings have loaded)
 	end, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Nameplates")
+	RegisterSubpage(canvas, "Nameplates", L["Nameplate & Names"])
 end
 
 -- The Style hub's Names page: how names look on nameplates showing just the
@@ -6805,7 +6875,7 @@ do
 	-- drawer under it, in from the left, a line each (Row, Name, Mark, Color,
 	-- Plate, When; Default's own no Row: it's always there).
 	local SHOW_X, PREVIEW_X, NAME_X, CHIPS_X = 16, 44, 92, 290
-	local ROW_W, NAME_W, CHIPS_W = 590, 192, 228
+	local ROW_W, NAME_W, CHIPS_W, NUMBER_W = 590, 192, 228, 22
 	local DRAWER_X, LINE_H, LABEL_W = 44, 34, 48
 	-- The Also color column's parts: setting (<kind>Color<part>), name, tip,
 	-- and (targetOnly) whether only your target's plate has one: the game's
@@ -6867,8 +6937,16 @@ do
 		barEdge:SetPoint("TOPLEFT", -1, 1)
 		barEdge:SetPoint("BOTTOMRIGHT", 1, -1)
 		barEdge:SetColorTexture(0, 0, 0, 1)
+		-- (The health left, from the left; the lost part dark in its color.)
+		local barBack = bar:CreateTexture(nil, "ARTWORK", nil, -1)
+		barBack:SetAllPoints()
 		local barFill = bar:CreateTexture(nil, "ARTWORK")
-		barFill:SetAllPoints()
+		barFill:SetPoint("TOPLEFT")
+		barFill:SetPoint("BOTTOMLEFT")
+		local function BarColour(r, g, b)
+			barFill:SetColorTexture(r, g, b, 1)
+			barBack:SetColorTexture(r * 0.25, g * 0.25, b * 0.25, 1)
+		end
 		-- (The game's border round your target's bar: 2 pixels, just outside its black edge.)
 		local border = {}
 		for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
@@ -6965,9 +7043,9 @@ do
 				unitName:SetTextColor(colors[1], colors[2], colors[3])
 			end
 			if shown and ns.TargetMarkAlso("ColorBar", tintKind) then
-				barFill:SetColorTexture(r, g, b, 1)
+				BarColour(r, g, b)
 			else
-				barFill:SetColorTexture(colors[4], colors[5], colors[6], 1)
+				BarColour(colors[4], colors[5], colors[6])
 			end
 			-- (The border: your target's own, white unless its Also color takes it.)
 			local targeted = base == "target" or base == "aggro"
@@ -6983,12 +7061,55 @@ do
 			local first = ({ n = "npc", e = "elite", p = "players", m = "minions" })
 				[base:match("^u(%l)") or ""]
 			unitName:SetText(PREVIEW_NAMES[first or base] or L["Unit Name"])
-			holder:SetAlpha(shown and (ns.TargetMarkSetting("Alpha", kind) or 1) or 0.35)
-			-- (Its health bar's size, on retail: Forever's plates don't change size.)
+			-- (The cast bar at the Cast bars page's size.)
+			local castLook = ns.PlateCastLook and ns.PlateCastLook()
+			local castWidth = castLook and castLook.plateCastWidth or 1
+			cast:SetSize(150 * castWidth, 7 * (castLook and castLook.plateCastHeight or 1))
+			castFill:SetWidth(150 * castWidth * 0.4)
+			-- (Its opacity and health bar's size, on retail: Forever's plates
+			-- don't change size; moved to by the OnUpdate below, as plates do.)
+			local goal = self.goal
+			goal.alpha = shown and (ns.TargetMarkSetting("Alpha", kind) or 1) or 0.35
 			local sized = shown and ns.isRetail
-			bar:SetSize(150 * (sized and ns.TargetMarkSetting("PlateWidth", kind) or 1),
-				11 * (sized and ns.TargetMarkSetting("PlateHeight", kind) or 1))
+			local db = ns.GetDB()
+			goal.width = (sized and ns.TargetMarkSetting("PlateWidth", kind) or 1)
+				* (ns.isRetail and db.plateStyleWidth or 1)
+			goal.height = (sized and ns.TargetMarkSetting("PlateHeight", kind) or 1)
+				* (ns.isRetail and db.plateStyleHeight or 1)
+			-- (db.plateStyle*: filled from DEFAULTS at load, 1 for none.)
 		end
+		-- Moving like a plate in a fight: its health dropping in hits and
+		-- filling again, the cast filling over and over, and its opacity and
+		-- size going to a newly picked row's in the Change time
+		-- (plateStyleFadeTime), as PlateParts' easer moves them. The mark bobs
+		-- on its own (StyleTargetArrow). Each frame while the page shows.
+		preview.goal = { alpha = 1, width = 1, height = 1 }
+		local now = { alpha = 1, width = 1, height = 1 }
+		local HEALTH_TIME, CAST_TIME = 9, 3
+		local started, health = GetTime(), 1
+		-- (The health for a time in the loop: full, five hits, a pause, filled again.)
+		local function HealthAt(t)
+			if t < 1.5 then return 1 end
+			if t < 4.5 then return 1 - 0.13 * (math.floor((t - 1.5) / 0.6) + 1) end
+			if t < 6 then return 0.35 end
+			return math.min(1, 0.35 + (t - 6) / 2 * 0.65)
+		end
+		-- (Shown again: at its row's look at once, as a plate just come.)
+		preview:SetScript("OnShow", function(self) self.snap = true end)
+		preview.snap = true
+		preview:SetScript("OnUpdate", function(self, elapsed)
+			local time = ns.GetDB().plateStyleFadeTime or 1.5
+			for what, goal in pairs(self.goal) do
+				now[what] = self.snap and goal or ns.Approach(now[what], goal, elapsed, time)
+			end
+			self.snap = nil
+			holder:SetAlpha(now.alpha)
+			bar:SetSize(150 * now.width, 11 * now.height)
+			local t = GetTime() - started
+			health = ns.Approach(health, HealthAt(t % HEALTH_TIME), elapsed, 0.25)
+			barFill:SetWidth(math.max(0.01, bar:GetWidth() * health))
+			castFill:SetWidth(math.max(0.01, cast:GetWidth() * math.min(1, t % CAST_TIME / (CAST_TIME - 0.5))))
+		end)
 		controls[#controls + 1] = preview
 
 		-- A choice from a list: a dropdown, or on a client without the modern
@@ -7292,6 +7413,7 @@ do
 					below = below or Covers(list[j], id) and list[j]
 				end
 				row.below = below
+				row.number:SetText(id ~= "others" and i or "")
 				row:SetName()
 				-- (Its drawer: a closed one's settings still count for page
 				-- search, which opens it.)
@@ -7841,10 +7963,19 @@ do
 			end
 			controls[#controls + 1] = preview
 
+			-- Its place in the order, grey before its name (set by the grid's
+			-- Refresh): the first row that fits a plate decides. Default's
+			-- none, as it has no arrows: it's for whatever none above fits.
+			local number = Place(Label(row, "GameFontDisable", ""), NAME_X)
+			number:SetWidth(NUMBER_W - 6)
+			number:SetJustifyH("RIGHT")
+			number.searchSkip = true
+			row.number = number
+
 			-- Its name: the kind's, its Who and number dimmed after it (orange
 			-- while a row of its kind for all its units is above it).
-			local name = Place(Label(row, "GameFontHighlight", ""), NAME_X)
-			name:SetWidth(NAME_W)
+			local name = Place(Label(row, "GameFontHighlight", ""), NAME_X + NUMBER_W)
+			name:SetWidth(NAME_W - NUMBER_W)
 			name:SetWordWrap(false)
 			name.searchSkip = true
 			function row:SetName()
@@ -8027,8 +8158,8 @@ do
 				local dbKey = MarkKey(kind, key)
 				RecordKey(content, dbKey)
 				local box = At(line, ns.SkinEditBox(CreateFrame("EditBox", nil, drawer, "InputBoxTemplate")),
-					x or DRAWER_W - 50 - (slot - 1) * 100)
-				box:SetSize(40, 20)
+					x or DRAWER_W - 60 - (slot - 1) * 100)
+				box:SetSize(36, 20)
 				box:SetAutoFocus(false)
 				box:SetJustifyH("RIGHT")
 				box:SetMaxLetters(4)
@@ -8043,7 +8174,7 @@ do
 					percent = math.max(low, math.min(high, math.floor(percent + 0.5)))
 					ns.GetDB()[dbKey] = percent / 100
 					-- (Typing in it: the bare number, still to edit.)
-					box:SetText(box:HasFocus() and tostring(Now()) or Now() .. "%")
+					box:SetText(tostring(Now()))
 					box.edited = nil
 					chips.Refresh()
 					preview.Refresh()
@@ -8073,10 +8204,10 @@ do
 						Set(typed)
 					end
 					self.cancelled, self.edited = nil, nil
-					self:SetText(Now() .. "%")
+					self:SetText(tostring(Now()))
 				end)
 				box.Refresh = function(self)
-					if not self:HasFocus() then self:SetText(Now() .. "%") end
+					if not self:HasFocus() then self:SetText(tostring(Now())) end
 					if Shown() then self:Enable() else self:Disable() end
 					self:SetAlpha(Shown() and 1 or 0.5)
 				end
@@ -8085,6 +8216,10 @@ do
 				local label = Label(drawer, "GameFontHighlightSmall", name)
 				label:SetPoint("RIGHT", box, "LEFT", -6, 0)
 				label.searchSkip = true
+				-- (The % after the box, the number alone in it.)
+				local percent = Label(drawer, "GameFontHighlightSmall", "%")
+				percent:SetPoint("LEFT", box, "RIGHT", 3, 0)
+				percent.searchSkip = true
 				return box, label
 			end
 
@@ -8299,7 +8434,7 @@ do
 				local SIZE_TIP = L["Its name, mark and the rest of the plate move with the bar's edges. Not on " ..
 					"WoW Forever: its plates don't change size."]
 				local _, w = PercentBox("Plate", 2, "PlateWidth", 50, 300, L["Width"],
-					L["The health bar's width."] .. " " .. SIZE_TIP, DRAWER_W - 214)
+					L["The health bar's width."] .. " " .. SIZE_TIP, DRAWER_W - 230)
 				w:SetText(L["W"])
 				local _, h = PercentBox("Plate", 2, "PlateHeight", 50, 300, L["Height"],
 					L["The health bar's height."] .. " " .. SIZE_TIP)
@@ -8393,12 +8528,22 @@ do
 		-- (How fast a plate's opacity and size change, as CineMode's Fade in
 		-- time: a quick look away from an elite and back barely shows.)
 		stack:Header(content, L["All rows"])
-		local fadeTime = stack:Add(Slider(content, "plateStyleFadeTime", L["Change time"], 0, 10, 0.1,
-			L["%.1f sec"]), "slider")
-		Tooltip(fadeTime, L["How long a plate takes to change its opacity or size a whole 100% when the row it " ..
+		-- (On one line, small boxes: the time, and on retail every plate's
+		-- Width and Height, times each row's, as theirs.)
+		local allRows = stack:Add(BoxLine(content), "label")
+		allRows:Box(L["Change time"], "plateStyleFadeTime", 0, 10, 0.1, "%.1f", 1,
+			L["How long a plate takes to change its opacity or size a whole 100% when the row it " ..
 			"goes by changes: from 100% to 15% takes a bit less. If it changes back before it's there, it turns " ..
 			"back from where it is, so a quick look away from an elite and back barely shows. A plate just come " ..
-			"into view starts at its row's. 0: at once."])
+			"into view starts at its row's. 0: at once."], nil, nil, L["sec"])
+		if ns.isRetail then
+			local MASTER_TIP = L["Every plate's, those no row fits too, times its row's own. When they show is the " ..
+				"Target Indicator row's, as the rows'."]
+			allRows:Box(L["W"], "plateStyleWidth", 50, 300, 5, "%d", 100,
+				L["The health bar's width."] .. " " .. MASTER_TIP, Changed, nil, "%")
+			allRows:Box(L["H"], "plateStyleHeight", 50, 300, 5, "%d", 100,
+				L["The health bar's height."] .. " " .. MASTER_TIP, Changed, nil, "%")
+		end
 		-- (The game's Show Offscreen Nameplates in CineMode; none on a client
 		-- without it.)
 		if GetCVar("nameplateShowOffscreen") ~= nil then
@@ -8413,15 +8558,14 @@ do
 		stack:Header(content, L["All marks"])
 		-- (Two heights: on a showing plate, and with none; the marks move
 		-- between them as the plate fades, as the quest mark does.)
-		local height = stack:Add(Slider(content, "targetArrowY", L["Height with a plate"], -40, 40, 1, "%d", 1,
-			Changed), "slider")
-		Tooltip(height, L["Moves the marks drawn over the plate (arrow, chevron, diamond) up, or down below 0, " ..
-			"from just over the name, while the plate shows."])
-		local bareHeight = stack:Add(Slider(content, "targetArrowBareY", L["Height without a plate"], -40, 40, 1,
-			"%d", 1, Changed), "slider")
-		Tooltip(bareHeight, L["Moves the marks drawn over the plate up, or down below 0, from where the plate's " ..
+		local marks = stack:Add(BoxLine(content), "label")
+		marks:Box(L["Height with a plate"], "targetArrowY", -40, 40, 1, "%d", 1,
+			L["Moves the marks drawn over the plate (arrow, chevron, diamond) up, or down below 0, " ..
+			"from just over the name, while the plate shows."], Changed)
+		marks:Box(L["without a plate"], "targetArrowBareY", -40, 40, 1, "%d", 1,
+			L["Moves the marks drawn over the plate up, or down below 0, from where the plate's " ..
 			"middle is, while nothing of the plate shows. As the plate fades in or out, the marks move between " ..
-			"the two heights."])
+			"the two heights."], Changed)
 
 		canvas:SetScript("OnShow", PageShown(Refresh, content))
 		canvas:Hide()
@@ -9177,7 +9321,7 @@ local function CreateMinimapPanel()
 		end
 	end
 	local onTaxi = Check(content, "minimapHideOnTaxi", L["Not on flight paths"],
-		L["On a flight path the minimap stays hidden: pings, the reveals above and the tracking under " ..
+		L["On a flight path the minimap stays hidden: pings, the reveals above and the tracking and zones under " ..
 		"Keep open don't bring it up (you can't gather while flying), and nothing is pinged. Hovering it " ..
 		"still shows it."])
 	onTaxi:SetPoint("TOPLEFT", previousReveal, "BOTTOMLEFT", 0, -2)
@@ -9191,13 +9335,95 @@ local function CreateMinimapPanel()
 		"The game stops updating the indoor map while the minimap is hidden, so after walking " ..
 		"around it can come back blank or out of date for a moment. Off, it's redrawn as it comes back."])
 	indoors:SetPoint("TOPLEFT", keepLabel, "BOTTOMLEFT", 12, -4)
-	local quest = Check(content, "minimapKeepQuest", L["Tracking a quest"],
+
+	-- Zones you picked (minimapKeepZones, map IDs comma-separated): a row
+	-- each (name, Remove), then a button to add the one you're in.
+	local zonesLabel = Label(content, "GameFontHighlightSmall", L["In these zones:"])
+	-- (Lined up with the checkboxes' text.)
+	zonesLabel:SetPoint("TOPLEFT", indoors, "BOTTOMLEFT", 28, -4)
+	local function ZoneEntries()
+		local entries = {}
+		for id in (ns.GetDB().minimapKeepZones or ""):gmatch("%d+") do
+			entries[#entries + 1] = tonumber(id)
+		end
+		return entries
+	end
+	local function SaveZones(entries)
+		ns.GetDB().minimapKeepZones = table.concat(entries, ", ")
+		Refresh()
+		FitContentHeight(content)
+	end
+	local function ZoneName(id)
+		local ok, info = pcall(C_Map.GetMapInfo, id)
+		return ok and type(info) == "table" and type(info.name) == "string" and info.name
+			or ("|cff808080(%d)|r"):format(id)
+	end
+	local zoneRows = {}
+	local function ZoneRow(i)
+		local row = zoneRows[i]
+		if not row then
+			row = CreateFrame("Frame", nil, content)
+			row:SetSize(200, 22) -- (Remove ends where the Add button does)
+			row.text = Label(row, "GameFontHighlight")
+			row.text:SetPoint("LEFT", 0, 0)
+			row.remove = ns.PanelButton(row)
+			row.remove:SetSize(70, 20)
+			row.remove:SetPoint("RIGHT", 0, 0)
+			row.remove:SetText(L["Remove"])
+			row.remove:SetScript("OnClick", function(self)
+				local entries = ZoneEntries()
+				table.remove(entries, self:GetParent().index)
+				SaveZones(entries)
+			end)
+			zoneRows[i] = row
+		end
+		return row
+	end
+	local addZone = ns.PanelButton(content)
+	addZone:SetSize(200, 20)
+	addZone:SetScript("OnClick", function()
+		local map = ns.CurrentZoneMap()
+		if not map then return end
+		local entries = ZoneEntries()
+		for _, id in ipairs(entries) do
+			if id == map then return end
+		end
+		entries[#entries + 1] = map
+		SaveZones(entries)
+	end)
+	Tooltip(addZone, L["In the zones listed here, the minimap stays up during CineMode: say, one where " ..
+		"you do a lot of dailies. Caves and towns inside a zone count as the zone."])
+	-- Rebuilt as the page shows and after each change.
+	controls[#controls + 1] = { Refresh = function()
+		local previous = zonesLabel
+		local entries = ZoneEntries()
+		local here, listed = ns.CurrentZoneMap(), false
+		for i, id in ipairs(entries) do
+			local row = ZoneRow(i)
+			row.index = i
+			row.text:SetText(ZoneName(id))
+			row:ClearAllPoints()
+			row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, i == 1 and -4 or -2)
+			row:Show()
+			previous = row
+			listed = listed or id == here
+		end
+		for i = #entries + 1, #zoneRows do zoneRows[i]:Hide() end
+		addZone:SetText(here and L["Add %s"]:format(ZoneName(here)) or L["Add this zone"])
+		addZone:SetWidth(math.max(200, addZone:GetFontString():GetStringWidth() + 24))
+		addZone:SetEnabled(here ~= nil and not listed)
+		addZone:ClearAllPoints()
+		addZone:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -6)
+	end }
+	RecordKey(content, "minimapKeepZones") -- (for Reset page)
+
+	local quest =Check(content, "minimapKeepQuest", L["Tracking a quest"],
 		L["While a quest is tracked in the quest tracker, the minimap stays up during CineMode, so you " ..
 		"can see where to go. Untrack your quests and it fades again."], function(value)
 			ns.GetDB().minimapKeepQuest = value
 			Refresh()
 		end)
-	quest:SetPoint("TOPLEFT", indoors, "BOTTOMLEFT", 0, -2)
+	quest:SetPoint("TOPLEFT", addZone, "BOTTOMLEFT", -28, -6)
 	-- (Under it: how long after picking up a quest or progress on one.)
 	local questFor = Slider(content, "minimapKeepQuestFor", L["Only after progress"], 0, 10, 1,
 		function(value) return value == 0 and L["Off"] or L["%d min"]:format(value) end)
@@ -9328,15 +9554,20 @@ local function CreateQuestTrackerPanel()
 	combatCalm:SetPoint("TOPLEFT", onlyThat, "BOTTOMLEFT", 0, -2)
 	GreyUnless(combatCalm, function(db) return db.stayInCombat end)
 
-	local lastQuest = combatCalm
-	-- Classic's quest timer box (retail shows timers in the tracker itself).
+	-- Classic's quest timer box; retail shows timers in the tracker itself.
+	local timer
 	if ns.OptionAvailable({ retail = false }) then
-		local timer = Check(content, "questTimerShow", L["Show the quest timer while one is running"],
+		timer = Check(content, "questTimerShow", L["Show the quest timer while one is running"],
 			L["Keeps the quest timer box up in CineMode, and in fights, while a timed quest " ..
 			"counts down. Just the timer: the quest tracker stays faded."])
-		timer:SetPoint("TOPLEFT", combatCalm, "BOTTOMLEFT", 0, -2)
-		lastQuest = timer
+	else
+		timer = Check(content, "questTimerShow", L["Show timers in the quest tracker while one is running"],
+			L["Keeps the quest tracker's timers up in CineMode, and in fights, while one counts down: " ..
+			"a scenario's or assault's timer, a dungeon's clock, a timed quest's bar. Just the timer's quest " ..
+			"or scenario: the rest of the tracker stays faded. Hovering it shows it all."])
 	end
+	timer:SetPoint("TOPLEFT", combatCalm, "BOTTOMLEFT", 0, -2)
+	local lastQuest = timer
 
 	-- The durability figure: not the quest tracker's, so the page's switch
 	-- leaves it be (pageSwitch = false).
@@ -9454,12 +9685,21 @@ local function CreateCooldownPanel()
 		GreyUnless(afterCombat, function(db) return db.handleCooldowns and db[whileKey] end)
 	end
 
+	-- Each spell's key on its icon (Frames.lua: ns.ApplyCooldownKeybinds).
+	local keybinds = Check(content, "cooldownKeybinds", L["Show keybinds"],
+		L["Shows the key each spell is bound to in the corner of its icon in the Essential and Utility bars, " ..
+		"as on an action button: the key of the first action bar button holding it (or a macro casting it)."])
+	keybinds:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", -16, -8)
+	keybinds:HookScript("OnClick", function() ns.ApplyCooldownKeybinds() end)
+	GreyUnless(keybinds, function(db) return db.handleCooldowns end)
+	afterCombat = keybinds
+
 	-- Each spell's icon: always shown (the game's own), only when ready in
 	-- fights, or only while recharging. A row per spell in the Cooldown
 	-- Manager's spell bars now, grouped by bar as in its settings, then any
 	-- set that aren't in it.
 	local readyHeader = Label(content, "GameFontNormal", L["Spell icons"])
-	readyHeader:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", -14, -18)
+	readyHeader:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", 2, -18)
 	local readyNote = PageIntro(content, readyHeader,
 		L["Pick when each spell's icon shows. Always: as the game shows it. When Ready: out of " ..
 		"fights, and while it recharges, it fades out; it comes back once it's ready, or the seconds in " ..
@@ -9470,7 +9710,8 @@ local function CreateCooldownPanel()
 		"settings beside each group's name set every spell in it at once."]:format(ns.READY_EARLY * 100) .. " " ..
 		L["Tracked buffs and bars: Always, In combat, Out of combat or Hidden (the game keeps your buffs " ..
 		"secret in fights, so they go by that alone). Click a group's name to fold it away."] .. " " ..
-		L["Until you set a bar's mode, its spells with no cooldown go by what they cost, as Smart Set picks."])
+		L["With Smart Set's round tick on, until you set a bar's mode, its spells with no cooldown go by what " ..
+		"they cost, as Smart Set picks; with Default's, by their group's setting."])
 	RecordKey(content, "cooldownReadyOnly") -- (for the page's Reset)
 	RecordKey(content, "cooldownReadyEarly")
 	RecordKey(content, "cooldownEarlyOn")
@@ -9480,6 +9721,7 @@ local function CreateCooldownPanel()
 	RecordKey(content, "cooldownProcOnly")
 	RecordKey(content, "cooldownAlwaysShow")
 	RecordKey(content, "cooldownBuffMode")
+	RecordKey(content, "cooldownSmartDefaults")
 	-- Columns: the spell, when it shows, and (When ready only) how early it's back.
 	local MODE_X, POWER_X, EARLY_X, ROW_HEIGHT = 200, 360, 440, 26
 	local GROUP_HEIGHT, GROUP_GAP, GROUP_WIDTH = 36, 12, 560
@@ -9928,15 +10170,41 @@ local function CreateCooldownPanel()
 			if ns.COOLDOWN_SMART_GROUPS[spell.group] then visit(spell.id) end
 		end
 	end
+	-- The round tick in front of each: which the spells you haven't set go by
+	-- (db.cooldownSmartDefaults), one at a time. Each button ticks its own.
+	local function ChooseSmart(on)
+		ns.GetDB().cooldownSmartDefaults = on
+		ListSpells()
+		Refresh()
+	end
+	local function DefaultsTick(smart, tip)
+		local ok, tick = pcall(CreateFrame, "CheckButton", nil, content, "UIRadioButtonTemplate")
+		if ok and tick then ns.SkinCheck(tick, true) end
+		if not ok or not tick then
+			tick = ns.SkinCheck(CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate"))
+			tick:SetSize(22, 22)
+		end
+		Tooltip(tick, tip)
+		tick:SetScript("OnClick", function() ChooseSmart(smart) end)
+		tick.Refresh = function(self)
+			self:SetChecked((ns.db.cooldownSmartDefaults and true or false) == smart)
+		end
+		controls[#controls + 1] = tick
+		return tick
+	end
+	local smartTick = DefaultsTick(true, L["Ticked: the spells with no cooldown you haven't set yourself go by " ..
+		"Smart Set's pick, until you set their group's mode."])
+	smartTick:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -8)
 	local smartSet = ns.PanelButton(content)
 	smartSet:SetSize(110, 22)
-	smartSet:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -8)
+	smartSet:SetPoint("LEFT", smartTick, "RIGHT", 4, 0)
 	smartSet:SetText(L["Smart Set"])
 	Tooltip(smartSet, L["Sets each spell with no cooldown in the Essential and Utility bars by what it costs: " ..
 		"When Ready with Resources if it spends a resource you build up (like Maelstrom), else When it procs " ..
 		"(like Lightning Bolt). Spells with a cooldown are left as they are."])
 	smartSet:SetScript("OnClick", function()
 		local db, procs, power = ns.GetDB(), 0, 0
+		db.cooldownSmartDefaults = true
 		EachBarSpell(function(id)
 			local pick = ns.SmartCooldownMode(id)
 			if pick == "power" then
@@ -9954,14 +10222,16 @@ local function CreateCooldownPanel()
 	end)
 	smartSet.Refresh = function() end
 	controls[#controls + 1] = smartSet
+	local defaultTick = DefaultsTick(false, L["Ticked: every spell you haven't set yourself goes by its group's setting."])
+	defaultTick:SetPoint("LEFT", smartSet, "RIGHT", 12, 0)
 	local smartReset = ns.PanelButton(content)
 	smartReset:SetSize(110, 22)
-	smartReset:SetPoint("LEFT", smartSet, "RIGHT", 8, 0)
-	smartReset:SetText(L["Reset"])
-	Tooltip(smartReset, L["Puts every spell in the Essential and Utility bars back to its default: its group's setting, " ..
-		"or Smart Set's pick for one with no cooldown until you set the group's mode."])
+	smartReset:SetPoint("LEFT", defaultTick, "RIGHT", 4, 0)
+	smartReset:SetText(L["Default"])
+	Tooltip(smartReset, L["Puts every spell in the Essential and Utility bars back to its group's setting."])
 	smartReset:SetScript("OnClick", function()
 		local db = ns.GetDB()
+		db.cooldownSmartDefaults = false
 		EachBarSpell(function(id)
 			SetSpellMode(id, nil)
 			db.cooldownNeedsPower[id], db.cooldownEarlyOn[id], db.cooldownReadyEarly[id] = nil, nil, nil
@@ -10139,9 +10409,10 @@ local function CreateVisionPanel()
 		-- Quest talk itself (questTalk; off to start with, on in the Cinema
 		-- profile). How it looks, the "Show the game's window" link and the
 		-- number keys: the Style hub's Quest talk page (QuestTalkStyle.lua), a
-		-- button away, by the title.
-		ns.StyleLink(content, title, "Quest Talk Style", L["Opens the Style hub's Quest talk page: how the " ..
-			"speech bubbles and reply list look, the \"Show the game's window\" link and the number keys."], Tooltip)
+		-- button away, right of the tick's label.
+		local styleLink = ns.StyleLink(content, title, "Quest Talk Style", L["Opens the Style hub's Quest talk " ..
+			"page: how the speech bubbles and reply list look, the \"Show the game's window\" link and the " ..
+			"number keys."], Tooltip)
 		local talk = questStack:Add(Check(content, "questTalk", L["Custom dialogue frames"],
 			L["Talking to an NPC, what they say shows in a speech bubble over their head, and what you can say " ..
 			"back in a list near the bottom of the screen, instead of the game's gossip and quest windows. " ..
@@ -10155,6 +10426,8 @@ local function CreateVisionPanel()
 				ApplyTalk()
 			end), "check")
 		talk:HookScript("OnClick", Refresh) -- (grey out / enable what needs it)
+		styleLink:ClearAllPoints()
+		styleLink:SetPoint("LEFT", talk.searchEdges.right, "RIGHT", 16, 0) -- (its label)
 		-- Where they go (the bubble and list; with quest talk off, the game's windows).
 		local PLACES = {
 			{ value = "fixed", text = L["Default"] },
@@ -10196,11 +10469,10 @@ local function CreateVisionPanel()
 		end
 		-- Over the head.
 		local headStack = Stack(column, "label")
-		local topGap = Own("head", headStack:Add(Slider(content, "questTalkTopGap", L["Space above the bubble"], 0, 30, 1,
-			"%d%%", 100, ApplyTalk), "slider"))
-		Tooltip(topGap, L["Over the NPC's head, the bubble always stays at least this far down from the top of " ..
-			"the screen (and below the letterbox), so it never sits right against the edge."])
-		GreyUnless(topGap, TalkOn)
+		local topGapLine = Own("head", headStack:Add(BoxLine(content), "label"))
+		GreyUnless(topGapLine:Box(L["Space above the bubble"], "questTalkTopGap", 0, 30, 1, "%d%%", 100,
+			L["Over the NPC's head, the bubble always stays at least this far down from the top of " ..
+			"the screen (and below the letterbox), so it never sits right against the edge."], ApplyTalk), TalkOn)
 		local still = Own("head", headStack:Add(Check(content, "questTalkStill", L["Hold the camera still"],
 			L["With the bubble over the head, the quest camera turns in as usual but doesn't drift to and fro " ..
 			"while you talk: following the NPC on the screen, the bubble and card would jiggle as it moved."],
@@ -10290,6 +10562,8 @@ local function CreateVisionPanel()
 		}
 		local QUALITY_TIP = L["Only items of this quality and better get a panel in the window. Rolls on the " ..
 			"rest are only in chat. The test (/cine rolls test) goes by it too."]
+		-- Which items get a panel, then whose rolls each lists, then where the window goes.
+		stack:Header(content, L["Which items"])
 		stack:Add(Label(content, "GameFontHighlight", L["Show rolls on"]), "label")
 		local quality = Dropdown(content, "rollMinQuality", QUALITIES, 200)
 		if quality then
@@ -10306,17 +10580,14 @@ local function CreateVisionPanel()
 			L["Items you can't use (armor or weapons you can't wear, another class's, or a level you're not " ..
 			"yet: anything in red on its tooltip) don't get a panel. Their rolls are only in chat."]), "check")
 		GreyUnless(usable, RollsOn)
-		local panels = stack:Add(Slider(content, "rollMaxPanels", L["Items shown at once"], 1, 8, 1, "%d"),
-			"slider")
-		Tooltip(panels, L["The window shows this many items at once, newest at the top: four down, the " ..
-			"rest in a second column. When another drops, the oldest goes."])
-		GreyUnless(panels, RollsOn)
-		local raidRows = stack:Add(Slider(content, "rollRaidRows", L["Players shown per item in a raid"], 1, 10, 1, "%d"),
-			"slider")
-		Tooltip(raidRows, L["In a raid, each item lists only this many players' rolls: the winner, then need " ..
+		GreyUnless(stack:Add(BoxLine(content), "label"):Box(L["Items shown at once"], "rollMaxPanels", 1, 8, 1, "%d",
+			1, L["The window shows this many items at once, newest at the top: four down, the " ..
+			"rest in a second column. When another drops, the oldest goes."]), RollsOn)
+		stack:Header(content, L["Players"])
+		GreyUnless(stack:Add(BoxLine(content), "label"):Box(L["Players shown per item in a raid"], "rollRaidRows", 1,
+			10, 1, "%d", 1, L["In a raid, each item lists only this many players' rolls: the winner, then need " ..
 			"before greed, the highest numbers first. The rest are counted on an \"and N more\" line. " ..
-			"In a party, everyone is listed. Click an item's panel to list everyone on it."])
-		GreyUnless(raidRows, RollsOn)
+			"In a party, everyone is listed. Click an item's panel to list everyone on it."]), RollsOn)
 		local ownRoll = stack:Add(Check(content, "rollShowSelf", L["Always list your own roll"],
 			L["Your own pick and number are always on an item's panel, even when it lists only the top few " ..
 			"players or only the best pick."]), "check")
@@ -10326,6 +10597,12 @@ local function CreateVisionPanel()
 			"win it), only counted on a \"Lower picks\" line. Players still choosing stay listed. Click an " ..
 			"item's panel to list everyone on it."]), "check")
 		GreyUnless(topPick, RollsOn)
+		local footer = stack:Add(Check(content, "rollFooter", L["Show the counts under each item"],
+			L["The lines under an item's players: \"and N more\", \"Lower picks\", who passed, and " ..
+			"\"Click to list everyone\". Off: just the players. Clicking an item's panel still lists everyone."]),
+			"check")
+		GreyUnless(footer, RollsOn)
+		stack:Header(content, L["Where"])
 		local beside = stack:Add(Check(content, "rollBeside", L["Beside the game's roll frames"],
 			L["The window sits to the right of the game's roll frames, level with their top, instead of under " ..
 			"them, so a long list of drops doesn't push it down the screen. It stays there once you've chosen."],
@@ -10345,11 +10622,6 @@ local function CreateVisionPanel()
 				Refresh() -- ("Beside the game's roll frames" greys out)
 			end), "check")
 		GreyUnless(separate, RollsOn)
-		local footer = stack:Add(Check(content, "rollFooter", L["Show the counts under each item"],
-			L["The lines under an item's players: \"and N more\", \"Lower picks\", who passed, and " ..
-			"\"Click to list everyone\". Off: just the players. Clicking an item's panel still lists everyone."]),
-			"check")
-		GreyUnless(footer, RollsOn)
 		canvas:SetScript("OnShow", PageShown(Refresh, content))
 		canvas:Hide()
 		RegisterSubpage(canvas, "Roll Vision")
@@ -10466,14 +10738,90 @@ local function CreateVisionPanel()
 				"or the one picked in the group finder), whatever the row says. None ticked (-): every role."] },
 		}):SetPoint("LEFT", row, "LEFT", NAME_WIDTH, 0)
 
-		local previous = row
-		local function Option(key, label, tip, enabled)
-			local check = Check(content, key, label, tip, function(value)
-				ns.GetDB()[key] = value
+		-- Default, Tank, Healer and Damage tabs: the settings below are the
+		-- Default tab's, or a role's (ns.HEAL_VISION_ROLE_KEYS, <key>_<ROLE>),
+		-- used while you're that role once its "Use default settings" is unticked.
+		local editing -- (nil: the Default tab; else "TANK", "HEALER" or "DAMAGER")
+		local function UsesDefault(db) return editing and not db["healVisionOwn_" .. editing] end
+		local function Editable(db) return IfAny(db) and not UsesDefault(db) end
+		-- (A setting's key as a getter and setter: the tab's own value, or the
+		-- Default tab's, shown while the role uses it.)
+		local function KeyOf(db, key)
+			return (editing and not UsesDefault(db)) and key .. "_" .. editing or key
+		end
+		local function Field(key)
+			for _, role in ipairs(ns.HEAL_VISION_ROLES) do RecordKey(content, key .. "_" .. role) end
+			RecordKey(content, key)
+			return { get = function() local db = ns.GetDB() return db[KeyOf(db, key)] end,
+				set = function(value) ns.GetDB()[editing and key .. "_" .. editing or key] = value end }
+		end
+		local ROLE_NAMES = { TANK = L["Tank"], HEALER = L["Healer"], DAMAGER = L["Damage"] }
+		local TABS = { false, "TANK", "HEALER", "DAMAGER" }
+		local ROLE_ICONS = { TANK = "0:19:22:41", HEALER = "20:39:1:20", DAMAGER = "20:39:22:41" }
+		local tabs, ownCheck, tabNote = {}, nil, nil
+		local function ShowTabs()
+			local db = ns.GetDB()
+			if not db then return end
+			for _, tab in ipairs(tabs) do
+				if tab.role == editing then tab:LockHighlight() else tab:UnlockHighlight() end
+			end
+			ownCheck:SetShown(editing ~= nil)
+			local role = ns.PlayerRole()
+			tabNote:SetText(L["Current role:"] .. " " .. (ROLE_ICONS[role] and
+				"|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:16:16:0:0:64:64:" .. ROLE_ICONS[role] .. "|t"
+				or L["None"]))
+		end
+		for i, role in ipairs(TABS) do
+			local tab = ns.PanelButton(content)
+			tab:SetSize(90, 22)
+			tab:SetText(role and ROLE_NAMES[role] or L["Default"])
+			tab.role = role or nil
+			if i == 1 then
+				tab:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -14)
+			else
+				tab:SetPoint("LEFT", tabs[i - 1], "RIGHT", 4, 0)
+			end
+			Tooltip(tab, role and L["The settings below as they are while you're this role (your " ..
+				"specialization's, or the one picked in the group finder)."]
+				or L["The settings below for every role that uses the default settings."])
+			tab:SetScript("OnClick", function()
+				editing = tab.role
+				Refresh() -- (the tabs too: ownCheck's Refresh)
+			end)
+			tabs[i] = tab
+		end
+		tabNote = Label(content, "GameFontHighlight")
+		tabNote:SetPoint("LEFT", tabs[#tabs], "RIGHT", 10, 0)
+		tabNote.searchSkip = true
+		for _, role in ipairs(ns.HEAL_VISION_ROLES) do RecordKey(content, "healVisionOwn_" .. role) end
+		-- Use default settings: unticked, the role goes by its own values (each kept while ticked).
+		ownCheck = Check(content, false, L["Use default settings"],
+			L["Ticked: while you're this role, Heal Vision goes by the Default tab. Unticked: by the " ..
+			"settings on this tab."], function(value)
+				ns.GetDB()["healVisionOwn_" .. editing] = not value
 				Apply()
 			end)
-			check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", previous == row and -2 or 0, previous == row and -10 or -2)
-			GreyUnless(check, enabled or IfAny)
+		ownCheck.Refresh = function(self)
+			self:SetChecked(editing and not ns.GetDB()["healVisionOwn_" .. editing] or false)
+			ShowTabs()
+		end
+		ownCheck:SetPoint("TOPLEFT", tabs[1], "BOTTOMLEFT", -2, -6)
+		GreyUnless(ownCheck, IfAny)
+		-- (Holds the place under the tabs, the check shown or not.)
+		local tabsEnd = CreateFrame("Frame", nil, content)
+		tabsEnd:SetSize(1, 26)
+		tabsEnd:SetPoint("TOPLEFT", tabs[1], "BOTTOMLEFT", 0, -6)
+
+		local previous = tabsEnd
+		local function Option(key, label, tip, enabled)
+			local field = Field(key)
+			local check = Check(content, key, label, tip, function(value)
+				field.set(value)
+				Apply()
+			end)
+			check.Refresh = function(self) self:SetChecked(field.get()) end
+			check:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", previous == tabsEnd and -2 or 0, -2)
+			GreyUnless(check, function(db) return Editable(db) and (not enabled or enabled(db)) end)
 			previous = check
 		end
 		-- (Any debuff takes in the ones you can dispel: that box greys while it's ticked.)
@@ -10482,41 +10830,74 @@ local function CreateVisionPanel()
 		if ns.HEAL_VISION_DEBUFFS then
 			Option("healVisionDispel", L["Show members with a debuff you can dispel"],
 				L["A member with a debuff you can dispel shows, at full health too."],
-				function(db) return IfAny(db) and not db.healVisionAnyDebuff end)
+				function(db) return not db[KeyOf(db, "healVisionAnyDebuff")] end)
 			Option("healVisionAnyDebuff", L["Show members with any debuff"],
 				L["A member with any debuff at all shows, at full health too."])
 		end
 
-		-- Tanks, healers and damage, then pets: each kind's health they show
-		-- below (100%: any damage; tanks: always), and how faded they are while
-		-- hidden (0: gone). Neither slider goes past the other.
+		-- A table, a line each: tanks, healers and damage, then pets, with the
+		-- health they show below (100%: any damage; tanks: always) and how
+		-- faded they are while hidden (0: gone); neither goes past the other: one
+		-- set past pushes the other along. Then your target, hidden no fainter
+		-- than its box (100%: always shown), and the dead, offline and far away:
+		-- always hidden (nothing to heal; far: 100% leaves them be), only how
+		-- faded. Only your target goes before them (HealVisionFrames.lua's Rule).
 		local ROLE_ICON = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:16:16:0:0:64:64:%s|t"
 		local PET_ICON = "|TInterface\\Icons\\Ability_Hunter_BeastCall:16:16:0:0:64:64:5:59:5:59|t"
+		local TARGET_ICON = "|TInterface\\Cursor\\Crosshairs:16:16|t"
+		local SKULL_ICON = "|TInterface\\TargetingFrame\\UI-TargetingFrame-Skull:16:16|t"
+		local NAME_W, COLUMN_W = 150, 200
 		local function Percent(value, default)
 			return math.floor((value or default) * 100 + 0.5)
 		end
+		local heads = CreateFrame("Frame", nil, content)
+		heads:SetSize(NAME_W + 2 * COLUMN_W, 16)
+		heads:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", previous == tabsEnd and 0 or 2, -10)
+		for column, text in ipairs({ L["Show below health"], L["Opacity while hidden"] }) do
+			local head = Label(heads, "GameFontNormal", text)
+			head:SetPoint("LEFT", heads, "LEFT", NAME_W + (column - 1) * COLUMN_W, 0)
+			head.searchSkip = true -- (each box has its own)
+		end
+		local lastRow = heads
+		local function Row(icon, name, gap)
+			local row = CreateFrame("Frame", nil, content)
+			row:SetSize(NAME_W + 2 * COLUMN_W, 24)
+			row:SetPoint("TOPLEFT", lastRow, "BOTTOMLEFT", 0, -(gap or 2))
+			local label = Label(row, "GameFontHighlight", icon .. " " .. name)
+			label:SetPoint("LEFT")
+			label.searchSkip = true
+			lastRow = row
+			return row
+		end
+		-- A box in a column (1: show below, 2: opacity); searchName: what search finds it by.
+		local function Cell(row, column, field, searchName, tip, onChange)
+			local line = BoxLine(row)
+			line:SetPoint("LEFT", row, "LEFT", NAME_W + (column - 1) * COLUMN_W, 0)
+			local box = line:Box("", field, 0, 100, 1, "%d%%", 100, tip, onChange or ApplyFrames)
+			box.searchLabel = searchName
+			GreyUnless(box, Editable)
+			return box
+		end
 		local function Kind(icon, heading, belowKey, belowTip, alphaKey, alphaTip)
-			local header = Label(content, "GameFontNormal", icon .. " " .. heading)
-			header:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", previous.isKindSlider and -4 or 2, -22)
+			local row = Row(icon, heading)
+			local belowField, alphaField = Field(belowKey), Field(alphaKey)
 			local below, alpha
-			below = Slider(content, belowKey, L["Show below health"], 0, 100, 1, "%d%%", 100, function(value)
-				local floor = Percent(ns.GetDB()[alphaKey], 0.05)
-				if value < floor then below:SetValue(floor) return end
+			below = Cell(row, 1, belowField, heading .. ": " .. L["Show below health"], belowTip, function(value)
+				-- (Below the opacity: takes it down too.)
+				if value < Percent(alphaField.get(), 0.05) then
+					alphaField.set(value / 100)
+					alpha:Refresh()
+				end
 				ApplyFrames()
 			end)
-			below:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 4, -26)
-			Tooltip(below, belowTip)
-			GreyUnless(below, IfAny)
-			alpha = Slider(content, alphaKey, L["Opacity while hidden"], 0, 100, 1, "%d%%", 100, function(value)
-				local ceiling = Percent(ns.GetDB()[belowKey], 0.95)
-				if value > ceiling then alpha:SetValue(ceiling) return end
+			alpha = Cell(row, 2, alphaField, heading .. ": " .. L["Opacity while hidden"], alphaTip, function(value)
+				-- (Above the health: takes it up too.)
+				if value > Percent(belowField.get(), 0.95) then
+					belowField.set(value / 100)
+					below:Refresh()
+				end
 				ApplyFrames()
 			end)
-			alpha:SetPoint("LEFT", below, "RIGHT", 40, 0)
-			Tooltip(alpha, alphaTip)
-			GreyUnless(alpha, IfAny)
-			below.isKindSlider = true
-			previous = below
 		end
 		Kind(ROLE_ICON:format("0:19:22:41"), L["Tanks"], "healVisionTankBelow",
 			L["A tank (by role, or main tank in a raid) shows once their health drops below this. " ..
@@ -10536,43 +10917,22 @@ local function CreateVisionPanel()
 			L["A pet shows once its health drops below this. 100% shows it at any damage."],
 			"healVisionPetAlpha", L["How much of a hidden pet still shows. 0% hides them completely."])
 
-		-- Your target: hidden no fainter than this (100%: always shown).
-		local TARGET_ICON = "|TInterface\\Cursor\\Crosshairs:16:16|t"
-		local target = Slider(content, "healVisionTargetAlpha", TARGET_ICON .. " " .. L["Target min opacity"], 0, 100, 1,
-			"%d%%", 100, ApplyFrames)
-		target.searchLabel = L["Target min opacity"] -- (search: without the icon)
-		target:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -40)
-		Tooltip(target, L["The least of the member you've targeted that shows while they'd be hidden. It only ever " ..
-			"makes them more visible: a target whose own opacity above is higher (a tank shown always, say) " ..
-			"keeps it. 100% always shows them, at full health too."])
-		GreyUnless(target, IfAny)
-		previous = target
-
-		-- The dead and offline: always hidden (nothing to heal), only how
-		-- faded, each beside the other. Under them, the far away (100%: off).
-		-- Only your target goes before them (HealVisionFrames.lua's Rule).
-		local SKULL_ICON = "|TInterface\\TargetingFrame\\UI-TargetingFrame-Skull:16:16|t"
-		local goneHeader = Label(content, "GameFontNormal", SKULL_ICON .. " " .. L["Dead, offline or far away"])
-		goneHeader:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", -4, -22)
-		local dead = Slider(content, "healVisionDeadAlpha", L["Dead opacity"], 0, 100, 1, "%d%%", 100, ApplyFrames)
-		dead:SetPoint("TOPLEFT", goneHeader, "BOTTOMLEFT", 4, -26)
-		Tooltip(dead, L["Dead members are hidden whatever their health, debuffs or role (unless one is your " ..
+		Cell(Row(TARGET_ICON, L["Your target, at least"], 12), 2, Field("healVisionTargetAlpha"),
+			L["Target min opacity"], L["The least of the member you've targeted that shows while they'd be hidden. " ..
+			"It only ever makes them more visible: a target whose own opacity above is higher (a tank shown always, " ..
+			"say) keeps it. 100% always shows them, at full health too."])
+		Cell(Row(SKULL_ICON, L["Dead"], 12), 2, Field("healVisionDeadAlpha"), L["Dead opacity"],
+			L["Dead members are hidden whatever their health, debuffs or role (unless one is your " ..
 			"target). How much of them still shows. 0% hides them completely."])
-		GreyUnless(dead, IfAny)
-		local offline = Slider(content, "healVisionOfflineAlpha", L["Offline opacity"], 0, 100, 1, "%d%%", 100,
-			ApplyFrames)
-		offline:SetPoint("LEFT", dead, "RIGHT", 40, 0)
-		Tooltip(offline, L["Offline members are hidden whatever their health, debuffs or role (unless one is " ..
+		Cell(Row(SKULL_ICON, L["Offline"]), 2, Field("healVisionOfflineAlpha"), L["Offline opacity"],
+			L["Offline members are hidden whatever their health, debuffs or role (unless one is " ..
 			"your target). How much of them still shows. 0% hides them completely."])
-		GreyUnless(offline, IfAny)
-		local far = Slider(content, "healVisionFarAlpha", L["Far away opacity"], 0, 100, 1, "%d%%", 100, ApplyFrames)
-		far:SetPoint("TOPLEFT", dead, "BOTTOMLEFT", 0, -36)
-		Tooltip(far, L["Members more than 100 yards away show this much, out of reach of your heals, whatever " ..
+		Cell(Row(SKULL_ICON, L["Far away"]), 2, Field("healVisionFarAlpha"), L["Far away opacity"],
+			L["Members more than 100 yards away show this much, out of reach of your heals, whatever " ..
 			"their health, debuffs or role (unless one is your target). In a dungeon or raid, so does anyone not " ..
 			"in it with you. In battlegrounds, where WoW Forever won't say how far anyone is, members out of " ..
 			"range of your heals (about 40 yards) fade to this instead of the game's own dimming, on top of the " ..
 			"rest of the page. 100% leaves them be; 0% hides them completely."])
-		GreyUnless(far, IfAny)
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
@@ -11171,8 +11531,11 @@ local KEYBINDS = {
 	{ action = "CINEMATIC_TOGGLE", label = L["Toggle CineMode"],
 		tip = L["Turns CineMode on or off, like /cine."] },
 	{ action = "CINEMATIC_TOGGLEEFFECTS", label = L["Toggle visual effects"],
-		tip = L["Turns the Visual Effects page on or off (its Enable page switch): the letterbox, tint, " ..
+		tip = L["Turns the visual effects on or off (their Enable visual effects switch): the letterbox, tint, " ..
 			"vignette, weather and the rest."] },
+	{ action = "CINEMATIC_RELOAD", label = L["Reload the UI"],
+		tip = L["Reloads the UI, like /reload. With Keep windows open across a reload ticked (Quality of " ..
+			"life > General), what you had open opens again after."] },
 	{ action = "CLICK CinematicMasterWheelButton:LeftButton", label = L["Master wheel"], section = L["Wheels"],
 		tip = L["Hold to bring up a wheel of the wheels below (camera, menu, marker...): point at one and " ..
 			"let go to open it, then click what you want on it. Tap it instead and the wheel stays up for you " ..
@@ -11421,6 +11784,16 @@ function ns.OpenOptions(page)
 		InterfaceOptionsFrame_OpenToCategory(subpages[page] or mainCanvas)
 		InterfaceOptionsFrame_OpenToCategory(subpages[page] or mainCanvas)
 	end
+end
+
+-- The Cinematic page the settings window shows, by name as ns.OpenOptions
+-- takes it ("" for the main page), and its scroll frame if it has one; nil
+-- with none shown. (DevReload.lua: reopened after a reload.)
+function ns.ShownOptionsPage()
+	for _, page in ipairs(searchPages) do
+		if page.key and ns.Flag(page.canvas:IsVisible()) then return page.key, page.canvas.scroll end
+	end
+	if mainCanvas and ns.Flag(mainCanvas:IsVisible()) then return "", mainCanvas.scroll end
 end
 
 -- Sub-page: mouseover. Groups of frames that come up together when you
@@ -12737,6 +13110,9 @@ ns.OnLanguage(function()
 	end
 	if ns.CreateCombatStylePanel then -- (CombatVision.lua)
 		ns.CreateCombatStylePanel(ns.lowHealthKit)
+	end
+	if ns.CreateVitalsStylePanel then -- (LowHealth.lua)
+		ns.CreateVitalsStylePanel(ns.lowHealthKit)
 	end
 	if ns.CreateQuestTalkStylePanel then -- (QuestTalkStyle.lua)
 		ns.CreateQuestTalkStylePanel(ns.lowHealthKit)

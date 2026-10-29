@@ -78,4 +78,7 @@
 	<Binding name="CINEMATIC_TOGGLETOOLTIPS" category="ADDONS">
 		Cinematic_ToggleTooltips()
 	</Binding>
+	<Binding name="CINEMATIC_RELOAD" category="ADDONS">
+		Cinematic_Reload()
+	</Binding>
 </Bindings>

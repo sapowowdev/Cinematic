@@ -32,6 +32,7 @@ ns.CLIENT = ns.isRetail and "retail" or "forever"
 local KEY_ADDRESSES = {
 	editModeLayout = "Profiles/Edit Mode layout", -- (set by the Layout choices in Customize, on the Profiles page)
 	cooldownManagerOn = "Cooldown Manager/top", -- (the game's own switch: no box of ours)
+	prdOn = "Profiles/Edit Mode layout", -- (the game's own switch, with the layout centred on it)
 	chatPeekChannelList = "Chat/Other",
 	-- (with the rows as dropdowns, what rows without a Calm Timer of their own go by)
 	combatShowCalm = "Standard Frames/top",
@@ -137,10 +138,13 @@ end
 -- isn't there). No layout module: the player's own layout. ns.LAYOUT_PRESET:
 -- the game's own, a preset (Layouts.lua: the one they're on, else Modern).
 ns.LAYOUT_PRESET = "*preset"
-local function Layout(key, name, layout, client, tip)
+local function Layout(key, name, layout, client, tip, also)
 	return { key = key, name = name, client = client, group = "layout", editMode = layout,
 		scope = { "Profiles/Edit Mode layout" }, tip = tip,
-		apply = function(set) set("editModeLayout", layout) end }
+		apply = function(set)
+			set("editModeLayout", layout)
+			if also then also(set) end
+		end }
 end
 
 -- Every module, in the order the Module Editor lists them. key: what
@@ -159,7 +163,9 @@ ns.PROFILE_MODULES = {
 	Layout("layout-forever", "Forever-style layout", "CINE_RETAIL_FOREVER_LAYOUT", "retail",
 		"Retail laid out like WoW Forever's default."),
 	Layout("layout-pure", "Personal Resource Centered layout", "Personal Resource Centered", "retail",
-		"The personal resource display in the middle, the Cooldown Manager above it."),
+		"The personal resource display in the middle, the Cooldown Manager above it. Turns the game's personal " ..
+		"resource display on if it's off.",
+		function(set) set("prdOn", true) end),
 
 	-- What fades, and when
 	{ key = "recovering", name = "Up while recovering", scope = { "Standard Frames/top", "Personal Resources" },
@@ -284,14 +290,15 @@ ns.PROFILE_MODULES = {
 		"(the marks themselves: ultra-plates).",
 		apply = function(set)
 			for _, key in ipairs({ "plateAlwaysGroupMembers", "plateAlwaysGroupMinions", "plateGroupFriends",
-				"plateGroupFriendlyMinions", "plateAlwaysMyFriendlyNPCTarget", "plateAlwaysMyFriendlyPlayerTarget",
-				"plateCinematicEnemies", "plateInCitiesEnemies", "plateCombatPvPEnemies", "plateCombatPvPEnemyMinions", "plateCombatPvPFriends",
+				"plateGroupFriendlyMinions", "plateAlwaysYourTarget", "plateCinematicEnemies", "plateInCitiesEnemies", "plateCombatPvPEnemies", "plateCombatPvPEnemyMinions", "plateCombatPvPFriends",
 				"plateInBGsEnemies", "plateInBGsFriends", "plateInPvPEnemies", "plateAlwaysPartClassEnemy",
 				"plateAlwaysPartRoleHealer", "plateAlwaysPartRoleTank" }) do
 				set(key, false)
 			end
 			set("plateCombatEnemies", true)
 			set("plateCombatEnemyMinions", true)
+			-- (Your target's plate kept up unless it's friendly.)
+			set("frameRules", { ["plate:YourTarget"] = "enemyplayer or hostilenpc or neutralplayer or neutralnpc" })
 			-- An arrow over your target's plate all through CineMode, with no
 			-- target frame to show what you've targeted.
 			for _, prefix in ipairs({ "plateCinematic", "plateCombat", "plateInPvP", "plateInBGs", "plateInInstances" }) do
@@ -362,6 +369,22 @@ ns.PROFILE_MODULES = {
 		"quest windows.",
 		apply = function(set)
 			set("questTalk", true)
+		end },
+	{ key = "combat-vision", name = "Combat Vision", scope = { "Combat Vision" },
+		tip = "Combat Vision on: a cue on the screen and sounds as you go into a fight and come out of it.",
+		apply = function(set)
+			set("combatVision", true)
+		end },
+	{ key = "no-visions", name = "No visions", scope = { "Heal Vision", "Quest Vision", "Vision", "Roll Vision",
+		"Vitals Vision", "Combat Vision" },
+		tip = "Every vision off: Heal, Quest, Duel, Roll, Vitals and Combat Vision.",
+		apply = function(set)
+			set("handleHealVision", false)
+			set("questVision", false)
+			set("duelPlates", false)
+			set("rollWindow", false)
+			set("lowHealth", false)
+			set("combatVision", false)
 		end },
 	{ key = "pure-tooltips", name = "Pure: tooltips", scope = { "Tooltips" },
 		tip = "The Tooltips page on: shown all through CineMode, fights too; no Mouse still.",
@@ -464,8 +487,6 @@ ns.PROFILE_MODULES = {
 		apply = function(set)
 			set("lowHealth", true)
 			set("lowHealthPrd", true)
-			set("lowHealthGrade", true)
-			set("lowHealthGradeAmount", 1)
 		end },
 
 	-- Sound and chat
@@ -747,20 +768,23 @@ ns.SerialValue = Serial
 -- What modules change once applied (the old grids' settings gone over to
 -- the new): each setting, or list row, that differs from the defaults
 -- applied the same way, as { key, row (or nil), value }. hoverGroups as a whole.
-function ns.ModuleEffect(resolved, client)
+-- before: ns.ModuleBase(client), when working out many (it's the same each time).
+function ns.ModuleEffect(resolved, client, before)
 	local function Defaults()
 		local values = {}
 		for k, v in pairs(ns.DEFAULTS) do values[k] = v end
 		return values
 	end
-	local before = ns.ApplyModules({}, Defaults(), client)
+	before = before or ns.ApplyModules({}, Defaults(), client)
 	local after = ns.ApplyModules(resolved, Defaults(), client)
 	local keys, out = {}, {}
 	for k in pairs(before) do keys[k] = true end
 	for k in pairs(after) do keys[k] = true end
 	for key in pairs(keys) do
 		local a, b = before[key], after[key]
-		if ns.IS_PROFILE_TABLE[key] and key ~= "hoverGroups" and (type(a) == "table" or type(b) == "table") then
+		-- (Most aren't touched: the same value, or the same table, both sides.)
+		if a == b then
+		elseif ns.IS_PROFILE_TABLE[key] and key ~= "hoverGroups" and (type(a) == "table" or type(b) == "table") then
 			a, b = type(a) == "table" and a or {}, type(b) == "table" and b or {}
 			local rows = {}
 			for row in pairs(a) do rows[row] = true end
@@ -778,6 +802,14 @@ function ns.ModuleEffect(resolved, client)
 	return out
 end
 
+-- The defaults with no modules applied (the old grids' settings gone over),
+-- as ns.ModuleEffect compares against. Not to be changed.
+function ns.ModuleBase(client)
+	local values = {}
+	for k, v in pairs(ns.DEFAULTS) do values[k] = v end
+	return ns.ApplyModules({}, values, client)
+end
+
 -- The slot whose choices change a setting (or a list's row), on this
 -- client; nil: none of them do. (Picking a choice puts just these back as
 -- it has them: ns.ApplyPart.)
@@ -786,10 +818,11 @@ function ns.ForgetSlotSettings() slotOf = nil end
 function ns.SettingSlot(key, row)
 	if not slotOf then
 		slotOf = { keys = {}, rows = {} }
+		local before = ns.ModuleBase(ns.CLIENT)
 		for _, slot in ipairs(ns.PROFILE_SLOTS) do
 			for _, choice in ipairs(ns.SLOT_CHOICES[slot.key] and ns.SLOT_CHOICES[slot.key].choices or {}) do
 				local modules = ns.ChoiceModules(slot.key, choice.part, ns.CLIENT)
-				for _, change in ipairs(ns.ModuleEffect(modules, ns.CLIENT)) do
+				for _, change in ipairs(ns.ModuleEffect(modules, ns.CLIENT, before)) do
 					if change[2] == nil then
 						slotOf.keys[change[1]] = slotOf.keys[change[1]] or slot.key
 					else

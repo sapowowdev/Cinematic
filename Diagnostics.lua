@@ -34,6 +34,8 @@ local NumAddOns = (C_AddOns and C_AddOns.GetNumAddOns) or GetNumAddOns
 local AddOnInfo = (C_AddOns and C_AddOns.GetAddOnInfo) or GetAddOnInfo
 
 local function Plain(text)
+	-- (A secret line, from a debug print, can't be read: it says so.)
+	if issecretvalue and (issecretvalue(text) or issecretvalue(tostring(text))) then return "secret" end
 	return (tostring(text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
 end
 
@@ -528,7 +530,11 @@ function ns.CaptureDebug(command, run)
 	local print = _G.print
 	_G.print = function(...)
 		local parts = {}
-		for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+		for i = 1, select("#", ...) do
+			-- (A secret value can't be joined: one that slipped into a print says so.)
+			local part = tostring((select(i, ...)))
+			parts[i] = (issecretvalue and issecretvalue(part)) and "secret" or part
+		end
 		captured[#captured + 1] = (Plain(table.concat(parts, " ")):gsub("^Cinematic: ", ""))
 		return print(...)
 	end

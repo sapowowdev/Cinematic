@@ -57,6 +57,11 @@ local FAR = { alpha = "healVisionFarAlpha" } -- (100%: off)
 
 -- Your target: their kind's settings, but hidden no fainter than the target
 -- opacity (raise).
+-- (A setting as your role has it: see ns.HealVisionSetting.)
+local function Setting(key)
+	return ns.HealVisionSetting(key)
+end
+
 local targetKinds = {}
 local function TargetOf(kind)
 	local made = targetKinds[kind]
@@ -69,8 +74,8 @@ end
 
 -- A kind's opacity setting (your target's: see TargetOf).
 local function Floor(kind)
-	local floor = ns.db and tonumber(ns.db[kind.alpha]) or 0
-	if kind.raise and ns.db then floor = math.max(floor, tonumber(ns.db[kind.raise]) or 1) end
+	local floor = tonumber(Setting(kind.alpha)) or 0
+	if kind.raise then floor = math.max(floor, tonumber(Setting(kind.raise)) or 1) end
 	return floor
 end
 
@@ -86,7 +91,7 @@ end
 -- it, Shown(step). 100% there means any damage (full is 1), 0% never.
 local function Curve(step, kind)
 	local floor = Floor(kind)
-	local below = ns.db and ns.db[kind.below]
+	local below = Setting(kind.below)
 	local made = curves[kind]
 	if not made or made.floor ~= floor or made.below ~= below then
 		made = { floor = floor, below = below }
@@ -192,11 +197,10 @@ end
 -- auras), only out of combat.
 ns.HEAL_VISION_DEBUFFS = false
 local function ShownAnyway(unit)
-	local db = ns.db
 	local debuffs = ns.HEAL_VISION_DEBUFFS
-	return ((tonumber(db.healVisionTankBelow) or 1) >= 1 and Tank(unit)) -- (100%: always)
-		or (debuffs and db.healVisionAnyDebuff and Debuffed(unit, ANY_FILTERS, nil))
-		or (debuffs and db.healVisionDispel and Debuffed(unit, DISPEL_FILTERS, "RAID"))
+	return ((tonumber(Setting("healVisionTankBelow")) or 1) >= 1 and Tank(unit)) -- (100%: always)
+		or (debuffs and Setting("healVisionAnyDebuff") and Debuffed(unit, ANY_FILTERS, nil))
+		or (debuffs and Setting("healVisionDispel") and Debuffed(unit, DISPEL_FILTERS, "RAID"))
 end
 
 -- (kind: its setting, as the Vision grid's row has it: on here, see ns.HealVisionHere.)
@@ -524,11 +528,10 @@ end
 -- (beside: a tank's target beside them, not kept up with the tank: their
 -- health, as everyone else's.)
 local function Rule(unit, beside)
-	local db = ns.db
-	if (tonumber(db.healVisionTargetAlpha) or 1) >= 1 and IsTarget(unit) then return "target" end
+	if (tonumber(Setting("healVisionTargetAlpha")) or 1) >= 1 and IsTarget(unit) then return "target" end
 	if UnitIsConnected and Plain(UnitIsConnected(unit)) == false then return "offline", OFFLINE end
 	if UnitIsDeadOrGhost and Plain(UnitIsDeadOrGhost(unit)) == true then return "dead", DEAD end
-	if (tonumber(db.healVisionFarAlpha) or 1) < 1 and Far(unit) then return "far", FAR end
+	if (tonumber(Setting("healVisionFarAlpha")) or 1) < 1 and Far(unit) then return "far", FAR end
 	if not beside and ShownAnyway(unit) then return "shown" end
 	return "health"
 end
@@ -540,7 +543,7 @@ end
 -- rules that show members (health, tanks, debuffs), not one of them.
 local function RangeFar(unit, rule)
 	if rule ~= "health" and rule ~= "shown" then return false end
-	if (tonumber(ns.db.healVisionFarAlpha) or 1) >= 1 then return false end
+	if (tonumber(Setting("healVisionFarAlpha")) or 1) >= 1 then return false end
 	local place = PlaceType()
 	return (place == "pvp" or place == "arena") and ns.HealVisionDistance(unit) == nil
 end
@@ -583,7 +586,7 @@ function ns.HealVisionDebug(unit)
 	end
 	return ("on %s, %d frame(s), rule %s, place %s, other zone %s, far slider %s, hover step %d/%d, alpha %s [%s]"):format(
 		on, #frames, rule, PlaceType(),
-		tostring(otherZone), tostring(db.healVisionFarAlpha), revealStep, STEPS,
+		tostring(otherZone), tostring(Setting("healVisionFarAlpha")), revealStep, STEPS,
 		Secret(alpha) and "secret" or tostring(alpha), table.concat(list, "; "))
 end
 

@@ -1,0 +1,436 @@
+<title>Vitals Vision Demo</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono&display=swap">
+<style>
+/* Layout: the screen on top as the hero, a readout under it, then three control panels (art, effects, health) that wrap to one column on phones. One dark look, like the game's own screen. */
+:root {
+  --bg: #0e1013; --panel: #171a1f; --line: #2a2f37; --fg: #ebe7de; --muted: #9ea4ad; --gold: #d2a95a; --on-gold: #1b1406;
+  --display: "Cinzel", Georgia, serif; --body: "Source Sans 3", system-ui, sans-serif; --mono: "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); }
+.wrap { max-width: 1100px; margin: 0 auto; padding-block: 24px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+h1 { font: 600 clamp(22px, 3vw, 30px)/1.2 var(--display); margin: 0; letter-spacing: .02em; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 62ch; }
+.stage { position: relative; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #000; }
+canvas { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; height: auto; }
+.readout { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 13px/1.4 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.readout b { color: var(--fg); font-weight: 400; }
+.themes { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.panel h2 { font: 600 12px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--gold); margin: 0; }
+.panel h3 { font: 600 14px/1.2 var(--body); margin: 6px 0 0; }
+.row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 44px; align-items: center; gap: 10px; font-size: 14px; }
+.row.two { grid-template-columns: 92px minmax(0, 1fr); }
+.row span:last-child { text-align: right; color: var(--muted); font: 12px var(--mono); font-variant-numeric: tabular-nums; }
+.row.two span:last-child { text-align: left; }
+label.tick { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.ticks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+select, button { font: 14px var(--body); color: var(--fg); background: #0f1216; border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; min-width: 0; max-width: 100%; }
+button { cursor: pointer; padding: 6px 12px; }
+button:hover, select:hover { border-color: #46505c; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button[aria-pressed="true"] { background: var(--gold); color: var(--on-gold); border-color: var(--gold); }
+input[type=range] { width: 100%; accent-color: var(--gold); }
+input[type=checkbox] { accent-color: var(--gold); width: 16px; height: 16px; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.dim { opacity: .45; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Vitals Vision</h1>
+    <p>The addon's low-health edges, running here: our art, Blizzard's screen effects over it, and the effects that move them. Drop your health to see it close in.</p>
+  </header>
+
+  <div class="stage"><canvas id="screen" width="960" height="540" aria-label="The game screen with Vitals Vision's edges"></canvas></div>
+  <div class="readout" id="readout"></div>
+
+  <div class="themes">
+    <label for="theme">Theme</label>
+    <select id="theme"></select>
+    <div class="seg" role="group" aria-label="Art">
+      <button type="button" id="artOurs" aria-pressed="false">Ours</button>
+      <button type="button" id="artTheirs" aria-pressed="false">Blizzard's</button>
+      <button type="button" id="artBoth" aria-pressed="true">Both</button>
+    </div>
+  </div>
+
+  <div class="panels">
+    <section class="panel" aria-labelledby="h-art">
+      <h2 id="h-art">Art</h2>
+      <label class="tick"><input type="checkbox" id="ours" checked> Our art</label>
+      <div class="row"><label for="oursAlpha">Opacity</label><input type="range" id="oursAlpha" min="0" max="100" step="5" value="90"><span id="oursAlphaV"></span></div>
+      <label class="tick"><input type="checkbox" id="theirs" checked> Blizzard art</label>
+      <div class="row two"><label for="pattern">Pattern</label><select id="pattern"></select></div>
+      <div class="row two"><label for="mask">Edge</label><select id="mask"></select></div>
+      <div class="row two"><label for="colors">Colors</label><select id="colors">
+        <option value="auto">The pattern's own choice</option><option value="theme">The theme's color</option><option value="own">Its own colors</option></select></div>
+      <div class="row"><label for="theirsAlpha">Opacity</label><input type="range" id="theirsAlpha" min="0" max="100" step="5" value="60"><span id="theirsAlphaV"></span></div>
+      <div class="row"><label for="reach">Reach</label><input type="range" id="reach" min="0" max="100" step="5" value="70"><span id="reachV"></span></div>
+      <p class="note" id="pickNote"></p>
+    </section>
+
+    <section class="panel" aria-labelledby="h-fx">
+      <h2 id="h-fx">Our effects</h2>
+      <div class="ticks">
+        <label class="tick"><input type="checkbox" id="shadow" checked> Shadow</label>
+        <label class="tick"><input type="checkbox" id="pulse" checked> Heartbeat</label>
+        <label class="tick"><input type="checkbox" id="flashOn" checked> Flash on big hits</label>
+        <label class="tick"><input type="checkbox" id="grade"> Color grade</label>
+        <label class="tick"><input type="checkbox" id="sparks" checked> Sparks</label>
+        <label class="tick"><input type="checkbox" id="ripple" checked> Ripple wave</label>
+      </div>
+      <div class="row"><label for="dark">Darkness</label><input type="range" id="dark" min="0" max="100" step="5" value="85"><span id="darkV"></span></div>
+      <div class="row"><label for="tintS">Shadow tint</label><input type="range" id="tintS" min="0" max="100" step="5" value="60"><span id="tintSV"></span></div>
+      <div class="row"><label for="throb">Throb</label><input type="range" id="throb" min="0" max="60" step="5" value="25"><span id="throbV"></span></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-hp">
+      <h2 id="h-hp">Your health</h2>
+      <div class="row"><label for="health">Health</label><input type="range" id="health" min="0" max="100" step="1" value="20"><span id="healthV"></span></div>
+      <div class="seg">
+        <button type="button" id="test">Run the test</button>
+        <button type="button" id="hit">Take a big hit</button>
+        <button type="button" id="heal">Heal up</button>
+      </div>
+      <p class="note">The test is the page's own: from 100% to 10% over 8 seconds, in hits, then back.</p>
+      <label class="tick"><input type="checkbox" id="classic"> As on Classic</label>
+      <p class="note">Classic has only a few of Blizzard's effects; a theme's pick it lacks becomes the red edge, tinted.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+const D = /*DATA*/null;
+const $ = id => document.getElementById(id);
+const cv = $("screen"), ctx = cv.getContext("2d");
+const W = cv.width, H = cv.height;
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// LowHealth.lua's numbers.
+const EDGE_START = 0.05, ART_OUT = 1.35, ART_DEEPEST = 1, ART_SHALLOWEST = 1.2, FLASH_TIME = 0.6, FLASH_TINT = 0.6;
+const LIFT_EASE = 0.8, RIPPLE_SPAN = 0.25, RIPPLE_ALPHA = 0.7, SWAY = 0.012, GAS_REACH = 0.2, GAS_DRIFT = 0.03;
+const FADE_IN = 0.3, FADE_END = 1.2, GRADE_GREY = [0.6, 0.63, 0.68], GRADE_TINT = 0.3, MAX_SPARKS = 24;
+const START = 0.75, FULL = 0.15, REACH = 0.3, BPM_SLOW = 60, BPM_FAST = 140, FOLLOW = 0.1, LIFT = 0.4;
+const FLASH_HIT = 0.08, FLASH_ADDED = 0.2, EDGE_FILE = 131140, WISPY = 1305138, WHITE = [1, 1, 1];
+
+const THEME = Object.fromEntries(D.themes.map(t => [t.key, t]));
+const PATTERN = Object.fromEntries(D.patterns.map(p => [p.id, p]));
+const MASK = Object.fromEntries(D.masks.map(m => [m.id, m]));
+
+// Images: the data's, then each color and alpha pair joined into one canvas.
+const imgs = {};
+function load() {
+  return Promise.all(Object.entries(D.img).map(([k, src]) => new Promise(ok => {
+    const im = new Image(); im.onload = () => { imgs[k] = im; ok(); }; im.onerror = ok; im.src = src;
+  })));
+}
+function canvas(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
+const joined = {};
+function join(key) {
+  if (joined[key]) return joined[key];
+  const c = imgs[key + "c"], a = imgs[key + "a"];
+  if (!c || !a) return null;
+  const out = canvas(c.width, c.height), x = out.getContext("2d");
+  x.drawImage(c, 0, 0);
+  const px = x.getImageData(0, 0, c.width, c.height);
+  const ax = canvas(c.width, c.height).getContext("2d");
+  ax.drawImage(a, 0, 0);
+  const ap = ax.getImageData(0, 0, c.width, c.height).data;
+  for (let i = 3; i < px.data.length; i += 4) px.data[i] = ap[i - 3];
+  x.putImageData(px, 0, 0);
+  return (joined[key] = out);
+}
+// Tinted: each color times this one (greyed first if desaturated), as SetVertexColor does.
+const tinted = new Map();
+function tint(src, color, grey, key) {
+  const id = key + "|" + color.join() + "|" + grey;
+  if (tinted.has(id)) return tinted.get(id);
+  const out = canvas(src.width, src.height), x = out.getContext("2d");
+  x.drawImage(src, 0, 0);
+  const px = x.getImageData(0, 0, src.width, src.height), d = px.data;
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], g = d[i + 1], b = d[i + 2];
+    if (grey) r = g = b = 0.299 * r + 0.587 * g + 0.114 * b;
+    d[i] = r * color[0]; d[i + 1] = g * color[1]; d[i + 2] = b * color[2];
+  }
+  x.putImageData(px, 0, 0);
+  tinted.set(id, out);
+  return out;
+}
+
+// Settings (the page's) and state (LowHealth.lua's).
+const S = { theme: "blood", ours: true, theirs: true, pattern: "auto", mask: "auto", colors: "auto", oursAlpha: 0.9,
+  theirsAlpha: 0.6, reach: 0.7, shadow: true, pulse: true, flashOn: true, grade: false, sparks: true, ripple: true,
+  dark: 0.85, tintS: 0.6, throb: 0.25, health: 0.2, classic: false };
+let level = 0, flash = 0, beat = 0, liftSpeed = 0, lastHealth = null, lostAdding = 0, reachNow = 0, test = null;
+const sparks = [];
+
+function has(file) { return !S.classic || D.classic.includes(file); }
+
+// Blizzard art for the theme: LowHealth.lua's TheirsPick.
+function theirsPick(theme) {
+  const pick = theme.theirs;
+  const file = S.pattern === "auto" ? pick && pick.file : +S.pattern;
+  if (!file) return null;
+  const p = PATTERN[file] || { id: file, tiles: 1 };
+  let mask = S.mask === "auto" ? p.mask : S.mask === "none" ? null : +S.mask;
+  let own = p.own;
+  if (S.pattern === "auto" && pick && pick.own != null) own = pick.own;
+  if (S.colors !== "auto") own = S.colors === "own";
+  const edge = { file: EDGE_FILE, mask: null, tiles: 1, own: false, paint: false };
+  if (!has(file)) return edge;
+  if (mask && !has(mask)) { mask = has(WISPY) ? WISPY : null; if (!mask) return edge; }
+  return { file, mask, tiles: p.tiles || 1, own: !!own, paint: !!p.paint };
+}
+
+// Its layer, the size of the screen: the pattern (an edge stretched, the rest
+// in squares across), tinted, cut by its mask. Drawn bigger as it closes in.
+const layers = new Map();
+function theirsLayer(pick, color) {
+  const id = [pick.file, pick.mask, pick.tiles, pick.own, color.join()].join("|");
+  if (layers.has(id)) return layers.get(id);
+  const src = join("p" + pick.file);
+  if (!src) return null;
+  const tex = tint(src, pick.own ? WHITE : color, !pick.own, "p" + pick.file);
+  const out = canvas(W, H), x = out.getContext("2d");
+  if (pick.file === EDGE_FILE) x.drawImage(tex, 0, 0, W, H);
+  else {
+    const size = W / pick.tiles;
+    for (let ty = 0; ty < H; ty += size) for (let tx = 0; tx < W; tx += size) x.drawImage(tex, tx, ty, size, size);
+  }
+  const m = pick.mask && join("p" + pick.mask);
+  if (m) { x.globalCompositeOperation = "destination-in"; x.drawImage(m, 0, 0, W, H); }
+  layers.set(id, out);
+  return out;
+}
+
+function smooth(c) { return c * c * (3 - 2 * c); }
+function heartbeat(phase) {
+  const p = phase % 1;
+  return Math.max(Math.exp(-(((p - 0.05) / 0.05) ** 2)), 0.6 * Math.exp(-(((p - 0.28) / 0.06) ** 2)));
+}
+function between(r) { return r[0] + (r[1] - r[0]) * Math.random(); }
+function place(at, reach, spread) {
+  const along = spread ? Math.random() : 0.1 + 0.8 * Math.random();
+  const inset = reach * (0.4 + 0.7 * Math.random());
+  const side = at === "top" ? 1 : at === "bottom" ? 2 : at === "sides" ? 3 + (Math.random() < 0.5 ? 0 : 1) : 1 + Math.floor(Math.random() * 4);
+  if (side === 1) return [along, inset];
+  if (side === 2) return [along, 1 - inset];
+  if (side === 3) return [inset * 0.6, along];
+  return [1 - inset * 0.6, along];
+}
+function spark(info, now) {
+  if (sparks.length >= MAX_SPARKS) return;
+  const gas = info.kind === "drift";
+  const [x, y] = place(info.at, gas ? reachNow * GAS_REACH : reachNow, gas);
+  sparks.push({ info, born: now, life: between(info.life), size: between(info.size), x, y,
+    phase: Math.random() * Math.PI * 2, flip: Math.random() < 0.5 });
+}
+
+// The shadow: each edge darkening in, the theme's color as far as Shadow tint says.
+function vignette(size, alpha, rgb) {
+  if (alpha <= 0) return;
+  const col = a => `rgba(${rgb.map(v => Math.round(v * 255)).join(",")},${a})`;
+  const sides = [[0, 0, W, H * size, 0, 0, 0, H * size], [0, H * (1 - size), W, H * size, 0, H, 0, H * (1 - size)],
+    [0, 0, W * size, H, 0, 0, W * size, 0], [W * (1 - size), 0, W * size, H, W, 0, W * (1 - size), 0]];
+  for (const [x, y, w, h, x0, y0, x1, y1] of sides) {
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, col(alpha)); g.addColorStop(0.55, col(alpha * 0.35)); g.addColorStop(1, col(0));
+    ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+  }
+}
+function drawScaled(src, scale, alpha, op, dx, dy) {
+  if (!src || alpha <= 0) return;
+  const w = W * scale, h = H * scale;
+  ctx.globalAlpha = Math.min(1, alpha); ctx.globalCompositeOperation = op;
+  ctx.drawImage(src, (W - w) / 2 + (dx || 0), (H - h) / 2 + (dy || 0), w, h);
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
+}
+
+// One frame: LowHealth.lua's Update, then Apply.
+let last = performance.now() / 1000;
+function frame(nowMs) {
+  const now = nowMs / 1000, elapsed = Math.min(0.1, now - last);
+  last = now;
+  const theme = THEME[S.theme];
+  let share = S.health, testing = false;
+  if (test) {
+    const t = now - test.start;
+    if (t > 8 + 2) { test = null; }
+    else {
+      const steps = Math.floor(8 / 0.7);
+      const progress = Math.min(1, Math.ceil(Math.min(1, t / 8) * steps - 0.001) / steps);
+      share = 1 + (0.1 - 1) * progress; testing = true;
+    }
+  }
+  // Big hits: a flash, and the theme's sparks for a hit.
+  let lostNow = lastHealth == null ? 0 : Math.max(0, lastHealth - share);
+  lostAdding += lostNow;
+  const sparking = S.sparks && level > 0.05 && theme.sparks;
+  if (lostNow >= FLASH_HIT || lostAdding >= FLASH_ADDED) {
+    lostAdding = 0;
+    if (S.flashOn) flash = 1;
+    if (sparking) for (const info of sparking) if (info.hit) for (let n = Math.round(between(info.hit)); n > 0; n--) spark(info, now);
+  }
+  if (sparking) for (const info of sparking) if (info.rate && Math.random() < info.rate / 60 * elapsed * level) spark(info, now);
+  lastHealth = share;
+  flash = Math.max(0, flash - elapsed / FLASH_TIME);
+  const target = Math.max(0, Math.min(1, (START - share) / (START - FULL)));
+  if (target >= level) { level = Math.min(target, level + elapsed / FOLLOW); liftSpeed = 0; }
+  else {
+    const wanted = Math.min(LIFT, Math.sqrt(2 * LIFT_EASE * (level - target)));
+    liftSpeed = Math.min(wanted, liftSpeed + LIFT_EASE * elapsed);
+    level = Math.max(target, level - liftSpeed * elapsed);
+  }
+  let k = level, heart = 0, bpm = 0;
+  if (S.pulse && level > 0) {
+    bpm = (BPM_SLOW + (BPM_FAST - BPM_SLOW) * level) * (theme.bpm || 1);
+    beat = (beat + elapsed * bpm / 60) % 1;
+    heart = reduce ? 0 : heartbeat(beat);
+    k = level * (1 + S.throb * (theme.pulse || 1) * heart);
+  }
+  k = Math.max(k, flash * 0.35);
+  apply(theme, k, heart, now);
+  $("readout").innerHTML = `<span>health <b>${Math.round(share * 100)}%</b></span><span>edges in <b>${Math.round(level * 100)}%</b></span>` +
+    `<span>heartbeat <b>${bpm ? Math.round(bpm) + " bpm" : "off"}</b></span><span>${testing ? "<b>test running</b>" : ""}</span>`;
+  requestAnimationFrame(frame);
+}
+
+function apply(theme, k, heart, now) {
+  ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
+  ctx.drawImage(imgs.world, 0, 0, W, H);
+  const c = smooth(Math.min(1, k)), over = Math.max(0, k - 1);
+  const size = EDGE_START + (REACH - EDGE_START) * c + over * 0.1;
+  reachNow = size;
+  if (S.shadow) {
+    const alpha = Math.min(1, S.dark * c + flash * 0.35);
+    const col = theme.shadow.map((v, i) => { const s = v * S.tintS; return s + (theme.flash[i] - s) * flash * FLASH_TINT; });
+    vignette(size, alpha, col);
+  }
+  if (S.grade && level > 0) {
+    const g = smooth(level) * 0.5;
+    const col = GRADE_GREY.map((grey, i) => 1 + (grey + (theme.flash[i] - grey) * GRADE_TINT - 1) * g);
+    ctx.globalCompositeOperation = "multiply";
+    ctx.fillStyle = `rgb(${col.map(v => Math.round(v * 255)).join(",")})`; ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "source-over";
+  }
+  const pick = theirsPick(theme), blizz = S.theirs && pick;
+  if ((S.ours || blizz) && c > 0) {
+    const deep = ART_SHALLOWEST + (ART_DEEPEST - ART_SHALLOWEST) * S.reach;
+    const scale = Math.max(1, ART_OUT + (deep - ART_OUT) * c - over * 0.05);
+    const sway = theme.sway, pad = sway ? 4 * SWAY * sway : 0;
+    const sx = sway ? Math.sin(now * 1.3) * sway * SWAY * H : 0, sy = sway ? Math.sin(now * 0.9 + 1) * sway * SWAY * 0.6 * H : 0;
+    if (S.ours && theme.edge) {
+      const artAlpha = S.oursAlpha * Math.min(1, c * 3);
+      const body = theme.body && join("o" + theme.edge), glow = theme.glow && join("o" + theme.edge + "Glow");
+      if (body) drawScaled(tint(body, theme.body, false, "o" + theme.edge), scale + pad, artAlpha, "source-over", sx, sy);
+      if (glow) drawScaled(tint(glow, theme.glow, false, "o" + theme.edge + "Glow"), scale + pad,
+        artAlpha * (theme.glowAlpha || 1) * (0.8 + 0.3 * heart + 0.4 * flash), "lighter", sx, sy);
+    }
+    if (blizz) {
+      const color = pick.own ? WHITE : theme.glow || theme.body || WHITE;
+      const layer = theirsLayer(pick, color);
+      const a = S.theirsAlpha * Math.min(1, c * 3) * (0.85 + 0.25 * heart + 0.3 * flash);
+      drawScaled(layer, scale + pad, a, pick.paint ? "source-over" : "lighter", sx, sy);
+      if (S.ripple) {
+        const p = S.pulse ? beat : now % 1;
+        drawScaled(layer, scale + pad + RIPPLE_SPAN * (1 - p), Math.min(1, a) * RIPPLE_ALPHA * Math.sin(Math.PI * p), "lighter");
+      }
+    }
+  }
+  // Sparks.
+  const sa = S.oursAlpha * Math.min(1, c * 2);
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i], info = s.info, t = now - s.born;
+    if (t >= s.life || !S.sparks) { sparks.splice(i, 1); continue; }
+    let a, x = s.x, y = s.y, size = s.size;
+    if (info.kind === "flicker") a = (Math.sin(t * 55 + s.phase) > -0.4 ? 1 : 0.15) * (1 - t / s.life);
+    else if (info.kind === "twinkle") a = Math.sin(Math.PI * t / s.life);
+    else if (info.kind === "drift") {
+      const sh = t / s.life;
+      x += (0.5 - x) * GAS_DRIFT * sh; y += (0.5 - y) * GAS_DRIFT * sh; size *= 1 + 0.5 * sh;
+      a = Math.min(1, t / (FADE_IN * 2), (s.life - t) / FADE_END);
+    } else {
+      y -= (info.speed || 0.1) * t; x += Math.sin(s.phase + t * 2) * 0.008;
+      a = Math.min(1, t / FADE_IN, (s.life - t) / FADE_END);
+    }
+    const im = imgs["s" + info.tex];
+    if (!im || a <= 0) continue;
+    const spr = tint(im, info.color, false, "s" + info.tex), px = size * H;
+    ctx.globalAlpha = Math.min(1, sa * a); ctx.globalCompositeOperation = info.flat ? "source-over" : "lighter";
+    ctx.save(); ctx.translate(x * W, y * H); if (s.flip) ctx.scale(-1, 1);
+    ctx.drawImage(spr, -px / 2, -px / 2, px, px); ctx.restore();
+  }
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
+}
+
+// Controls.
+function fillThemes() {
+  const sel = $("theme");
+  for (const cls of D.menu) {
+    const g = document.createElement("optgroup"); g.label = cls.name;
+    for (const s of cls.specs) {
+      const o = document.createElement("option"); o.value = s.key; o.textContent = `${s.spec}: ${THEME[s.key].name}`;
+      g.appendChild(o);
+    }
+    sel.appendChild(g);
+  }
+  sel.value = S.theme;
+}
+function fillPatterns() {
+  const sel = $("pattern"), mk = $("mask"), keep = [S.pattern, S.mask];
+  const pick = THEME[S.theme].theirs;
+  sel.innerHTML = ""; mk.innerHTML = "";
+  sel.add(new Option("Theme's pick: " + (pick && PATTERN[pick.file] ? PATTERN[pick.file].name : "none"), "auto"));
+  for (const p of D.patterns) if (has(p.id)) sel.add(new Option(p.name, p.id));
+  mk.add(new Option("The pattern's own", "auto")); mk.add(new Option("None", "none"));
+  for (const m of D.masks) if (has(m.id)) mk.add(new Option(m.name, m.id));
+  sel.value = [...sel.options].some(o => o.value == keep[0]) ? keep[0] : "auto";
+  mk.value = [...mk.options].some(o => o.value == keep[1]) ? keep[1] : "auto";
+  S.pattern = sel.value; S.mask = mk.value;
+}
+function note() {
+  const pick = theirsPick(THEME[S.theme]);
+  if (!pick) { $("pickNote").textContent = "No Blizzard art for this theme."; return; }
+  const p = PATTERN[pick.file], m = pick.mask && MASK[pick.mask];
+  $("pickNote").textContent = `Showing ${p ? p.name : "file " + pick.file}` + (m ? `, cut by the ${m.name.toLowerCase()}` : "") +
+    `, in ${pick.own ? "its own colors" : "the theme's color"}, drawn as ${pick.paint ? "paint" : "light"}. File ${pick.file}.`;
+}
+function sync() {
+  for (const id of ["oursAlpha", "theirsAlpha", "reach", "dark", "tintS", "throb", "health"]) $(id + "V").textContent = Math.round(S[id] * 100) + "%";
+  $("artOurs").setAttribute("aria-pressed", S.ours && !S.theirs);
+  $("artTheirs").setAttribute("aria-pressed", !S.ours && S.theirs);
+  $("artBoth").setAttribute("aria-pressed", S.ours && S.theirs);
+  $("ours").checked = S.ours; $("theirs").checked = S.theirs;
+  for (const id of ["pattern", "mask", "colors", "theirsAlpha"]) $(id).closest(".row").classList.toggle("dim", !S.theirs);
+  $("oursAlpha").closest(".row").classList.toggle("dim", !S.ours);
+  note();
+}
+function bind() {
+  $("theme").onchange = e => { S.theme = e.target.value; sparks.length = 0; fillPatterns(); sync(); };
+  for (const id of ["ours", "theirs", "shadow", "pulse", "flashOn", "grade", "sparks", "ripple"])
+    $(id).onchange = e => { S[id] = e.target.checked; sync(); };
+  for (const id of ["oursAlpha", "theirsAlpha", "reach", "dark", "tintS", "throb", "health"])
+    $(id).oninput = e => { S[id] = e.target.value / 100; if (id === "health") test = null; sync(); };
+  for (const id of ["pattern", "mask", "colors"]) $(id).onchange = e => { S[id] = e.target.value; sync(); };
+  $("classic").onchange = e => { S.classic = e.target.checked; fillPatterns(); sync(); };
+  $("artOurs").onclick = () => { S.ours = true; S.theirs = false; sync(); };
+  $("artTheirs").onclick = () => { S.ours = false; S.theirs = true; sync(); };
+  $("artBoth").onclick = () => { S.ours = true; S.theirs = true; sync(); };
+  $("test").onclick = () => { test = { start: performance.now() / 1000 }; lastHealth = 1; };
+  $("hit").onclick = () => { test = null; S.health = Math.max(0, S.health - 0.15); $("health").value = Math.round(S.health * 100); sync(); };
+  $("heal").onclick = () => { test = null; S.health = 1; $("health").value = 100; sync(); };
+}
+
+load().then(() => {
+  fillThemes(); fillPatterns(); bind(); sync();
+  level = Math.max(0, Math.min(1, (START - S.health) / (START - FULL)));
+  lastHealth = S.health;
+  requestAnimationFrame(frame);
+});
+</script>

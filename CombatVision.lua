@@ -14,23 +14,28 @@ DEFAULTS.combatOnEnter = true          -- as a fight starts (its Show in row's C
 DEFAULTS.combatOnLeave = true          -- ...and as it ends
 DEFAULTS.combatMinFight = 3            -- no leaving cue after a fight shorter than this (seconds)
 DEFAULTS.combatAlways = true           -- its Show in row's Always (the rest: ROW_KEY's ticks and rule)
-DEFAULTS.combatPlace = "screen"        -- "screen", "top" or "bottom" (a letterbox bar)
-DEFAULTS.combatWiden = true            -- in a bar: the bar grows to fit the text
+DEFAULTS.combatPlace = "top"           -- "screen", "top" or "bottom" (a letterbox bar)
+DEFAULTS.combatBarScale = 0.62         -- in a bar: the text's height, a share of the bar's
 DEFAULTS.combatAlign = "center"        -- in a bar: "left", "center" or "right"
-DEFAULTS.combatStyle = "title"         -- "title", "subtitle", "chapter" or "none"
-DEFAULTS.combatTextIn = ""             -- the words ("": Combat, Respite)
-DEFAULTS.combatTextOut = ""
-DEFAULTS.combatFont = "morpheus"       -- QUEST_ITEM_FONTS (QuestItemButton.lua)
+DEFAULTS.combatStyle = "title"         -- "title", "subtitle" or "chapter" (no words: "none" in Setup)
+DEFAULTS.combatTextIn = "Combat"       -- the words ("": none, just the icon, pulse, bar; these
+DEFAULTS.combatTextOut = "Respite"     -- two shown in the game's language: ShownWords)
+DEFAULTS.combatFont = "general"        -- QUEST_ITEM_FONTS (QuestItemButton.lua; general: General's)
 DEFAULTS.combatSize = 34               -- the text's height on the screen
-DEFAULTS.combatOutline = 1             -- 0 none, 1 thin, 2 thick
-DEFAULTS.combatInR, DEFAULTS.combatInG, DEFAULTS.combatInB = 0.89, 0.29, 0.29
-DEFAULTS.combatOutR, DEFAULTS.combatOutG, DEFAULTS.combatOutB = 0.62, 0.88, 0.8
-DEFAULTS.combatHold = 1.5              -- seconds the text stays, between its fades
-DEFAULTS.combatPulse = true            -- the screen's edges flash in the text's color
-DEFAULTS.combatPulseStrength = 0.1
-DEFAULTS.combatIcon = false            -- an icon before the word
+DEFAULTS.combatOutlineR, DEFAULTS.combatOutlineG, DEFAULTS.combatOutlineB = 0, 0, 0 -- (black: the game's own)
+DEFAULTS.combatOutline = -1            -- 0 none, 1 thin, 2 thick (-1: General's, thin at the game's)
+DEFAULTS.combatInR, DEFAULTS.combatInG, DEFAULTS.combatInB = 0.89, 0.79, 0.34
+DEFAULTS.combatOutR, DEFAULTS.combatOutG, DEFAULTS.combatOutB = 0.49, 0.67, 0.73
+-- The pulse's colors, going in and coming out.
+DEFAULTS.combatPulseInR, DEFAULTS.combatPulseInG, DEFAULTS.combatPulseInB = 0.89, 0.79, 0.34
+DEFAULTS.combatPulseOutR, DEFAULTS.combatPulseOutG, DEFAULTS.combatPulseOutB = 0.49, 0.67, 0.73
+DEFAULTS.combatHold = 0.5              -- seconds the text stays, between its fades
+DEFAULTS.combatPulseIn = 0.03          -- the screen's edges flash, this strong (0: no)
+DEFAULTS.combatPulseOut = 0.01
+DEFAULTS.combatIconShowIn = false      -- an icon before the word going in
+DEFAULTS.combatIconShowOut = false     -- ...and coming out
 DEFAULTS.combatIconIn = "Interface\\Icons\\Ability_DualWield" -- (a file or file ID: IconBrowser.lua)
-DEFAULTS.combatIconOut = "Interface\\Icons\\Ability_Warrior_DefensiveStance"
+DEFAULTS.combatIconOut = 132320
 
 -- Its Show in row (GridRows.lua: the places, roles and a rule, which can
 -- name cinemode), read as a fight begins.
@@ -83,6 +88,13 @@ local function MakeCue(frame)
 	local text = over:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
 	text:SetShadowOffset(1, -1)
 	text:SetShadowColor(0, 0, 0, 0.8)
+	-- An outline in a color: the text again behind it, nudged each way (the
+	-- game's own outline is always black).
+	text.rim = {}
+	for i = 1, 8 do
+		text.rim[i] = over:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+		text.rim[i]:SetDrawLayer("OVERLAY", -1)
+	end
 	local line = over:CreateTexture(nil, "OVERLAY")
 	local icon = over:CreateTexture(nil, "OVERLAY")
 	icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
@@ -102,18 +114,27 @@ local function FontFile(look)
 	return (GameFontNormalHuge:GetFont())
 end
 
+-- The words at key (combatTextIn, combatTextOut) as shown: the defaults in
+-- the game's language.
+local function ShownWords(look, key)
+	local word = look[key] or DEFAULTS[key]
+	return word == DEFAULTS[key] and L[word] or word
+end
+
 -- Sets up cue for a going in (enter) or coming out, on a screen width x
 -- height; scale: that next to the real screen (the preview's smaller).
 local function Setup(cue, look, enter, width, height, scale)
-	local r, g, b
+	local r, g, b, pr, pg, pb
 	if enter then
 		r, g, b = look.combatInR, look.combatInG, look.combatInB
+		pr, pg, pb = look.combatPulseInR, look.combatPulseInG, look.combatPulseInB
 	else
 		r, g, b = look.combatOutR, look.combatOutG, look.combatOutB
+		pr, pg, pb = look.combatPulseOutR, look.combatPulseOutG, look.combatPulseOutB
 	end
-	local word = enter and look.combatTextIn or look.combatTextOut
-	if not word or word == "" then word = enter and L["Combat"] or L["Respite"] end
+	local word = ShownWords(look, enter and "combatTextIn" or "combatTextOut")
 	local style, place = look.combatStyle, look.combatPlace
+	if word == "" then style = "none" end
 	local size = look.combatSize * scale
 	if style == "subtitle" then
 		size, word = math.max(size * 0.5, 11 * scale), "- " .. word .. " -"
@@ -127,12 +148,15 @@ local function Setup(cue, look, enter, width, height, scale)
 	cue.barSide, cue.lineWidth = nil, nil
 	local x, y, point, relative = 0, 0, "CENTER", "CENTER"
 	if place == "top" or place == "bottom" then
-		-- In a bar of our own: as tall as the text needs (Widen), or as the
-		-- letterbox's own bars are now, the text sized to fit it.
-		local real = 0
-		if ns.letterbox and ns.letterbox:IsShown() and scale == 1 then real = ns.letterbox.top:GetHeight() end
-		local want = look.combatWiden and math.max(real, size * 1.8) or (real > size * 0.8 and real or size * 1.5)
-		size = math.min(size, want * 0.62)
+		-- With the letterbox up (in CineMode; the preview as if it were): in
+		-- its bar. Else in a bar of our own, as tall as the letterbox's. The
+		-- text scales with the bar (combatBarScale).
+		local barLook = ns.LetterboxLook()
+		local full = ns.LetterboxHeight(barLook, width, height)
+		local active = ns.db.letterbox and (scale ~= 1 or ns.lastCinematic) and full >= 1
+		local want = full >= 1 and full or size * 1.5
+		size = math.max(want * look.combatBarScale, 6 * scale)
+		cue.ownBar = not (active and scale == 1)
 		local side = place == "top" and "TOP" or "BOTTOM"
 		local align = look.combatAlign == "left" and "LEFT" or look.combatAlign == "right" and "RIGHT" or ""
 		point, relative = align ~= "" and align or "CENTER", side .. align
@@ -152,19 +176,37 @@ local function Setup(cue, look, enter, width, height, scale)
 	end
 	text:SetPoint(point, cue.over, relative, x, y)
 	text:SetText(word)
-	ns.SetPlateNameFont(text, GameFontNormalHuge, FontFile(look), math.floor(size + 0.5), 1,
-		OUTLINES[look.combatOutline] or "")
+	local outline = OUTLINES[look.combatOutline] or ""
+	local or_, og, ob = look.combatOutlineR or 0, look.combatOutlineG or 0, look.combatOutlineB or 0
+	local rimmed = outline ~= "" and or_ + og + ob > 0
+	local fontSize = math.floor(size + 0.5)
+	ns.SetPlateNameFont(text, GameFontNormalHuge, FontFile(look), fontSize, 1, rimmed and "" or outline)
 	text:SetTextColor(r, g, b, 1)
 	text:SetVertexColor(r, g, b, 1) -- (one and the same on Forever)
 	text:SetShown(style ~= "none")
+	local nudge = (outline == "THICKOUTLINE" and 2 or 1) * math.max(scale, 0.5)
+	for i, rim in ipairs(text.rim) do
+		rim:SetShown(rimmed and style ~= "none")
+		if rimmed then
+			local angle = (i - 1) * math.pi / 4
+			rim:ClearAllPoints()
+			rim:SetPoint("CENTER", text, "CENTER", math.cos(angle) * nudge, math.sin(angle) * nudge)
+			rim:SetText(word)
+			ns.SetPlateNameFont(rim, GameFontNormalHuge, FontFile(look), fontSize, 1, "")
+			rim:SetTextColor(or_, og, ob, 1)
+			rim:SetVertexColor(or_, og, ob, 1)
+			rim:SetShadowOffset(0, 0)
+		end
+	end
 	if style == "chapter" then
 		line:SetColorTexture(r, g, b, 0.8)
 		line:SetHeight(math.max(1, scale))
 		cue.lineWidth = cue.barSide and width * 0.6 or math.max(text:GetStringWidth() * 1.6, width * 0.3)
 	end
 	line:SetShown(style == "chapter")
-	icon:SetShown(look.combatIcon and true or false)
-	if look.combatIcon then
+	local showIcon = look[enter and "combatIconShowIn" or "combatIconShowOut"] and true or false
+	icon:SetShown(showIcon)
+	if showIcon then
 		icon:SetTexture(enter and look.combatIconIn or look.combatIconOut)
 		icon:SetSize(size * 1.1, size * 1.1)
 		if style == "none" then
@@ -177,9 +219,9 @@ local function Setup(cue, look, enter, width, height, scale)
 		local thick = (side == "TOP" or side == "BOTTOM") and height * 0.2 or width * 0.12
 		if side == "TOP" or side == "BOTTOM" then edge:SetHeight(thick) else edge:SetWidth(thick) end
 		Gradient(edge, (side == "TOP" or side == "BOTTOM") and "VERTICAL" or "HORIZONTAL",
-			side == "TOP" or side == "LEFT", r, g, b)
+			side == "TOP" or side == "LEFT", pr, pg, pb)
 	end
-	cue.look, cue.width, cue.height, cue.scale = look, width, height, scale
+	cue.look, cue.enter, cue.width, cue.height, cue.scale = look, enter, width, height, scale
 	cue.barLook = cue.barSide and setmetatable({ letterboxSizeBy = "height", letterboxSize = cue.barShare,
 		letterboxMotion = "slide" }, { __index = ns.LetterboxLook() })
 end
@@ -207,13 +249,14 @@ local function Draw(cue, age)
 	cue.over:SetAlpha(a)
 	if cue.lineWidth then cue.line:SetWidth(math.max(cue.lineWidth * a, 0.01)) end
 	local pulse = 0
-	if look.combatPulse then
+	local strength = cue.enter and look.combatPulseIn or look.combatPulseOut
+	if strength > 0 then
 		pulse = age < PULSE_PEAK and age / PULSE_PEAK or math.max(0, 1 - (age - PULSE_PEAK) / (PULSE_GONE - PULSE_PEAK))
 	end
 	cue.pulse:SetShown(pulse > 0)
-	cue.pulse:SetAlpha(pulse * look.combatPulseStrength)
-	cue.bars:SetShown(cue.barSide ~= nil)
-	if cue.barSide then
+	cue.pulse:SetAlpha(pulse * strength)
+	cue.bars:SetShown(cue.barSide ~= nil and cue.ownBar)
+	if cue.barSide and cue.ownBar then
 		local bars = cue.bars
 		ns.DrawLetterbox(bars, cue.barLook, cue.width, cue.height, a, cue.scale)
 		local other = cue.barSide == "TOP" and "bottom" or "top"
@@ -309,21 +352,6 @@ function ns.CreateCombatVisionPanel(kit)
 	local stack = kit.Stack(switch, "check")
 	local rows = ns.StyleRows(kit, content, stack, Changed, "combatVision")
 
-	local tests = CreateFrame("Frame", nil, content)
-	tests:SetSize(320, 24)
-	stack:Add(tests, "label")
-	for i, enter in ipairs({ true, false }) do
-		local test = ns.PanelButton(tests)
-		test:SetSize(150, 22)
-		test:SetPoint("LEFT", (i - 1) * 158, 0)
-		test:SetText(enter and L["Test: into a fight"] or L["Test: out of it"])
-		kit.Tooltip(test, L["Plays the cue on the screen as it will look."])
-		test:SetScript("OnClick", function() ns.PlayCombatVision(enter) end)
-		test.Refresh = function() end
-		test.pageSwitch = false
-		kit.AddControl(test)
-	end
-
 	stack:Header(content, L["When"])
 	rows.Slider("combatMinFight", L["Not after fights under"], 0, 10, 1, "%d s", 1,
 		L["No cue coming out of a fight shorter than this, so a stray hit doesn't bring it up. 0: after " ..
@@ -332,18 +360,12 @@ function ns.CreateCombatVisionPanel(kit)
 	-- Where and which: a Show in row as the Visual Effects page's, read as a
 	-- fight starts and ends; its Combat dropdown is just those two (the
 	-- usual fights and targets left out).
-	stack:Header(content, L["Show in"])
-	local note = stack:Add(kit.Label(content, "GameFontHighlightSmall",
-		L["When and where the cue shows. Combat: entering combat, leaving it, or both. Always: everywhere. " ..
-		"Location: the places. Role: only as those roles. Edit: a rule, with Entering combat and Leaving " ..
-		"combat under Combat, and In CineMode under You for only the fights that begin in CineMode."]), "label")
-	note:SetWidth(460)
-	note:SetJustifyH("LEFT")
+	local header = stack:Header(content, L["Show in"])
 	local function Edge(key, name, tip)
 		return { name, function() return ns.GetDB()[key] and true or false end,
 			function() local db = ns.GetDB() db[key] = not db[key] end, nil, tip }
 	end
-	local lastRow = ns.ShowTable(content, note, {
+	local lastRow = ns.ShowTable(content, header, {
 		opts = { anyFight = true, omit = { combatShow = true, enemyShow = true, friendlyShow = true },
 			combatItems = {
 				Edge("combatOnEnter", L["Entering combat"], L["The cue as a fight starts."]),
@@ -366,34 +388,38 @@ end
 
 -- The look's settings a preset sets (the rest as the defaults; the colors
 -- and words too).
-local PRESET_KEYS = { "combatPlace", "combatWiden", "combatAlign", "combatStyle", "combatFont", "combatSize",
-	"combatOutline", "combatHold", "combatPulse", "combatPulseStrength", "combatIcon", "combatTextIn",
-	"combatTextOut", "combatInR", "combatInG", "combatInB", "combatOutR", "combatOutG", "combatOutB" }
+local PRESET_KEYS = { "combatPlace", "combatBarScale", "combatAlign", "combatStyle", "combatFont", "combatSize",
+	"combatOutline", "combatOutlineR", "combatOutlineG", "combatOutlineB",
+	"combatHold", "combatPulseIn", "combatPulseOut", "combatIconShowIn", "combatIconShowOut", "combatTextIn",
+	"combatTextOut", "combatInR", "combatInG", "combatInB", "combatOutR", "combatOutG", "combatOutB",
+	"combatPulseInR", "combatPulseInG", "combatPulseInB", "combatPulseOutR", "combatPulseOutG", "combatPulseOutB" }
 
--- A row with an edit box for words (key: "" for the usual ones).
+-- A row with an edit box for words (key: "" for none; the defaults shown
+-- and kept as such in any language).
 local function WordsRow(kit, content, stack, key, label, tip, test)
 	local name = stack:Add(kit.Label(content, "GameFontHighlight", label), "label")
 	name:SetSize(150, 22)
 	local box = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
 	if ns.SkinEditBox then ns.SkinEditBox(box) end
-	box:SetSize(200, 22)
+	box:SetSize(150, 22)
 	box:SetAutoFocus(false)
 	box:SetMaxLetters(40)
-	box:SetPoint("LEFT", name, "RIGHT", 8, 0)
+	box:SetPoint("LEFT", name, "LEFT", 160, 0) -- (in line with the rows' choices)
 	kit.Tooltip(box, tip)
 	local function Save(self)
-		ns.GetDB()[key] = (self:GetText() or ""):match("^%s*(.-)%s*$")
+		local words = (self:GetText() or ""):match("^%s*(.-)%s*$")
+		ns.GetDB()[key] = words == L[DEFAULTS[key]] and DEFAULTS[key] or words
 		self:ClearFocus()
 		if content.combatChanged then content.combatChanged() end
 	end
 	box:SetScript("OnEnterPressed", Save)
 	box:SetScript("OnEditFocusLost", Save)
 	box:SetScript("OnEscapePressed", function(self)
-		self:SetText(ns.GetDB()[key] or "")
+		self:SetText(ShownWords(ns.GetDB(), key))
 		self:ClearFocus()
 	end)
 	box.Refresh = function(self)
-		if not self:HasFocus() then self:SetText(ns.GetDB()[key] or "") end
+		if not self:HasFocus() then self:SetText(ShownWords(ns.GetDB(), key)) end
 	end
 	kit.GreyUnless(box, test)
 	kit.AddControl(box)
@@ -461,26 +487,45 @@ function ns.CreateCombatStylePanel(kit)
 		local previewH = math.floor(PREVIEW_W * height / math.max(width, 1) + 0.5)
 		self:SetHeight(previewH)
 		ns.StyleScene(self)
-		Play(stage, ns.GetDB(), lastEnter, PREVIEW_W, previewH, previewH / math.max(height, 1))
+		Play(stage, ns.StyleLook("combatVision"), lastEnter, PREVIEW_W, previewH, previewH / math.max(height, 1))
 	end
 	preview.pageSwitch = false
 	stack:Add(preview, "label")
 	kit.AddControl(preview)
 
+	local tests = CreateFrame("Frame", nil, content)
+	tests:SetSize(PREVIEW_W, 24)
+	stack:Add(tests, "label")
+	for i, enter in ipairs({ true, false }) do
+		local test = ns.PanelButton(tests)
+		test:SetSize(150, 22)
+		test:SetPoint("LEFT", (i - 1) * 158, 0)
+		test:SetText(enter and L["Test: into a fight"] or L["Test: out of it"])
+		kit.Tooltip(test, L["Plays the cue on the screen as it will look."])
+		test:SetScript("OnClick", function() ns.PlayCombatVision(enter) end)
+		test.Refresh = function() end
+		test.pageSwitch = false
+		kit.AddControl(test)
+	end
+
 	rows.Presets({
-		{ L["Film"], L["A serif title in the middle of the screen, the edges pulsing (the defaults)."], {} },
-		{ L["Reel"], L["The word in the bottom bar, the bar growing in to hold it."],
-			{ combatPlace = "bottom", combatSize = 26, combatPulse = false } },
+		{ L["Film"], L["A serif title in the middle of the screen, the edges pulsing."],
+			{ combatPlace = "screen", combatFont = "morpheus" } },
+		{ L["Reel"], L["The word in the bottom letterbox bar, no pulse."],
+			{ combatPlace = "bottom", combatPulseIn = 0, combatPulseOut = 0 } },
 		{ L["Minimal"], L["A small subtitle low on the screen, nothing else."],
-			{ combatStyle = "subtitle", combatFont = "friz", combatHold = 1, combatPulse = false,
-			combatInR = 0.94, combatInG = 0.58, combatInB = 0.58, combatOutR = 0.83, combatOutG = 0.82, combatOutB = 0.78 } },
+			{ combatPlace = "screen", combatStyle = "subtitle", combatFont = "friz", combatHold = 1, combatPulseIn = 0,
+			combatPulseOut = 0, combatInR = 0.94, combatInG = 0.58, combatInB = 0.58, combatOutR = 0.83, combatOutG = 0.82,
+			combatOutB = 0.78 } },
 		{ L["Arcade"], L["Big, bold, an icon and a strong pulse."],
-			{ combatFont = "skurri", combatSize = 46, combatOutline = 2, combatHold = 1, combatPulseStrength = 0.9,
-			combatIcon = true, combatInR = 0.94, combatInG = 0.62, combatInB = 0.15,
-			combatOutR = 0.59, combatOutG = 0.77, combatOutB = 0.35 } },
+			{ combatPlace = "screen", combatFont = "skurri", combatSize = 46, combatOutline = 2, combatHold = 1,
+			combatPulseIn = 0.9, combatPulseOut = 0.9, combatIconShowIn = true,
+			combatIconShowOut = true, combatInR = 0.94, combatInG = 0.62, combatInB = 0.15,
+			combatOutR = 0.59, combatOutG = 0.77, combatOutB = 0.35, combatPulseInR = 0.94, combatPulseInG = 0.62,
+			combatPulseInB = 0.15, combatPulseOutR = 0.59, combatPulseOutG = 0.77, combatPulseOutB = 0.35 } },
 		{ L["Quiet"], L["A chapter line in the top bar, on the right, a faint pulse."],
-			{ combatPlace = "top", combatWiden = false, combatAlign = "right", combatStyle = "chapter",
-			combatSize = 26, combatHold = 2 } },
+			{ combatPlace = "top", combatAlign = "right", combatStyle = "chapter", combatBarScale = 0.45,
+			combatHold = 2 } },
 	}, PRESET_KEYS, PREVIEW_W)
 
 	stack:Header(content, L["Where"])
@@ -490,68 +535,79 @@ function ns.CreateCombatStylePanel(kit)
 		{ "top", L["Top letterbox bar"] },
 		{ "bottom", L["Bottom letterbox bar"] },
 	})
-	rows.Check("combatWiden", L["Widen the bar to fit"],
-		L["The bar grows as the cue comes in, tall enough for the text, then goes back. Unticked: the text " ..
-		"is sized to fit the bar as it is. With no bars up, a bar comes in for the cue either way."], InBar)
 	rows.Choices(L["In the bar:"], "combatAlign", {
 		{ "left", L["Left"] },
 		{ "center", L["Center"] },
 		{ "right", L["Right"] },
 	}, InBar)
+	rows.Slider("combatBarScale", L["Letterbox scale"], 20, 100, 1, "%d%%", 100,
+		L["The text's height next to the bar's: it grows and shrinks with your letterbox. (With no letterbox " ..
+		"up, a bar as tall as your letterbox's comes in for the cue.)"], InBar)
+
+	local On = rows.On
 
 	stack:Header(content, L["Text"])
-	local function Words(db) return db.combatVision and db.combatStyle ~= "none" end
+	local Words = On
 	rows.Choices(L["Style:"], "combatStyle", {
 		{ "title", L["Title card"], L["A big word in the middle of the screen."] },
 		{ "subtitle", L["Subtitle"], L["A small line low on the screen, where a film's subtitles go."] },
 		{ "chapter", L["Chapter line"], L["The word over a line that draws out, as a new scene starts."] },
-		{ "none", L["No text"] },
 	})
-	WordsRow(kit, content, stack, "combatTextIn", L["Going in:"],
-		L["The words going into a fight. Empty: Combat."], Words)
-	WordsRow(kit, content, stack, "combatTextOut", L["Coming out:"],
-		L["The words coming out of it. Empty: Respite."], Words)
-	local font = kit.Dropdown(content, "combatFont", function()
-		local list = {}
-		for _, info in ipairs(ns.QUEST_ITEM_FONTS or {}) do list[#list + 1] = { value = info[1], text = info[2] } end
-		return list
-	end, 200, Changed)
-	if font then
-		local fontName = stack:Add(kit.Label(content, "GameFontHighlight", L["Font:"]), "label")
-		font:SetPoint("LEFT", fontName, "RIGHT", 10, 0)
-		kit.GreyUnless(font, Words)
-		kit.Tooltip(font, L["Words in Russian, Korean or Chinese keep the game's font, so their letters show."])
-	end
-	rows.Slider("combatSize", L["Size"], 14, 64, 2, "%d", 1, L["How tall the text is."], Words)
+	rows.Font("combatFont", L["Words in Russian, Korean or Chinese keep the game's font, so their letters show."],
+		Words)
+	-- Size, outline (and its color) and how long it stays: number boxes on
+	-- one row.
+	local boxes = rows.Boxes()
+	boxes:Box(L["Size"], "combatSize", 14, 64, 1, "%d", 1,
+		L["How tall the text is on the screen. (In a letterbox bar: Letterbox scale.)"],
+		function(db) return Words(db) and db.combatPlace == "screen" end)
 	local OUTLINE_NAMES = { [0] = L["None"], L["Thin"], L["Thick"] }
-	rows.Slider("combatOutline", L["Outline"], 0, 2, 1, function(value) return OUTLINE_NAMES[value] or "" end, 1,
-		L["A black border round the letters."], Words)
-	rows.Color(L["Going in"], { "combatInR", "combatInG", "combatInB" }, L["Pick the color going in."])
-	rows.Color(L["Coming out"], { "combatOutR", "combatOutG", "combatOutB" }, L["Pick the color coming out."])
-	rows.Slider("combatHold", L["Stays for"], 5, 40, 5, function(value) return ("%.1f s"):format(value / 10) end,
-		10, L["How long the cue stays between fading in and out."])
+	local function OutlineName(value)
+		if value == -1 then
+			return L["General"] .. " (" .. (OUTLINE_NAMES[ns.GeneralStyleValue("combatOutline")] or "") .. ")"
+		end
+		return OUTLINE_NAMES[value] or ""
+	end
+	-- (Its box as wide as its longest name.)
+	local measure = content:CreateFontString(nil, "ARTWORK", "ChatFontNormal")
+	local widest = 0
+	for value = -1, 2 do
+		measure:SetText(value == -1 and L["General"] .. " (" .. L["Thick"] .. ")" or OutlineName(value))
+		widest = math.max(widest, measure:GetStringWidth())
+	end
+	measure:Hide()
+	local outlineBox = boxes:Box(L["Outline"], "combatOutline", -1, 2, 1, OutlineName, 1,
+		L["A border round the letters."], Words, nil, math.ceil(widest) + 14)
+	outlineBox:SetMaxLetters(30) -- (its name in full: the boxes take 6)
+	local outlineColor = rows.Swatch(boxes, nil, { "combatOutlineR", "combatOutlineG", "combatOutlineB" },
+		L["Pick the outline's color."], function(db)
+			local outline = db.combatOutline == -1 and ns.GeneralStyleValue("combatOutline") or db.combatOutline
+			return Words(db) and (outline or 0) > 0
+		end)
+	rows.Boxes(outlineColor):Box(L["Stays for"], "combatHold", 0, 4, 0.1, "%.1f", 1,
+		L["How long the cue stays between fading in and out."], On, "s")
 
-	stack:Header(content, L["Screen"])
-	rows.Check("combatPulse", L["Pulse the screen's edges"],
-		L["The edges of the screen flash in the cue's color for a moment."])
-	rows.Slider("combatPulseStrength", L["Pulse strength"], 10, 100, 5, "%d%%", 100, nil,
-		function(db) return db.combatVision and db.combatPulse end)
-	rows.Check("combatIcon", L["An icon"],
-		L["An icon before the word: crossed swords going in and a shield coming out, unless you pick others."])
-	-- Its icons: a button each showing the one now, a click opening every
-	-- icon the game has (IconBrowser.lua).
-	local function Icons(db) return db.combatVision and db.combatIcon end
+	-- Going in and coming out: a row each, its words, color, icon (a tick
+	-- for it at all, then a button opening every icon the game has:
+	-- IconBrowser.lua) and pulse.
+	stack:Header(content, L["Going in and coming out"])
 	local browser = ns.IconBrowser(canvas, function(key, icon)
 		ns.GetDB()[key] = icon
 		Changed()
 		kit.Refresh()
 	end)
-	for _, which in ipairs({ { "combatIconIn", L["Going in"] }, { "combatIconOut", L["Coming out"] } }) do
-		local name = stack:Add(kit.Label(content, "GameFontHighlight", which[2]), "label")
-		name:SetSize(150, 30)
+	-- A tick for the icon at all (showKey), then the icon's button.
+	local function IconButton(after, showKey, iconKey, tip)
+		local check = kit.Check(content, showKey, "", tip, function(value)
+			ns.GetDB()[showKey] = value
+			Changed()
+			kit.Refresh()
+		end)
+		check:SetPoint("LEFT", after, "RIGHT", 10, 0)
+		kit.GreyUnless(check, function(db) return db.combatVision end)
 		local button = CreateFrame("Button", nil, content)
-		button:SetSize(28, 28)
-		button:SetPoint("LEFT", name, "RIGHT", 4, 0)
+		button:SetSize(22, 22)
+		button:SetPoint("LEFT", check, "RIGHT", 2, 0)
 		local border = button:CreateTexture(nil, "BACKGROUND")
 		border:SetAllPoints()
 		border:SetColorTexture(0.45, 0.38, 0.2, 1)
@@ -562,23 +618,47 @@ function ns.CreateCombatStylePanel(kit)
 		local hl = button:CreateTexture(nil, "HIGHLIGHT")
 		hl:SetAllPoints(icon)
 		hl:SetColorTexture(1, 1, 1, 0.2)
-		kit.Tooltip(button, L["Click to pick the icon from all the game's. Right-click: back to the usual one."])
+		kit.Tooltip(button, L["The icon. Click to pick it from all the game's. Right-click: back to the usual one."])
 		button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 		button:SetScript("OnClick", function(self, mouse)
 			local db = ns.GetDB()
 			if mouse == "RightButton" then
-				db[which[1]] = DEFAULTS[which[1]]
+				db[iconKey] = DEFAULTS[iconKey]
 				Changed()
 				kit.Refresh()
 				return
 			end
-			browser:Open(self, which[1], db[which[1]])
+			browser:Open(self, iconKey, db[iconKey])
 		end)
 		button:SetScript("OnEnable", function(self) self:SetAlpha(1) end)
 		button:SetScript("OnDisable", function(self) self:SetAlpha(0.4) end)
-		button.Refresh = function() icon:SetTexture(ns.GetDB()[which[1]] or DEFAULTS[which[1]]) end
-		kit.GreyUnless(button, Icons)
+		button.Refresh = function() icon:SetTexture(ns.GetDB()[iconKey] or DEFAULTS[iconKey]) end
+		kit.GreyUnless(button, function(db) return db.combatVision and db[showKey] end)
 		kit.AddControl(button)
+		return button
+	end
+	local SIDES = {
+		{ L["Going in:"], "In",
+			L["The words going into a fight. Empty: none, just the rest of the cue."], L["Pick the text's color going in."],
+			L["An icon before the word going in: crossed swords, unless you pick another."],
+			L["The edges of the screen flash for a moment as a fight starts, this strongly. 0: no pulse."],
+			L["Pick the pulse's color going in."] },
+		{ L["Coming out:"], "Out",
+			L["The words coming out of it. Empty: none, just the rest of the cue."], L["Pick the text's color coming out."],
+			L["An icon before the word coming out, unless you pick another."],
+			L["The edges of the screen flash for a moment as a fight ends, this strongly. 0: no pulse."],
+			L["Pick the pulse's color coming out."] },
+	}
+	for _, side in ipairs(SIDES) do
+		local which = side[2]
+		local box = WordsRow(kit, content, stack, "combatText" .. which, side[1], side[3], Words)
+		local swatch = rows.Swatch(box, nil, { "combat" .. which .. "R", "combat" .. which .. "G",
+			"combat" .. which .. "B" }, side[4])
+		local icon = IconButton(swatch, "combatIconShow" .. which, "combatIcon" .. which, side[5])
+		local pulse = rows.Boxes(icon)
+		pulse:Box(L["Pulse"], "combatPulse" .. which, 0, 100, 1, "%d", 100, side[6], On, "%")
+		rows.Swatch(pulse, nil, { "combatPulse" .. which .. "R", "combatPulse" .. which .. "G",
+			"combatPulse" .. which .. "B" }, side[7], function(db) return On(db) and db["combatPulse" .. which] > 0 end)
 	end
 
 	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content)) -- (its refresh plays the preview)

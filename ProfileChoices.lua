@@ -68,7 +68,7 @@ ns.SLOT_CHOICES = {
 			modules = { "recovering", "solo-only" } },
 		{ part = "pure", label = "Almost always", line = "As little UI as possible, even in fights",
 			modules = { "pure-frames", "minimal-target", "pure-plates", "ultra-plates", "pure-tooltips",
-				"heal-vision-everywhere", "quest-talk" } },
+				"heal-vision-everywhere", "quest-talk", "combat-vision" } },
 		{ part = "nofade", label = "Never", line = "Your UI stays as the game has it",
 			modules = { "recovering", "no-fading" } },
 		{ part = "standard", label = "Softly", line = "Between fights, with the minimap and group plates as usual",
@@ -163,6 +163,7 @@ ns.BUILTIN_PROFILES = {
 			"letterbox, and the camera's left to you."],
 		picks = { layout = { forever = "preset" }, frames = "nofade", camera = "off", vfx = "noletterbox",
 			sound = "nomusic" },
+		modules = { "no-visions" },
 	},
 	{
 		name = "Balanced",

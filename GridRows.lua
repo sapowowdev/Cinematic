@@ -39,6 +39,19 @@ function ns.RulePieces()
 	for _, piece in ipairs({ { "instance", L["Instances"] }, { "dungeon", L["Dungeons"] }, { "raid", L["Raids"] } }) do
 		location[#location + 1] = piece
 	end
+	-- (Spell range's bands, Frames.lua: * as the yards go by your class.)
+	local ranges = {}
+	for _, band in ipairs(ns.RANGE_BANDS) do
+		ranges[#ranges + 1] = { band.field, band.label .. "*" }
+	end
+	-- (The classes this client has, by the game's names for them.)
+	local classes = {}
+	for id = 1, (GetNumClasses and GetNumClasses() or 0) do
+		local name, file = GetClassInfo(id)
+		if name and file and ns.RULE_WORDS[file:lower()] then
+			classes[#classes + 1] = { file:lower(), name }
+		end
+	end
 	return {
 		{ L["Logic"], { 1, 1, 1 }, { { "and", "AND" }, { "or", "OR" }, { "not", "NOT" }, { "(", "(" }, { ")", ")" } } },
 		{ L["Combat"], { 1, 0.45, 0.4 }, { { "combat", L["In combat"] }, { "calm", L["Calm Timer"] },
@@ -48,14 +61,15 @@ function ns.RulePieces()
 			{ "target", L["Anything targeted"] }, { "targetself", L["You"] }, { "enemyplayer", L["Enemy Players"] },
 			{ "hostilenpc", L["Hostile NPCs"] }, { "neutralplayer", L["Neutral Players"] },
 			{ "neutralnpc", L["Neutral NPCs"] }, { "friendlyplayer", L["Friendly Players"] },
-			{ "friendlynpc", L["Friendly NPCs"] }, { "noplate", L["Plate off screen"] }, { "near", L["Near (11 yards)"] }, { "near28", L["Near (28 yards)"] },
-			{ "near40", L["Near (40 yards)"] } } },
+			{ "friendlynpc", L["Friendly NPCs"] }, { "noplate", L["Plate off screen"] }, { "near", L["Near (11 yards)"] }, { "near28", L["Near (28 yards)"] } } },
+		{ L["Spell range"], { 0.45, 0.9, 0.9 }, ranges },
 		{ L["Nearby"], { 1, 0.5, 0.8 }, { { "elite11", L["Elite near (11 yards)"] },
 			{ "elite28", L["Elite near (28 yards)"] }, { "elite40", L["Elite near (40 yards)"] } } },
 		{ L["Location"], { 0.45, 0.75, 1 }, location },
 		{ L["You"], { 0.8, 0.6, 1 }, { { "mounted", L["Mounted"] }, { "flagged", L["PvP flagged"] },
 			{ "group", L["Grouped"] }, { "cinemode", L["In CineMode"] } } },
 		{ L["Role"], { 0.4, 0.85, 0.5 }, { { "tank", L["Tank"] }, { "healer", L["Healer"] }, { "damage", L["Damage"] } } },
+		{ L["Class"], { 0.85, 0.75, 0.6 }, classes },
 		-- (Last: the editor shows it only for the Tooltips row, tooltip:All.)
 		{ L["Tooltip"], { 0.95, 0.95, 0.6 }, { { "tipenemy", L["Enemy"] }, { "tipfriendly", L["Friendly"] },
 			{ "tipgather", L["Gatherable"] }, { "tipquest", L["Quest objective"] }, { "tipother", L["Anything else"] } },
@@ -138,7 +152,7 @@ function ns.ReadGridRule(text, grid)
 			end
 		end
 	end
-	if n == 0 then return nil, L["it's empty"] end
+	if n == 0 then return false, ticked end -- (blank: nothing ticked, so never)
 	if n % 2 == 0 then return nil, L["it isn't finished"] end
 	-- (Brackets matched, or the rules can't read it either.)
 	local _, err = ns.CompileRule(text)
@@ -278,7 +292,8 @@ local function BuildEditor()
 	box:SetWidth(EDIT_W - 40)
 	box:SetPoint("TOPLEFT", 6, -6)
 	box:SetMaxLetters(255)
-	box:SetScript("OnEscapePressed", box.ClearFocus)
+	-- (It has the keys from the start: Escape here closes the editor, as Done does.)
+	box:SetScript("OnEscapePressed", function() editor:Hide() end)
 	well:SetScript("OnMouseDown", function() box:SetFocus() end)
 
 	local reads = editor:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -376,7 +391,15 @@ local function BuildEditor()
 					"is an enemy too). Anything else: none of the others, and every tooltip of the UI."]):format(word))
 			elseif field then
 				wordButtons[word] = button
-				Tip(button, (L["Adds \"%s\". A green dot: true where you are now."]):format(word))
+				local tip = (L["Adds \"%s\". A green dot: true where you are now."]):format(word)
+				if field:find("^range") then
+					-- (What it measures with here, as you look.)
+					Tip(button, function() return ns.RangeBandInfo(field) end)
+				elseif field == "near" or field == "near28" then
+					Tip(button, tip .. "\n\n" .. L["Never counts in fights: the game won't say how far anyone is then. Spell range does."])
+				else
+					Tip(button, tip)
+				end
 			end
 		end
 		if g == 1 then
@@ -406,7 +429,11 @@ local function BuildEditor()
 	done:SetPoint("BOTTOMRIGHT", -14, 12)
 	done:SetText(L["Done"])
 	done:SetScript("OnClick", function() editor:Hide() end)
+	if done.SetMotionScriptsWhileDisabled then done:SetMotionScriptsWhileDisabled(true) end -- (its tip says why)
 	Tip(done, function()
+		if not done:IsEnabled() then
+			return L["The rule isn't finished. Finish it, or close with X or Escape to put back the rule it had."]
+		end
 		return target and not target.grid and L["Closes the editor, keeping the rule."]
 			or L["Closes the editor. A rule that's just the dropdowns' words joined by OR goes back into them; " ..
 			"one that isn't stays the row's rule."]
@@ -430,6 +457,8 @@ local function BuildEditor()
 		local isAlways, why
 		if grid then isAlways, why = ns.ReadGridRule(text, grid) end
 		resetGrid:SetShown(grid ~= nil and isAlways == nil)
+		-- (Only a rule that reads, or none, can be kept.)
+		done:SetEnabled(not text:find("%S") or ns.CompileRule(text) ~= nil)
 		reads:SetShown(grid ~= nil)
 		reads:SetText(not grid and "" or isAlways ~= nil and "|cff60ff60" .. L["Goes back into the dropdowns as you close it."] .. "|r"
 			or "|cffffd100" .. (L["Stays the row's rule (it can't go in the dropdowns: %s)."]):format(why) .. "|r")
@@ -443,10 +472,10 @@ local function BuildEditor()
 		end
 		local test, err = ns.CompileRule(text)
 		if not text:find("%S") then
-			now:SetText("|cff999999" .. (grid and L["Empty: the dropdowns decide."] or L["Empty: its ticks decide."]) .. "|r")
+			now:SetText(grid and "|cffffd100" .. L["Blank: never shown."] .. "|r"
+				or "|cff999999" .. L["Empty: its ticks decide."] .. "|r")
 		elseif not test then
-			now:SetText("|cffff6060" .. (grid and L["Not finished: %s. The dropdowns decide until it is."]
-				or L["Not finished: %s. Its ticks decide until it is."]):format(err) .. "|r")
+			now:SetText("|cffff6060" .. (L["Not finished: %s. Closing now puts back the rule it had."]):format(err) .. "|r")
 		else
 			now:SetText(test(facts) and "|cff60ff60" .. L["Right now: shown"] .. "|r"
 				or "|cffffd100" .. L["Right now: hidden"] .. "|r")
@@ -793,13 +822,21 @@ function ns.GridRow(kit, parent, labelWidth, layout, spec)
 		ruleText:SetPoint("LEFT", 0, 0)
 		local function Target()
 			local before = Rule()
-			-- (No rule yet: its dropdowns' or ticks' words to start from.)
-			local start = before or (rule.grid and ns.GridRule(AlwaysOn(), rule.words()))
-				or (spec.liveRule and spec.liveRule()) or ""
+			-- (No rule yet: its dropdowns' or ticks' words to start from; none ticked, blank.)
+			local ticksRule = not rule.grid and spec.liveRule and spec.liveRule()
+			local start = before or (rule.grid and (AlwaysOn() or #rule.words() > 0)
+				and ns.GridRule(AlwaysOn(), rule.words())) or (rule.grid and "")
+				or (ticksRule ~= "never" and ticksRule) or ""
 			return { label = rule.label(), grid = rule.grid, key = RuleKey(),
 				Text = function() return start end,
 				SetText = function(typed) SetRule(typed) Refresh() end,
 				Close = function(typed)
+					-- (A rule that doesn't read never stays: back to the one it had, or its grid.)
+					if typed:find("%S") and not ns.CompileRule(typed) then
+						SetRule(before and ns.CompileRule(before) and before or nil)
+						Changed()
+						return
+					end
 					local isAlways, ticked
 					if rule.grid then isAlways, ticked = ns.ReadGridRule(typed, rule.grid) end
 					if isAlways ~= nil then

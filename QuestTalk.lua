@@ -475,7 +475,8 @@ local function NpcSide()
 	return ns.QuestCamSide and ns.QuestCamSide()
 end
 
--- Whether Opposite Clicked has someone to be opposite (else it's as Fixed).
+-- Whether Opposite Clicked has someone to be opposite (else the bubble opens
+-- at its own spot, unmirrored; the card still follows it).
 local function Opposite()
 	return PlaceMode() == "opposite" and (talk.clickX ~= nil or NpcSide() ~= nil)
 end
@@ -528,8 +529,10 @@ local function Place()
 	bubble:ClearAllPoints()
 	local mode = PlaceMode()
 	local plate = mode == "head" and NpcPlate()
-	-- (follow: the card goes beside it, over their head or Opposite Clicked.)
-	bubble.free, bubble.side, bubble.follow = false, nil, true
+	-- (follow: the card goes beside it, over their head or Opposite Clicked;
+	-- questTalkCardSide "separate": never, the card keeps its own spot.)
+	local separate = ns.db.questTalkCardSide == "separate"
+	bubble.free, bubble.side, bubble.follow = false, nil, not separate
 	-- (onPlate: the plate it's over. waiting: kept off it while the camera
 	-- moves, questTalkCamMove "wait".)
 	bubble.onPlate = nil
@@ -569,8 +572,10 @@ local function Place()
 		x = 1 - x
 	end
 	bubble:SetPoint("BOTTOM", UIParent, "BOTTOMLEFT", x * width / scale, bottom * height / scale)
-	bubble.follow = opposite
-	bubble.side = opposite and (x > 0.5 and "right" or "left") or nil
+	-- (The card follows it in Opposite Clicked even with no click to go by:
+	-- an object's talk, the interact key.)
+	bubble.follow = mode == "opposite" and not separate
+	bubble.side = mode == "opposite" and (x > 0.5 and "right" or "left") or nil
 	bubble.free = true
 	SetTail(false)
 	RoomAtTop(false)
@@ -1888,7 +1893,7 @@ function Show(keepPage)
 	-- to suit.
 	local mode = PlaceMode()
 	talk.cardBelow = ns.db.questTalkCardSide == "below"
-		and (mode == "head" and NpcPlate() ~= nil or Opposite())
+		and (mode == "head" and NpcPlate() ~= nil or mode == "opposite")
 	panelWidth = talk.cardBelow and TEXT_WIDTH + bubble.indent + PAD_X or PANEL_WIDTH
 	panel:SetWidth(panelWidth)
 	local look = CurrentLook()
@@ -1918,7 +1923,8 @@ function Show(keepPage)
 	SCREENS[talk.kind]()
 	-- On the bubble's right it's as tall as the bubble: more than fits there,
 	-- and the rewards' "also received" goes on a second page.
-	local beside = not talk.cardBelow and (mode == "head" and NpcPlate() ~= nil or Opposite())
+	local beside = not talk.cardBelow and ns.db.questTalkCardSide ~= "separate"
+		and (mode == "head" and NpcPlate() ~= nil or mode == "opposite")
 	local limit = beside and FullHeight() + 12 + 4 + 14 + PAD_Y * 2 + (talk.title and 22 or 0)
 	if talk.canSplit and limit and cursor + 28 > limit then
 		talk.split = true

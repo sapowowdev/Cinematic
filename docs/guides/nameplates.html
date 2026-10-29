@@ -140,7 +140,7 @@ table.t { width: 100%; border-collapse: collapse; font-size: 15.5px }
 <div class="col">
 
   <section>
-    <div class="eyebrow">The Nameplates page</div>
+    <div class="eyebrow">The Nameplate &amp; Names page</div>
     <h2>Grids of kinds and places</h2>
     <p>The <b>Nameplates</b> page, in the UI Manager, says which nameplates and names stay up in CineMode. Each grid has a row per kind of unit and these columns:</p>
     <ul class="cols">
@@ -184,6 +184,11 @@ table.t { width: 100%; border-collapse: collapse; font-size: 15.5px }
     <h2>The grids, top to bottom</h2>
     <div class="grids">
       <article class="g">
+        <div class="name">Target</div>
+        <ul class="chips"><li>Nameplates</li><li>Names</li></ul>
+        <p class="muted">Your target's own plate and its name, whatever the grids below say. The plate row starts with Always ticked, so your target's plate is up everywhere. To keep either up for some kinds of target only, name them in its rule from <b>Edit</b>, like <code>enemyplayer or hostilenpc</code>.</p>
+      </article>
+      <article class="g">
         <div class="name">Friendly Nameplates</div>
         <ul class="chips"><li>Your Pet</li><li>Friendly Players</li><li>Minions</li><li>Friendly NPCs</li><li>Group Members</li><li>Group members' minions</li></ul>
         <p class="muted">Your pet's row wins over the Minions rows. Group members' rows win over Friendly Players, out of instances. Minions are anything a player controls: pets, guardians and totems.</p>
@@ -199,11 +204,6 @@ table.t { width: 100%; border-collapse: collapse; font-size: 15.5px }
         <p class="muted">Minor units are the small fry the game calls minor, under the NPCs they belong with.</p>
       </article>
       <article class="g">
-        <div class="name">Target Nameplate</div>
-        <ul class="chips"><li>Enemy Player</li><li>Enemy NPC</li><li>Neutral Player</li><li>Neutral NPC</li><li>Friendly Player</li><li>Friendly NPC</li></ul>
-        <p class="muted">Your target's own plate, by what it is, whatever the grids above say. Each starts with Always ticked, so your target's plate is up everywhere.</p>
-      </article>
-      <article class="g">
         <div class="name">Plate Parts</div>
         <ul class="chips"><li>Health Bar</li><li>Name</li><li>Cast Bar</li><li>Buffs</li><li>Debuffs</li><li>Raid Marker</li><li>Elite/Rare Icon</li><li>Level</li><li>Threat Glow</li><li>Target Highlight</li><li>Quest/Widget Icons</li></ul>
         <p class="muted">Each part of the plates that are up, shown or hidden by the same columns. Keep the health bar and cast bar in fights and drop the buffs, say. Retail's plates have no level, so there's no Level row there.</p>
@@ -217,10 +217,6 @@ table.t { width: 100%; border-collapse: collapse; font-size: 15.5px }
         <div class="name">Names</div>
         <ul class="chips"><li>My Name</li><li>Hostile NPCs</li><li>Neutral NPCs</li><li>Friendly NPCs</li><li>Critters and Companions</li><li>Friendly Players</li><li>Minions</li><li>Enemy Players</li><li>Minions</li><li>Guild Names</li><li>Raid Marker</li></ul>
         <p class="muted">Names over heads, for units without a plate showing. Ticking any box turns those names on in the game's options; ticking none turns them off. <b>Raid Marker</b> keeps skulls and moons over their units as their plates fade, so your group can still see what's marked.</p>
-      </article>
-      <article class="g">
-        <div class="name">Target Names</div>
-        <p class="muted">Your target's name by what it is, even with its kind's names off in the Names grid.</p>
       </article>
     </div>
   </section>
@@ -282,7 +278,7 @@ table.t { width: 100%; border-collapse: collapse; font-size: 15.5px }
     <dl class="faq">
       <div><dt>I hid friendly plates, but in a dungeon they're back.</dt><dd>In dungeons and raids, friendly plates follow <b>Friendly Plates in Dungeons and Raids</b> instead of the grids: the game doesn't let addons fade them one by one there.</dd></div>
       <div><dt>I changed a setting mid-fight and nothing happened.</dt><dd>The game only switches nameplates on or off out of combat. Your change applies as the fight ends.</dd></div>
-      <div><dt>My target's plate shows even though its kind is unticked.</dt><dd>That's the Target Nameplate grid, which starts with Always ticked for every kind. Untick a row there to let the main grids decide.</dd></div>
+      <div><dt>My target's plate shows even though its kind is unticked.</dt><dd>That's the Target section's Nameplates row, which starts with Always ticked. Untick it to let the main grids decide, or give it a rule naming the kinds you want.</dd></div>
       <div><dt>Can I see plates farther away?</dt><dd>Yes, with <b>Nameplate distance</b> on <a href="graphics.html">the Graphics+ page</a>, up to the game's own limit.</dd></div>
     </dl>
   </section>
@@ -299,8 +295,8 @@ table.t { width: 100%; border-collapse: collapse; font-size: 15.5px }
     { id: "friendnpc", label: "Friendly NPC", row: "Friendly NPCs", grid: "Friendly Nameplates", friendly: true },
     { id: "group", label: "Group member", row: "Group Members", grid: "Friendly Nameplates", friendly: true, group: true },
     { id: "pet", label: "Your pet", row: "Your Pet", grid: "Friendly Nameplates", friendly: true, pet: true },
-    { id: "target", label: "Your target (enemy)", row: "Enemy NPC", grid: "Target Nameplate", friendly: false, target: true },
-    { id: "ftarget", label: "Your target (friend)", row: "Friendly Player", grid: "Target Nameplate", friendly: true, target: true }
+    { id: "target", label: "Your target (enemy)", row: "Nameplates", grid: "Target", friendly: false, target: true },
+    { id: "ftarget", label: "Your target (friend)", row: "Nameplates", grid: "Target", friendly: true, target: true }
   ];
   var PLACES = [
     { id: "world", label: "Open World", col: "Open World" },
@@ -333,8 +329,8 @@ table.t { width: 100%; border-collapse: collapse; font-size: 15.5px }
         (u.target ? " That goes for your friendly target's plate too." : ""),
       more: [u.pet ? "Hidden or Shown. (Showing pets shows friendly players' plates too.)" : "Hidden, Shown, or With a friendly target (on while you have one of that kind targeted, out of fights).",
         state.fight ? "In a fight nothing switches: plates stay as the fight found them." : "Changes wait until you're out of combat."] };
-    if (u.target) return { who: "Target Nameplate grid: " + u.row,
-      why: "Your target's own plate, by what it is, whatever the other grids say. It starts with Always ticked, so it's up here.",
+    if (u.target) return { who: "Target section: Nameplates",
+      why: "Your target's own plate, whatever the other grids say. It starts with Always ticked, so it's up here.",
       more: ["Untick its Always box and its other columns, then the main grids, decide.",
         "The Target Indicator row (Cinematic Plate Parts) puts a mark on it, if ticked."] };
     var cols = [];

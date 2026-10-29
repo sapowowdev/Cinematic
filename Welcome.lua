@@ -362,9 +362,12 @@ function ns.CustomizePanel(parent, width, onChange, skinned)
 
 	-- Gold edge on the choice the live settings match (none: your own mix),
 	-- or on each Vision that's on, and which profile a change goes in.
+	local building = true
 	local function UpdateChoices()
-		-- (built before the settings load, at the language: the page's refresh comes later)
-		if not ns.db then return end
+		-- (built before the settings load, at the language, or with the
+		-- window: the page's refresh as it's shown does it. Matching every
+		-- choice is slow, too much on top of the build on a slower client.)
+		if not ns.db or building then return end
 		local any = shown.visions
 		for _, option in ipairs(options) do
 			local vision = option.choice and option.choice.vision
@@ -554,6 +557,7 @@ function ns.CustomizePanel(parent, width, onChange, skinned)
 	saved = Text(panel, "GameFontHighlightSmall", "", DIM, panelW - 28)
 	saved:SetPoint("BOTTOMLEFT", 14, 12)
 	Show(1, true)
+	building = false
 	return holder
 end
 
@@ -683,6 +687,12 @@ local function CreateWindow()
 end
 
 function ns.ShowWelcome()
+	-- (A build an error stopped halfway: thrown away and made again.)
+	if window and not back then
+		window:SetScript("OnHide", nil)
+		window:Hide()
+		window = nil
+	end
 	if not window then CreateWindow() end
 	window:Show()
 	ShowPage(1)

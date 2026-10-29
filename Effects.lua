@@ -60,10 +60,9 @@ ns.NAME_GROUPS = {
 			"on nameplates showing just the name."] },
 	-- Not in the game's menu: whatever you've targeted shows its name
 	-- even with its kind's names off, unless this is off too. Its boxes are
-	-- the Target Names grid's rows (ns.NAME_TARGET_ROWS: the Target Nameplate
-	-- grid's kinds): the game's one setting follows your target's row (any
-	-- row's, in fights and with no target). On a plate: your target's, as its
-	-- row says, whatever its kind's row says.
+	-- the Target section's Names row (ns.NAME_TARGET_ROWS: YourTarget, its rule
+	-- naming kinds), which the game's one setting follows. On a plate: your
+	-- target's, as its row says, whatever its kind's row says.
 	{ key = "Target", label = L["Target"], plate = true, cvars = { "UnitNameFocused" }, rows = ns.NAME_TARGET_ROWS },
 }
 ns.OnLanguage(function() ns.TranslateFields(ns.NAME_GROUPS, "label") end)
@@ -125,11 +124,14 @@ local function SetOwnValue(cvar, value)
 	end
 end
 
--- Whether any box in a names row is ticked.
+-- Whether any box in a names row is ticked (or it has a rule: it may show).
 local NAME_ROW_PREFIXES = { "nameAlways", "nameGroup", "nameCombat", "nameCombatPvP", "nameKeep",
 	"nameInInstances", "nameInPvP", "nameInBGs" }
 local function NameRowTicked(group)
 	for _, key in ipairs(group.keys) do
+		if ns.RuleTest(ns.NameRuleKey(key)) then
+			return true
+		end
 		for _, prefix in ipairs(NAME_ROW_PREFIXES) do
 			if ns.db[prefix .. key] then
 				return true
@@ -255,17 +257,7 @@ local function NameKeptHere(key, inCombat)
 			and NameKeptHere("FriendlyNPCs", inCombat)
 	end
 	if key == "Target" then
-		-- (Your target's row; any row in fights, where the setting can't follow it.)
-		local row = not inCombat and ns.TargetNameRow and ns.TargetNameRow("target")
-		if row then
-			return NameKeptHere(row, inCombat)
-		end
-		for _, other in ipairs(ns.NAME_TARGET_ROWS) do
-			if NameKeptHere(other, inCombat) then
-				return true
-			end
-		end
-		return false
+		return NameKeptHere("YourTarget", inCombat) -- (the Target section's Names row)
 	end
 	-- (Its roles, and its rule, edited on its row: name:<row>.)
 	local facts = ns.RuleFactsNow()
@@ -2016,8 +2008,8 @@ local function AnyPlatesKeptCinematic()
 	return false
 end
 
--- Which of the Target Nameplate rows your target goes by, players and NPCs
--- apart: Enemy (those you can attack), Neutral (NPCs the game calls neutral,
+-- Which kind your target is (the rules' words for your target: see
+-- ns.RuleFacts), players and NPCs apart: Enemy (those you can attack), Neutral (NPCs the game calls neutral,
 -- and the other faction's players you can't attack) or Friendly (the rest,
 -- and the dead). nil when the game won't say.
 local function TargetRow(unit)
@@ -2042,18 +2034,17 @@ local function TargetRow(unit)
 	return (neutral and "MyNeutral" or "MyEnemy") .. who .. "Target"
 end
 
--- The Target Names row (ns.NAME_TARGET_ROWS) a unit goes by as your target,
--- or nil.
+-- Which kind a unit is as your target ("TargetEnemyPlayer"...: the rules'
+-- enemyplayer and the rest, see ns.RuleFacts), or nil.
 function ns.TargetNameRow(unit)
 	local row = Ask(UnitExists, unit) and TargetRow(unit)
 	return row and "Target" .. row:match("^My(.-)Target$") or nil
 end
 
--- Whether your target's plate shows now (its target row), whatever its
--- kind's row says.
+-- Whether your target's plate shows now (the Target section's Nameplates
+-- row, YourTarget: its rule names kinds), whatever its kind's row says.
 local function AlwaysShownTarget(unit)
-	local row = TargetRow(unit)
-	return row ~= nil and UnitRowWanted(row)
+	return TargetRow(unit) ~= nil and UnitRowWanted("YourTarget")
 end
 
 local function TargetKeptUp()
@@ -2104,9 +2095,9 @@ end
 -- `leavingTargets` maps old targets' plates to their fade on the way out.
 local targetFade = { plate = nil, level = 0, enemy = false }
 local leavingTargets = {}
--- The other way round: in CineMode, your target's plate goes while its
--- target row doesn't keep it up here, whatever its kind's row says (the
--- Target Nameplate grid overrides the Nameplates grid both ways). It fades
+-- The other way round: in CineMode, your target's plate goes while Your
+-- Target doesn't keep it up here, whatever its kind's row says (the
+-- Target section's Nameplates row overrides the kinds' rows both ways). It fades
 -- down, and back up if the row lets it again; a plate that stops being your
 -- target is its kind's again at once. level: 1 untouched, 0 hidden.
 local targetHidden = { plate = nil, level = 1 }
@@ -2115,8 +2106,7 @@ local function TargetHeldDown()
 	if not (platesActive and ns.HasTarget()) then
 		return false
 	end
-	local row = TargetRow("target")
-	return row ~= nil and not UnitRowWanted(row)
+	return TargetRow("target") ~= nil and not UnitRowWanted("YourTarget")
 end
 
 local function TargetFadeTime(fadeIn)
@@ -2344,9 +2334,9 @@ local function PlateAlphas(unit, plate)
 	elseif platesForced and unit and plate ~= PersonalPlate() then
 		local kind = PlateKind(unit)
 		name = kind and nameLevel[KIND_NAME_GROUP[kind]] or 0
-		local targetRow = IsTarget(unit) and ns.TargetNameRow(unit)
-		if targetRow and (nameLevel[targetRow] or 0) > name then
-			name = nameLevel[targetRow]
+		-- (Your target's, as the Target section's Names row says.)
+		if IsTarget(unit) and ns.TargetNameRow(unit) and (nameLevel.YourTarget or 0) > name then
+			name = nameLevel.YourTarget
 		end
 	end
 	-- Quest Vision's Name: a quest mob's name kept on its plate. Its Quest
@@ -2381,8 +2371,8 @@ function ns.DescribePlateNameKept(unit, plate)
 		:format(tostring(kind),
 		tostring(kind and KIND_NAME_GROUP[kind]), tostring(kind and nameLevel[KIND_NAME_GROUP[kind]]),
 		tostring(unit and ns.SoftPlateHidden(unit)), tostring(platesForced), PlateAlpha(unit, plate),
-		tostring(unit and IsTarget(unit) and (targetRow or "none")), tostring(targetRow and nameLevel[targetRow]),
-		tostring(targetRow and NameKeptHere(targetRow, InCombatLockdown())),
+		tostring(unit and IsTarget(unit) and (targetRow or "none")), tostring(targetRow and nameLevel.YourTarget),
+		tostring(targetRow and NameKeptHere("YourTarget", InCombatLockdown())),
 		table.concat({ PlateAlphas(unit, plate) }, "/"))
 end
 
@@ -2608,7 +2598,8 @@ function ns.PrintPlatesDebug()
 		local found = 0
 		local function Key(object, fallback)
 			local ok, key = pcall(object.GetParentKey, object)
-			return (ok and key) or object:GetName() or fallback
+			local name = object:GetName()
+			return (ok and Known(key) and key) or (Known(name) and name) or fallback
 		end
 		local function Visit(object, path)
 			if found >= 20 then return end
@@ -2620,10 +2611,13 @@ function ns.PrintPlatesDebug()
 			if (alpha and alpha > 0.01) or ignoring then
 				local w, h = object:GetSize()
 				local art = ""
-				if object.GetAtlas and object:GetAtlas() then
-					art = " atlas " .. tostring(object:GetAtlas())
+				-- (A debuff icon's art is secret in fights.)
+				local atlas = object.GetAtlas and object:GetAtlas()
+				local texture = object.GetTexture and object:GetTexture()
+				if type(atlas) ~= "nil" then
+					art = " atlas " .. (Known(atlas) and tostring(atlas) or "secret")
 				elseif object.GetTexture then
-					art = " texture " .. tostring(object:GetTexture())
+					art = " texture " .. (Known(texture) and tostring(texture) or "secret")
 				end
 				found = found + 1
 				ns.Print(("  shows: %s (%s) alpha %s%s, %.0fx%.0f%s"):format(path, object:GetObjectType(),
@@ -2647,7 +2641,8 @@ function ns.PrintPlatesDebug()
 		if found == 0 then
 			ns.Print("  nothing")
 		end
-		ns.Print("  name color: " .. ns.DescribePlateName(overPlate.UnitFrame))
+		local nameColor = ns.DescribePlateName(overPlate.UnitFrame)
+		ns.Print("  name color: " .. (Known(nameColor) and nameColor or "secret"))
 	elseif UnitExists("mouseover") then
 		ns.Print("mouseover " .. tostring(UnitName("mouseover")) .. ": NO plate")
 	end
@@ -2656,9 +2651,9 @@ function ns.PrintPlatesDebug()
 		ns.Print("target " .. describe("target") .. (plate and ", has a plate" or ", NO plate"))
 		local okFriend, friend = pcall(UnitIsFriend, "player", "target")
 		local okReaction, reaction = pcall(UnitReaction, "player", "target")
-		ns.Print(("  enemy=%s, friend=%s, reaction=%s, kept up=%s"):format(
+		ns.Print(("  enemy=%s, friend=%s, reaction=%s, as %s, kept up=%s"):format(
 			tostring(ns.IsEnemyUnit("target")), okFriend and tostring(friend) or "?",
-			okReaction and tostring(reaction) or "?", tostring(TargetKeptUp())))
+			okReaction and tostring(reaction) or "?", tostring(ns.TargetNameRow("target")), tostring(TargetKeptUp())))
 		local frame = plate and plate.UnitFrame
 		if frame then
 			ns.Print(("  plate shown=%s alpha=%.2f, frame shown=%s alpha=%.2f, health bar shown=%s"):format(
@@ -2700,12 +2695,16 @@ function ns.PrintPlatesDebug()
 			ns.Print("  parts: " .. parts)
 			ns.Print("  fields: " .. fields)
 			ns.Print("  health bar fields: " .. healthFields)
+			if ns.DescribePlateCastBar then -- (PlateCastStyle.lua)
+				ns.Print("  cast bar: " .. ns.DescribePlateCastBar(frame))
+			end
 		end
 	end
 	-- Your personal resource bars' power half (Frames), and on Forever your
 	-- own plate's fields, for finding power bars a client names otherwise.
 	if ns.DescribePersonalPower then
 		ns.Print("personal resource bars: " .. ns.DescribePersonalPower())
+		if ns.DescribePersonalMana then ns.Print("  " .. ns.DescribePersonalMana()) end
 		local own = PersonalPlate()
 		if own and own.UnitFrame and not (own.IsForbidden and own:IsForbidden()) then
 			local _, fields = ns.DescribePlateParts(own.UnitFrame)
@@ -3240,7 +3239,7 @@ function ns.UpdatePlates(cinematic, elapsed)
 		end
 	end
 	-- Names kept on plates fade up and down likewise.
-	-- (The Target row's by the Target Names grid's rows, for your target's kind.)
+	-- (The Target group's by its one row, YourTarget: the Target section's Names.)
 	for _, group in ipairs(ns.NAME_GROUPS) do
 		if group.plate then
 			for _, key in ipairs(group.keys) do
@@ -3325,7 +3324,7 @@ function Cinematic_ToggleTooltips()
 end
 
 -- The Toggle visual effects keybind: the Visual Effects page's master switch
--- (visualEffects), as its Enable page box does.
+-- (visualEffects), as its Enable visual effects box does.
 function Cinematic_ToggleVisualEffects()
 	if not ns.db then
 		return
@@ -3914,17 +3913,20 @@ function ns.MakeLetterboxBars(frame)
 	frame.bottom, frame.bottomFeather, frame.bottomLine = Side("BOTTOM", "TOP")
 end
 
+-- How tall look's bars are, all the way in, on a screen width x height.
+function ns.LetterboxHeight(look, width, height)
+	if look.letterboxSizeBy == "aspect" then
+		return math.max(0, (height - width / look.letterboxAspect) / 2)
+	end
+	return height * look.letterboxSize
+end
+
 -- Draws frame's bars (ns.MakeLetterboxBars) as look says, on a screen
 -- width x height, t of the way in (0-1, eased). scale: the frame's size next
 -- to the real screen's (the preview's smaller), for the feather. Gives the
 -- bars' height now.
 function ns.DrawLetterbox(frame, look, width, height, t, scale)
-	local bar
-	if look.letterboxSizeBy == "aspect" then
-		bar = math.max(0, (height - width / look.letterboxAspect) / 2)
-	else
-		bar = height * look.letterboxSize
-	end
+	local bar = ns.LetterboxHeight(look, width, height)
 	local slide = look.letterboxMotion ~= "fade"
 	local shown = math.max(slide and t * bar or bar, 0.01)
 	local r, g, b = 0, 0, 0

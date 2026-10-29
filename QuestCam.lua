@@ -636,6 +636,9 @@ local function HandOver(what)
 	ns.Log("questcam", ("handed over to you (%s): turn, tilt and zoom stopped"):format(tostring(what)))
 	for _, m in pairs(movers) do
 		StopMove(m)
+		-- (Your speed now, not SPEED_RESTORE_DELAY later: your first drag ran
+		-- at the turn's slowed speed, and the camera seemed to fight you.)
+		RestoreSpeed(m.cvar)
 		m.amount = 0
 	end
 	if not (zoomer.leaving and zoomer.moving and ns.lastCameraInputWhat ~= "zoom") then
@@ -1040,9 +1043,13 @@ do
 		if #cam.steps > 0 then parts[#parts + 1] = "steps to go" end
 		if movers.yaw.moving then parts[#parts + 1] = cam.drifting and "drifting" or "turning" end
 		if movers.pitch.moving then parts[#parts + 1] = "tilting" end
-		if zoomer.moving then parts[#parts + 1] = (cam.zoomBy and cam.zoomBy .. "'s " or "") .. "zoom" end
+		if zoomer.moving then
+			parts[#parts + 1] = (cam.zoomBy and cam.zoomBy .. "'s " or "") .. ("zoom to %.1f"):format(zoomer.goal)
+		end
 		if zoomer.release then parts[#parts + 1] = "zoom speed easing back" end
-		if zoomer.pending then parts[#parts + 1] = "zoom out held till you walk off" end
+		if zoomer.pending then
+			parts[#parts + 1] = ("zoom out to %.1f held till you walk off"):format(zoomer.pending.to)
+		end
 		if (cam.restoring or 0) > 0 then parts[#parts + 1] = "speed settings going back" end
 		if GetTime() - (zoomer.wantsAt or -math.huge) < 0.5 then parts[#parts + 1] = "waiting for the view to zoom out" end
 		return table.concat(parts, ", ")
@@ -1069,7 +1076,8 @@ do
 		end
 		if parts ~= partsWas then
 			ns.Log("questcam", parts ~= "" and ("still going: " .. parts)
-				or ("all done, the view's free (holder now: %s)"):format(tostring(ns.CameraHolder("quest") or "nobody")))
+				or ("all done at %.1f yards, the view's free (holder now: %s)"):format(GetCameraZoom(),
+					tostring(ns.CameraHolder("quest") or "nobody")))
 			partsWas = parts
 		end
 	end

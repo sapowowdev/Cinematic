@@ -572,10 +572,15 @@ function ns.CreateWindGuidePanel(kit)
 			kit.Refresh()
 		end), "check")
 	end
-	local function Slide(key, label, minV, maxV, step, fmt, scale, tip)
-		local slider = stack:Add(kit.Slider(content, key, label, minV, maxV, step, fmt, scale, Changed), "slider")
-		if tip then kit.Tooltip(slider, tip) end
-		return slider
+	-- Number boxes on a line of their own: { key, label, min, max, step, fmt,
+	-- scale, tip } each (fmt as a slider's: "%d%%", the unit after the box).
+	local function Boxes(...)
+		local line = stack:Add(kit.BoxLine(content), "label")
+		for _, box in ipairs({ ... }) do
+			local key, label, minV, maxV, step, fmt, scale, tip = unpack(box)
+			line:Box(label, key, minV, maxV, step, fmt, scale, tip, Changed)
+		end
+		return line
 	end
 	local function Button(parent, text, width, tip, onClick)
 		local button = ns.PanelButton(parent)
@@ -692,19 +697,24 @@ function ns.CreateWindGuidePanel(kit)
 	Tick("windGuideNotInFights", L["Not in fights"], L["Ticked, the wind drops while you're in a fight."])
 	-- (With the game's waypoint marker the wind stops when it does: no slider.)
 	if not HAS_MARKER then
-		Slide("windGuideNear", L["Stops within"], 0, 100, 5, L["%d yards"], 1,
-			L["How close to the waypoint the wind stops (you're there)."])
+		Boxes({ "windGuideNear", L["Stops within"], 0, 100, 5, L["%d yards"], 1,
+			L["How close to the waypoint the wind stops (you're there)."] })
 	end
 
 	stack:Header(content, L["Look"])
-	Slide("windGuideAmount", L["Amount"], 1, 20, 1, L["%d a second"], 1,
-		L["How many streaks (or leaves, or motes) start each second."])
-	Tick("windGuideGusts", L["In gusts"],
-		L["Ticked, the wind comes and goes in gusts every few seconds. Unticked, it blows steadily."])
-	Slide("windGuideStrength", L["Opacity"], 10, 100, 5, "%d%%", 100)
-	Slide("windGuideSize", L["Size"], 50, 200, 10, "%d%%", 100)
-	Slide("windGuideSpeed", L["Speed"], 25, 300, 5, "%d%%", 100,
-		L["How fast they travel to the waypoint, next to the style's own speed."])
+	-- (In gusts: on the Amount's line, after its box.)
+	local amount = Boxes({ "windGuideAmount", L["Amount"], 1, 20, 1, L["%d a second"], 1,
+		L["How many streaks (or leaves, or motes) start each second."] })
+	local gusts = kit.Check(content, "windGuideGusts", L["In gusts"],
+		L["Ticked, the wind comes and goes in gusts every few seconds. Unticked, it blows steadily."], function(value)
+			ns.GetDB().windGuideGusts = value
+			Changed()
+		end)
+	gusts:SetPoint("LEFT", amount, "RIGHT", 4, 0)
+	Boxes({ "windGuideStrength", L["Opacity"], 10, 100, 5, "%d%%", 100 },
+		{ "windGuideSize", L["Size"], 50, 200, 10, "%d%%", 100 },
+		{ "windGuideSpeed", L["Speed"], 25, 300, 5, "%d%%", 100,
+			L["How fast they travel to the waypoint, next to the style's own speed."] })
 
 	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))
 	canvas:Hide()

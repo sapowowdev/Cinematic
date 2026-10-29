@@ -63,6 +63,17 @@ local MIN_TURN = 2     -- degrees: a smaller swing isn't worth a move
 local TRACK_START = 2  -- degrees past the framing before it starts after them
 local TRACK_CATCH = 1  -- seconds the turn's speed makes up the gap in (walking on, they stay about their speed times this past it)
 local TRACK_MAX = 90   -- degrees from where the camera started it follows them to, at most
+-- Where a swing leaves them (short of the framing by less than CORRECT, as
+-- the gain's a guess) is the framing for keeping up, till the next swing:
+-- counting from chatCamFrame, every swing ended in a dead stop, then a
+-- moment still, then a turn from rest after someone standing still.
+-- The turn's speed then eases toward each look's (TRACK_EASE, speeding up
+-- harder no quicker than TRACK_JERK), rather than straight at MAX_ACCEL: the
+-- looks jump about, and each one jolted it.
+local TRACK_EASE = 0.6 -- seconds the speed takes to close most of the gap to the speed wanted
+local TRACK_JERK = 15  -- degrees/sec per second, per second: how fast its speeding up can change
+local TRACK_STILL = 0.2 -- degrees/sec: slower than this with none wanted, it's stopped
+local HITCH = 0.05     -- seconds: a frame longer than this while turning is logged (a hitch on screen whatever we do)
 -- Swings share a budget: TURN_BUDGET degrees in any TURN_WINDOW seconds, a
 -- swing past it cut to what's left (or held, under MIN_TURN). Two speakers
 -- too far apart to frame together got a full 30-degree swing each way at
@@ -292,6 +303,10 @@ local function StopMove()
 		return
 	end
 	if turn.sent or turn.creeping then
+		if turn.sent and turn.sent > 1 then
+			-- (Cut off at speed: a jolt on screen.)
+			Say(("%s stopped dead at %.1f deg/sec"):format(turn.kind or "move", turn.sent))
+		end
 		Send(Command(turn.right) .. "Stop")
 	end
 	turn.moving, turn.sent, turn.creeping, turn.stopping, turn.stoppedAt = false, nil, nil, nil, GetTime()
@@ -405,7 +420,7 @@ end
 -- set by turn.want.
 local function StartTrack(right, want)
 	StopMove()
-	turn.kind, turn.right, turn.want, turn.speed, turn.t = "track", right, want, 0, 0
+	turn.kind, turn.right, turn.want, turn.speed, turn.t, turn.accel = "track", right, want, 0, 0, 0
 	turn.share = ns.db.chatCamSwingSpeed / ns.HoldSpeed(WHO, CVAR)
 	Prime()
 	turn.stopping = nil
@@ -471,14 +486,19 @@ local function StepMove(elapsed)
 		over = stopping.t >= stopping.T
 		speed = over and 0 or stopping.from * (1 + math.cos(math.pi * stopping.t / stopping.T)) / 2
 	elseif turn.kind == "track" then
-		-- (Toward the speed wanted, no harder than MAX_ACCEL; at rest with none wanted: over.)
-		local step = MAX_ACCEL * elapsed
+		-- (Eased toward the speed wanted, no harder than MAX_ACCEL, its speeding
+		-- up changing no quicker than TRACK_JERK; all but still with none wanted: over.)
 		if convo and (turn.right and 1 or -1) * (turn.amount - convo.base) >= TRACK_MAX then
 			turn.want = 0 -- (the safeguard, whatever's steering it: see TRACK_MAX)
 		end
-		speed =(turn.speed or 0) + math.max(-step, math.min(step, (turn.want or 0) - (turn.speed or 0)))
-		over = speed <= 0 and (turn.want or 0) <= 0
-		speed = math.max(0, speed)
+		local want = turn.want or 0
+		local accel = turn.accel or 0
+		local aim = math.max(-MAX_ACCEL, math.min(MAX_ACCEL, (want - (turn.speed or 0)) / TRACK_EASE))
+		local jerk = TRACK_JERK * elapsed
+		accel = accel + math.max(-jerk, math.min(jerk, aim - accel))
+		speed = math.max(0, (turn.speed or 0) + accel * elapsed)
+		turn.accel = speed > 0 and accel or 0
+		over = want <= 0 and speed < TRACK_STILL
 	else
 		over = turn.t >= turn.T
 		speed = over and 0 or MoveSpeed(turn.t)
@@ -1208,6 +1228,7 @@ local function Aim(now, drifting)
 		convo.gain, step, target, T,
 		(target ~= wanted and " (as far as it goes)" or "") .. (spot and (", " .. spot) or "") .. (budget or "")))
 	Note("swing to " .. speaker.name)
+	convo.slack = nil -- (set again by where this swing leaves them: see TRACK_EASE)
 	convo.turnedAt = convo.turnedAt or now
 	if carry then
 		Note(turn.kind .. " turned into the swing")
@@ -1233,9 +1254,16 @@ local function Drift()
 	MoveTo(target, math.max(1, DRIFT_TIME * math.abs(target - turn.amount) / width), DRIFT_EASE, "drift")
 end
 
+local hitchSaidAt = 0
 local function OnUpdate(_, elapsed)
 	StepMove(elapsed)
 	local now = GetTime()
+	if elapsed > HITCH and turn.sent and now >= hitchSaidAt then
+		-- (A slow frame mid-turn: the game's own stutter, not the curve's. Once a second at most.)
+		hitchSaidAt = now + 1
+		Say(("slow frame mid-%s: %.0f ms at %.1f deg/sec (%.0f fps)"):format(turn.kind or "move", elapsed * 1000,
+			turn.sent, GetFramerate()))
+	end
 	if convo then
 		local takenOver = TakenOver()
 		-- (Your mouse already held on the camera as it started counts too: turning
@@ -1244,6 +1272,9 @@ local function OnUpdate(_, elapsed)
 			local zoomed = ns.lastCameraInputWhat == "zoom"
 			HandOver(zoomed and "you zoomed"
 				or ("you moved the camera: %s"):format(tostring(ns.lastCameraInputWhat)), nil, not zoomed)
+			-- (Your turn speed now, not SPEED_RESTORE_DELAY later: your drag ran
+			-- at the swing's crawl meanwhile, and the camera seemed taken away.)
+			ns.ReleaseSpeed(WHO, CVAR)
 		elseif takenOver then
 			if Turned() or convo.zoomedTo then
 				HandOver(takenOver)
@@ -1312,6 +1343,13 @@ local function OnUpdate(_, elapsed)
 						speaker.correcting, speaker.aimed, convo.on = true, false, nil
 					end
 				end
+				-- (Left short of the framing, and no more swings for it: that's where
+				-- keeping up counts from. See TRACK_EASE.)
+				local past = after and math.abs(after) - ns.db.chatCamFrame
+				if past and past > 0 and speaker == convo.speaker and speaker.aimed then
+					convo.slack = { name = speaker.name, right = after > 0, by = math.min(past, CORRECT) }
+					Say(("%s left %.1f deg past the framing: keeping up counts from there"):format(speaker.name, past))
+				end
 			end
 			local speaker = convo.speaker
 			-- Keeping up: the one it's on walking off the framing while talking
@@ -1333,6 +1371,10 @@ local function OnUpdate(_, elapsed)
 				local angle, _, sy, others, how = BubbleAngle(speaker.text)
 				local good = angle and not zooming and BubbleReading(sy, others, how)
 				local frame = ns.db.chatCamFrame
+				local slack = convo.slack
+				if slack and slack.name == speaker.name and good and (angle > 0) == slack.right then
+					frame = frame + slack.by
+				end
 				local off = (not good or math.abs(angle) <= frame) and 0 or (angle - (angle > 0 and frame or -frame))
 				-- (No further than TRACK_MAX from where it started.)
 				local room = TRACK_MAX - (off > 0 and 1 or -1) * (turn.amount - convo.base)
@@ -1347,13 +1389,20 @@ local function OnUpdate(_, elapsed)
 					end
 					turn.want = want
 					convo.center, convo.driftOut = turn.amount, nil
+					if want > 0 and now >= (convo.trackSaidAt or 0) then
+						-- (Once a second: how the look steers it, to match a jolt on screen.)
+						convo.trackSaidAt = now + 1
+						Say(("keeping up with %s: %s, past the framing %+.1f (framing %.1f), want %.1f deg/sec, going %.1f (speeding up %+.1f), at %+.1f deg"):format(
+							speaker.name, angle and ("%+.1f deg off"):format(angle) or "no bubble", off, frame,
+							want, turn.speed or 0, turn.accel or 0, turn.amount))
+					end
 				elseif math.abs(off) > TRACK_START and room > 0 then
 					if turn.moving then
 						EaseToStop() -- (a drift leg: a stop first, then after them)
 					else
 						local want = math.min(ns.db.chatCamSwingSpeed, math.abs(off) / convo.gain / TRACK_CATCH)
-						Say(("%s walked to %+.1f deg off the middle: keeping up (%.1f deg/sec)"):format(
-							speaker.name, angle, want))
+						Say(("%s walked to %+.1f deg off the middle (framing %.1f): keeping up (%.1f deg/sec)"):format(
+							speaker.name, angle, frame, want))
 						convo.turnedAt = convo.turnedAt or now
 						StartTrack(off > 0, want)
 					end
@@ -1442,7 +1491,8 @@ local function Heard(text, name)
 		end
 		-- (Still turning back from the last one: the swing to this speaker takes
 		-- it over, or it eases out if they're the other way: see Aim.)
-		Say(("%s started talking%s"):format(name, fake and " (test)" or ""))
+		Say(("%s started talking%s (camera at %.1f yards, max %s)"):format(name, fake and " (test)" or "",
+			GetCameraZoom and GetCameraZoom() or -1, tostring(GetCVar("cameraDistanceMaxZoomFactor"))))
 	elseif name == convo.on then
 		Say(("%s again: staying on them"):format(name))
 	end
@@ -1612,6 +1662,7 @@ ns.RegisterCamera("chatcam", function()
 		or (ns.QuestCamZoomBy and ns.QuestCamZoomBy() == "chatcam" and ns.QuestCamZoomHeld())
 end, function()
 	HandOver("you moved the camera", nil, ns.lastCameraInputWhat ~= "zoom")
+	ns.ReleaseSpeed(WHO, CVAR) -- (your speed now: see OnUpdate's hand over)
 end)
 
 -- Whether a conversation has the camera now (the Minimap page hides the

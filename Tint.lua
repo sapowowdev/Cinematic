@@ -251,9 +251,10 @@ local function CreateVignette(frame)
 end
 
 -- size: the fraction of the screen each edge covers; alpha: its darkness;
--- r, g, b: its colour (black if left out).
-local function SetVignette(pieces, size, alpha, r, g, b)
-	local width, height = UIParent:GetWidth(), UIParent:GetHeight()
+-- r, g, b: its colour (black if left out); w, h: the frame's size, if not
+-- the screen's (a preview).
+local function SetVignette(pieces, size, alpha, r, g, b, w, h)
+	local width, height = w or UIParent:GetWidth(), h or UIParent:GetHeight()
 	for name, piece in pairs(pieces) do
 		piece:SetShown(alpha > 0)
 		piece:SetVertexColor(r or 0, g or 0, b or 0, alpha)
@@ -505,7 +506,7 @@ local function GetClockTime()
 	return GetGameTime()
 end
 
--- Showing a preview: an hour picked in the Visual Effects hub's Tint tab's Preview time
+-- Showing a preview: an hour picked in the Atmosphere hub's Tint tab's Preview time
 -- (just opening the page shows nothing), or a quick preview from the minimap
 -- menu is running.
 local function Previewing()
@@ -1307,7 +1308,7 @@ ns.GetWeatherDebug = function()
 	info.target, info.shown = weatherTarget, weatherColor
 	return info
 end
--- The Tint tab (Visual Effects) is open: its Preview time can show the tint.
+-- The Tint tab (Atmosphere) is open: its Preview time can show the tint.
 ns.SetTintPreview = function(on)
 	tintPreview = on
 	tintDirty = true

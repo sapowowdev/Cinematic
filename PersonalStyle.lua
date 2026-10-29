@@ -22,6 +22,10 @@ DEFAULTS.prdHealthR, DEFAULTS.prdHealthG, DEFAULTS.prdHealthB = 0.2, 0.8, 0.4
 DEFAULTS.prdHealthHeight = 1         -- the health bar's height, times the game's
 DEFAULTS.prdPowerHeight = 1          -- the power bar's, times the game's
 DEFAULTS.prdPiecesScale = 1          -- your class resource (combo points, holy power, runes...), times its size
+DEFAULTS.prdMana = false             -- a mana bar of ours under them, when mana isn't your power (PersonalMana.lua)
+DEFAULTS.prdManaColor = "game"       -- ...its color: "game" or "custom" (prdManaR/G/B)
+DEFAULTS.prdManaR, DEFAULTS.prdManaG, DEFAULTS.prdManaB = 0, 0.55, 1
+DEFAULTS.prdManaHeight = 1           -- ...its height, times the power bar's
 
 local function Look()
 	return ns.StyleLook("prdStyle")
@@ -69,6 +73,11 @@ local function OwnOf(frame)
 		own[frame] = saved
 	end
 	return saved
+end
+-- (The mana bar's height to start from: the power bar's own.)
+function ns.PersonalOwnHeight(frame)
+	local height = OwnOf(frame).height
+	return type(height) == "number" and height > 0 and height or nil
 end
 
 -- A frame's border and background pieces: its fields named so, and its own
@@ -204,12 +213,19 @@ local Apply
 function Apply()
 	local root, holder, health, power, pieces = Parts()
 	if not root then return end
+	-- (The mana bar: shown or not as the page says now, made if it's wanted.)
+	if ns.UpdatePersonalMana then ns.UpdatePersonalMana(true) end
 	local look = ns.StyleOn("prdStyle") and Look() or nil
 	if not look and not next(own) then return end
 	local r, g, b
 	if look then r, g, b = HealthColor(look) end
 	DressBar(health, holder, look, "prdHealthHeight", r and { r, g, b } or nil)
 	DressBar(power, nil, look, "prdPowerHeight")
+	local mana = ns.PersonalManaBar and ns.PersonalManaBar()
+	if mana then
+		DressBar(mana, nil, look, "prdManaHeight")
+		ns.ColorPersonalMana(look)
+	end
 	local pieceScale = look and tonumber(look.prdPiecesScale) or 1
 	if pieces and pieces.SetScale and (pieceScale ~= 1 or sized[pieces]) then
 		pieces:SetScale(pieceScale)
@@ -275,12 +291,12 @@ function ns.MakePersonalPreview(parent, width)
 		bar.skin = MakeSkin(bar)
 		return bar
 	end
-	local health, power = Bar(0.72), Bar(0.55)
+	local health, power, mana = Bar(0.72), Bar(0.55), Bar(0.8)
 	health:SetPoint("TOP", holder, "TOP", 0, -54)
 	power:SetPoint("TOP", health, "BOTTOM", 0, -3)
+	mana:SetPoint("TOP", power, "BOTTOM", 0, -3)
 	local pieces = CreateFrame("Frame", nil, holder)
 	pieces:SetSize(200, 18)
-	pieces:SetPoint("TOP", power, "BOTTOM", 0, -6)
 	pieces.dots = {}
 	local _, class = UnitClass("player")
 	local count = PREVIEW_PIECES[class or ""] or 5
@@ -302,7 +318,13 @@ function ns.MakePersonalPreview(parent, width)
 		ns.StyleScene(self, 0.62, 0.85)
 		local look = Look()
 		local _, _, realHealth, realPower = Parts()
-		for _, info in ipairs({ { health, realHealth, "prdHealthHeight", 10 }, { power, realPower, "prdPowerHeight", 8 } }) do
+		-- (The mana bar while it's ticked: a third bar, under the power bar, in
+		-- the power bar's game fill.)
+		local withMana = ns.PERSONAL_MANA and look.prdMana and true or false
+		mana:SetShown(withMana)
+		pieces:SetPoint("TOP", withMana and mana or power, "BOTTOM", 0, -6)
+		for _, info in ipairs({ { health, realHealth, "prdHealthHeight", 10 }, { power, realPower, "prdPowerHeight", 8 },
+			{ mana, realPower, "prdManaHeight", 8 } }) do
 			local bar = info[1]
 			if not ns.SetBarTexture(bar, look.prdTexture) then
 				local atlas, file = GameFill(info[2])
@@ -315,7 +337,18 @@ function ns.MakePersonalPreview(parent, width)
 		end
 		local r, g, b = HealthColor(look)
 		health:SetStatusBarColor(r or 0, g or 0.8, b or 0)
-		power:SetStatusBarColor(unpack(PREVIEW_POWER))
+		-- (The power bar a Maelstrom-like purple beside the mana bar, else mana's blue.)
+		if withMana then
+			power:SetStatusBarColor(0.6, 0.3, 1)
+		else
+			power:SetStatusBarColor(unpack(PREVIEW_POWER))
+		end
+		if look.prdManaColor == "custom" then
+			mana:GetStatusBarTexture():SetDesaturated(true)
+			mana:SetStatusBarColor(look.prdManaR or 0, look.prdManaG or 0, look.prdManaB or 0)
+		else
+			mana:SetStatusBarColor(unpack(PREVIEW_POWER))
+		end
 		local scale = tonumber(look.prdPiecesScale) or 1
 		local cr, cg, cb = ClassColor()
 		for i, dot in ipairs(pieces.dots) do
@@ -331,7 +364,7 @@ end
 
 -- The page itself.
 local PRESET_KEYS = { "prdTexture", "prdBorder", "prdBorderSize", "prdBorderR", "prdBorderG", "prdBorderB", "prdBack",
-	"prdHealthColor", "prdHealthHeight", "prdPowerHeight", "prdPiecesScale" }
+	"prdHealthColor", "prdHealthHeight", "prdPowerHeight", "prdPiecesScale", "prdManaHeight" }
 
 function ns.CreatePersonalStylePanel(kit)
 	local canvas, content = kit.CreateScrollPage()
@@ -343,7 +376,7 @@ function ns.CreatePersonalStylePanel(kit)
 
 	local preview -- (below: drawn again as each setting changes)
 	local function Changed()
-		Apply()
+		Apply() -- (the mana bar too)
 		if preview then preview:Refresh() end
 	end
 
@@ -361,13 +394,14 @@ function ns.CreatePersonalStylePanel(kit)
 	rows.Presets({
 		{ L["Like the game's"], L["The game's bars, as it draws them (the defaults)."], {} },
 		{ L["Flat"], L["Flat bars, health in your class color, with a thin black edge."],
-			{ prdTexture = "flat", prdBorder = "thin", prdBack = 0.6, prdHealthColor = "class", prdPowerHeight = 0.8 } },
+			{ prdTexture = "flat", prdBorder = "thin", prdBack = 0.6, prdHealthColor = "class", prdPowerHeight = 0.8,
+				prdManaHeight = 0.8 } },
 		{ L["Slim"], L["Thin, borderless bars that barely show over the world."],
 			{ prdTexture = "flat", prdBorder = "none", prdBack = 0.35, prdHealthColor = "class", prdHealthHeight = 0.5,
-				prdPowerHeight = 0.4, prdPiecesScale = 0.8 } },
+				prdPowerHeight = 0.4, prdManaHeight = 0.4, prdPiecesScale = 0.8 } },
 		{ L["Cinematic"], L["Soft, thin bars with a fine edge, health in your class color."],
 			{ prdTexture = "smooth", prdBorder = "thin", prdBack = 0.4, prdHealthColor = "class",
-				prdHealthHeight = 0.7, prdPowerHeight = 0.6 } },
+				prdHealthHeight = 0.7, prdPowerHeight = 0.6, prdManaHeight = 0.6 } },
 	}, PRESET_KEYS, 480)
 
 	-- The bars' look: their fill, their border (the game's, a line of ours
@@ -390,6 +424,11 @@ function ns.CreatePersonalStylePanel(kit)
 		nil, "%")
 	sizes:Box(L["Class resource"], "prdPiecesScale", 0, 100, 5, "%d", 100,
 		L["How big your class resource is (combo points, holy power, runes and the like), next to the game's."], nil, "%")
+	local function ManaOn(db) return rows.On(db) and Look().prdMana end
+	if ns.PERSONAL_MANA then
+		sizes:Box(L["Mana"], "prdManaHeight", 0, 100, 5, "%d", 100,
+			L["The mana bar's height, next to the power bar's."], ManaOn, "%")
+	end
 
 	stack:Header(content, L["Health"])
 	local last = rows.Choices(L["Color:"], "prdHealthColor", {
@@ -399,6 +438,21 @@ function ns.CreatePersonalStylePanel(kit)
 	})
 	rows.Swatch(last, "prdHealthColor", { "prdHealthR", "prdHealthG", "prdHealthB" },
 		L["The health bar's color, for Custom."])
+
+	-- Mana under the power bar, when it isn't your power (PersonalMana.lua).
+	if ns.PERSONAL_MANA then
+		stack:Header(content, L["Mana bar"])
+		rows.Check("prdMana", L["Show your mana when it isn't your power"],
+			L["The game shows only your main power under your character: Maelstrom, Insanity, Astral Power, " ..
+			"rage or energy in a form. Ticked, your mana gets a bar of its own under it. When it comes up is the " ..
+			"Personal mana bar row on the Standard Frames page."])
+		local manaLast = rows.Choices(L["Color:"], "prdManaColor", {
+			{ "game", L["The game's"] },
+			{ "custom", L["Custom"], L["A color of your own (the swatch)."] },
+		}, ManaOn)
+		rows.Swatch(manaLast, "prdManaColor", { "prdManaR", "prdManaG", "prdManaB" },
+			L["The mana bar's color, for Custom."], ManaOn)
+	end
 
 	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))
 	canvas:Hide()

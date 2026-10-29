@@ -78,7 +78,8 @@ function ns.CreateQuestTalkStylePanel(kit)
 	local SIDE_TIP = L["Where the quest card (the objective, rewards and buttons, or the list of replies) " ..
 		"goes beside the bubble. Below: as wide as the bubble, which moves up to make room for it. Side: " ..
 		"with Opposite Clicked, on the bubble's outer side (away from the middle of the screen), else on " ..
-		"the right. Right or Left: always that side. Beside it, it's as tall as the bubble."]
+		"the right. Right or Left: always that side. Beside it, it's as tall as the bubble."] .. " " ..
+		L["Separate: the card stays where you drag it (or at the list's height), wherever the bubble goes."]
 	-- (Default leaves the card where it is: under the bubble or the list's own spot.)
 	local function SideOn(db) return db.questTalk and db.questTalkPlace ~= "fixed" end
 	local side = kit.Dropdown(content, "questTalkCardSide", {
@@ -86,6 +87,7 @@ function ns.CreateQuestTalkStylePanel(kit)
 		{ value = "side", text = L["Side"] },
 		{ value = "right", text = L["Right"] },
 		{ value = "left", text = L["Left"] },
+		{ value = "separate", text = L["Separate"] },
 	}, 160, Changed)
 	if side then
 		local sideName = stack:Add(kit.Label(content, "GameFontHighlight", L["Quest card beside the bubble"]), "label")
@@ -96,6 +98,7 @@ function ns.CreateQuestTalkStylePanel(kit)
 		rows.Choices(L["Quest card beside the bubble"], "questTalkCardSide", {
 			{ "below", L["Below"], SIDE_TIP }, { "side", L["Side"], SIDE_TIP },
 			{ "right", L["Right"], SIDE_TIP }, { "left", L["Left"], SIDE_TIP },
+			{ "separate", L["Separate"], SIDE_TIP },
 		}, SideOn)
 	end
 	local listLine = stack:Add(kit.BoxLine(content), "label")

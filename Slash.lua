@@ -148,6 +148,7 @@ local function PrintDebugHelp()
 	print("  /cine debug questtimer - say whether a quest timer is running and how its box fades")
 	print("  /cine debug vitals - Vitals Vision now: your health as read, how far in, the theme's art (run it in a fight)")
 	print("  /cine debug gameedge [number|back|blend|off] - step through the game's full-screen effect textures over the whole screen, one each time, to pick edges for Vitals Vision's Game art")
+	print("  /cine debug texreel [masks] [shots] [seconds] [from] | pause | off - play the game's full-screen effect textures as a slideshow to record, each with its number, file and name, and the time left; shots takes a screenshot of each")
 	print("  /cine debug gameart [off] - test Vitals Vision with the game's own low-health edge in place of the theme's art, in its colors; off for the theme's again")
 	print("  /cine debug death - print what the death camera does on real deaths (again to stop)")
 	print("  /cine debug place - city, inn, dungeon detection")
@@ -473,6 +474,8 @@ local function HandleSlash(msg)
 		ns.ReportVitals()
 	elseif cmd == "debug" and (arg == "gameedge" or arg:match("^gameedge ")) then
 		ns.ScoutGameEdges(arg:match("^gameedge%s*(.-)$"))
+	elseif cmd == "debug" and (arg == "texreel" or arg:match("^texreel ")) then
+		ns.TextureReel(arg:match("^texreel%s*(.-)$"))
 	elseif cmd == "debug" and (arg == "gameart" or arg:match("^gameart ")) then
 		ns.LowHealthGameArt(arg:match("^gameart%s*(.-)$"))
 	elseif cmd == "debug" and arg == "death" then
@@ -1206,6 +1209,8 @@ local function HandleSlash(msg)
 			tostring(ns.orbitFrame:GetScript("OnUpdate") ~= nil), tostring(MoveViewUpStart ~= nil)))
 	elseif cmd == "debug" and arg == "cooldowns" then
 		ns.ReportCooldowns()
+	elseif cmd == "debug" and arg == "spellrange" then
+		ns.ReportSpellRange()
 	elseif cmd == "debug" and arg == "textures" then
 		ns.ShowStyleTextures()
 	elseif cmd == "debug" and arg == "platetextures" then

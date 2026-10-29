@@ -200,7 +200,7 @@ function ns.CreateGeneralStylePanel(kit)
 		for _, row in ipairs(pageRows) do row:Refresh() end
 	end
 
-	local switch = kit.PageSwitch(content, "styleGeneral", L["Enable page"],
+	local switch = kit.PageSwitch(content, "styleGeneral", L["Enable Style"],
 		L["On: every Style page looks as it says. Off: none of them do; everything shows the game's look. " ..
 		"Each page keeps its settings for when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")

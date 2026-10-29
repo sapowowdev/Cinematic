@@ -173,12 +173,15 @@ local DESIGN = {
 }
 
 -- Pure Cinema's retail layout: the dev's PURE_CINEMA, as the game's Edit Mode
--- save had it (WTF edit-mode-cache-account, 2026-10-24): one line per system
+-- save had it (WTF edit-mode-cache-account, 2026-10-29): one line per system
 -- (system, index, in its default spot, point, relative point, relative to,
 -- x, y, -1, settings), in the game's own export format, so it's put together
 -- into an export string (ExportFromSystems). The personal resource display
 -- moved to the middle (its health bar shown: its first setting, HideHealth,
--- 0), the Cooldown Manager above it.
+-- 0), the Cooldown Manager above it. The cast bar out of its default spot
+-- (in it, the game stacks it above whatever pet or stance bar is up). The
+-- pet and stance bars and the vehicle leave button stay in theirs: pinned
+-- to bar 2, they went to the screen's top left on characters without it.
 local PURE_CINEMA_SYSTEMS = {
 	"0 0 1 7 7 UIParent 0.0 45.0 -1 ##$$%/&('%)#+#,$",
 	"0 1 1 7 7 UIParent 0.0 45.0 -1 ##$$%/&('%(#,$",
@@ -191,7 +194,7 @@ local PURE_CINEMA_SYSTEMS = {
 	"0 10 1 7 7 UIParent 0.0 45.0 -1 ##$$&('%",
 	"0 11 1 7 7 UIParent 0.0 45.0 -1 ##$$&('%,#",
 	"0 12 1 7 7 UIParent 0.0 45.0 -1 ##$$&('%",
-	"1 -1 1 4 4 UIParent 0.0 0.0 -1 ##$#%#",
+	"1 -1 0 4 4 UIParent 0.0 -240.7 -1 ##$#%#",
 	"2 -1 1 2 2 UIParent 0.0 0.0 -1 ##$#%(&(",
 	"3 0 1 8 7 UIParent -300.0 250.0 -1 $#3#",
 	"3 1 1 6 7 UIParent 300.0 250.0 -1 %#3#",
@@ -202,11 +205,11 @@ local PURE_CINEMA_SYSTEMS = {
 	"3 6 1 5 5 UIParent 0.0 0.0 -1 -=.+/#4$5#6(7-7$8(9(",
 	"3 7 1 4 4 UIParent 0.0 0.0 -1 3#",
 	"4 -1 0 2 2 UIParent -414.5 -277.8 -1 #",
-	"5 -1 0 4 4 UIParent 0.0 -141.2 -1 #",
+	"5 -1 0 4 4 UIParent 0.0 -80.4 -1 #",
 	"6 0 1 2 2 UIParent -255.0 -10.0 -1 ##$#%#&.(()(",
 	"6 1 1 2 2 UIParent -270.0 -155.0 -1 ##$#%#'+(()(-$",
 	"6 2 1 1 1 UIParent 0.0 -25.0 -1 ##$#%$&.(()(+#,-,$",
-	"7 -1 1 7 7 UIParent 0.0 45.0 -1 #",
+	"7 -1 0 6 6 UIParent 531.7 92.8 -1 #",
 	"8 -1 1 6 6 UIParent 35.0 50.0 -1 #'$A%$&i",
 	"9 -1 1 7 7 UIParent 0.0 45.0 -1 #",
 	"10 -1 1 0 0 UIParent 16.0 -116.0 -1 #",
@@ -217,21 +220,21 @@ local PURE_CINEMA_SYSTEMS = {
 	"15 0 1 7 7 StatusTrackingBarManager 0.0 0.0 -1 &-",
 	"15 1 1 7 7 StatusTrackingBarManager 0.0 17.0 -1 &-",
 	"16 -1 1 5 5 UIParent 0.0 0.0 -1 #(",
-	"17 -1 1 1 1 UIParent 0.0 -100.0 -1 ##",
+	"17 -1 0 4 4 UIParent 0.0 355.3 -1 ##",
 	"18 -1 1 5 5 UIParent 0.0 0.0 -1 #-",
-	"19 -1 1 7 7 UIParent 0.0 0.0 -1 ##",
-	"20 0 1 7 7 UIParent 0.0 310.0 -1 ##$/%$&('%(-($)#+$,$-$",
-	"20 1 1 7 7 UIParent 0.0 240.0 -1 ##$*%$&('%(-($)#+$,$-$",
-	"20 2 1 7 7 UIParent 0.0 370.0 -1 ##$$%$&('((-($)#+$,$-$",
+	"19 -1 0 5 5 UIParent -438.3 251.7 -1 ##",
+	"20 0 0 4 4 UIParent 0.0 -350.0 -1 ##$/%$&('%(-($)#+$,$-$",
+	"20 1 0 4 4 UIParent 0.0 -403.3 -1 ##$7%$&('%(-($)#+$,$-$",
+	"20 2 0 4 4 UIParent 0.0 -293.3 -1 ##$$%$&('((-($)#+$,$-$",
 	"20 3 1 7 7 UIParent 420.0 430.0 -1 #$$$%#&('((-($)#*#+$,$-$.-.$",
-	"21 -1 0 4 4 UIParent 0.0 -225.5 -1 ##%#&#'((()#*-*$+#,&-#.#/(0#1#",
+	"21 -1 0 4 4 UIParent 0.0 -204.7 -1 ##%#&#'((()#*-*$+#,&-#.#/(0#1#",
 	"22 0 1 8 7 UIParent -457.0 336.0 -1 #$$$%#&('((#)U*$+%,$-#.#/U0%",
 	"22 1 1 1 1 UIParent 0.0 -40.0 -1 &('()U*#+%",
 	"22 2 1 1 1 UIParent 0.0 -90.0 -1 &('()U*#+%",
 	"22 3 1 1 1 UIParent 0.0 -130.0 -1 &('()U*#+%",
 	"23 -1 1 0 0 UIParent 0.0 0.0 -1 ##$#%$&7&%'7(%)U+$,$-$.(/U",
-	"24 -1 1 1 1 UIParent 0.0 -182.0 -1 #",
-	"26 -1 1 4 4 UIParent 0.0 0.0 -1 #( ",
+	"24 -1 0 4 4 UIParent -22.5 241.3 -1 #",
+	"26 -1 1 4 4 UIParent 0.0 0.0 -1 #(",
 }
 
 -- Cinematic's own layouts, by the name Edit Mode lists them under. export:

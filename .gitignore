@@ -10,3 +10,6 @@ Release/
 
 # The dev copy's commit list (Tools/commits.sh)
 ChangelogCommits.dev.lua
+
+# Python bytecode
+__pycache__/

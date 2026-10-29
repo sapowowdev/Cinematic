@@ -12,6 +12,8 @@
 --   flash    a big hit's flash colour (and the colour grade's tinge)
 --   pulse, bpm  the heartbeat's throb and speed, times the page's
 --   sway     the art rocks slowly, sloshing (1 about a hand's width), or nil
+--   look     the theme's own defaults for the Style page's settings ({ lowHealthDark = 0.6, ... }):
+--            a setting the player hasn't changed takes the theme's; one they have stays theirs
 --   sparks   the few sprites left (LowHealth.lua draws them), each:
 --     tex    its texture: "Bolt" (lightning), "Star", "Mote" or "Gas"
 --     kind   "flicker" (on and off, fading: lightning), "twinkle" (fading in
@@ -213,14 +215,95 @@ local function Haze(theme)
 	end
 	if not color then return end
 	theme.sparks = theme.sparks or {}
-	table.insert(theme.sparks, { tex = "Gas", kind = "drift", flat = not add, color = color, size = { 0.35, 0.6 },
-		life = { 3, 5 }, rate = 45, hit = { 3, 4 } })
+	table.insert(theme.sparks, { tex = "Gas", kind = "drift", haze = true, flat = not add, color = color,
+		size = { 0.35, 0.6 }, life = { 3, 5 }, rate = 45, hit = { 3, 4 } })
 end
 
 ns.LOW_HEALTH_THEME = {} -- (by key)
 for _, theme in ipairs(ns.LOW_HEALTH_THEMES) do
 	Haze(theme)
 	ns.LOW_HEALTH_THEME[theme.key] = theme
+end
+
+-- Blizzard art: the game's full-screen effects (by file number), a layer of
+-- their own over our art (or alone), cut to an edge by a mask and closing in
+-- with it. Each pattern players can pick, with how it's drawn unless the
+-- page says otherwise:
+--   mask   the mask cutting it to an edge (nil: it's an edge already)
+--   own    in its own colors (else greyed and tinted in the theme's)
+--   tiles  times across the screen; paint  drawn over (else added on, as light)
+-- Retail has them all; Classic only the first few (the rest are left out of
+-- the page there, and a theme's pick it hasn't falls back to the red edge).
+local SOFT, ROUND, RAGGED, FROSTY, WISPY, WAVY = 1802909, 2202396, 6225363, 2199927, 1305138, 5857689
+ns.LOW_HEALTH_BLIZZ_EDGE = 131140 -- (the game's own low-health edge: Classic has it)
+ns.LOW_HEALTH_BLIZZ_PATTERNS = {
+	{ 131140, "Red soft edge", own = true },
+	{ 985799, "Grey fog", mask = WISPY },
+	{ 1273707, "White crackling veins", mask = WISPY },
+	{ 1305137, "Olive blotchy cells", mask = WISPY, own = true },
+	{ 4383351, "Rays in from the edges" },
+	{ 2395778, "Amber flame wisps", mask = SOFT, own = true },
+	{ 4876486, "Lava cracks", mask = SOFT, own = true },
+	{ 2140999, "Embers and ash flakes", own = true },
+	{ 4237662, "Gold marble with sparkles", mask = ROUND, own = true },
+	{ 5201310, "Orange wavy lines with specks", mask = SOFT, own = true },
+	{ 5636771, "Pale gold wavy stripes", mask = SOFT, own = true },
+	{ 2396780, "Gold water ripples", mask = SOFT, own = true },
+	{ 3522953, "Blue lightning veins", mask = SOFT, own = true },
+	{ 5332774, "Teal with white waves", mask = WAVY, own = true },
+	{ 4417751, "Teal wavy lines", mask = SOFT, own = true },
+	{ 2735672, "Mint green water ripples", mask = SOFT, own = true },
+	{ 2202483, "Pale blue blurry blobs", mask = FROSTY, own = true },
+	{ 2199926, "Grey ripples", mask = SOFT },
+	{ 6214876, "Thin lilac waves on dark", mask = SOFT },
+	{ 4237661, "Thin white curves", mask = ROUND },
+	{ 6225095, "White petals in clumps", mask = SOFT, tiles = 2 },
+	{ 6907568, "Grey clouds, cyan and lilac tints", mask = ROUND },
+	{ 4541185, "Grey wavy wisps", mask = SOFT },
+	{ 6996935, "Grey flowing smoke", mask = SOFT },
+	{ 3509149, "Grey sideways streaks", mask = SOFT },
+	{ 5680179, "Green with yellow glows", mask = SOFT, own = true },
+	{ 5198840, "Green speckles", mask = SOFT, own = true },
+	{ 6225364, "Dark green moss", mask = RAGGED, own = true },
+	{ 6225366, "Thorny green vines", mask = RAGGED, own = true, paint = true },
+	{ 4630641, "Brown dirt", mask = RAGGED, own = true, paint = true },
+	{ 4741753, "Purple and blue swirl", mask = SOFT, own = true },
+	{ 5857669, "Purple swirl with stars", mask = SOFT, own = true },
+	{ 5857660, "Dark purple swirl", mask = SOFT, own = true },
+	{ 4741750, "Dark blue night sky, faint stars", mask = ROUND, own = true },
+}
+-- The masks players can pick (Theme's pick and None are the page's).
+ns.LOW_HEALTH_BLIZZ_MASKS = {
+	{ SOFT, "Soft frame" }, { ROUND, "Soft rounded frame" }, { WAVY, "Soft frame, wavy bottom" },
+	{ RAGGED, "Ragged frame" }, { FROSTY, "Frosty ragged frame" }, { WISPY, "Wispy frame" },
+}
+ns.LOW_HEALTH_BLIZZ_PATTERN = {} -- (by file number)
+for _, pattern in ipairs(ns.LOW_HEALTH_BLIZZ_PATTERNS) do
+	ns.LOW_HEALTH_BLIZZ_PATTERN[pattern[1]] = pattern
+end
+-- Each theme's pick: a pattern, or { pattern, own = false } to tint one that
+-- is in its own colors otherwise. (Game art themes: none, their art is it.)
+local THEIRS = {
+	blood = 131140, wounds = 131140, claws = 131140, bloodrune = 131140,
+	bruise = { 131140, own = false },
+	rage = 2395778, dragonfire = 2395778,
+	shield = 985799,
+	holylight = 4237662, holyshield = 4383351, judgement = 5201310,
+	lonewolf = 4541185, thorns = 6225366,
+	poison = 5680179, shadow = 6996935,
+	ward = 4237661, feathers = 6225095, void = 4741753,
+	storm = 3522953, gale = 6214876, water = 5332774,
+	arcane = 5857669, fire = 4876486, frost = 2202483,
+	decay = 1305137, fel = 1273707, felfire = 2140999,
+	eclipse = 4741750, leaves = 6225364,
+	runefrost = 4237661, plague = 5198840,
+	stagger = 2396780, mist = 6907568, chi = 4417751,
+	demon = 1273707, souls = 3509149, devour = 5857660,
+	dream = 2735672, sands = 5636771,
+	bear = 4630641, outlaw = 2199926,
+}
+for key, pick in pairs(THEIRS) do
+	ns.LOW_HEALTH_THEME[key].theirs = type(pick) == "table" and pick or { pick }
 end
 
 -- Game art (the menu's Game art section, not Auto's): the game's own

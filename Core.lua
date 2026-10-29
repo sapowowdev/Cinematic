@@ -26,6 +26,7 @@ local function SetBindingNames()
 	BINDING_NAME_CINEMATIC_CAM_DEATH = "Cinematic: " .. L["Test the death camera"]
 	BINDING_NAME_CINEMATIC_SHOWTOOLTIPS = "Cinematic: " .. L["Show hidden tooltips (hold)"]
 	BINDING_NAME_CINEMATIC_TOGGLETOOLTIPS = "Cinematic: " .. L["Toggle tooltip hiding"]
+	BINDING_NAME_CINEMATIC_RELOAD = "Cinematic: " .. L["Reload the UI"]
 end
 SetBindingNames()
 ns.OnLanguage(SetBindingNames)
@@ -97,7 +98,7 @@ local DEFAULTS = {
 	tintPreviewHour = -2,  -- options-page preview of the time-of-day tint at this hour (-1 = now, -2 = not picked)
 	alwaysShowMinimap = false, -- keep the whole minimap group visible in cinematic mode
 	alwaysShowWaypoint = true, -- keep retail's quest waypoint visible in cinematic mode
-	questTimerShow = true,     -- keep the quest timer visible in cinematic mode while one runs (not retail)
+	questTimerShow = true,     -- keep the quest timer visible in cinematic mode while one runs (retail: the tracker's timers)
 	durabilityShow = true,     -- keep the durability figure visible in cinematic mode while gear is damaged
 	durabilityHideInCam = true, -- ...except while a camera mode is running
 	petUnhappyShow = true,     -- keep the pet frame visible in cinematic mode while a hunter's pet isn't happy (not retail)
@@ -122,9 +123,11 @@ local DEFAULTS = {
 	                                -- with Enhanced Cooldown Manager's; the Utility bar's below)
 	cooldownUtilityWhileRecharging = false,
 	cooldownUtilityAfterCombat = true,
+	cooldownSmartDefaults = true, -- Cooldown Manager page: spells with no cooldown default to Smart Set's pick
 	minimapIndoors = false,    -- keep the minimap up indoors (hidden there, its map goes stale)
 	minimapKeepQuest = true,   -- keep the minimap up while a quest is tracked
 	minimapKeepQuestFor = 1,   -- ...only this many minutes after picking one up or progress on one (0 = off)
+	minimapKeepZones = "",     -- ...and in these zones: map IDs, comma-separated (ns.IsMinimapKeptInZone)
 	-- Reveal (Minimap page): the faded minimap comes up while one of these is on
 	-- it (NodeSweep.lua looks; with any ticked it's kept full size, icons hidden).
 	minimapRevealNodes = true,   -- ore, herbs and treasure (the tracking has to be on)
@@ -289,12 +292,15 @@ local DEFAULTS = {
 	talentCalcTalented = false, -- ...counting the Legacy Tree's Talented (points from level 5) for the level a build needs
 	editModeLayout = "",       -- the profile's Edit Mode layout, switched to when it's picked ("": the player's own; Layouts.lua)
 	cooldownManagerOn = false, -- the profile turns the game's Cooldown Manager on if it's off (the CDM part; Profiles.lua)
+	prdOn = false,             -- ...and the personal resource display (the Personal Resource Centered layout)
 	centerPanels = true,      -- windows the game opens on the left open in the middle of the screen (CenterPanels.lua)
 	dragPanels = true,         -- ...and drag them to move them; they open where last dropped (panelSpots, CenterPanels.lua)
 	chatCopyButton = true,     -- an icon on each chat window opens its lines to copy (ChatCopy.lua)
 	chatCopyColours = true,    -- ...its lines in their chat colours (the Colours tick in that window)
 	loginZoom = false,         -- after a login or /reload, zoom to loginZoomDistance (Camera.lua)
 	loginZoomDistance = 15,    -- ...yards
+	reloadButton = false,      -- a Reload button on the screen (Reload.lua)
+	reloadKeepWindows = true,  -- after a reload, the windows that were open open again (Reload.lua)
 	rollWindow = true,         -- a window of the group's loot rolls, instead of reading them in chat (RollWindow.lua)
 	rollMinQuality = 3,        -- ...only items of this quality and up (2 uncommon, 3 rare, 4 epic)
 	rollRaidRows = 3,          -- ...in a raid, the top this many players' rolls per item (a party: all)
@@ -529,7 +535,7 @@ DEFAULTS.weatherOffInCombat = false
 -- ones you'd walk or run off into after one (RP walking, auto-running), the
 -- tele camera and the quest camera; the rest start straight away. Not the death camera: you die in a fight.
 ns.CALM_WAIT_NEVER = { death = true }
--- The Cameras page's Enable page switch: off, no
+-- The Cameras page's Enable cameras switch: off, no
 -- camera mode starts (ns.IsCameraOffHere).
 DEFAULTS.cameraModes = true
 local CALM_WAIT_DEFAULT = { walk = true, run = true, tele = true, quest = true }
@@ -863,6 +869,10 @@ DEFAULTS.targetArrowAlpha = 1
 -- How long a plate takes to change its opacity or size a whole 100% when
 -- its row changes, in seconds (0: at once; PlateParts eases it).
 DEFAULTS.plateStyleFadeTime = 1.5
+-- Every plate's health bar width and height (retail), times its row's
+-- Width and Height; on plates no row fits too.
+DEFAULTS.plateStyleWidth = 1
+DEFAULTS.plateStyleHeight = 1
 -- The game's Show Offscreen Nameplates on in CineMode (Effects'
 -- OFFSCREEN_PLATE_CVARS): plates for units out of view stay, so the elite
 -- rules find an elite behind you. Yours back after.
@@ -947,13 +957,14 @@ DEFAULTS.questTalkKeys = true         -- 1-0 pick, Space turns the page / first 
 DEFAULTS.questTalkScale = 1
 DEFAULTS.questTalkTopGap = 0.03       -- the bubble kept this share of the screen down from its top (and the bar)
 DEFAULTS.questTalkLines = 7          -- the bubble's height, in lines of its words
-DEFAULTS.questTalkCardSide = "below" -- the quest card beside the bubble: "below", "side" (Opposite Clicked: its outer side, else the right), "right" or "left"
+DEFAULTS.questTalkCardSide = "below" -- the quest card beside the bubble: "below", "side" (Opposite Clicked: its outer side, else the right), "right", "left" or "separate" (never beside it: its own spot)
 DEFAULTS.questTalkCardSame = true    -- the card on the bubble's background
 DEFAULTS.questTalkPortrait = true -- the NPC's portrait on the bubble's corner
 DEFAULTS.questTalkListY = 0.46 -- the list's top edge up the screen, till it's dragged
 DEFAULTS.duelPlates = true -- in CineMode, the nameplates of two players dueling near you show (see Effects)
 DEFAULTS.minimapVisions = true -- the minimap button glows and lists the visions in use (see MinimapButton)
 DEFAULTS.handleCooldowns = true -- the Cooldown Manager page's master switch (off: left alone)
+DEFAULTS.cooldownKeybinds = false -- its Show keybinds: each spell's key on its icon (Frames.lua)
 -- The other pages' master switches likewise (see ns.HANDLE_SWITCHES): off,
 -- CineMode leaves that part of the UI to the game.
 DEFAULTS.handleFrames = true -- Standard Frames
@@ -1020,10 +1031,10 @@ local VISION_PLACE = { city = "Cities", dungeon = "Dungeons", raid = "Raids", pv
 DEFAULTS.healVision = false
 -- (Damage and the rest, tanks, healers and pets: each kind has its health and opacity.)
 DEFAULTS.healVisionMinAlpha = 0.05 -- how much of the members it hides still shows (0-1)
-DEFAULTS.healVisionShowBelow = 0.95 -- members show below this much health (0-1; 1: any damage)
-DEFAULTS.healVisionTankBelow = 1 -- tanks below this (1: always, full health too)
+DEFAULTS.healVisionShowBelow = 0.8 -- members show below this much health (0-1; 1: any damage)
+DEFAULTS.healVisionTankBelow = 0.95 -- tanks below this (1: always, full health too)
 DEFAULTS.healVisionTankAlpha = 0.05
-DEFAULTS.healVisionHealerBelow = 0.95 -- healers below this
+DEFAULTS.healVisionHealerBelow = 0.7 -- healers below this
 DEFAULTS.healVisionHealerAlpha = 0.05
 DEFAULTS.healVisionPetBelow = 0.35 -- and pets below this
 DEFAULTS.healVisionPetAlpha = 0.05
@@ -1033,6 +1044,29 @@ DEFAULTS.healVisionFarAlpha = 0.05 -- those more than 100 yards away (another zo
 DEFAULTS.healVisionTargetAlpha = 1 -- your target while hidden, if more than their kind's (1: always shown)
 DEFAULTS.healVisionDispel = true -- so do members with a debuff you can dispel
 DEFAULTS.healVisionAnyDebuff = false -- or with any debuff
+-- The page's Tank, Healer and Damage tabs: while you're that role, with
+-- healVisionOwn_<ROLE> on, these settings are its own, <key>_<ROLE>; off
+-- (to start with), the Default tab's. ns.HealVisionSetting reads them. Each
+-- role starts from its own values: the Default tab's but for HEAL_VISION_ROLE_STARTS.
+ns.HEAL_VISION_ROLE_KEYS = { "healVisionTankBelow", "healVisionTankAlpha", "healVisionHealerBelow",
+	"healVisionHealerAlpha", "healVisionShowBelow", "healVisionMinAlpha", "healVisionPetBelow",
+	"healVisionPetAlpha", "healVisionTargetAlpha", "healVisionDeadAlpha", "healVisionOfflineAlpha",
+	"healVisionFarAlpha", "healVisionDispel", "healVisionAnyDebuff" }
+ns.HEAL_VISION_ROLES = { "TANK", "HEALER", "DAMAGER" }
+local HEAL_VISION_ROLE_STARTS = {
+	TANK = { healVisionTankBelow = 1, healVisionHealerBelow = 0.95, healVisionShowBelow = 0.95 },
+	HEALER = { healVisionTankBelow = 1, healVisionHealerBelow = 0.95, healVisionShowBelow = 0.95 },
+	DAMAGER = { healVisionTankBelow = 0.5, healVisionHealerBelow = 0.5, healVisionShowBelow = 0.35,
+		healVisionPetBelow = 0.05 },
+}
+for _, role in ipairs(ns.HEAL_VISION_ROLES) do
+	DEFAULTS["healVisionOwn_" .. role] = false
+	for _, key in ipairs(ns.HEAL_VISION_ROLE_KEYS) do
+		local start = HEAL_VISION_ROLE_STARTS[role][key]
+		if start == nil then start = DEFAULTS[key] end
+		DEFAULTS[key .. "_" .. role] = start
+	end
+end
 do
 	local HEAL_VISION_KEYS = { "healVision" }
 	for _, column in ipairs({ "World", "Cities", "Dungeons", "Raids", "BGs", "Party", "Raid" }) do
@@ -1101,6 +1135,19 @@ do
 		return IsInGroup() and db.healVisionInParty
 	end
 
+	-- A setting of ns.HEAL_VISION_ROLE_KEYS as it is now: your role's own,
+	-- if its tab has "Use default settings" unticked, else the Default tab's.
+	function ns.HealVisionSetting(key, db)
+		db = db or ns.db
+		if not db then return nil end
+		local role = ns.PlayerRole()
+		if role and db["healVisionOwn_" .. role] then
+			local value = db[key .. "_" .. role]
+			if value ~= nil then return value end
+		end
+		return db[key]
+	end
+
 	-- Whether any of its boxes is ticked.
 	function ns.HealVisionAny(db)
 		db = db or ns.db
@@ -1125,13 +1172,13 @@ DEFAULTS.handleFishing = true -- right-click casting and the cast bar
 -- Effects): your target, your pet, and your party or raid's players and their
 -- pets. Same columns as the kinds. Your target and group members (with their
 -- pets) are kept up everywhere to start with.
--- (Your target's rows, the Target Nameplate grid: ns.PLATE_TARGET_ROWS.)
+-- Your target's plate row, the Target section's Nameplates: YourTarget (its
+-- rule names kinds: the rules' enemyplayer, hostilenpc...).
+-- ns.PLATE_TARGET_ROWS: the kinds your target can be, its rows before (for
+-- the settings' upgrades).
 ns.PLATE_TARGET_ROWS = { "MyEnemyPlayerTarget", "MyEnemyNPCTarget", "MyNeutralPlayerTarget", "MyNeutralNPCTarget",
 	"MyFriendlyPlayerTarget", "MyFriendlyNPCTarget" }
-ns.PLATE_UNIT_ROWS = { "MyPet", "GroupMembers", "GroupMinions" }
-for _, row in ipairs(ns.PLATE_TARGET_ROWS) do
-	table.insert(ns.PLATE_UNIT_ROWS, row)
-end
+ns.PLATE_UNIT_ROWS = { "MyPet", "GroupMembers", "GroupMinions", "YourTarget" }
 for _, row in ipairs(ns.PLATE_UNIT_ROWS) do
 	for _, prefix in ipairs({ "plateAlways", "plateCombat", "plateCombatPvP", "plateCinematic", "plateGroup" }) do
 		DEFAULTS[prefix .. row] = false
@@ -1140,15 +1187,10 @@ for _, row in ipairs(ns.PLATE_UNIT_ROWS) do
 		DEFAULTS["plateIn" .. suffix .. row] = false
 	end
 end
-for _, row in ipairs(ns.PLATE_TARGET_ROWS) do
-	DEFAULTS["plateAlways" .. row] = true
-end
--- The Target Names grid's rows, the same kinds (MyEnemyPlayerTarget ->
--- TargetEnemyPlayer): the Names grid's Target row, split. See Effects.
-ns.NAME_TARGET_ROWS = {}
-for _, row in ipairs(ns.PLATE_TARGET_ROWS) do
-	ns.NAME_TARGET_ROWS[#ns.NAME_TARGET_ROWS + 1] = "Target" .. row:match("^My(.-)Target$")
-end
+DEFAULTS.plateAlwaysYourTarget = true
+-- Your target's name row, the Target section's Names: YourTarget, as its
+-- plate's (its rule names kinds), the Names grid's Target row. See Effects.
+ns.NAME_TARGET_ROWS = { "YourTarget" }
 DEFAULTS.plateAlwaysGroupMembers = true
 DEFAULTS.plateAlwaysGroupMinions = true
 -- The Plate Parts grid's rows (see PlateParts): each part of the plates that
@@ -1204,7 +1246,8 @@ DEFAULTS.handleHealVision = true -- (read by ns.HealVisionHere; Quest Vision's s
 local PAGE_SWITCH = {}
 for page, keys in pairs({
 	handleQuality = { "campfireSitButton", "dragEquipCharacter", "talentLink", "talentCalc",
-		"centerPanels", "dragPanels", "chatCopyButton", "loginZoom" },
+		"centerPanels", "dragPanels", "chatCopyButton", "loginZoom",
+		"reloadButton", "reloadKeepWindows" },
 	handleHunter = { "hunterAmmoSort", "hunterQuiverFill" },
 	handleVision = { "duelPlates", "minimapVisions" }, -- Vision > General (Roll Vision has its own page: rollWindow)
 }) do
@@ -1986,6 +2029,39 @@ function ns.IsTrackingOffHere()
 	local place = PLACE_SUFFIX[ns.GetPlaceType() or ""]
 	return place ~= nil and ns.db["trackingOffIn" .. place] or false
 end
+
+-- The zone map you're on (its ID), up through the small maps inside it
+-- (caves, city districts) to the zone or dungeon map they're in, or nil.
+function ns.CurrentZoneMap()
+	if not (C_Map and C_Map.GetBestMapForUnit and C_Map.GetMapInfo and Enum and Enum.UIMapType) then return nil end
+	local ok, map = pcall(C_Map.GetBestMapForUnit, "player")
+	if not ok or type(map) ~= "number" then return nil end
+	for _ = 1, 5 do
+		local okInfo, info = pcall(C_Map.GetMapInfo, map)
+		if not okInfo or type(info) ~= "table" then return map end
+		local mapType, parent = info.mapType, info.parentMapID
+		if type(mapType) ~= "number" or mapType <= Enum.UIMapType.Dungeon
+			or type(parent) ~= "number" or parent == 0 then
+			return map
+		end
+		map = parent
+	end
+	return map
+end
+
+-- Keep open in these zones (Minimap page): you're in one of minimapKeepZones.
+local keepZonesText, keepZones
+function ns.IsMinimapKeptInZone()
+	local text = ns.db and ns.db.minimapKeepZones
+	if type(text) ~= "string" or text == "" then return false end
+	if text ~= keepZonesText then
+		keepZonesText, keepZones = text, {}
+		for id in text:gmatch("%d+") do keepZones[tonumber(id)] = true end
+	end
+	local map = ns.CurrentZoneMap()
+	return map ~= nil and keepZones[map] or false
+end
+ns.IsMinimapKeptInZone = OncePerFrame(ns.IsMinimapKeptInZone)
 
 local function IsInDisabledZone()
 	local place = ns.GetOptionPlace()
@@ -4123,6 +4199,23 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.prdPowerHoverV1 = true
 		end
+		-- And the mana bar's row (PersonalMana.lua), with the power half. Once.
+		if not ns.db.prdManaHoverV1 then
+			local function AddManaRow(groups)
+				for _, group in ipairs(groups or {}) do
+					local has = {}
+					for _, key in ipairs(group.members or {}) do has[key] = true end
+					if has.prdpower and not has.prdmana then
+						table.insert(group.members, "prdmana")
+					end
+				end
+			end
+			AddManaRow(ns.db.hoverGroups)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then AddManaRow(saved.hoverGroups) end
+			end
+			ns.db.prdManaHoverV1 = true
+		end
 		-- The minimap header got a row apart from the minimap: into saved
 		-- Mouseover groups with the minimap, as the default groups have it. Once.
 		if not ns.db.minimapHeaderHoverV1 then
@@ -4395,6 +4488,16 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.questTalkProfileV1 = true
 		end
+		-- Combat Vision is off to start with, on in the Cinema profile: it goes
+		-- as your profile has it, and saved profiles drop theirs. Once.
+		if not ns.db.combatVisionProfileV1 then
+			local base = ns.ProfileBase and ns.ProfileBase() or DEFAULTS
+			ns.db.combatVision = base.combatVision and true or false
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then saved.combatVision = nil end
+			end
+			ns.db.combatVisionProfileV1 = true
+		end
 		-- The Style pages' shared settings (bar texture, font, outline) follow
 		-- the Style hub's General page now: everyone's start on General, saved
 		-- profiles dropping theirs. Once.
@@ -4642,15 +4745,139 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				end
 			end
 		end
-		NeutralFromHostile(ns.db)
-		TargetRowsFromMyTarget(ns.db)
-		NPCNamesSplit(ns.db)
-		for _, saved in pairs(ns.db.profiles or {}) do
-			if type(saved) == "table" then
-				NeutralFromHostile(saved)
-				TargetRowsFromMyTarget(saved)
-				NPCNamesSplit(saved)
+		-- ...then those rows became one again, Your Target (YourTarget), for
+		-- plates and names alike (the Target section's two rows now), whose rule can
+		-- name the kinds (the rules' words for your target). Rows all alike:
+		-- its ticks, rule and roles are theirs. Otherwise a rule saying what
+		-- each kind's row did, its ticks as rule words. Once each.
+		local TARGET_KIND_WORDS = { "enemyplayer", "hostilenpc", "neutralplayer", "neutralnpc", "friendlyplayer",
+			"friendlynpc" }
+		local TARGET_MERGES = {
+			{ flag = "plateTargetMergedV1", prefix = "plate", world = "Cinematic", rows = ns.PLATE_TARGET_ROWS,
+				always = true }, -- (the plate rows started with Always ticked)
+			{ flag = "nameTargetMergedV1", prefix = "name", world = "Keep", rows = { "TargetEnemyPlayer", "TargetEnemyNPC",
+				"TargetNeutralPlayer", "TargetNeutralNPC", "TargetFriendlyPlayer", "TargetFriendlyNPC" } },
+		}
+		local TARGET_ROLES = { { "tankHide", "tank" }, { "healerHide", "healer" }, { "damageHide", "damage" } }
+		local function MergeTargetRows(t, merge)
+			if t[merge.flag] then
+				return
 			end
+			local prefix = merge.prefix
+			local ticks = {
+				{ prefix .. "Combat", "(combat or calm)" }, { prefix .. "CombatPvP", "((combat or calm) and flagged)" },
+				{ prefix .. "Group", "group" }, { prefix .. merge.world, "(not combat and world)" },
+				{ prefix .. "InCities", "(not combat and city)" }, { prefix .. "InPvP", "(not combat and flagged and not bg)" },
+				{ prefix .. "InBGs", "(not combat and bg)" }, { prefix .. "InInstances", "(not combat and instance)" },
+				{ prefix .. "TargetEnemy", "(not combat and enemy)" }, { prefix .. "TargetFriendly", "(not combat and friendly)" },
+			}
+			local always = prefix .. "Always"
+			local rules = type(t.frameRules) == "table" and t.frameRules or nil
+			local function Value(key, row)
+				local value = t[key .. row]
+				if value == nil then
+					return key == always and merge.always or false -- (as the rows started)
+				end
+				return value and true or false
+			end
+			local function RoleHidden(list, row)
+				return type(t[list]) == "table" and t[list][prefix .. ":" .. row] and true or false
+			end
+			-- (Nothing of the rows saved: the new row's defaults, or what an
+			-- older upgrade gave it, stand.)
+			local any = false
+			for _, row in ipairs(merge.rows) do
+				any = any or t[always .. row] ~= nil or (rules and rules[prefix .. ":" .. row]) ~= nil
+				for _, tick in ipairs(ticks) do any = any or t[tick[1] .. row] ~= nil end
+				for _, role in ipairs(TARGET_ROLES) do any = any or RoleHidden(role[1], row) end
+			end
+			if any then
+				-- Each row as a rule (its own, or its ticks'), with its roles: what it shows.
+				local texts, alike = {}, true
+				for i, row in ipairs(merge.rows) do
+					local rule = rules and rules[prefix .. ":" .. row]
+					local text
+					if type(rule) == "string" and rule:find("%S") then
+						text = "(" .. rule .. ")"
+					elseif Value(always, row) then
+						text = "always"
+					else
+						local words = {}
+						for _, tick in ipairs(ticks) do
+							if Value(tick[1], row) then words[#words + 1] = tick[2] end
+						end
+						text = #words > 0 and "(" .. table.concat(words, " or ") .. ")" or "never"
+					end
+					if text ~= "never" then
+						for _, role in ipairs(TARGET_ROLES) do
+							if RoleHidden(role[1], row) then text = text .. " and not " .. role[2] end
+						end
+					end
+					texts[i] = text
+					alike = alike and text == texts[1]
+				end
+				local first = merge.rows[1]
+				local ruleKey = prefix .. ":YourTarget"
+				if alike then
+					t[always .. "YourTarget"] = Value(always, first)
+					for _, tick in ipairs(ticks) do
+						t[tick[1] .. "YourTarget"] = Value(tick[1], first)
+					end
+					if rules and rules[prefix .. ":" .. first] then rules[ruleKey] = rules[prefix .. ":" .. first] end
+					for _, role in ipairs(TARGET_ROLES) do
+						if RoleHidden(role[1], first) then t[role[1]][ruleKey] = true end
+					end
+				else
+					-- (Kinds whose rows said the same share a piece.)
+					local pieces, kindsOf = {}, {}
+					for i, text in ipairs(texts) do
+						if text ~= "never" then
+							if not kindsOf[text] then
+								kindsOf[text] = {}
+								pieces[#pieces + 1] = text
+							end
+							table.insert(kindsOf[text], TARGET_KIND_WORDS[i])
+						end
+					end
+					for i, text in ipairs(pieces) do
+						local kinds = kindsOf[text]
+						local who = #kinds > 1 and "(" .. table.concat(kinds, " or ") .. ")" or kinds[1]
+						pieces[i] = text:find("^always") and who .. text:sub(7) or who .. " and " .. text
+					end
+					t[always .. "YourTarget"] = false
+					for _, tick in ipairs(ticks) do
+						t[tick[1] .. "YourTarget"] = false
+					end
+					if #pieces > 0 then
+						t.frameRules = rules or {}
+						t.frameRules[ruleKey] = table.concat(pieces, " or ")
+					end
+				end
+				for _, row in ipairs(merge.rows) do
+					t[always .. row] = nil
+					for _, tick in ipairs(ticks) do
+						t[tick[1] .. row] = nil
+					end
+					if type(t.frameRules) == "table" then t.frameRules[prefix .. ":" .. row] = nil end
+					for _, role in ipairs(TARGET_ROLES) do
+						if type(t[role[1]]) == "table" then t[role[1]][prefix .. ":" .. row] = nil end
+					end
+				end
+			end
+			t[merge.flag] = true
+		end
+		-- (Each grid's after the upgrades that made its rows: the old names
+		-- Target row comes straight to the new one.)
+		local function TargetUpgrades(t)
+			NeutralFromHostile(t)
+			TargetRowsFromMyTarget(t)
+			MergeTargetRows(t, TARGET_MERGES[1])
+			NPCNamesSplit(t)
+			MergeTargetRows(t, TARGET_MERGES[2])
+		end
+		TargetUpgrades(ns.db)
+		for _, saved in pairs(ns.db.profiles or {}) do
+			if type(saved) == "table" then TargetUpgrades(saved) end
 		end
 		-- LocalDefense attacks now show as a title on the screen (Show attacks
 		-- on the screen), so the channel no longer brings up chat. Once, in
@@ -5293,6 +5520,58 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		for _, saved in pairs(ns.db.profiles or {}) do
 			if type(saved) == "table" then PlateSizeSplit(saved) end
 		end
+		-- Combat Vision's pulse (a tick and a strength) is a strength going in
+		-- and one coming out, 0 for none; its icon's tick a tick for each.
+		local function PulseSplit(saved)
+			if saved.combatPulseIn == nil then
+				local strength = saved.combatPulse == false and 0 or tonumber(saved.combatPulseStrength)
+				if strength then saved.combatPulseIn, saved.combatPulseOut = strength, strength end
+			end
+			if saved.combatIconShowIn == nil and saved.combatIcon ~= nil then
+				saved.combatIconShowIn, saved.combatIconShowOut = saved.combatIcon, saved.combatIcon
+			end
+		end
+		PulseSplit(ns.db)
+		for _, saved in pairs(ns.db.profiles or {}) do
+			if type(saved) == "table" then PulseSplit(saved) end
+		end
+		-- Its words' "" (Combat and Respite) are those words now, "" none.
+		-- Once. (Saved profiles drop theirs, to follow their base.)
+		if not ns.db.combatWordsV1 then
+			for _, key in ipairs({ "combatTextIn", "combatTextOut" }) do
+				if (ns.db[key] or "") == "" then ns.db[key] = DEFAULTS[key] end
+				for _, saved in pairs(ns.db.profiles or {}) do
+					if type(saved) == "table" and saved[key] == "" then saved[key] = nil end
+				end
+			end
+			ns.db.combatWordsV1 = true
+		end
+		-- Its pulse has colors of its own now, as the text's to start with.
+		-- Once.
+		if not ns.db.combatPulseColorV1 then
+			local function PulseColor(saved)
+				for _, side in ipairs({ "In", "Out" }) do
+					for _, c in ipairs({ "R", "G", "B" }) do
+						local key = "combatPulse" .. side .. c
+						if saved[key] == nil then saved[key] = saved["combat" .. side .. c] end
+					end
+				end
+			end
+			PulseColor(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then PulseColor(saved) end
+			end
+			ns.db.combatPulseColorV1 = true
+		end
+		-- Its No text style is gone: no words going in or out in its place.
+		local function NoText(saved)
+			if saved.combatStyle ~= "none" then return end
+			saved.combatStyle, saved.combatTextIn, saved.combatTextOut = DEFAULTS.combatStyle, "", ""
+		end
+		NoText(ns.db)
+		for _, saved in pairs(ns.db.profiles or {}) do
+			if type(saved) == "table" then NoText(saved) end
+		end
 		-- Cinematic's Edit Mode layouts got new names (Layouts.lua): the
 		-- profiles on one under its old name, on the new.
 		local function LayoutRenamed(saved)
@@ -5333,6 +5612,10 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			"musicOffOnFlights", -- (the flight camera's Music switch, Cameras page)
 			"trackingHideWhenIdle", -- (now flightHideMinimap, idleHideMinimap)
 			"tintWhen", -- (now tintMoving, tintStill, tintFlight)
+			"combatPulse", "combatPulseStrength", -- (now combatPulseIn, combatPulseOut)
+			"combatIcon", -- (now combatIconShowIn, combatIconShowOut)
+			"combatWordsIn", "combatWordsOut", -- (empty words now)
+			"combatWiden", -- (now combatBarScale)
 			"plateTargetEnemyFadeIn", "plateTargetEnemyFadeOut", "plateTargetFriendlyFadeIn",
 			"plateTargetFriendlyFadeOut", -- (the target's plate fades at the UI's fade times now)
 			"enemyFadeInTime", "enemyFadeOutTime",
