@@ -87,6 +87,7 @@ CombatSoundRules.lua
 CombatVision.lua
 QuestTalkStyle.lua
 BubbleStyle.lua
+TooltipStyle.lua
 WindGuideStyles.lua
 WindGuide.lua
 Focus.lua

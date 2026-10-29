@@ -1214,6 +1214,7 @@ do
 			{ "Cast Bar Style", "Interface\\Icons\\Spell_Nature_Lightning", label = "Cast bars", section = "Game" },
 			{ "Bubble Style", "Interface\\Icons\\Ability_Warrior_RallyingCry", label = "Chat bubbles",
 				section = "Game" },
+			{ "Tooltip Style", "Interface\\Icons\\INV_Misc_Note_05", label = "Tooltips", section = "Game" },
 			{ "Letterbox Style", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", label = "Letterbox",
 				section = "Cinematic" },
 			{ "Quest Talk Style", "Interface\\Icons\\INV_Scroll_02", label = "Quest talk", section = "Cinematic" },
@@ -10472,6 +10473,8 @@ local function CreateTooltipPanel()
 
 	local note = PageIntro(content, title, L["Only in CineMode. Hold your Show hidden tooltips " ..
 		"key (set it on the Keybinds page) to see a hidden one anyway."])
+	-- Their look: the Style hub's Tooltips page (TooltipStyle.lua).
+	ns.StyleLink(content, title, "Tooltip Style", L["Opens the Style hub's Tooltips page: how tooltips look."], Tooltip)
 	local switch = PageSwitch(content, "handleTooltips", L["Enable page"],
 		L["On: CineMode hides tooltips as this page says. Off: every tooltip shows as normal."], note)
 
@@ -12622,6 +12625,9 @@ ns.OnLanguage(function()
 	end
 	if ns.CreateBubbleStylePanel then -- (BubbleStyle.lua)
 		ns.CreateBubbleStylePanel(ns.lowHealthKit)
+	end
+	if ns.CreateTooltipStylePanel then -- (TooltipStyle.lua)
+		ns.CreateTooltipStylePanel(ns.lowHealthKit)
 	end
 	CreateEffectsPanel()
 	CreateTintPanel()

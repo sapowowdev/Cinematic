@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-29", page = "Tooltip Style", title = "Tooltips style",
+		text = "Tooltips have a page of their own in the Style hub: a dark or colored background, an edge in a " ..
+		"unit's or item's color, the words' font, size and outline, names in class colors, and where the health " ..
+		"bar goes, with presets and a preview." },
 	{ date = "2026-10-29", page = "Bubble Style", title = "Chat bubbles style",
 		text = "Chat bubbles have a page of their own in the Style hub: the game's bubble, a dark one, a color " ..
 		"of your own or just the words, the tail, the font, size and outline, for speech from behind you too, " ..

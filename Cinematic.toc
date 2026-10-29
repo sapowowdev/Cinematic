@@ -95,6 +95,7 @@ CombatSoundRules.lua
 CombatVision.lua
 QuestTalkStyle.lua
 BubbleStyle.lua
+TooltipStyle.lua
 Focus.lua
 Tracking.lua
 NodeSweep.lua

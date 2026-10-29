@@ -159,6 +159,24 @@ function ns.StyleRows(kit, content, stack, changed, switchKey)
 		return rows.Swatch(name, nil, keys, tip, test)
 	end
 
+	-- A Font: row, its dropdown (ns.QUEST_ITEM_FONTS) just after the word; the
+	-- row as tall as the dropdown, so the next row clears it.
+	function rows.Font(key, tip, test)
+		local font = kit.Dropdown(content, key, function()
+			local list = {}
+			for _, info in ipairs(ns.QUEST_ITEM_FONTS or {}) do list[#list + 1] = { value = info[1], text = info[2] } end
+			return list
+		end, 200, changed)
+		if not font then return end
+		local name = stack:Add(kit.Label(content, "GameFontHighlight", ns.L["Font:"]), "label")
+		name:SetHeight(30)
+		name:SetJustifyV("MIDDLE")
+		font:SetPoint("LEFT", name, "RIGHT", 10, 0)
+		kit.GreyUnless(font, test or On)
+		kit.Tooltip(font, tip)
+		return font
+	end
+
 	function rows.Slider(key, label, minV, maxV, step, fmt, scale, tip, test)
 		local slider = stack:Add(kit.Slider(content, key, label, minV, maxV, step, fmt, scale, changed), "slider")
 		if tip then kit.Tooltip(slider, tip) end
