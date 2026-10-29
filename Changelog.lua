@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-29", page = "Unit Style", title = "Unit frames style",
+		text = "Your player, target, focus, pet and target of target frames have a page of their own in the Style " ..
+		"hub: their bars' texture and border, health and name colors, the name's font, and class icons for " ..
+		"players, with a Default tab and a tab for each frame that can have its own look." },
 	{ date = "2026-10-29", page = "Style General", title = "Style hub: General",
 		text = "One switch for every Style page, and a bar texture, font, outline and border every page " ..
 		"follows unless you give it its own, with a preview of several pages at once." },

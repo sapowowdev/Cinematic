@@ -9,6 +9,7 @@ local L = ns.L
 -- The pages that share settings, as the list shows them: name, the page to
 -- open (ns.OpenOptions), its shared settings.
 local PAGES = {
+	{ "Unit frames", "Unit Style", { "ufTexture", "ufFont", "ufOutline", "ufBorder" } },
 	{ "Personal resources", "Personal Style", { "prdTexture", "prdBorder" } },
 	{ "Tooltips", "Tooltip Style", { "tooltipBarTexture", "tooltipFont", "tooltipOutline", "tooltipEdge" } },
 	{ "Cast bars", "Cast Bar Style", { "plateCastFill", "plateCastFont", "plateCastOutline", "plateCastBorder" } },

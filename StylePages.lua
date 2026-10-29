@@ -547,11 +547,17 @@ function ns.ReportPlateTextures(which)
 end
 
 -- The rows for a page: kit (Options.lua's ns.lowHealthKit), its content and
--- stack, changed() after each change, and its switch's key.
-function ns.StyleRows(kit, content, stack, changed, switchKey)
+-- stack, changed() after each change, and its switch's key. fieldOf: for a
+-- page with tabs (the Unit frames page), a setting's key -> the field its
+-- controls edit now (Options.lua's KeyGet/KeyPut); the key itself if not.
+function ns.StyleRows(kit, content, stack, changed, switchKey, fieldOf)
 	local rows = {}
 	local function On(db) return ns.StyleOn(switchKey, db) end
 	rows.On = On
+	local K = fieldOf or function(key) return key end
+	local function Get(key) return ns.StyleKeyGet(K(key)) end
+	local function Put(key, value) ns.StyleKeyPut(K(key), value) end
+	rows.Get, rows.Put = Get, Put
 
 	-- A row of choices for key, after its name: { value, text, tip } each.
 	-- Gives the last, to put a color swatch after.
@@ -560,7 +566,7 @@ function ns.StyleRows(kit, content, stack, changed, switchKey)
 		name:SetWidth(150)
 		local last
 		for _, info in ipairs(list) do
-			local choice = kit.Choice(content, key, info[1], info[2], info[3])
+			local choice = kit.Choice(content, K(key), info[1], info[2], info[3])
 			choice:HookScript("OnClick", changed)
 			if last then
 				choice:SetPoint("LEFT", last.Text or last.text, "RIGHT", 16, 0)
@@ -589,14 +595,14 @@ function ns.StyleRows(kit, content, stack, changed, switchKey)
 		swatch:SetScript("OnEnable", function(self) self:SetAlpha(1) end)
 		swatch:SetScript("OnDisable", function(self) self:SetAlpha(0.4) end)
 		swatch.Refresh = function()
-			local db = ns.GetDB()
-			color:SetColorTexture(db[keys[1]], db[keys[2]], db[keys[3]], 1)
+			color:SetColorTexture(Get(keys[1]) or 0, Get(keys[2]) or 0, Get(keys[3]) or 0, 1)
 		end
 		swatch:SetScript("OnClick", function()
-			local db = ns.GetDB()
-			kit.OpenColorPicker(db[keys[1]], db[keys[2]], db[keys[3]], function(r, g, b)
-				db[keys[1]], db[keys[2]], db[keys[3]] = r, g, b
-				if key then db[key] = "custom" end
+			kit.OpenColorPicker(Get(keys[1]) or 0, Get(keys[2]) or 0, Get(keys[3]) or 0, function(r, g, b)
+				Put(keys[1], r)
+				Put(keys[2], g)
+				Put(keys[3], b)
+				if key then Put(key, "custom") end
 				changed()
 				kit.Refresh()
 			end)
@@ -623,7 +629,7 @@ function ns.StyleRows(kit, content, stack, changed, switchKey)
 		return tostring(value)
 	end
 	function rows.Font(key, tip, test)
-		local font = kit.Dropdown(content, key, function()
+		local font = kit.Dropdown(content, K(key), function()
 			local list = {}
 			local general = ns.GeneralStyleValue(key)
 			if general ~= nil then
@@ -647,7 +653,7 @@ function ns.StyleRows(kit, content, stack, changed, switchKey)
 	-- strips' color ({ r, g, b }).
 	-- game: the first entry's name for the part's own ("The game's").
 	function rows.Texture(label, key, tip, test, tint, game)
-		local dropdown = kit.Dropdown(content, key, function()
+		local dropdown = kit.Dropdown(content, K(key), function()
 			local list = ns.StyleTextureChoices(game, key)
 			for _, choice in ipairs(list) do choice.tint = tint end
 			return list
@@ -665,8 +671,7 @@ function ns.StyleRows(kit, content, stack, changed, switchKey)
 		local refresh = dropdown.Refresh
 		dropdown.Refresh = function(self)
 			refresh(self)
-			local db = ns.GetDB()
-			local value = db and db[key]
+			local value = ns.GetDB() and Get(key)
 			if ns.IsGeneralStyle(value) then value = ns.GeneralStyleValue(key) end
 			local shown = value ~= nil and ns.SetStyleTexture(strip, value) or false
 			strip:SetShown(shown)
@@ -683,7 +688,7 @@ function ns.StyleRows(kit, content, stack, changed, switchKey)
 	-- A dropdown row: its name, then the dropdown (list: a function giving
 	-- { value, text } each, read as it opens).
 	local function DropdownRow(label, key, list, tip, test)
-		local dropdown = kit.Dropdown(content, key, list, 200, changed)
+		local dropdown = kit.Dropdown(content, K(key), list, 200, changed)
 		if not dropdown then return end
 		local name = stack:Add(kit.Label(content, "GameFontHighlight", label), "label")
 		name:SetSize(150, 30)
@@ -736,9 +741,9 @@ function ns.StyleRows(kit, content, stack, changed, switchKey)
 			return list
 		end, tip, test)
 		-- (Custom's: greyed unless it's picked.)
-		local function Custom(db) return (test or On)(db) and db[key] == "custom" end
+		local function Custom(db) return (test or On)(db) and Get(key) == "custom" end
 		local line = rows.Boxes()
-		line:Box(ns.L["Thickness"], key .. "Size", 1, 10, 1, "%d", 1, ns.L["How thick the border is, in pixels."],
+		line:Box(ns.L["Thickness"], K(key .. "Size"), 1, 10, 1, "%d", 1, ns.L["How thick the border is, in pixels."],
 			Custom, "px")
 		local color = kit.Label(content, "GameFontHighlight", ns.L["Color"])
 		color:SetPoint("LEFT", line, "RIGHT", 6, 0)
@@ -761,7 +766,7 @@ function ns.StyleRows(kit, content, stack, changed, switchKey)
 			if unit == "" then unit = nil end
 		end
 		local line = rows.Boxes()
-		line:Box(label, key, minV, maxV, step, shown, scale, tip, test, unit, width)
+		line:Box(label, K(key), minV, maxV, step, shown, scale, tip, test, unit, width)
 		return line
 	end
 
@@ -806,8 +811,8 @@ function ns.StyleRows(kit, content, stack, changed, switchKey)
 	end
 
 	function rows.Check(key, label, tip, test)
-		local check = stack:Add(kit.Check(content, key, label, tip, function(value)
-			ns.GetDB()[key] = value
+		local check = stack:Add(kit.Check(content, K(key), label, tip, function(value)
+			Put(key, value)
 			changed()
 			kit.Refresh()
 		end), "check")

@@ -98,6 +98,7 @@ BubbleStyle.lua
 TooltipStyle.lua
 PersonalStyle.lua
 PlateCastStyle.lua
+UnitStyle.lua
 GeneralStyle.lua
 Focus.lua
 Tracking.lua

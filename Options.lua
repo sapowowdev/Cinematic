@@ -31,6 +31,19 @@ local function SectionOf(parent)
 	return frame and sectionNow[frame] or false
 end
 -- (section: its section when it's moved from elsewhere, else the one it's in.)
+-- A control's setting: a db key, or a field ({ get = fn, set = fn(value) }:
+-- a setting that's one key or another, as Heal Vision's and the Unit frames
+-- Style page's tabs have it).
+local function KeyGet(key)
+	if type(key) == "table" then return key.get() end
+	local db = ns.GetDB()
+	return db and db[key]
+end
+local function KeyPut(key, value)
+	if type(key) == "table" then key.set(value) else ns.GetDB()[key] = value end
+end
+ns.StyleKeyGet, ns.StyleKeyPut = KeyGet, KeyPut
+
 local function RecordKey(parent, key, section)
 	if type(key) == "string" then
 		pageKeys[parent] = pageKeys[parent] or {}
@@ -223,9 +236,9 @@ local function Check(parent, key, label, tip, onChange)
 
 	cb:SetScript("OnClick", function(self)
 		local value = self:GetChecked() and true or false
-		if onChange then onChange(value) else ns.GetDB()[key] = value end
+		if onChange then onChange(value) else KeyPut(key, value) end
 	end)
-	cb.Refresh = function(self) self:SetChecked(ns.GetDB()[key]) end
+	cb.Refresh = function(self) self:SetChecked(KeyGet(key)) end
 	controls[#controls + 1] = cb
 	RecordKey(parent, key)
 	return cb
@@ -472,10 +485,10 @@ end
 -- A checkbox that acts as one choice in a group sharing a db key.
 local function Choice(parent, key, value, label, tip)
 	local cb = Check(parent, key, label, tip, function()
-		ns.GetDB()[key] = value
+		KeyPut(key, value)
 		Refresh()
 	end)
-	cb.Refresh = function(self) self:SetChecked(ns.GetDB()[key] == value) end
+	cb.Refresh = function(self) self:SetChecked(KeyGet(key) == value) end
 	return cb
 end
 
@@ -495,11 +508,10 @@ local function Dropdown(parent, key, choices, width, onChange)
 			local radio = rootDescription:CreateRadio(choice.text,
 				-- SetupMenu builds the menu right away, before saved settings load.
 				function()
-					local db = ns.GetDB()
-					return db ~= nil and db[key] == choice.value
+					return ns.GetDB() ~= nil and KeyGet(key) == choice.value
 				end,
 				function()
-					ns.GetDB()[key] = choice.value
+					KeyPut(key, choice.value)
 					if onChange then onChange(choice.value) end
 					Refresh()
 				end)
@@ -1313,6 +1325,8 @@ do
 			{ "Bubble Style", "Interface\\Icons\\Ability_Warrior_RallyingCry", label = "Chat bubbles",
 				section = "Game" },
 			{ "Tooltip Style", "Interface\\Icons\\INV_Misc_Note_05", label = "Tooltips", section = "Game" },
+			{ "Unit Style", "Interface\\Icons\\INV_Misc_Head_Human_01", label = "Unit frames",
+				section = "Game" },
 			{ "Personal Style", "Interface\\Icons\\Spell_Holy_SealOfVengeance", label = "Personal resources",
 				section = "Game" },
 			{ "Letterbox Style", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", label = "Letterbox",
@@ -5231,6 +5245,9 @@ local function CreatePortraitsPanel()
 
 	local title = Label(content, "GameFontNormalLarge", L["Unit Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
+	-- Their look: the Style hub's Unit frames page (UnitStyle.lua).
+	ns.StyleLink(content, title, "Unit Style", L["Opens the Style hub's Unit frames page: how the frames look."],
+		Tooltip)
 
 	-- (With the grids the page's own ? says what they do: no header of their
 	-- own under the title, which would only say Unit frame parts again.)
@@ -12627,7 +12644,7 @@ ns.lowHealthKit = { CreateScrollPage = CreateScrollPage, Label = Label, PageShow
 	PageSwitch = PageSwitch, AddControl = function(control) controls[#controls + 1] = control end,
 	Header = Header, CreateKeybindButton = CreateKeybindButton, RefreshKeybinds = RefreshKeybinds,
 	StopListening = StopListening, IconPicker = IconPicker, FitContentHeight = FitContentHeight,
-	Choice = Choice, OpenColorPicker = OpenColorPicker, BoxLine = BoxLine }
+	Choice = Choice, OpenColorPicker = OpenColorPicker, BoxLine = BoxLine, RecordKey = RecordKey }
 
 -- The pages are built once the language is known (Locales.lua): first the
 -- text this file made as it ran is translated again.
@@ -12731,6 +12748,9 @@ ns.OnLanguage(function()
 	end
 	if ns.CreatePersonalStylePanel then -- (PersonalStyle.lua)
 		ns.CreatePersonalStylePanel(ns.lowHealthKit)
+	end
+	if ns.CreateUnitStylePanel then -- (UnitStyle.lua)
+		ns.CreateUnitStylePanel(ns.lowHealthKit)
 	end
 	if ns.CreateGeneralStylePanel then -- (GeneralStyle.lua)
 		ns.CreateGeneralStylePanel(ns.lowHealthKit)
