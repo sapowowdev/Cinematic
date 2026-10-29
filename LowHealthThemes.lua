@@ -223,6 +223,52 @@ for _, theme in ipairs(ns.LOW_HEALTH_THEMES) do
 	ns.LOW_HEALTH_THEME[theme.key] = theme
 end
 
+-- Game art (the menu's Game art section, not Auto's): the game's own
+-- low-health edge in place of ours, greyed and tinted by body and glow, with
+-- a wave of it creeping in on each beat. One for each colour. Not in the
+-- gallery: the art is the game's. No haze, so it's the game's look.
+local function Game(key, name, body, glow, shadow, flash)
+	return { key = key, name = name, game = true, body = body, glow = glow, glowAlpha = 0.6, shadow = shadow,
+		flash = flash }
+end
+ns.LOW_HEALTH_GAME_THEMES = {
+	Game("game_low", "Low health", BLOOD, { 0.6, 0.05, 0.05 }, DARK_RED, { 1, 0, 0 }),
+	Game("game_fire", "Fire", { 1, 0.4, 0.08 }, { 1, 0.5, 0.1 }, { 0.3, 0.08, 0 }, { 1, 0.5, 0.1 }),
+	Game("game_gold", "Gold", { 1, 0.8, 0.35 }, { 1, 0.85, 0.45 }, { 0.25, 0.18, 0.05 }, { 1, 0.9, 0.5 }),
+	Game("game_light", "Light", { 1, 0.95, 0.8 }, { 1, 1, 0.9 }, { 0.2, 0.2, 0.22 }, { 1, 1, 0.9 }),
+	Game("game_nature", "Nature", { 0.4, 0.8, 0.3 }, { 0.55, 0.9, 0.4 }, { 0.05, 0.12, 0.03 }, { 0.6, 1, 0.4 }),
+	Game("game_fel", "Fel", { 0.35, 0.9, 0.15 }, { 0.45, 1, 0.2 }, { 0.05, 0.15, 0.02 }, { 0.5, 1, 0.2 }),
+	Game("game_jade", "Jade", { 0.3, 0.9, 0.65 }, { 0.45, 1, 0.75 }, { 0.03, 0.12, 0.08 }, { 0.5, 1, 0.8 }),
+	Game("game_frost", "Frost", { 0.45, 0.75, 1 }, { 0.6, 0.85, 1 }, { 0, 0.06, 0.15 }, { 0.6, 0.85, 1 }),
+	Game("game_storm", "Storm", { 0.3, 0.5, 1 }, { 0.5, 0.7, 1 }, { 0.03, 0.06, 0.12 }, { 0.6, 0.8, 1 }),
+	Game("game_arcane", "Arcane", { 0.7, 0.45, 1 }, { 0.8, 0.6, 1 }, { 0.12, 0.03, 0.2 }, { 0.8, 0.5, 1 }),
+	Game("game_shadow", "Shadow", { 0.5, 0.2, 0.8 }, { 0.6, 0.3, 1 }, { 0.1, 0, 0.18 }, { 0.6, 0.2, 1 }),
+}
+for _, theme in ipairs(ns.LOW_HEALTH_GAME_THEMES) do
+	ns.LOW_HEALTH_THEME[theme.key] = theme
+end
+
+-- Auto, Game art: as Auto below, each spec a colour.
+ns.LOW_HEALTH_GAME_CLASS_THEMES = {
+	WARRIOR = { "game_low", "game_fire", "game_light", none = "game_low" },
+	PALADIN = { "game_light", "game_gold", "game_gold" },
+	HUNTER = { "game_nature", "game_gold", "game_fire" },
+	ROGUE = { "game_fel", "game_low", "game_shadow" },
+	PRIEST = { "game_light", "game_gold", "game_shadow" },
+	SHAMAN = { "game_storm", "game_storm", "game_frost" },
+	MAGE = { "game_arcane", "game_fire", "game_frost" },
+	WARLOCK = { "game_shadow", "game_fel", "game_fire" },
+	DRUID = { "game_arcane", "game_low", "game_nature" },
+	DEATHKNIGHT = { "game_low", "game_frost", "game_nature" },
+	MONK = { "game_gold", "game_jade", "game_jade" },
+	DEMONHUNTER = { "game_fel", "game_shadow", "game_shadow" },
+	EVOKER = { "game_fire", "game_nature", "game_gold" },
+}
+ns.LOW_HEALTH_GAME_SPEC_THEMES = {
+	DRUID = { "game_arcane", "game_low", "game_fire", "game_nature" },
+	ROGUE = { "game_fel", "game_low", "game_shadow" },
+}
+
 -- Auto: by class, then the talent tree with the most points (in the game's
 -- order of trees). No points yet (under level 10): the class's own, first.
 ns.LOW_HEALTH_CLASS_THEMES = {

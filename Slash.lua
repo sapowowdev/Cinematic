@@ -144,6 +144,8 @@ local function PrintDebugHelp()
 	print("  /cine debug flybys - print each fly-by's start and end, random ones too (again to stop)")
 	print("  /cine debug questtimer - say whether a quest timer is running and how its box fades")
 	print("  /cine debug vitals - Vitals Vision now: your health as read, how far in, the theme's art (run it in a fight)")
+	print("  /cine debug gameedge [number|back|blend|off] - step through the game's full-screen effect textures over the whole screen, one each time, to pick edges for Vitals Vision's Game art")
+	print("  /cine debug gameart [off] - test Vitals Vision with the game's own low-health edge in place of the theme's art, in its colors; off for the theme's again")
 	print("  /cine debug death - print what the death camera does on real deaths (again to stop)")
 	print("  /cine debug place - city, inn, dungeon detection")
 	print("  /cine debug group [party|raid|off] - act as if in a party or raid, for the group options")
@@ -466,6 +468,10 @@ local function HandleSlash(msg)
 		ns.ReportQuestTimer()
 	elseif cmd == "debug" and arg == "vitals" then
 		ns.ReportVitals()
+	elseif cmd == "debug" and (arg == "gameedge" or arg:match("^gameedge ")) then
+		ns.ScoutGameEdges(arg:match("^gameedge%s*(.-)$"))
+	elseif cmd == "debug" and (arg == "gameart" or arg:match("^gameart ")) then
+		ns.LowHealthGameArt(arg:match("^gameart%s*(.-)$"))
 	elseif cmd == "debug" and arg == "death" then
 		ns.deathDebug = not ns.deathDebug
 		ns.Print("death camera log on real deaths: " .. OnOff(ns.deathDebug) .. " (until you /reload)")

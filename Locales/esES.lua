@@ -2344,6 +2344,9 @@ L["Tick Show speech from behind you on the Chat page and says and yells from peo
 -- LowHealth.lua and LowHealthThemes.lua: Vitals Vision
 L["Vitals Vision"] = "Visión vital"
 L["Vitals Vision test done."] = "Prueba de la Visión vital terminada."
+L["Game art"] = "Arte del juego"
+L["Low health"] = "Salud baja"
+L["Jade"] = "Jade"
 L["Toggle Vitals Vision"] = "Activar/desactivar la Visión vital"
 L["Turns Vitals Vision on or off (its Enable page switch)."] = "Activa o desactiva la Visión vital (su interruptor Activar página)."
 L["Your health at a glance, without the portrait: as it drops, the screen's edges close in, with your theme's art soaking in from them (blood, smoke, a glow in its color), a heartbeat that quickens as you weaken and a flash on big hits. Auto picks a theme for your class and spec. The death screen takes over if you die."] = "Tu salud de un vistazo, sin mirar el retrato: al bajar, los bordes de la pantalla se cierran, con el arte de tu tema empapándolos (sangre, humo, un resplandor de su color), un latido que se acelera al debilitarte y un destello con los golpes fuertes. Automático elige un tema para tu clase y especialización. Si mueres, toma el relevo la pantalla de muerte."

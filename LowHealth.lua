@@ -60,6 +60,12 @@ local LIFT_EASE = 0.8        -- how quickly the lift speeds up and slows down (a
 local TEST_HOLD = 2          -- seconds the test stays at its last share before handing back
 local TEST_HIT_EVERY = 0.7   -- seconds between the test's hits
 local ART = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\LowHealth\\"
+-- Game art (the Game art themes, LowHealthThemes.lua, or over any theme with
+-- /cine debug gameart): the game's own low-health edge in place of our art,
+-- greyed and tinted by the theme, and a wave of it creeping in on each beat.
+local GAME_EDGE = "Interface\\FullScreenTextures\\LowHealth"
+local RIPPLE_SPAN = 0.25           -- how far past the art each wave starts (screens)
+local RIPPLE_ALPHA = 0.7
 local SWAY = 0.012                 -- how far a sloshing theme's art rocks (share of the height, times its sway)
 -- Sparks (a theme's sparks, LowHealthThemes.lua): the few sprites left, each
 -- its own texture: lightning flickering in by the top edge, stars twinkling,
@@ -77,11 +83,14 @@ local GRADE_GREY = { 0.6, 0.63, 0.68 }
 local GRADE_TINT = 0.3
 
 local frame, edges, body, glow, grade, driver
+local ripple -- (game art only)
+local gameArt -- the game's art shown, not ours
+local gameArtTest -- (/cine debug gameart's, over any theme)
 local sparks = {} -- (made once, reused)
 local reachNow = 0 -- (the shadow's reach as last shown: sparks start about there)
 local artScale = ART_OUT -- (the art's size now)
 local theme, shownTheme -- (the theme wanted, and the one the textures are set up for)
-local autoTheme -- (Auto's pick, until your talents change)
+local autoTheme, autoGameTheme -- (Auto's picks, ours and Game art's, until your talents change)
 local level, flash, beat = 0, 0, 0 -- shown (0-1), the hit flash (0-1), heartbeat phase
 local liftSpeed = 0 -- (lifting now: a share of all the way a second)
 local lastHealth -- (share, for spotting big hits)
@@ -159,15 +168,16 @@ local function TreeWithMostPoints()
 	return best
 end
 
-local function AutoTheme()
+-- (byClass, bySpec: our themes' lists, or Game art's.)
+local function AutoTheme(byClass, bySpec, fallback)
 	local _, class = UnitClass("player")
-	local list = ns.LOW_HEALTH_CLASS_THEMES[class]
-	if not list then return "blood" end
+	local list = byClass[class]
+	if not list then return fallback end
 	local tree
 	if GetSpecialization then
 		local ok, spec = pcall(GetSpecialization)
 		if ok and type(spec) == "number" and spec > 0 then
-			list = ns.LOW_HEALTH_SPEC_THEMES[class] or list
+			list = bySpec[class] or list
 			tree = spec
 		end
 	else
@@ -177,13 +187,22 @@ local function AutoTheme()
 end
 
 function ns.LowHealthAutoTheme()
-	autoTheme = autoTheme or AutoTheme()
+	autoTheme = autoTheme or AutoTheme(ns.LOW_HEALTH_CLASS_THEMES, ns.LOW_HEALTH_SPEC_THEMES, "blood")
 	return autoTheme
+end
+
+-- Auto, Game art: the game's edge in your class and spec's colour.
+function ns.LowHealthAutoGameTheme()
+	autoGameTheme = autoGameTheme
+		or AutoTheme(ns.LOW_HEALTH_GAME_CLASS_THEMES, ns.LOW_HEALTH_GAME_SPEC_THEMES, "game_low")
+	return autoGameTheme
 end
 
 local function WantedTheme()
 	local key = db.lowHealthTheme
-	if key == "auto" or not ns.LOW_HEALTH_THEME[key] then
+	if key == "autogame" then
+		key = ns.LowHealthAutoGameTheme()
+	elseif key == "auto" or not ns.LOW_HEALTH_THEME[key] then
 		key = ns.LowHealthAutoTheme()
 	end
 	return ns.LOW_HEALTH_THEME[key] or ns.LOW_HEALTH_THEMES[1]
@@ -201,6 +220,10 @@ local function Create()
 	glow = frame:CreateTexture(nil, "BORDER", nil, 1)
 	glow:SetPoint("CENTER")
 	glow:SetBlendMode("ADD")
+	ripple = frame:CreateTexture(nil, "BORDER", nil, 1)
+	ripple:SetPoint("CENTER")
+	ripple:SetBlendMode("ADD")
+	ripple:Hide()
 	edges = ns.CreateVignette(frame)
 	-- (The shadow under everything: over the art, it hid it.)
 	for _, piece in pairs(edges) do
@@ -241,6 +264,21 @@ local function UseTheme(wanted)
 	if wanted.edge and wanted.glow then
 		glow:SetTexture(ART .. wanted.edge .. "Glow")
 		glow:SetBlendMode("ADD")
+	end
+	body:SetDesaturated(false)
+	body:SetBlendMode("BLEND")
+	glow:SetDesaturated(false)
+	ripple:Hide()
+	-- (A Game art theme's, or the debug test's over any.)
+	gameArt = gameArtTest or wanted.game or false
+	if gameArt then
+		for _, tex in ipairs({ body, glow, ripple }) do
+			tex:SetTexture(GAME_EDGE)
+			tex:SetDesaturated(true) -- (it's red: grey, then the theme's colour)
+		end
+		-- (Light on black, as the game draws it: as paint, its black middle
+		-- covered the screen.)
+		body:SetBlendMode("ADD")
 	end
 end
 
@@ -377,16 +415,18 @@ local function Apply(k, fade, heart, secret)
 			body:SetPoint("CENTER", sx, sy)
 			glow:SetPoint("CENTER", sx, sy)
 		end
-		local color = shownTheme.body
-		if color and shownTheme.edge then
+		-- (Game art: the theme's art colour or its glow's, for both.)
+		local edged = shownTheme.edge or gameArt
+		local color = shownTheme.body or gameArt and shownTheme.glow
+		if color and edged then
 			body:SetSize(width * (artScale + pad), height * (artScale + pad))
 			body:SetVertexColor(color[1], color[2], color[3], artAlpha)
 			body:Show()
 		else
 			body:Hide()
 		end
-		color = shownTheme.glow
-		if color and shownTheme.edge then
+		color = shownTheme.glow or gameArt and shownTheme.body
+		if color and edged then
 			glow:SetSize(width * (artScale + pad), height * (artScale + pad))
 			-- (brighter on a beat and in a flash)
 			local a = artAlpha * (shownTheme.glowAlpha or 1) * (0.8 + 0.3 * heart + 0.4 * flash)
@@ -395,10 +435,20 @@ local function Apply(k, fade, heart, secret)
 		else
 			glow:Hide()
 		end
+		if gameArt and color then
+			-- A wave creeping in from past the edges on each beat (each second
+			-- with no heartbeat), brightest halfway.
+			local p = db.lowHealthPulse and beat or GetTime() % 1
+			local scale = artScale + pad + RIPPLE_SPAN * (1 - p)
+			ripple:SetSize(width * scale, height * scale)
+			ripple:SetVertexColor(color[1], color[2], color[3], artAlpha * RIPPLE_ALPHA * math.sin(math.pi * p))
+			ripple:Show()
+		end
 		AnimateSparks(GetTime(), width, height, db.lowHealthBloodAlpha * math.min(1, c * 2) * fade)
 	else
 		body:Hide()
 		glow:Hide()
+		ripple:Hide()
 		ClearSparks()
 	end
 	return size
@@ -690,7 +740,7 @@ events:SetScript("OnEvent", function(_, event, _, action, _, amount)
 			pcall(events.RegisterEvent, events, other)
 		end
 	elseif isTalentEvent[event] then
-		autoTheme = nil -- (picked again)
+		autoTheme, autoGameTheme = nil, nil -- (picked again)
 	end
 	Wake()
 end)
@@ -736,12 +786,113 @@ function ns.ReportVitals()
 		Show(max), Show(HealthShare()), Show(SecretCurve() and true), level, artScale))
 	ns.Print(("  theme %s (edge %s), frame shown %s, alpha %s, driver %s"):format(Show(shownTheme and shownTheme.key),
 		Show(shownTheme and shownTheme.edge), Show(frame:IsShown()), Show(frame:GetAlpha()), Show(driver:IsShown())))
-	for name, tex in pairs({ art = body, glow = glow }) do
-		local _, _, _, a = tex:GetVertexColor()
+	ns.Print("  game art: " .. Show(gameArt))
+	for name, tex in pairs({ art = body, glow = glow, wave = ripple }) do
+		local r, g, b, a = tex:GetVertexColor()
 		local width, height = tex:GetSize()
-		ns.Print(("  %s: shown %s, texture %s, size %s x %s, alpha %s"):format(name, Show(tex:IsShown()),
-			Show(tex:GetTexture()), Show(width), Show(height), Show(a)))
+		ns.Print(("  %s: shown %s, texture %s, size %s x %s, color %s %s %s, alpha %s, %s, greyed %s"):format(name,
+			Show(tex:IsShown()), Show(tex:GetTexture()), Show(width), Show(height), Show(r), Show(g), Show(b), Show(a),
+			Show(tex:GetBlendMode()), Show(tex.IsDesaturated and tex:IsDesaturated())))
 	end
+end
+
+-- /cine debug gameart [off]: the game's edge (GAME_EDGE) in place of the
+-- theme's art, in its colours, then the page's test. A test to compare by
+-- eye; until /reload or off.
+function ns.LowHealthGameArt(arg)
+	if not frame then ns.Print("Vitals Vision: not set up yet") return end
+	gameArtTest = arg ~= "off" or nil
+	UseTheme(WantedTheme())
+	if gameArtTest then
+		ns.Print("Vitals Vision: the game's low-health edge in the theme's colours. Testing (off: /cine debug gameart off)")
+		ns.TestLowHealth()
+	else
+		ns.Print("Vitals Vision: the theme's own art again")
+	end
+	Wake()
+end
+
+-- /cine debug gameedge [number|back|blend|off]: steps through the game's
+-- full-screen textures (screen effects, by file number: their names don't
+-- say what they look like), one at a time over the whole screen, to pick
+-- edges for Game art. As light (most are light on black) or, with blend, as
+-- paint.
+local EDGE_SCOUT = {
+	{ 131140, "lowhealth" }, { 131141, "outofcontrol" }, { 965906, "penandinkoverlay" },
+	{ 965907, "penandinkoverlay_512" }, { 985799, "outlinemagicscroll" }, { 1273707, "dh_demonvisionscroll" },
+	{ 1305137, "dh_demonvisionfire" }, { 1305138, "dh_demonvisionfiremask" }, { 1610628, "vignette_t" },
+	{ 1802909, "8fx_mask_fullscreen_01" }, { 1803988, "mask_fullscreen_01" },
+	{ 1807126, "mask_fullscreen_01_scroll" }, { 2140999, "fullscreeneffect_blend_2140999" },
+	{ 2144748, "mask_fullscreen_02" }, { 2199089, "fullscreeneffect_2199089" },
+	{ 2199924, "fullscreeneffect_blend_2199924" }, { 2199926, "fullscreeneffect_blend_2199926" },
+	{ 2199927, "fullscreeneffect_blend_2199927" }, { 2202396, "mask_fullscreen_03" },
+	{ 2202483, "fullscreeneffect_blend_2202483" }, { 2202649, "fullscreeneffect_blend_2202649" },
+	{ 2395778, "fullscreeneffect_2395778" }, { 2396780, "fullscreeneffect_blend_2396780" },
+	{ 2510375, "mask_fullscreen_01_scroll_a" }, { 2530675, "mask_fullscreen_01_scroll_a2" },
+	{ 2735672, "fullscreeneffect_2735672" }, { 3509149, "9fx_soul_camera_vignette_3509149" },
+	{ 3509152, "9fx_soul_camera_vignette_3509152" }, { 3522951, "fullscreeneffect_blend_3522951" },
+	{ 3522953, "fullscreeneffect_3522953" }, { 3522955, "fullscreeneffect_blend_3522955" },
+	{ 3728762, "9fx_soul_camera_vignette_3728762" }, { 3728763, "9fx_soul_camera_vignette_3728763" },
+	{ 3728764, "9fx_soul_camera_vignette_3728764" }, { 3728765, "9fx_soul_camera_vignette_3728765" },
+	{ 3728766, "9fx_soul_camera_vignette_3728766" }, { 4237661, "fullscreeneffect_blend_4237661" },
+	{ 4237662, "fullscreeneffect_4237662" }, { 4325579, "fullscreeneffect_blend_4325579" },
+	{ 4383351, "fullscreeneffect_blend_4383351" }, { 4417751, "fullscreeneffect_blend_4417751" },
+	{ 4541185, "fullscreeneffect_4541185" }, { 4541187, "fullscreeneffect_blend_4541187" },
+	{ 4541189, "fullscreeneffect_blend_4541189" }, { 4630641, "fullscreeneffect_blend_4630641" },
+	{ 4741748, "fullscreeneffect_4741748" }, { 4741750, "fullscreeneffect_blend_4741750" },
+	{ 4741753, "fullscreeneffect_blend_4741753" }, { 4876486, "fullscreeneffect_4876486" },
+	{ 5198840, "fullscreeneffect_blend_5198840" }, { 5201310, "fullscreeneffect_blend_5201310" },
+	{ 5332772, "fullscreeneffect_blend_5332772" }, { 5332774, "fullscreeneffect_blend_5332774" },
+	{ 5371262, "fullscreeneffect_blend_5371262" },
+	{ 5556140, "7fx_soulengine_soulwrap_camera_vignette_5556140" },
+	{ 5636771, "fullscreeneffect_blend_5636771" }, { 5636772, "fullscreeneffect_5636772" },
+	{ 5680179, "fullscreeneffect_5680179" }, { 5726057, "fullscreeneffect_5726057" },
+	{ 5737247, "fullscreeneffect_blend_5737247" }, { 5737249, "fullscreeneffect_5737249" },
+	{ 5737251, "fullscreeneffect_blend_5737251" }, { 5857660, "fullscreeneffect_blend_5857660" },
+	{ 5857669, "fullscreeneffect_5857669" }, { 5857689, "fullscreeneffect_blend_5857689" },
+	{ 6214875, "fullscreeneffect_blend_6214875" }, { 6214876, "fullscreeneffect_blend_6214876" },
+	{ 6214877, "fullscreeneffect_blend_6214877" }, { 6225363, "fullscreeneffect_blend_6225363" },
+	{ 6225364, "fullscreeneffect_6225364" }, { 6225365, "fullscreeneffect_blend_6225365" },
+	{ 6225366, "fullscreeneffect_blend_6225366" }, { 6907568, "fullscreeneffect_blend_6907568" },
+	{ 6907571, "fullscreeneffect_blend_6907571" }, { 6996935, "fullscreeneffect_blend_6996935" },
+	{ 6996936, "fullscreeneffect_6996936" }, { 7339122, "fullscreeneffect_blend_7339122" },
+	{ 7352941, "fullscreeneffect_blend_7352941" }, { 7713391, "fullscreeneffect_blend_7713391" },
+	{ 7713861, "fullscreeneffect_blend_7713861" },
+}
+local scout, scoutAt, scoutBlend = nil, 0, false
+function ns.ScoutGameEdges(arg)
+	if arg == "off" then
+		if scout then scout:Hide() end
+		ns.Print("game edges: off")
+		return
+	end
+	if not scout then
+		scout = CreateFrame("Frame", nil, UIParent)
+		scout:SetAllPoints(UIParent)
+		scout:SetFrameStrata("BACKGROUND")
+		scout:EnableMouse(false)
+		scout.tex = scout:CreateTexture(nil, "ARTWORK")
+		scout.tex:SetAllPoints()
+	end
+	local number = tonumber(arg)
+	if arg == "blend" then
+		scoutBlend = not scoutBlend
+	elseif arg == "back" then
+		scoutAt = scoutAt - 1
+	elseif number then
+		scoutAt = number
+	else
+		scoutAt = scoutAt + 1
+	end
+	scoutAt = (scoutAt - 1) % #EDGE_SCOUT + 1
+	local entry = EDGE_SCOUT[scoutAt]
+	scout.tex:SetTexture(entry[1])
+	scout.tex:SetBlendMode(scoutBlend and "BLEND" or "ADD")
+	scout:Show()
+	local id = scout.tex.GetTextureFileID and scout.tex:GetTextureFileID()
+	ns.Print(("game edge %d of %d: %s (%d), %s%s"):format(scoutAt, #EDGE_SCOUT, entry[2], entry[1],
+		scoutBlend and "as paint" or "as light", (id or 0) > 0 and "" or ", not loaded"))
+	ns.Print("  next: /cine debug gameedge; also back, a number, blend (light or paint), off")
 end
 
 function ns.SetVitalsSecretAlpha(frame)
@@ -809,10 +960,16 @@ function ns.CreateVitalsVisionPanel(kit)
 	local function AutoText()
 		return L["Auto"] .. ": " .. ThemeName(ns.LowHealthAutoTheme())
 	end
+	local function AutoGameText() -- (Game art's Auto, by class and spec too)
+		return L["Game art"] .. ", " .. L["Auto"] .. ": " .. ThemeName(ns.LowHealthAutoGameTheme())
+	end
 	local function Choices() -- (flat: the button that steps through them)
-		local list = { { value = "auto", text = AutoText() } }
+		local list = { { value = "auto", text = AutoText() }, { value = "autogame", text = AutoGameText() } }
 		for _, info in ipairs(ns.LOW_HEALTH_THEMES) do
 			list[#list + 1] = { value = info.key, text = L[info.name] }
+		end
+		for _, info in ipairs(ns.LOW_HEALTH_GAME_THEMES) do
+			list[#list + 1] = { value = info.key, text = L["Game art"] .. ": " .. ThemeName(info.key) }
 		end
 		return list
 	end
@@ -859,6 +1016,17 @@ function ns.CreateVitalsVisionPanel(kit)
 						function() return Picked(key) end, function() Pick(key) end)
 				end
 			end
+			-- The game's own edge (LowHealthThemes.lua's Game art): Auto by
+			-- class and spec, then each colour.
+			root:CreateDivider()
+			local gameMenu = root:CreateButton(L["Game art"])
+			gameMenu:CreateRadio(AutoGameText(), function() return Picked("autogame") end,
+				function() Pick("autogame") end)
+			gameMenu:CreateDivider()
+			for _, info in ipairs(ns.LOW_HEALTH_GAME_THEMES) do
+				local key = info.key
+				gameMenu:CreateRadio(ThemeName(key), function() return Picked(key) end, function() Pick(key) end)
+			end
 		end)
 	else
 		-- (No dropdowns on this client: a button that steps through them.)
@@ -877,7 +1045,7 @@ function ns.CreateVitalsVisionPanel(kit)
 		themePicker:SetPoint("LEFT", themeLabel, "RIGHT", 8, 0)
 		themePicker.Refresh = function(self)
 			local key = ns.GetDB().lowHealthTheme
-			self:SetText(key == "auto" and AutoText() or ThemeName(key))
+			self:SetText(key == "auto" and AutoText() or key == "autogame" and AutoGameText() or ThemeName(key))
 		end
 		kit.AddControl(themePicker)
 	end
