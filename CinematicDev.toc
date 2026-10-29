@@ -81,6 +81,7 @@ PersonalResources.lua
 StylePages.lua
 LetterboxStyle.lua
 QuestItemStyle.lua
+RollStyle.lua
 WindGuideStyles.lua
 WindGuide.lua
 Focus.lua

@@ -41,6 +41,51 @@ local function Enabled()
 	return ns.Setting("rollWindow")
 end
 
+-- Its look: the Style hub's Roll Vision page (rollStyle: on; off, these
+-- defaults, whatever the page's set to). Colors as R, G, B keys.
+local DEFAULTS = ns.DEFAULTS
+DEFAULTS.rollStyle = false
+DEFAULTS.rollPanel = "rounded"     -- cards on: "rounded" (the game's roll frame's edge), "flat" (a thin line), "none"
+DEFAULTS.rollAlpha = 0.88          -- ...their background's opacity
+DEFAULTS.rollDensity = "roomy"     -- player rows: "roomy" or "compact"
+DEFAULTS.rollFont = "game"         -- the text's font (ns.QUEST_ITEM_FONTS' names)
+DEFAULTS.rollTextSize = 1          -- ...times its usual size
+DEFAULTS.rollOutline = 0           -- ...outline: 0 none, 1 thin, 2 thick
+DEFAULTS.rollBarTexture = "flat"   -- the time left's bar: "flat" or "smooth" (the game's status bar)
+DEFAULTS.rollBarColor = "quality"  -- ...its color: the item's "quality", "gold" or "custom" (rollBarR/G/B)
+DEFAULTS.rollBarR, DEFAULTS.rollBarG, DEFAULTS.rollBarB = 1, 0.82, 0
+DEFAULTS.rollBarHeight = 3
+DEFAULTS.rollPicks = "icons"       -- each pick as the game's "icons" (dice, coin) or "words" in their colors:
+DEFAULTS.rollNeedR, DEFAULTS.rollNeedG, DEFAULTS.rollNeedB = 1, 0.7, 0.28
+DEFAULTS.rollGreedR, DEFAULTS.rollGreedG, DEFAULTS.rollGreedB = 0.5, 0.83, 0.42
+DEFAULTS.rollTransmogR, DEFAULTS.rollTransmogG, DEFAULTS.rollTransmogB = 0.5, 0.7, 1
+DEFAULTS.rollNumbers = true        -- the numbers, once the rolls are revealed
+DEFAULTS.rollWinner = "lit"        -- the winner's row: "lit" (and a crown), "crown" or "plain"
+DEFAULTS.rollWinnerColor = "gold"  -- ...its light and number: "gold" or "custom" (rollWinnerR/G/B)
+DEFAULTS.rollWinnerR, DEFAULTS.rollWinnerG, DEFAULTS.rollWinnerB = 1, 0.82, 0
+
+local function Look()
+	return ns.db and ns.db.rollStyle and ns.db or DEFAULTS
+end
+local styleVersion = 1 -- (one more each time the look changes: cards and rows put in it again)
+
+-- The text's font: its own file unless the client's language needs the
+-- game's (Cyrillic, Korean, Chinese names: boxes in the others).
+local ROMAN = not ({ ruRU = true, koKR = true, zhCN = true, zhTW = true })[GetLocale and GetLocale() or ""]
+local function StyleText(text, look)
+	text.base = text.base or { text:GetFont() }
+	local file, size, flags = text.base[1], text.base[2], text.base[3]
+	if not (file and size) then
+		return
+	end
+	if ROMAN then
+		for _, font in ipairs(ns.QUEST_ITEM_FONTS or {}) do
+			if font[1] == look.rollFont and font[3] then file = font[3] end
+		end
+	end
+	text:SetFont(file, size * look.rollTextSize, ns.OutlinedFlags(flags, look.rollOutline))
+end
+
 -- Player rows per card: everyone in a party; in a raid, the top few
 -- (rollRaidRows), the rest as "and N more".
 local function MaxRows()
@@ -323,24 +368,45 @@ local EDGE = 22
 
 -- Near-black behind a frame, in the game's rounded roll-frame border (tinted
 -- by quality, as its roll frames are, with a dark line round the outside);
--- returns the border, for its colour.
+-- returns the border, for its colour. Its look (rounded, flat or none) is
+-- StylePanel's; a colour for its border goes through BorderColor.
 local function Panel(frame)
 	local bg = frame:CreateTexture(nil, "BACKGROUND", nil, -3)
 	bg:SetPoint("TOPLEFT", RIM, -RIM)
 	bg:SetPoint("BOTTOMRIGHT", -RIM, RIM)
 	bg:SetColorTexture(0.03, 0.03, 0.04, 0.88)
-	local function Edge(outset)
+	local function Edge(outset, file, size)
 		local edge = CreateFrame("Frame", nil, frame, BackdropTemplateMixin and "BackdropTemplate")
 		edge:SetPoint("TOPLEFT", -outset, outset)
 		edge:SetPoint("BOTTOMRIGHT", outset, -outset)
 		edge:SetFrameLevel(frame:GetFrameLevel())
-		edge:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = EDGE })
+		edge:SetBackdrop({ edgeFile = file or "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = size or EDGE })
 		return edge
 	end
-	Edge(2):SetBackdropBorderColor(0, 0, 0, 0.9)
+	local outer = Edge(2)
+	outer:SetBackdropBorderColor(0, 0, 0, 0.9)
 	local border = Edge(0)
 	border:SetBackdropBorderColor(0.5, 0.5, 0.5, 0.8)
+	-- (Flat: a one-pixel line round the background.)
+	local flat = Edge(-RIM, "Interface\\Buttons\\WHITE8X8", 1)
+	flat:Hide()
+	frame.bg, frame.outer, frame.flat, frame.border = bg, outer, flat, border
 	return border
+end
+
+-- A panel's look: its background's opacity, the rounded edge or a flat line, or neither.
+local function StylePanel(frame, look)
+	local panel = look.rollPanel
+	frame.bg:SetShown(panel ~= "none")
+	frame.bg:SetColorTexture(0.03, 0.03, 0.04, look.rollAlpha)
+	frame.outer:SetShown(panel == "rounded")
+	frame.border:SetShown(panel == "rounded")
+	frame.flat:SetShown(panel == "flat")
+end
+
+local function BorderColor(card, r, g, b, a)
+	card.border:SetBackdropBorderColor(r, g, b, a)
+	card.flat:SetBackdropBorderColor(r, g, b, a)
 end
 
 -- A small grey x in the top right corner, lighter on hover.
@@ -402,12 +468,60 @@ local function NewRow(card)
 	row.crown:SetTexture(CROWN)
 	row.crown:SetSize(12, 12)
 	row.crown:SetPoint("RIGHT", row.roll, "LEFT", -4, 1)
-	row.name:SetPoint("RIGHT", row.crown, "LEFT", -4, -1)
+	-- (Picks as words: in place of the icon, right of the name.)
+	row.pick = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	row.pick:SetPoint("RIGHT", row.crown, "LEFT", -4, -1)
+	row.pick:SetJustifyH("RIGHT")
 	return row
 end
 
-local function NewCard(index)
-	local card = CreateFrame("Button", nil, window)
+-- How tall a player's row is.
+local function RowHeight(look)
+	return look.rollDensity == "compact" and 13 or ROW
+end
+
+-- A row in the look: its height, text, and the pick as an icon or a word.
+local function StyleRow(row, look)
+	row.styled = styleVersion
+	local height = RowHeight(look)
+	row:SetHeight(height)
+	row.icon:SetSize(height - 2, height - 2)
+	for _, text in ipairs({ row.name, row.roll, row.pick }) do StyleText(text, look) end
+	local words = look.rollPicks == "words"
+	row.icon:SetShown(not words)
+	row.pick:SetShown(words)
+	row.name:ClearAllPoints()
+	if words then
+		row.name:SetPoint("LEFT", 4, 0)
+		row.name:SetPoint("RIGHT", row.pick, "LEFT", -6, 0)
+	else
+		row.name:SetPoint("LEFT", row.icon, "RIGHT", 7, 0)
+		row.name:SetPoint("RIGHT", row.crown, "LEFT", -4, -1)
+	end
+	local r, g, b = unpack(GOLD)
+	if look.rollWinnerColor == "custom" then
+		r, g, b = look.rollWinnerR, look.rollWinnerG, look.rollWinnerB
+	end
+	row.winnerColor = { r, g, b }
+	Gradient(row.lit, r, g, b, 0.3, 0)
+end
+
+-- A pick as a word, in its color (nothing while still choosing).
+local function SetPickWord(text, state, look)
+	local color = (state == NEED or state == NEED_OFF) and "rollNeed" or state == GREED and "rollGreed"
+		or state == TRANSMOG and "rollTransmog"
+	if not color then
+		text:SetText("")
+		return
+	end
+	text:SetText(StateName(state))
+	text:SetTextColor(look[color .. "R"], look[color .. "G"], look[color .. "B"])
+end
+
+-- (parent: a preview's, the Style hub's Roll Vision page: not one of the
+-- window's cards, nor dragged)
+local function NewCard(index, parent)
+	local card = CreateFrame("Button", nil, parent or window)
 	card:SetWidth(CARD_W)
 	card.border = Panel(card) -- (coloured as its item's quality, as the game's roll frames are)
 	card.wash = card:CreateTexture(nil, "BACKGROUND", nil, -1)
@@ -466,7 +580,7 @@ local function NewCard(index)
 	end)
 	-- Its own x: don't care about this one, away it goes. Dragging any moves them all.
 	CloseButton(card, function() DismissCard(card) end)
-	DragStack(card)
+	if not parent then DragStack(card) end
 	card.rows = {}
 	-- Hovering the icon shows the item; shift-click links it, as the game's item buttons do.
 	card.hover = CreateFrame("Button", nil, card)
@@ -480,7 +594,7 @@ local function NewCard(index)
 	end)
 	card.hover:SetScript("OnLeave", function() GameTooltip:Hide() end)
 	card.hover:SetScript("OnClick", function() card:GetScript("OnClick")(card) end)
-	DragStack(card.hover)
+	if not parent then DragStack(card.hover) end
 	-- A plain click lists everyone on it, or back to the top few.
 	card:SetScript("OnClick", function(self)
 		if IsShiftKeyDown() or IsControlKeyDown() then -- (linking it, trying it on)
@@ -495,8 +609,40 @@ local function NewCard(index)
 			Layout()
 		end
 	end)
-	cards[index] = card
+	if not parent then cards[index] = card end
 	return card
+end
+
+local SMOOTH_BAR = "Interface\\TargetingFrame\\UI-StatusBar"
+
+-- A card in the look: its panel, text and the time left's bar.
+local function StyleCard(card, look)
+	card.styled = styleVersion
+	StylePanel(card, look)
+	card.wash:SetShown(look.rollPanel ~= "none")
+	for _, text in ipairs({ card.item, card.itemSmall, card.status, card.passed }) do StyleText(text, look) end
+	local height = look.rollBarHeight
+	card.track:SetHeight(height + 2)
+	card.bar:SetHeight(height)
+	if look.rollBarTexture == "smooth" then
+		card.bar:SetTexture(SMOOTH_BAR)
+	else
+		card.bar:SetVertexColor(1, 1, 1, 1) -- (BarColor's colour texture, untinted)
+	end
+end
+
+-- The time left's bar in its color: the item's quality's (r, g, b), gold or the page's own.
+local function BarColor(card, look, r, g, b)
+	if look.rollBarColor == "gold" then
+		r, g, b = unpack(GOLD)
+	elseif look.rollBarColor == "custom" then
+		r, g, b = look.rollBarR, look.rollBarG, look.rollBarB
+	end
+	if look.rollBarTexture == "smooth" then
+		card.bar:SetVertexColor(r, g, b, 0.9)
+	else
+		card.bar:SetColorTexture(r, g, b, 0.9)
+	end
 end
 
 -- The status line under the item's name.
@@ -599,6 +745,10 @@ end
 local function FillCard(card, drop)
 	local info = drop.info
 	local now = GetTime()
+	local look = Look()
+	if card.styled ~= styleVersion then
+		StyleCard(card, look)
+	end
 	local revealing = ScheduleReveals(drop, now)
 	local function Revealed(roll)
 		local at = type(roll.roll) == "number" and drop.reveal[roll.playerName or "?"]
@@ -628,9 +778,9 @@ local function FillCard(card, drop)
 	card.item:SetText(ItemText(info.itemHyperlink) or "")
 	card.itemSmall:SetText(ItemText(info.itemHyperlink) or "")
 	card.frame:SetColorTexture(r, g, b, 0.9)
-	card.border:SetBackdropBorderColor(r, g, b, done and 0.5 or 1)
+	BorderColor(card, r, g, b, done and 0.5 or 1)
 	Gradient(card.wash, r, g, b, done and 0.1 or 0.2, 0)
-	card.bar:SetColorTexture(r, g, b, 0.9)
+	BarColor(card, look, r, g, b)
 
 	local rolls, passed = {}, {}
 	local chosen, total = 0, 0
@@ -695,7 +845,7 @@ local function FillCard(card, drop)
 		card.bar:SetWidth(math.max(1, (CARD_W - 2 * INSET - 2) * (1 - gone)))
 	end
 
-	local y = compact and -(INSET + 32) or -(HEAD + 6)
+	local y = compact and -(INSET + 32) or -(HEAD + 6 + math.max(0, look.rollBarHeight - 3))
 	local maxRows = drop.expanded and #rolls or MaxRows()
 	-- (rollShowSelf: yours always listed, one row more under the few if it's further down)
 	if ns.Setting("rollShowSelf") and maxRows < #rolls then
@@ -714,16 +864,23 @@ local function FillCard(card, drop)
 		if roll then
 			row = row or NewRow(card)
 			card.rows[i] = row
+			if row.styled ~= styleVersion then
+				StyleRow(row, look)
+			end
 			row:SetPoint("TOPLEFT", INSET - 4, y)
 			SetStateIcon(row.icon, roll.state)
+			SetPickWord(row.pick, roll.state, look)
 			row.name:SetText(ClassText(roll.playerName, roll.playerClass))
 			local choosing = roll.state == NO_ROLL
 			-- (still choosing: faint, dots ticking; once it's won, the rest step back)
 			local won = winner and roll.isWinner
 			row.name:SetAlpha(choosing and 0.45 or (done and not won) and 0.7 or 1)
+			-- (the winner's number in its color, unless the page says plain)
+			local mark = won and look.rollWinner ~= "plain"
 			if Revealed(roll) then
-				row.roll:SetText(roll.roll)
-				row.roll:SetTextColor(won and GOLD[1] or 0.85, won and GOLD[2] or 0.85, won and GOLD[3] or 0.85)
+				row.roll:SetText(look.rollNumbers and roll.roll or "")
+				local color = row.winnerColor
+				row.roll:SetTextColor(mark and color[1] or 0.85, mark and color[2] or 0.85, mark and color[3] or 0.85)
 				-- (just out: it pops in, once)
 				drop.popped = drop.popped or {}
 				local name = roll.playerName or "?"
@@ -742,10 +899,10 @@ local function FillCard(card, drop)
 			else
 				row.roll:SetText("")
 			end
-			row.lit:SetShown(won and true or false)
-			row.crown:SetShown(won and true or false)
+			row.lit:SetShown(won and look.rollWinner == "lit" or false)
+			row.crown:SetShown(mark or false)
 			row:Show()
-			y = y - ROW
+			y = y - RowHeight(look)
 		elseif row then
 			row:Hide()
 		end
@@ -820,6 +977,11 @@ Layout = function()
 		end
 	end
 	-- (nothing to show, from /cine rolls: a panel saying so)
+	if window.empty.styled ~= styleVersion then
+		window.empty.styled = styleVersion
+		StylePanel(window.empty, Look())
+		StyleText(window.empty.text, Look())
+	end
 	window.empty:SetShown(#shown == 0)
 	if #shown == 0 then
 		lowest = -window.empty:GetHeight()
@@ -1160,6 +1322,7 @@ local function CreateWindow()
 	local text = empty:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	text:SetPoint("LEFT", INSET + 2, 0)
 	text:SetText(L["No rolls yet."])
+	empty.text = text
 	CloseButton(empty, function() Close() end)
 	DragStack(empty)
 	window.empty = empty
@@ -1305,6 +1468,14 @@ function ns.RollVisionActive()
 	return window and window:IsShown() and true or false
 end
 
+-- The Style hub's Roll Vision page changed: every card and row in its look again.
+function ns.RefreshRollStyle()
+	styleVersion = styleVersion + 1
+	if window and window:IsShown() then
+		Layout()
+	end
+end
+
 -- The setting turned off: away it goes.
 function ns.RefreshRollWindow()
 	if not Enabled() then
@@ -1442,4 +1613,67 @@ function ns.TestRollWindow()
 		C_Timer.After(1.2, Tick)
 	end
 	C_Timer.After(1.2, Tick)
+end
+
+---------------------------------------------------------------------------
+-- The Style hub's Roll Vision page's preview: two cards on parent, drawn as
+-- the window draws them, over the scene the Letterbox page's preview has: a
+-- drop won (the numbers in, the winner at the top) and one still being picked
+-- on, its time running out and round again. Everyone listed. Gives the
+-- holder; :Refresh() draws them again (the page's settings changed).
+
+function ns.MakeRollPreview(parent, width)
+	local holder = CreateFrame("Frame", nil, parent)
+	holder:SetSize(width, 200)
+	if holder.SetClipsChildren then holder:SetClipsChildren(true) end
+	local caption = holder:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	caption:SetPoint("TOPLEFT", 6, -5)
+	caption:SetText(L["Preview"])
+	caption.searchSkip = true
+	local function Roll(i, state, number, winner)
+		local fake = FAKE[i]
+		return { playerName = fake[1], playerClass = fake[2], state = state, roll = number, isWinner = winner }
+	end
+	local wonLink, wonIcon = FakeItem(4)
+	local won = Roll(1, NEED, 87, true)
+	local drops = {
+		{ key = "preview1", instant = true, expanded = true, info = { itemHyperlink = wonLink, testIcon = wonIcon,
+			winner = won, rollInfos = { won, Roll(2, GREED, 42), Roll(3, TRANSMOG, 15), Roll(4, PASS) } } },
+		{ key = "preview2", instant = true, expanded = true, info = { itemHyperlink = (FakeItem(3)),
+			testIcon = select(2, FakeItem(3)), startTime = GetTime(), duration = 12, testClock = true,
+			rollInfos = { Roll(2, NEED), Roll(1, GREED), Roll(3, NO_ROLL), Roll(4, NO_ROLL) } } },
+	}
+	local previewCards = {}
+	for i in ipairs(drops) do
+		previewCards[i] = NewCard(i, holder)
+	end
+	function holder:Refresh()
+		local y = -24
+		for i, drop in ipairs(drops) do
+			-- (the second's time runs round)
+			local info = drop.info
+			if info.testClock and GetTime() - info.startTime > info.duration then
+				info.startTime = GetTime()
+			end
+			local card = previewCards[i]
+			card:ClearAllPoints()
+			card:SetPoint("TOP", holder, "TOP", 0, y)
+			card:SetHeight(FillCard(card, drop))
+			y = y - card:GetHeight() - GAP
+		end
+		-- (the scene cut again to its new shape: StylePages.lua)
+		if self:GetHeight() ~= -y + 10 or not self.styleScene then
+			self:SetHeight(-y + 10)
+			ns.StyleScene(self)
+		end
+	end
+	local since = 0
+	holder:SetScript("OnUpdate", function(self, delta)
+		since = since + delta
+		if since >= 0.1 then -- (the dots and the time bar, as the window's)
+			since = 0
+			self:Refresh()
+		end
+	end)
+	return holder
 end

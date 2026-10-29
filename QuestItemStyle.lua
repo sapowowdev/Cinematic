@@ -38,15 +38,14 @@ function ns.CreateQuestItemStylePanel(kit)
 	local stack = kit.Stack(switch, "check")
 	local rows = ns.StyleRows(kit, content, stack, Changed, "questItemStyle")
 
-	-- The preview: the button ready, and cooling down (again and again), on a
-	-- dusky ground, with your item's icon if a quest has one.
+	-- The preview: the button ready, and cooling down (again and again), over
+	-- the Style pages' scene, with your item's icon if a quest has one.
 	local PREVIEW_W, PREVIEW_H = 480, 170
 	preview = CreateFrame("Frame", nil, content)
 	preview:SetSize(PREVIEW_W, PREVIEW_H)
+	stack:Add(ns.StyleSceneButton(content, kit.Tooltip, kit.AddControl), "label")
 	stack:Add(preview, "label")
-	local ground = preview:CreateTexture(nil, "BACKGROUND")
-	ground:SetAllPoints()
-	ground:SetColorTexture(0.11, 0.13, 0.16, 0.95)
+	ns.StyleScene(preview, 0.6) -- (StylePages.lua)
 	local caption = kit.Label(preview, "GameFontDisableSmall", L["Preview"])
 	caption:SetPoint("TOPLEFT", 6, -5)
 	caption.searchSkip = true

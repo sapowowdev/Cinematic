@@ -1206,6 +1206,7 @@ do
 			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names" },
 			{ "Letterbox Style", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", label = "Letterbox" },
 			{ "Quest Item Style", "Interface\\Icons\\INV_Misc_Key_03", label = "Quest item button" },
+			{ "Roll Style", "Interface\\Icons\\INV_Misc_Dice_02", label = "Roll Vision" },
 		} },
 		{ name = "Visions", pages = {
 			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl", label = "General" },
@@ -6435,10 +6436,10 @@ local function CreateNameStylePanel()
 	local PREVIEW_W, PREVIEW_H = 520, 84
 	preview = CreateFrame("Frame", nil, content)
 	preview:SetSize(PREVIEW_W, PREVIEW_H)
+	stack:Add(ns.StyleSceneButton(content, Tooltip, function(control) controls[#controls + 1] = control end),
+		"label")
 	stack:Add(preview, "label")
-	local ground = preview:CreateTexture(nil, "BACKGROUND")
-	ground:SetAllPoints()
-	ground:SetColorTexture(0.11, 0.14, 0.18, 0.95)
+	ns.StyleScene(preview, 0.55, 0.8) -- (the Style pages' scene, darker under the names: StylePages.lua)
 	local edges = {}
 	for i = 1, 4 do
 		edges[i] = preview:CreateTexture(nil, "BORDER")
@@ -6758,10 +6759,10 @@ do
 		local previewed = "others"
 		preview = CreateFrame("Frame", nil, content)
 		preview:SetSize(560, 160)
+		stack:Add(ns.StyleSceneButton(content, Tooltip, function(control) controls[#controls + 1] = control end),
+		"label")
 		stack:Add(preview, "label")
-		local ground = preview:CreateTexture(nil, "BACKGROUND")
-		ground:SetAllPoints()
-		ground:SetColorTexture(0.11, 0.14, 0.18, 0.95)
+		ns.StyleScene(preview, 0.55, 0.8) -- (the Style pages' scene, darker under the plate: StylePages.lua)
 		local caption = Label(preview, "GameFontNormal", "")
 		caption:SetPoint("TOPLEFT", 8, -7)
 		caption.searchSkip = true
@@ -12752,6 +12753,9 @@ ns.OnLanguage(function()
 	end
 	if ns.CreateQuestItemStylePanel then -- (QuestItemStyle.lua)
 		ns.CreateQuestItemStylePanel(ns.lowHealthKit)
+	end
+	if ns.CreateRollStylePanel then -- (RollStyle.lua)
+		ns.CreateRollStylePanel(ns.lowHealthKit)
 	end
 	CreateEffectsPanel()
 	CreateTintPanel()

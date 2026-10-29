@@ -5,11 +5,8 @@
 -- their own. A preview at the top, drawn by the same code as the real bars.
 -- When they show at all: the Visual Effects page's Show in grid.
 
-local ADDON_NAME, ns = ...
+local _, ns = ...
 local L = ns.L
-
--- The preview's backdrop: a lake at dusk, 2:1 (Media/make_letterbox_scene.py).
-local SCENE = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\LetterboxScene"
 
 -- The look's settings a preset sets (the rest as the defaults; the custom
 -- colors are kept, for a pick of Custom later).
@@ -44,9 +41,6 @@ function ns.CreateLetterboxStylePanel(kit)
 	preview = CreateFrame("Frame", nil, content)
 	preview:SetSize(PREVIEW_W, 270)
 	if preview.SetClipsChildren then preview:SetClipsChildren(true) end
-	local scene = preview:CreateTexture(nil, "BACKGROUND")
-	scene:SetAllPoints()
-	scene:SetTexture(SCENE)
 	local caption = kit.Label(preview, "GameFontDisableSmall", L["Preview"])
 	caption:SetPoint("TOPLEFT", 6, -5)
 	caption.searchSkip = true
@@ -66,9 +60,7 @@ function ns.CreateLetterboxStylePanel(kit)
 		local width, height = UIParent:GetWidth(), UIParent:GetHeight()
 		local previewH = math.floor(PREVIEW_W * height / math.max(width, 1) + 0.5)
 		preview:SetHeight(previewH)
-		-- (The scene is 2:1: cut to the screen's shape, from its middle.)
-		local cut = math.max(0, 1 - PREVIEW_W / math.max(previewH, 1) / 2) / 2
-		scene:SetTexCoord(cut, 1 - cut, 0, 1)
+		ns.StyleScene(preview) -- (cut to the screen's shape: StylePages.lua)
 		local t = progress * progress * (3 - 2 * progress)
 		ns.DrawLetterbox(bars, ns.LetterboxLook(), PREVIEW_W, previewH, t, previewH / math.max(height, 1))
 		bars:SetShown(progress > 0)
@@ -89,14 +81,18 @@ function ns.CreateLetterboxStylePanel(kit)
 	-- (above the preview)
 	stack:Add(inOut, "label")
 	stack:Add(preview, "label")
-	local function InOutText() inOut:SetText(target == 1 and L["Bars out"] or L["Bars in"]) end
+	inOut:SetText(L["Bars"])
+	-- (gold while the bars are in)
+	local function InOutText() ns.StyleToggle(inOut, target == 1) end
 	InOutText()
+	-- (Scene beside it: StylePages.lua)
+	ns.StyleSceneButton(content, kit.Tooltip, kit.AddControl):SetPoint("LEFT", inOut, "RIGHT", 8, 0)
 	kit.Tooltip(inOut, L["Brings the bars in or out, as at a fight's end and start."])
 	inOut:SetScript("OnClick", function()
 		target = 1 - target
 		InOutText()
 	end)
-	inOut.Refresh = function() end
+	inOut.Refresh = InOutText
 	kit.AddControl(inOut)
 
 	-- Presets: a few looks to start from.
