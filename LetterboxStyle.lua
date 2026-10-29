@@ -29,13 +29,13 @@ function ns.CreateLetterboxStylePanel(kit)
 		ns.RefreshLetterbox()
 		if preview then preview:Refresh() end
 	end
-	local function On(db) return db.letterboxStyle end
 
 	local switch = kit.PageSwitch(content, "letterboxStyle", L["Enable page"],
 		L["On: the bars look as this page says. Off: Cinematic's own, thin black bars sliding in with the " ..
 		"UI's fade (the preview shows that too). Each setting keeps its value for when you turn this back on."],
 		intro, Changed)
 	local stack = kit.Stack(switch, "check")
+	local rows = ns.StyleRows(kit, content, stack, Changed, "letterboxStyle")
 
 	-- The preview: a little screen with a lake at dusk, the bars over it as
 	-- the real ones are drawn, the screen's own shape. Bars in / Bars out
@@ -110,138 +110,49 @@ function ns.CreateLetterboxStylePanel(kit)
 		{ L["Gilded"], L["Thin bars with a thin gold line along their edge."],
 			{ letterboxSize = 0.06, letterboxLine = "gold" } },
 	}
-	local presetRow = CreateFrame("Frame", nil, content)
-	presetRow:SetSize(PREVIEW_W, 24)
-	stack:Add(presetRow, "label")
-	local lastButton
-	for _, preset in ipairs(PRESETS) do
-		local button = ns.PanelButton(presetRow)
-		button:SetText(preset[1])
-		button:SetSize(math.max(110, button:GetFontString():GetStringWidth() + 24), 22)
-		if lastButton then
-			button:SetPoint("LEFT", lastButton, "RIGHT", 8, 0)
-		else
-			button:SetPoint("LEFT", presetRow, "LEFT", 0, 0)
-		end
-		kit.Tooltip(button, preset[2])
-		button:SetScript("OnClick", function()
-			local db = ns.GetDB()
-			db.letterboxStyle = true
-			for _, key in ipairs(PRESET_KEYS) do
-				local value = preset[3][key]
-				if value == nil then value = ns.DEFAULTS[key] end
-				db[key] = value
-			end
-			Changed()
-			kit.Refresh()
-		end)
-		button.Refresh = function() end
-		kit.GreyUnless(button, On)
-		kit.AddControl(button)
-		lastButton = button
-	end
-
-	-- A row of choices for key, after its name: { value, text, tip } each.
-	-- Gives the last, to put a color swatch after.
-	local function Choices(label, key, list, test)
-		local name = stack:Add(kit.Label(content, "GameFontHighlight", label), "label")
-		name:SetWidth(150)
-		local last
-		for _, info in ipairs(list) do
-			local choice = kit.Choice(content, key, info[1], info[2], info[3])
-			choice:HookScript("OnClick", Changed)
-			if last then
-				choice:SetPoint("LEFT", last.Text or last.text, "RIGHT", 16, 0)
-			else
-				choice:SetPoint("LEFT", name, "RIGHT", 4, 0)
-			end
-			kit.GreyUnless(choice, test or On)
-			last = choice
-		end
-		return last
-	end
-
-	-- A color's swatch after a row of choices: its R, G and B settings (keys);
-	-- a pick puts key on Custom.
-	local function Swatch(after, key, keys, tip)
-		local swatch = CreateFrame("Button", nil, content)
-		swatch:SetSize(18, 18)
-		swatch:SetPoint("LEFT", after.Text or after.text, "RIGHT", 10, 0)
-		local border = swatch:CreateTexture(nil, "BACKGROUND")
-		border:SetAllPoints()
-		border:SetColorTexture(0.6, 0.6, 0.6, 1)
-		local color = swatch:CreateTexture(nil, "ARTWORK")
-		color:SetPoint("TOPLEFT", 2, -2)
-		color:SetPoint("BOTTOMRIGHT", -2, 2)
-		kit.Tooltip(swatch, tip)
-		swatch:SetScript("OnEnable", function(self) self:SetAlpha(1) end)
-		swatch:SetScript("OnDisable", function(self) self:SetAlpha(0.4) end)
-		swatch.Refresh = function()
-			local db = ns.GetDB()
-			color:SetColorTexture(db[keys[1]], db[keys[2]], db[keys[3]], 1)
-		end
-		swatch:SetScript("OnClick", function()
-			local db = ns.GetDB()
-			kit.OpenColorPicker(db[keys[1]], db[keys[2]], db[keys[3]], function(r, g, b)
-				db[keys[1]], db[keys[2]], db[keys[3]] = r, g, b
-				db[key] = "custom"
-				Changed()
-				kit.Refresh()
-			end)
-		end)
-		kit.GreyUnless(swatch, On)
-		kit.AddControl(swatch)
-		return swatch
-	end
-
-	local function StyleSlider(key, label, minV, maxV, step, fmt, scale, tip, test)
-		local slider = stack:Add(kit.Slider(content, key, label, minV, maxV, step, fmt, scale, Changed), "slider")
-		if tip then kit.Tooltip(slider, tip) end
-		kit.GreyUnless(slider, test or On)
-		return slider
-	end
+	rows.Presets(PRESETS, PRESET_KEYS, PREVIEW_W)
 
 	stack:Header(content, L["Size"])
-	Choices(L["Set by:"], "letterboxSizeBy", {
+	rows.Choices(L["Set by:"], "letterboxSizeBy", {
 		{ "height", L["Height"], L["Each bar a share of the screen's height."] },
 		{ "aspect", L["A film's frame"], L["The bars as tall as it takes for what's left between them to have a " ..
 			"film's shape, whatever your screen."] },
 	})
-	StyleSlider("letterboxSize", L["Bar height"], 0, 25, 1, "%d%%", 100,
+	rows.Slider("letterboxSize", L["Bar height"], 0, 25, 1, "%d%%", 100,
 		L["How tall each bar is, as a share of the screen's height."],
 		function(db) return db.letterboxStyle and db.letterboxSizeBy ~= "aspect" end)
-	Choices(L["Frame:"], "letterboxAspect", {
+	rows.Choices(L["Frame:"], "letterboxAspect", {
 		{ 2.39, L["2.39:1 (cinema)"] },
 		{ 2, L["2:1"] },
 		{ 1.85, L["1.85:1"] },
 	}, function(db) return db.letterboxStyle and db.letterboxSizeBy == "aspect" end)
 
 	stack:Header(content, L["Look"])
-	Swatch(Choices(L["Color:"], "letterboxColor", {
+	rows.Swatch(rows.Choices(L["Color:"], "letterboxColor", {
 		{ "black", L["Black"] },
 		{ "custom", L["Custom"] },
 	}), "letterboxColor", { "letterboxR", "letterboxG", "letterboxB" }, L["Pick the bars' color."])
-	StyleSlider("letterboxAlpha", L["Opacity"], 10, 100, 5, "%d%%", 100,
+	rows.Slider("letterboxAlpha", L["Opacity"], 10, 100, 5, "%d%%", 100,
 		L["How see-through the bars are."])
-	Choices(L["Inner edge:"], "letterboxEdge", {
+	rows.Choices(L["Inner edge:"], "letterboxEdge", {
 		{ "hard", L["Hard"] },
 		{ "soft", L["Soft (feathered)"], L["The bars fade into the scene past their edge."] },
 	})
-	StyleSlider("letterboxFeather", L["Feather"], 5, 80, 5, "%d", 1,
+	rows.Slider("letterboxFeather", L["Feather"], 5, 80, 5, "%d", 1,
 		L["How far past the bars' edge they fade into the scene."],
 		function(db) return db.letterboxStyle and db.letterboxEdge == "soft" end)
-	Swatch(Choices(L["Line along the edge:"], "letterboxLine", {
+	rows.Swatch(rows.Choices(L["Line along the edge:"], "letterboxLine", {
 		{ "none", L["None"] },
 		{ "gold", L["Gold"] },
 		{ "custom", L["Custom"] },
 	}), "letterboxLine", { "letterboxLineR", "letterboxLineG", "letterboxLineB" }, L["Pick the line's color."])
 
 	stack:Header(content, L["Coming in and going"])
-	Choices(L["How:"], "letterboxMotion", {
+	rows.Choices(L["How:"], "letterboxMotion", {
 		{ "slide", L["Slide in"], L["The bars grow in from the screen's edges."] },
 		{ "fade", L["Fade in"], L["The bars fade in at their full height."] },
 	})
-	StyleSlider("letterboxTime", L["How long"], 0, 30, 1, function(value)
+	rows.Slider("letterboxTime", L["How long"], 0, 30, 1, function(value)
 		return value == 0 and L["With the UI"] or ("%.1f s"):format(value / 10)
 	end, 10, L["How long the bars take to come in or go. 0: as long as the UI's own fades (the main page's " ..
 		"Fade in and Fade out times)."])

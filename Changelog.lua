@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-29", page = "Quest Item Style", title = "Quest item button style",
+		text = "The quest item button has a page of its own in the Style hub: its size, a round or square " ..
+		"shape, its frame, a glow when it's ready, a draining cooldown fill with the seconds left, and its " ..
+		"numbers' font, with presets and a preview." },
 	{ date = "2026-10-29", page = "Letterbox Style", title = "Letterbox style",
 		text = "The letterbox bars have a page of their own in the Style hub: size them by height or a film's " ..
 		"frame, color them, feather their edges, add a line along them and choose how they come in, with " ..

@@ -1205,6 +1205,7 @@ do
 			{ "Nameplate Style", "Interface\\Icons\\Ability_Marksmanship", label = "Nameplates" },
 			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names" },
 			{ "Letterbox Style", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", label = "Letterbox" },
+			{ "Quest Item Style", "Interface\\Icons\\INV_Misc_Key_03", label = "Quest item button" },
 		} },
 		{ name = "Visions", pages = {
 			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl", label = "General" },
@@ -10021,7 +10022,8 @@ local function CreateVisionPanel()
 		L["Where your extra ability button goes (the extra abilities frame's place in Edit Mode), a big button " ..
 		"with the item the nearest tracked quest gives you to use, the one in the quest tracker. Click it or press its " ..
 		"key (Keybinds page). Shows near the quest's area, beside the game's own button when that's up. " ..
-		"It can't show, hide or move in a fight: it stays as it was until the fight ends."], function(value)
+		"It can't show, hide or move in a fight: it stays as it was until the fight ends."]
+		.. L[" Its look: the Style hub's Quest item button page."], function(value)
 		ns.GetDB().questItemButton = value
 		if ns.RefreshQuestItemButton then ns.RefreshQuestItemButton() end
 	end)
@@ -12747,6 +12749,9 @@ ns.OnLanguage(function()
 	CreateTargetArrowPanel()
 	if ns.CreateLetterboxStylePanel then -- (LetterboxStyle.lua)
 		ns.CreateLetterboxStylePanel(ns.lowHealthKit)
+	end
+	if ns.CreateQuestItemStylePanel then -- (QuestItemStyle.lua)
+		ns.CreateQuestItemStylePanel(ns.lowHealthKit)
 	end
 	CreateEffectsPanel()
 	CreateTintPanel()

@@ -1,0 +1,169 @@
+-- The Style hub's Quest item button page: how the big button for the nearest
+-- quest's item looks (QuestItemButton.lua draws it, by ns.QuestItemLook):
+-- size, shape, its frame, the icon zoomed in, a glow while it's ready, its
+-- cooldown as the game's sweep or a draining fill with the seconds left, and
+-- its numbers' font. A preview at the top: the button ready, and cooling down,
+-- drawn by the same code as the real one. Turning it on: the Vision hub's
+-- Quest Vision page.
+
+local _, ns = ...
+local L = ns.L
+
+-- The look's settings a preset sets (the rest as the defaults; the custom
+-- glow color is kept, for a pick of Custom later).
+local PRESET_KEYS = { "questItemSize", "questItemShape", "questItemFrame", "questItemZoom", "questItemGlow",
+	"questItemGlowColor", "questItemCooldown", "questItemNumbers", "questItemKey", "questItemFont",
+	"questItemOutline" }
+local SAMPLE_ICON = "Interface\\Icons\\INV_Misc_Bag_07"
+local SAMPLE_COOLDOWN = 8 -- seconds the cooling sample counts down, over and over
+
+function ns.CreateQuestItemStylePanel(kit)
+	local canvas, content = kit.CreateScrollPage()
+	local title = kit.Label(content, "GameFontNormalLarge", L["Quest item button"])
+	title:SetPoint("TOPLEFT", 16, -16)
+	local intro = kit.PageIntro(content, title,
+		L["How the big button for the nearest quest's item looks. Turning it on: the Vision hub's Quest Vision " ..
+		"page. Where it sits: the extra ability button's place in Edit Mode. Changes show at once (its size " ..
+		"after a fight, if you're in one)."])
+
+	local preview -- (below: drawn again as each setting changes)
+	local function Changed()
+		ns.RefreshQuestItemStyle()
+		if preview then preview:Refresh() end
+	end
+
+	local switch = kit.PageSwitch(content, "questItemStyle", L["Enable page"],
+		L["On: the button looks as this page says. Off: like the game's extra ability button (the preview " ..
+		"shows that too). Each setting keeps its value for when you turn this back on."], intro, Changed)
+	local stack = kit.Stack(switch, "check")
+	local rows = ns.StyleRows(kit, content, stack, Changed, "questItemStyle")
+
+	-- The preview: the button ready, and cooling down (again and again), on a
+	-- dusky ground, with your item's icon if a quest has one.
+	local PREVIEW_W, PREVIEW_H = 480, 170
+	preview = CreateFrame("Frame", nil, content)
+	preview:SetSize(PREVIEW_W, PREVIEW_H)
+	stack:Add(preview, "label")
+	local ground = preview:CreateTexture(nil, "BACKGROUND")
+	ground:SetAllPoints()
+	ground:SetColorTexture(0.11, 0.13, 0.16, 0.95)
+	local caption = kit.Label(preview, "GameFontDisableSmall", L["Preview"])
+	caption:SetPoint("TOPLEFT", 6, -5)
+	caption.searchSkip = true
+	local samples = {}
+	for i, label in ipairs({ L["Ready"], L["Cooling down"] }) do
+		local frame = CreateFrame("Frame", nil, preview)
+		frame:SetPoint("CENTER", preview, "LEFT", PREVIEW_W * (i == 1 and 0.32 or 0.68), 8)
+		frame.parts = ns.MakeQuestItemParts(frame)
+		frame.parts.count:SetText("3")
+		local name = kit.Label(preview, "GameFontHighlightSmall", label)
+		name:SetPoint("BOTTOM", preview, "BOTTOMLEFT", PREVIEW_W * (i == 1 and 0.32 or 0.68), 10)
+		name.searchSkip = true
+		samples[i] = frame
+	end
+	local cooling = samples[2]
+	local function Icon()
+		local items = ns.QuestLogItems and ns.QuestLogItems() or {}
+		local first = items[1]
+		return first and (first.icon or (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(first.itemID)))
+			or SAMPLE_ICON
+	end
+	function preview:Refresh()
+		local look = ns.QuestItemLook()
+		local key = GetBindingKey("CLICK CinematicQuestItemButton:LeftButton")
+		local keyText = key and GetBindingText and GetBindingText(key, true) or key or "E"
+		local icon = Icon()
+		for _, frame in ipairs(samples) do
+			frame:SetSize(look.questItemSize, look.questItemSize)
+			frame.parts.icon:SetTexture(icon)
+			frame.parts.hotkey:SetText(keyText)
+			ns.StyleQuestItem(frame.parts, look, look.questItemSize)
+		end
+		if not cooling.parts.start then
+			ns.QuestItemCooldown(cooling.parts, GetTime(), SAMPLE_COOLDOWN)
+		end
+	end
+	-- (The cooling one starts again a moment after it's done.)
+	local readyAt
+	preview:SetScript("OnUpdate", function()
+		if cooling.parts.start then
+			readyAt = nil
+		elseif not readyAt then
+			readyAt = GetTime()
+		elseif GetTime() - readyAt > 1.5 then
+			ns.QuestItemCooldown(cooling.parts, GetTime(), SAMPLE_COOLDOWN)
+		end
+	end)
+	kit.AddControl(preview)
+
+	-- Presets: a few looks to start from.
+	rows.Presets({
+		{ L["Like the game's"], L["Framed like the game's extra ability button (the defaults)."], {} },
+		{ L["Flat"], L["A thin black edge, the icon zoomed in to cut its border, an edge glow when ready, " ..
+			"Arial Narrow."], { questItemFrame = "thin", questItemZoom = true, questItemFont = "arial",
+			questItemGlow = "edge" } },
+		{ L["Round"], L["A round button with a soft glow when ready."],
+			{ questItemShape = "round", questItemFrame = "thin", questItemZoom = true, questItemGlow = "soft" } },
+		{ L["Cinematic"], L["Smaller, no frame, a quiet edge glow and a dark cooldown fill, no key."],
+			{ questItemSize = 42, questItemFrame = "none", questItemZoom = true, questItemGlow = "edge",
+			questItemCooldown = "fill", questItemKey = false } },
+	}, PRESET_KEYS, PREVIEW_W)
+
+	stack:Header(content, L["Button"])
+	rows.Slider("questItemSize", L["Size"], 32, 80, 2, "%d", 1, L["The button's width and height."])
+	rows.Choices(L["Shape:"], "questItemShape", {
+		{ "square", L["Square"] },
+		{ "round", L["Round"] },
+	})
+	rows.Choices(L["Frame:"], "questItemFrame", {
+		{ "game", L["The game's"], L["The extra ability button's frame round it."] },
+		{ "thin", L["Thin black"] },
+		{ "none", L["None"] },
+	})
+	rows.Check("questItemZoom", L["Zoom the icon in to cut its own border"],
+		L["Icons have a dark border of their own: zoomed in a little, it's cut off."])
+
+	stack:Header(content, L["When it's ready"])
+	local function Glowing(db) return db.questItemStyle and db.questItemGlow ~= "none" end
+	rows.Choices(L["Glow:"], "questItemGlow", {
+		{ "none", L["None"] },
+		{ "soft", L["Soft"], L["A soft halo round it."] },
+		{ "edge", L["An edge"], L["A ring of color round it."] },
+	})
+	rows.Swatch(rows.Choices(L["Color:"], "questItemGlowColor", {
+		{ "gold", L["Gold"] },
+		{ "custom", L["Custom"] },
+	}, Glowing), "questItemGlowColor", { "questItemGlowR", "questItemGlowG", "questItemGlowB" },
+		L["Pick the glow's color."])
+	stack:Note(content, L["Ready: it's up (you're near the quest's area) and not cooling down."], 460)
+
+	stack:Header(content, L["Cooldown"])
+	rows.Choices(L["Shown as:"], "questItemCooldown", {
+		{ "sweep", L["The game's sweep"] },
+		{ "fill", L["Dark fill, draining"], L["A dark fill over the icon, going down as the cooldown runs out."] },
+	})
+	rows.Check("questItemNumbers", L["Seconds left in the middle"],
+		L["The seconds left in the middle of the button while it cools down."])
+
+	stack:Header(content, L["Text"])
+	rows.Check("questItemKey", L["Its key binding in the corner"],
+		L["The key you've bound to it (Key Bindings, Cinematic: Use the quest item), in its top corner."])
+	local font = kit.Dropdown(content, "questItemFont", function()
+		local list = {}
+		for _, info in ipairs(ns.QUEST_ITEM_FONTS) do list[#list + 1] = { value = info[1], text = info[2] } end
+		return list
+	end, 200, Changed)
+	if font then
+		local fontName = stack:Add(kit.Label(content, "GameFontHighlight", L["Font:"]), "label")
+		fontName:SetWidth(150)
+		font:SetPoint("LEFT", fontName, "RIGHT", 4, 0)
+		kit.GreyUnless(font, rows.On)
+	end
+	local OUTLINES = { [0] = L["None"], L["Thin"], L["Thick"] }
+	rows.Slider("questItemOutline", L["Outline"], 0, 2, 1, function(value) return OUTLINES[value] or "" end, 1,
+		L["A black border round its numbers."])
+
+	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))
+	canvas:Hide()
+	kit.RegisterSubpage(canvas, "Quest Item Style", L["Quest item button"])
+end

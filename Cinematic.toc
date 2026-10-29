@@ -86,7 +86,9 @@ Tint.lua
 LowHealthThemes.lua
 LowHealth.lua
 PersonalResources.lua
+StylePages.lua
 LetterboxStyle.lua
+QuestItemStyle.lua
 Focus.lua
 Tracking.lua
 NodeSweep.lua

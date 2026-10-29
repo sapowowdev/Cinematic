@@ -11,12 +11,11 @@
 -- CinematicQuestItemButton:LeftButton. Not one of the frames CineMode fades:
 -- that row (the extra action button's) is in the Action bars mouseover group,
 -- so the mouse on it brought the bars up. It shows while it's needed.
-local _, ns = ...
+local ADDON_NAME, ns = ...
 local L = ns.L
 
 local NEAR_YARDS = 300
 local CHECK_EVERY = 2 -- seconds (you move: the nearest quest changes)
-local SIZE = 52
 local BINDING = "CLICK CinematicQuestItemButton:LeftButton"
 local GAP = 10 -- beside the game's extra button: this far to its right
 
@@ -34,31 +33,238 @@ local function Shown(name)
 	return frame and frame.IsShown and ns.Flag(frame:IsShown()) or false
 end
 
+-- Its look: the Style hub's Quest item button page (questItemStyle: on; off,
+-- these defaults, whatever the page's set to).
+local DEFAULTS = ns.DEFAULTS
+DEFAULTS.questItemStyle = false
+DEFAULTS.questItemSize = 52            -- its width and height
+DEFAULTS.questItemShape = "square"     -- or "round"
+DEFAULTS.questItemFrame = "game"       -- round it: "game" (the extra action button's art), "thin" (black), "none"
+DEFAULTS.questItemZoom = false         -- the icon zoomed in, to cut its own border
+DEFAULTS.questItemGlow = "none"        -- while it's ready: "none", "soft" or "edge"
+DEFAULTS.questItemGlowColor = "gold"   -- ...gold or "custom" (questItemGlowR/G/B)
+DEFAULTS.questItemGlowR, DEFAULTS.questItemGlowG, DEFAULTS.questItemGlowB = 0.5, 0.83, 1
+DEFAULTS.questItemCooldown = "sweep"   -- "sweep" (the game's) or "fill" (a dark fill, draining)
+DEFAULTS.questItemNumbers = true       -- the seconds left in the middle while it cools down
+DEFAULTS.questItemKey = true           -- its key binding in the corner
+DEFAULTS.questItemFont = "game"        -- its numbers' font (QUEST_ITEM_FONTS)
+DEFAULTS.questItemOutline = 1          -- ...outline: 0 none, 1 thin, 2 thick
+
+function ns.QuestItemLook()
+	return ns.db and ns.db.questItemStyle and ns.db or DEFAULTS
+end
+
+local CIRCLE = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask" -- (a round mask every client has)
+local SOFT_GLOW = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\SoftGlow" -- (Media/make_soft_glow.py)
+local SQUARE = "Interface\\Buttons\\WHITE8X8"
+local GOLD = { 1, 0.82, 0 }
+-- The fonts its numbers can take (game: the action buttons' own).
+ns.QUEST_ITEM_FONTS = {
+	{ "game", "The game's" },
+	{ "friz", "Friz Quadrata", "Fonts\\FRIZQT__.TTF" },
+	{ "arial", "Arial Narrow", "Fonts\\ARIALN.TTF" },
+	{ "morpheus", "Morpheus", "Fonts\\MORPHEUS.TTF" },
+	{ "skurri", "Skurri", "Fonts\\SKURRI.TTF" },
+}
+local FONT_FILES = {}
+for _, font in ipairs(ns.QUEST_ITEM_FONTS) do FONT_FILES[font[1]] = font[3] end
+ns.OnLanguage(function() ns.QUEST_ITEM_FONTS[1][2] = L["The game's"] end)
+-- (A cooldown this short is the global cooldown: no fill, seconds or dimmed glow for it.)
+local GCD = 1.5
+
+-- The button's parts on frame (the real button, or a preview's stand-in):
+-- icon, the game's frame art (style), a black edge or disc behind (back), the
+-- ready glow, a dark fill for the cooldown, the cooldown sweep, and the count,
+-- key and seconds over them. round: textures masked round when its shape is
+-- (the button's highlight and pushed ones too). Drawn by ns.StyleQuestItem.
+function ns.MakeQuestItemParts(frame, round)
+	local parts = { frame = frame, round = round or {} }
+	parts.glow = frame:CreateTexture(nil, "BACKGROUND", nil, -2)
+	parts.glow:SetPoint("CENTER")
+	parts.back = frame:CreateTexture(nil, "BACKGROUND", nil, -1)
+	parts.back:SetPoint("CENTER")
+	parts.icon = frame:CreateTexture(nil, "ARTWORK")
+	parts.icon:SetAllPoints()
+	parts.fill = frame:CreateTexture(nil, "ARTWORK", nil, 1)
+	parts.fill:SetPoint("TOPLEFT")
+	parts.fill:SetPoint("TOPRIGHT")
+	parts.fill:SetColorTexture(0, 0, 0, 0.7)
+	parts.fill:Hide()
+	-- The extra action button's frame round it, where the client has that art;
+	-- else an action button's border.
+	parts.style = frame:CreateTexture(nil, "OVERLAY")
+	parts.style:SetPoint("CENTER")
+	if parts.style:SetTexture("Interface\\ExtraButton\\Default") == false or not parts.style:GetTexture() then
+		parts.style:SetTexture("Interface\\Buttons\\UI-Quickslot2")
+		parts.styleSize = { 1.7, 1.7 }
+	else
+		parts.styleSize = { 256 / 52, 128 / 52 }
+	end
+	parts.cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
+	parts.cooldown:SetAllPoints(parts.icon)
+	if parts.cooldown.SetHideCountdownNumbers then parts.cooldown:SetHideCountdownNumbers(true) end
+	-- (The text above the sweep.)
+	parts.top = CreateFrame("Frame", nil, frame)
+	parts.top:SetAllPoints()
+	parts.top:SetFrameLevel(parts.cooldown:GetFrameLevel() + 1)
+	parts.count = parts.top:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+	parts.count:SetPoint("BOTTOMRIGHT", -3, 3)
+	parts.hotkey = parts.top:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmallGray")
+	parts.hotkey:SetPoint("TOPRIGHT", -3, -3)
+	parts.seconds = parts.top:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+	parts.seconds:SetPoint("CENTER")
+	parts.fonts = {}
+	for _, text in ipairs({ parts.count, parts.hotkey, parts.seconds }) do
+		parts.fonts[text] = { text:GetFont() }
+	end
+	table.insert(parts.round, parts.icon)
+	table.insert(parts.round, parts.fill)
+	table.insert(parts.round, parts.back)
+	return parts
+end
+
+-- Its parts' look, as look says (ns.QuestItemLook), at size (the frame's
+-- own size is the caller's: the real button's can't change in a fight).
+function ns.StyleQuestItem(parts, look, size)
+	parts.look, parts.size = look, size
+	local round = look.questItemShape == "round"
+	if parts.frame.CreateMaskTexture and parts.masked ~= round then
+		parts.masked = round
+		if not parts.mask then
+			parts.mask = parts.frame:CreateMaskTexture()
+			parts.mask:SetAllPoints()
+			parts.mask:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIONAL", "CLAMPTOBLACKADDITIONAL")
+		end
+		for _, texture in ipairs(parts.round) do
+			if round then texture:AddMaskTexture(parts.mask) else texture:RemoveMaskTexture(parts.mask) end
+		end
+	end
+	local cooldown = parts.cooldown
+	if cooldown.SetSwipeTexture then
+		cooldown:SetSwipeTexture(round and CIRCLE or SQUARE)
+		cooldown:SetSwipeColor(0, 0, 0, 0.8)
+	end
+	if cooldown.SetUseCircularEdge then cooldown:SetUseCircularEdge(round) end
+
+	local frame = look.questItemFrame
+	parts.style:SetShown(frame == "game")
+	parts.style:SetSize(size * parts.styleSize[1], size * parts.styleSize[2])
+	-- (Thin: a black edge, a disc behind a round icon.)
+	parts.back:SetShown(frame == "thin")
+	parts.back:SetSize(size + 2, size + 2)
+	parts.back:SetColorTexture(0, 0, 0, 1)
+	local zoom = look.questItemZoom and 0.08 or 0
+	parts.icon:SetTexCoord(zoom, 1 - zoom, zoom, 1 - zoom)
+
+	-- The ready glow: soft, a halo added on; an edge, a ring of color.
+	local r, g, b = unpack(GOLD)
+	if look.questItemGlowColor == "custom" then
+		r, g, b = look.questItemGlowR, look.questItemGlowG, look.questItemGlowB
+	end
+	local glow = parts.glow
+	if look.questItemGlow == "soft" then
+		glow:SetTexture(SOFT_GLOW)
+		glow:SetBlendMode("ADD")
+		glow:SetVertexColor(r, g, b, 1)
+		glow:SetSize(size * 1.7, size * 1.7)
+		if parts.glowMasked then glow:RemoveMaskTexture(parts.glowMask) parts.glowMasked = false end
+	else
+		glow:SetColorTexture(r, g, b, 1)
+		glow:SetBlendMode("BLEND")
+		local pad = frame == "game" and 8 or frame == "thin" and 3 or 2
+		glow:SetSize(size + 2 * pad, size + 2 * pad)
+		-- (Round: a disc, masked with one of its own the size of the glow.)
+		if parts.frame.CreateMaskTexture and round ~= (parts.glowMasked or false) then
+			if not parts.glowMask then
+				parts.glowMask = parts.frame:CreateMaskTexture()
+				parts.glowMask:SetAllPoints(glow)
+				parts.glowMask:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIONAL", "CLAMPTOBLACKADDITIONAL")
+			end
+			if round then glow:AddMaskTexture(parts.glowMask) else glow:RemoveMaskTexture(parts.glowMask) end
+			parts.glowMasked = round
+		end
+	end
+
+	-- The numbers: the font's file, sized to the button, outlined.
+	local SCALE = { [parts.count] = 14 / 52, [parts.hotkey] = 12 / 52, [parts.seconds] = 0.36 }
+	for text, base in pairs(parts.fonts) do
+		local file = FONT_FILES[look.questItemFont] or base[1]
+		if file then
+			text:SetFont(file, math.max(6, math.floor(size * SCALE[text] + 0.5)),
+				ns.OutlinedFlags(base[3], look.questItemOutline))
+		end
+	end
+	parts.hotkey:SetShown(look.questItemKey)
+	ns.QuestItemCooldown(parts, parts.start, parts.duration)
+end
+
+-- Ticks a cooling button's fill and seconds; once it's done, it's ready.
+local function Tick(top)
+	local parts = top.parts
+	local left = parts.start and parts.start + parts.duration - GetTime() or 0
+	if left <= 0 then
+		top:SetScript("OnUpdate", nil)
+		ns.QuestItemCooldown(parts, nil, nil)
+		return
+	end
+	local look = parts.look
+	if look.questItemCooldown == "fill" then
+		parts.fill:SetHeight(math.max(0.01, parts.size * left / parts.duration))
+	end
+	if look.questItemNumbers then
+		parts.seconds:SetText(left >= 60 and ("%dm"):format(math.ceil(left / 60)) or math.ceil(left))
+	end
+end
+
+-- Its cooldown: start, duration (nil: none; false: the game won't say).
+function ns.QuestItemCooldown(parts, start, duration)
+	parts.start, parts.duration = start or nil, duration
+	local look = parts.look or ns.QuestItemLook()
+	local cooling = start and duration and duration > GCD and start + duration > GetTime()
+	local cooldown = parts.cooldown
+	if start and duration and start > 0 and look.questItemCooldown ~= "fill" then
+		cooldown:SetCooldown(start, duration)
+	else
+		cooldown:Clear()
+	end
+	parts.fill:SetShown(cooling and look.questItemCooldown == "fill" or false)
+	parts.seconds:SetShown(cooling and look.questItemNumbers or false)
+	-- (Ready: no cooldown the game told us of.)
+	parts.glow:SetShown(look.questItemGlow ~= "none" and start ~= false and not cooling)
+	parts.top.parts = parts
+	if cooling then
+		parts.top:SetScript("OnUpdate", Tick)
+		Tick(parts.top)
+	else
+		parts.top:SetScript("OnUpdate", nil)
+	end
+end
+
 local button = CreateFrame("Button", "CinematicQuestItemButton", UIParent, "SecureActionButtonTemplate")
-button:SetSize(SIZE, SIZE)
+button:SetSize(DEFAULTS.questItemSize, DEFAULTS.questItemSize)
 button:SetFrameStrata("MEDIUM")
 button:Hide()
 button:SetAttribute("type", "item")
-
-local icon = button:CreateTexture(nil, "ARTWORK")
-icon:SetAllPoints()
--- The extra action button's frame round it, where the client has that art;
--- else an action button's border.
-local style = button:CreateTexture(nil, "OVERLAY")
-style:SetPoint("CENTER")
-style:SetSize(256, 128)
-if style:SetTexture("Interface\\ExtraButton\\Default") == false or not style:GetTexture() then
-	style:SetTexture("Interface\\Buttons\\UI-Quickslot2")
-	style:SetSize(SIZE * 1.7, SIZE * 1.7)
-end
-local cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
-cooldown:SetAllPoints(icon)
-local count = button:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-count:SetPoint("BOTTOMRIGHT", -3, 3)
-local hotkey = button:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmallGray")
-hotkey:SetPoint("TOPRIGHT", -3, -3)
 button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
 button:SetPushedTexture("Interface\\Buttons\\UI-Quickslot-Depress")
+local parts = ns.MakeQuestItemParts(button, { button:GetHighlightTexture(), button:GetPushedTexture() })
+local icon, count, hotkey = parts.icon, parts.count, parts.hotkey
+
+-- Its look, again (out of fights: its size can't change in one).
+local styled -- (the look's been put on since it last changed)
+local function Style()
+	if styled or InCombatLockdown() then
+		return
+	end
+	styled = true
+	local look = ns.QuestItemLook()
+	button:SetSize(look.questItemSize, look.questItemSize)
+	ns.StyleQuestItem(parts, look, look.questItemSize)
+end
+function ns.RefreshQuestItemStyle()
+	styled = false
+	Style()
+end
 
 local current -- { itemID, link, index (quest log), questID }
 
@@ -264,11 +470,12 @@ local function Paint()
 	end
 	local GetCooldown = C_Container and C_Container.GetItemCooldown or _G.GetItemCooldown
 	local ok, start, duration, enable = pcall(GetCooldown, current.itemID)
-	if ok and Known(start) and Known(duration) and enable ~= 0 and enable ~= false
-		and type(start) == "number" and start > 0 then
-		cooldown:SetCooldown(start, duration)
+	if not (ok and Known(start) and Known(duration)) then
+		ns.QuestItemCooldown(parts, false)
+	elseif enable ~= 0 and enable ~= false and type(start) == "number" and start > 0 then
+		ns.QuestItemCooldown(parts, start, duration)
 	else
-		cooldown:Clear()
+		ns.QuestItemCooldown(parts, nil, nil)
 	end
 	local GetCount = C_Item and C_Item.GetItemCount or _G.GetItemCount
 	local okCount, have = pcall(GetCount, current.itemID, nil, true)
@@ -294,6 +501,7 @@ function ns.RefreshQuestItemButton()
 		icon:SetTexture(quest.icon or (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(quest.itemID)))
 	end
 	current = quest
+	Style()
 	Place()
 	Paint()
 	button:Show()
