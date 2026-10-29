@@ -1,5 +1,6 @@
 -- The Style hub's Unit frames page: how the game's player, target, focus,
--- pet and target of target frames look: their bars' texture, border and
+-- pet, target of target and party frames (unless the game draws the party
+-- as raid frames) look: their bars' texture, border and
 -- background, the health bar's and name's colors, the name's font, outline
 -- and size, and the portrait (the game's, or a player's class icon). A
 -- Default tab, and a tab for each frame that follows Default until its "Use
@@ -13,14 +14,57 @@ local L = ns.L
 local DEFAULTS = ns.DEFAULTS
 DEFAULTS.ufStyle = true
 
--- Each frame (its id, as the settings name it) and the game's frames it covers.
+-- Whether the game draws the party as raid frames (retail's Edit Mode
+-- setting, the classic clients' useCompactPartyFrames): then the Party tab
+-- has nothing to dress (the Raid frames page's, those).
+function ns.RaidStyleParty()
+	local manager = _G.EditModeManagerFrame
+	if manager and manager.UseRaidStylePartyFrames then
+		local ok, raid = pcall(manager.UseRaidStylePartyFrames, manager)
+		if ok and type(raid) == "boolean" then return raid end
+	end
+	local ok, raid = pcall(GetCVarBool, "useCompactPartyFrames")
+	return ok and raid == true
+end
+
+-- The party's own frames (when they aren't raid-style): the classic
+-- clients' by name, retail's in PartyFrame (the raid-style ones apart).
+local function PartyFrames()
+	local list = {}
+	if ns.RaidStyleParty() then return list end
+	for i = 1, 4 do
+		local frame = _G["PartyMemberFrame" .. i]
+		if frame then list[#list + 1] = frame end
+	end
+	local holder = _G.PartyFrame
+	if holder and not (holder.IsForbidden and holder:IsForbidden()) then
+		for _, child in ipairs({ holder:GetChildren() }) do
+			if child ~= _G.CompactPartyFrame then list[#list + 1] = child end
+		end
+	end
+	return list
+end
+
+-- Each frame (its id, as the settings name it) and the game's frames it
+-- covers (their names, or a function giving the frames themselves).
 local FRAMES = {
 	{ "PLAYER", "Player", { "PlayerFrame" } },
 	{ "TARGET", "Target", { "TargetFrame" } },
 	{ "FOCUS", "Focus", { "FocusFrame" } },
 	{ "PET", "Pet", { "PetFrame" } },
 	{ "TOT", "Target of target", { "TargetFrameToT", "FocusFrameToT" } },
+	{ "PARTY", "Party", PartyFrames },
 }
+
+-- The game's frames an entry covers, now.
+local function GameFrames(info)
+	if type(info[3]) == "function" then return info[3]() end
+	local list = {}
+	for _, name in ipairs(info[3]) do
+		if _G[name] then list[#list + 1] = _G[name] end
+	end
+	return list
+end
 
 -- The settings, Default's (and each frame's own, <key>_<FRAME>, starting as
 -- Default's). Texture, border, font and outline start on the General page.
@@ -293,9 +337,8 @@ local Dress
 local function DressFrame(info)
 	local active = ns.StyleOn("ufStyle")
 	local view = active and View(info[1]) or nil
-	for _, name in ipairs(info[3]) do
-		local frame = _G[name]
-		if frame and not (frame.IsForbidden and frame:IsForbidden()) then
+	for _, frame in ipairs(GameFrames(info)) do
+		if not (frame.IsForbidden and frame:IsForbidden()) then
 			local unit = frame.unit
 			local health, power, text, portrait = Parts(frame)
 			local r, g, b
@@ -333,15 +376,19 @@ end
 
 local watcher = CreateFrame("Frame")
 for _, event in ipairs({ "PLAYER_LOGIN", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED", "UNIT_PET",
-	"UNIT_DISPLAYPOWER", "UNIT_FACTION", "GROUP_ROSTER_UPDATE" }) do
+	"UNIT_DISPLAYPOWER", "UNIT_FACTION", "GROUP_ROSTER_UPDATE", "EDIT_MODE_LAYOUTS_UPDATED", "CVAR_UPDATE" }) do
 	pcall(watcher.RegisterEvent, watcher, event)
 end
-watcher:SetScript("OnEvent", function() ns.RefreshUnitStyle() end)
+watcher:SetScript("OnEvent", function(_, event, name)
+	-- (Of the game's settings, only the classic clients' raid-style party one.)
+	if event == "CVAR_UPDATE" and name ~= "useCompactPartyFrames" then return end
+	ns.RefreshUnitStyle()
+end)
 if hooksecurefunc and type(_G.UnitFramePortrait_Update) == "function" then
 	hooksecurefunc("UnitFramePortrait_Update", function(frame)
 		for _, info in ipairs(FRAMES) do
-			for _, name in ipairs(info[3]) do
-				if _G[name] == frame then
+			for _, each in ipairs(GameFrames(info)) do
+				if each == frame then
 					local _, _, _, portrait = Parts(frame)
 					DressPortrait(portrait, ns.StyleOn("ufStyle") and View(info[1]) or nil, frame.unit)
 				end
@@ -360,6 +407,8 @@ local SAMPLES = {
 		amount = 0.7, flip = true },
 	PET = { name = "Wolf", x = 30, y = -118, w = 80, reaction = 5, health = 1, power = { 1, 1, 0 }, amount = 0.5,
 		small = true },
+	PARTY = { name = "Lumen", x = 150, y = -146, w = 90, class = "PALADIN", health = 0.7, power = { 0, 0.55, 1 },
+		amount = 0.8, small = true },
 	TOT = { name = "Vedeth", x = 400, y = -64, w = 70, class = "WARRIOR", health = 0.86, power = { 1, 0, 0 },
 		amount = 0.4, small = true },
 }
@@ -492,9 +541,9 @@ function ns.CreateUnitStylePanel(kit)
 	local title = kit.Label(content, "GameFontNormalLarge", L["Unit frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
 	local intro = kit.PageIntro(content, title,
-		L["How your player, target, focus, pet and target of target frames look. The Default tab's settings " ..
-		"are every frame's until its own tab has Use default settings unticked. Which parts show: the UI " ..
-		"Manager's Unit Frames page."])
+		L["How your player, target, focus, pet, target of target and party frames look. The Default tab's " ..
+		"settings are every frame's until its own tab has Use default settings unticked. Which parts show: " ..
+		"the UI Manager's Unit Frames page."])
 
 	-- The tab being edited (nil: Default), and each setting as the field it edits:
 	-- the frame's own copy while it has one, else Default's (shown greyed).
@@ -528,7 +577,7 @@ function ns.CreateUnitStylePanel(kit)
 	end
 
 	local preview -- (below: drawn again as each setting changes)
-	local tabs, ownCheck = {}, nil
+	local tabs, ownCheck, partyNote = {}, nil, nil
 	local function Changed()
 		ns.RefreshUnitStyle()
 		if preview then preview:Refresh(editing) end
@@ -579,6 +628,7 @@ function ns.CreateUnitStylePanel(kit)
 			tab:SetText((tab.id and L[TAB_NAMES[tab.id]] or L["Default"]) .. (own and " |cffffd100*|r" or ""))
 		end
 		ownCheck:SetShown(editing ~= nil)
+		partyNote:SetShown(editing == "PARTY" and ns.RaidStyleParty())
 	end
 	local list = { false }
 	for _, info in ipairs(FRAMES) do list[#list + 1] = info[1] end
@@ -623,6 +673,13 @@ function ns.CreateUnitStylePanel(kit)
 	end
 	ownCheck.pageSwitch = false
 	stack:Add(ownCheck, "check")
+	-- (Party, while the game draws it as raid frames: nothing here to dress.)
+	partyNote = kit.Label(content, "GameFontHighlightSmall", L["Your party uses raid-style frames (Edit Mode's " ..
+		"party frames setting): they follow the Raid frames page, not this tab."])
+	partyNote:SetPoint("LEFT", ownCheck.Text or ownCheck.text or ownCheck, "RIGHT", 16, 0)
+	partyNote:SetWidth(300)
+	partyNote:SetJustifyH("LEFT")
+	partyNote:SetTextColor(1, 0.82, 0)
 	kit.GreyUnless(ownCheck, rows.On)
 	kit.AddControl(ownCheck)
 
