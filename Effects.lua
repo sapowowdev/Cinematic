@@ -3876,7 +3876,7 @@ end
 -- it's on, else Cinematic's own (the defaults: thin black bars sliding in
 -- with the UI's fade).
 function ns.LetterboxLook()
-	return ns.db.letterboxStyle and ns.db or ns.DEFAULTS
+	return ns.StyleLook("letterboxStyle")
 end
 
 -- A vertical fade of one colour, opaque at the top (or at the bottom).

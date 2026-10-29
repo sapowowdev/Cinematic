@@ -46,8 +46,8 @@ function ns.CreateBubbleStylePanel(kit)
 		{ L["Big words"], L["The game's bubbles, with bigger words."], { bubblesTextScale = 1.3 } },
 	}, PRESET_KEYS, 480)
 
-	local function Boxed(db) return db.bubblesStyle and db.bubblesBack ~= "none" end
-	local function Own(db) return db.bubblesStyle and (db.bubblesBack == "dark" or db.bubblesBack == "custom") end
+	local function Boxed(db) return rows.On(db) and db.bubblesBack ~= "none" end
+	local function Own(db) return rows.On(db) and (db.bubblesBack == "dark" or db.bubblesBack == "custom") end
 
 	stack:Header(content, L["Bubble"])
 	local last = rows.Choices(L["Behind the words:"], "bubblesBack", {
@@ -59,29 +59,17 @@ function ns.CreateBubbleStylePanel(kit)
 	rows.Swatch(last, "bubblesBack", { "bubblesBackR", "bubblesBackG", "bubblesBackB" },
 		L["The bubble's color, for Custom."])
 	rows.Slider("bubblesAlpha", L["Opacity"], 20, 100, 5, "%d%%", 100, L["How see-through the bubble is."], Boxed)
-	rows.Choices(L["Edge:"], "bubblesEdge", {
-		{ "thin", L["Thin"], L["A thin line round the bubble."] },
-		{ "none", L["None"] },
-	}, Own)
+	rows.Border(L["Edge:"], "bubblesEdge", nil, L["The line round a Dark or Custom bubble. Custom: its " ..
+		"thickness and color under it."], Own)
 	rows.Check("bubblesTail", L["The tail pointing at who's talking"],
 		L["The little point under the bubble. Unticked, just the bubble."], Boxed)
 
 	stack:Header(content, L["Words"])
-	local font = kit.Dropdown(content, "bubblesFont", function()
-		local list = {}
-		for _, info in ipairs(ns.QUEST_ITEM_FONTS or {}) do list[#list + 1] = { value = info[1], text = info[2] } end
-		return list
-	end, 200, Changed)
-	if font then
-		local fontName = stack:Add(kit.Label(content, "GameFontHighlight", L["Font:"]), "label")
-		font:SetPoint("LEFT", fontName, "RIGHT", 10, 0) -- (just after the word: a lone dropdown, no column to line up with)
-		kit.GreyUnless(font, rows.On)
-		kit.Tooltip(font, L["The words' font. Russian, Korean or Chinese text keeps the game's, so its letters show."])
-	end
+	rows.Font("bubblesFont", L["The words' font. Russian, Korean or Chinese text keeps the game's, so its letters show."])
 	rows.Slider("bubblesTextScale", L["Text size"], 50, 200, 5, "%d%%", 100,
 		L["How big the words are, next to their usual size."])
 	local OUTLINES = { [0] = L["None"], L["Thin"], L["Thick"], L["Thick + shadow"] }
-	rows.Slider("bubblesOutline", L["Outline"], 0, 3, 1, function(value) return OUTLINES[value] or "" end, 1,
+	rows.Outline("bubblesOutline", L["Outline"], 3, OUTLINES,
 		L["A black border round the letters, so they stand out against the world. Thick + shadow also drops " ..
 		"a shadow below and to the right of them."])
 
@@ -92,7 +80,7 @@ function ns.CreateBubbleStylePanel(kit)
 	stack:Help(content, L["Says and yells whose bubble isn't on your screen, shown low on the screen instead. " ..
 		"Turn it on, and move it, on the UI Manager's Chat bubbles page."])
 	local function Behind(db)
-		return db.bubblesStyle and db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind
+		return rows.On(db) and db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind
 	end
 	local speechName = rows.Check("speechBehindName", L["Show who said it"],
 		L["Speech from behind you starts with the speaker's name (\"Name says: ...\"). Unticked, just their words show."],

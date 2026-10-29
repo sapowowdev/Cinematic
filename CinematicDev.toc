@@ -88,6 +88,9 @@ CombatVision.lua
 QuestTalkStyle.lua
 BubbleStyle.lua
 TooltipStyle.lua
+PersonalStyle.lua
+PlateCastStyle.lua
+GeneralStyle.lua
 WindGuideStyles.lua
 WindGuide.lua
 Focus.lua

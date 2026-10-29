@@ -39,7 +39,7 @@ local DEFAULTS = ns.DEFAULTS
 DEFAULTS.questItemStyle = true
 DEFAULTS.questItemSize = 52            -- its width and height
 DEFAULTS.questItemShape = "square"     -- or "round"
-DEFAULTS.questItemFrame = "game"       -- round it: "game" (the extra action button's art), "thin" (black), "none"
+DEFAULTS.questItemFrame = "general"    -- round it: "game" (the extra action button's art), "none", "thin", "thick", "custom"
 DEFAULTS.questItemZoom = false         -- the icon zoomed in, to cut its own border
 DEFAULTS.questItemGlow = "none"        -- while it's ready: "none", "soft" or "edge"
 DEFAULTS.questItemGlowColor = "gold"   -- ...gold or "custom" (questItemGlowR/G/B)
@@ -47,11 +47,11 @@ DEFAULTS.questItemGlowR, DEFAULTS.questItemGlowG, DEFAULTS.questItemGlowB = 0.5,
 DEFAULTS.questItemCooldown = "sweep"   -- "sweep" (the game's) or "fill" (a dark fill, draining)
 DEFAULTS.questItemNumbers = true       -- the seconds left in the middle while it cools down
 DEFAULTS.questItemKey = true           -- its key binding in the corner
-DEFAULTS.questItemFont = "game"        -- its numbers' font (QUEST_ITEM_FONTS)
-DEFAULTS.questItemOutline = 1          -- ...outline: 0 none, 1 thin, 2 thick
+DEFAULTS.questItemFont = "general"     -- its numbers' font (QUEST_ITEM_FONTS; general: General's)
+DEFAULTS.questItemOutline = -1         -- ...outline: 0 none, 1 thin, 2 thick (-1: General's)
 
 function ns.QuestItemLook()
-	return ns.db and ns.db.questItemStyle and ns.db or DEFAULTS
+	return ns.StyleLook("questItemStyle")
 end
 
 local CIRCLE = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask" -- (a round mask every client has)
@@ -146,13 +146,14 @@ function ns.StyleQuestItem(parts, look, size)
 	end
 	if cooldown.SetUseCircularEdge then cooldown:SetUseCircularEdge(round) end
 
-	local frame = look.questItemFrame
+	local frame, edge, er, eg, eb = ns.StyleBorder(look, "questItemFrame")
 	parts.style:SetShown(frame == "game")
 	parts.style:SetSize(size * parts.styleSize[1], size * parts.styleSize[2])
-	-- (Thin: a black edge, a disc behind a round icon.)
-	parts.back:SetShown(frame == "thin")
-	parts.back:SetSize(size + 2, size + 2)
-	parts.back:SetColorTexture(0, 0, 0, 1)
+	-- (A line of ours: a plate behind it, edge pixels bigger all round; a disc
+	-- behind a round icon.)
+	parts.back:SetShown(frame == "line")
+	parts.back:SetSize(size + 2 * edge, size + 2 * edge)
+	parts.back:SetColorTexture(er or 0, eg or 0, eb or 0, 1)
 	local zoom = look.questItemZoom and 0.08 or 0
 	parts.icon:SetTexCoord(zoom, 1 - zoom, zoom, 1 - zoom)
 
@@ -171,7 +172,7 @@ function ns.StyleQuestItem(parts, look, size)
 	else
 		glow:SetColorTexture(r, g, b, 1)
 		glow:SetBlendMode("BLEND")
-		local pad = frame == "game" and 8 or frame == "thin" and 3 or 2
+		local pad = frame == "game" and 8 or frame == "line" and edge + 2 or 2
 		glow:SetSize(size + 2 * pad, size + 2 * pad)
 		-- (Round: a disc, masked with one of its own the size of the glow.)
 		if parts.frame.CreateMaskTexture and round ~= (parts.glowMasked or false) then

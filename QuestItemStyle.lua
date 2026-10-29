@@ -114,16 +114,13 @@ function ns.CreateQuestItemStylePanel(kit)
 		{ "square", L["Square"] },
 		{ "round", L["Round"] },
 	})
-	rows.Choices(L["Frame:"], "questItemFrame", {
-		{ "game", L["The game's"], L["The extra ability button's frame round it."] },
-		{ "thin", L["Thin black"] },
-		{ "none", L["None"] },
-	})
+	rows.Border(L["Frame:"], "questItemFrame", { game = true }, L["Round the button: the game's (the extra " ..
+		"ability button's frame), or one of ours (Custom: its thickness and color under it)."])
 	rows.Check("questItemZoom", L["Zoom the icon in to cut its own border"],
 		L["Icons have a dark border of their own: zoomed in a little, it's cut off."])
 
 	stack:Header(content, L["When it's ready"])
-	local function Glowing(db) return db.questItemStyle and db.questItemGlow ~= "none" end
+	local function Glowing(db) return rows.On(db) and db.questItemGlow ~= "none" end
 	rows.Choices(L["Glow:"], "questItemGlow", {
 		{ "none", L["None"] },
 		{ "soft", L["Soft"], L["A soft halo round it."] },
@@ -147,18 +144,9 @@ function ns.CreateQuestItemStylePanel(kit)
 	stack:Header(content, L["Text"])
 	rows.Check("questItemKey", L["Its key binding in the corner"],
 		L["The key you've bound to it (Key Bindings, Cinematic: Use the quest item), in its top corner."])
-	local font = kit.Dropdown(content, "questItemFont", function()
-		local list = {}
-		for _, info in ipairs(ns.QUEST_ITEM_FONTS) do list[#list + 1] = { value = info[1], text = info[2] } end
-		return list
-	end, 200, Changed)
-	if font then
-		local fontName = stack:Add(kit.Label(content, "GameFontHighlight", L["Font:"]), "label")
-		font:SetPoint("LEFT", fontName, "RIGHT", 10, 0) -- (just after the word: a lone dropdown, no column to line up with)
-		kit.GreyUnless(font, rows.On)
-	end
+	rows.Font("questItemFont", nil)
 	local OUTLINES = { [0] = L["None"], L["Thin"], L["Thick"] }
-	rows.Slider("questItemOutline", L["Outline"], 0, 2, 1, function(value) return OUTLINES[value] or "" end, 1,
+	rows.Outline("questItemOutline", L["Outline"], 2, OUTLINES,
 		L["A black border round its numbers."])
 
 	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))

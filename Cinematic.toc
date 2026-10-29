@@ -96,6 +96,9 @@ CombatVision.lua
 QuestTalkStyle.lua
 BubbleStyle.lua
 TooltipStyle.lua
+PersonalStyle.lua
+PlateCastStyle.lua
+GeneralStyle.lua
 Focus.lua
 Tracking.lua
 NodeSweep.lua

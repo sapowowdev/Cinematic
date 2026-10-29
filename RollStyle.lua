@@ -73,34 +73,22 @@ function ns.CreateRollStylePanel(kit)
 		{ "none", L["Nothing"], L["Just the text, over the world."] },
 	})
 	rows.Slider("rollAlpha", L["Opacity"], 20, 100, 5, "%d%%", 100, L["How see-through the cards are."],
-		function(db) return db.rollStyle and db.rollPanel ~= "none" end)
+		function(db) return rows.On(db) and db.rollPanel ~= "none" end)
 	rows.Choices(L["Rows:"], "rollDensity", {
 		{ "roomy", L["Roomy"] },
 		{ "compact", L["Compact"] },
 	})
 
 	stack:Header(content, L["Text"])
-	local font = kit.Dropdown(content, "rollFont", function()
-		local list = {}
-		for _, info in ipairs(ns.QUEST_ITEM_FONTS or {}) do list[#list + 1] = { value = info[1], text = info[2] } end
-		return list
-	end, 200, Changed)
-	if font then
-		local fontName = stack:Add(kit.Label(content, "GameFontHighlight", L["Font:"]), "label")
-		font:SetPoint("LEFT", fontName, "RIGHT", 10, 0) -- (just after the word: a lone dropdown, no column to line up with)
-		kit.GreyUnless(font, rows.On)
-		kit.Tooltip(font, L["Names in Russian, Korean or Chinese keep the game's font, so their letters show."])
-	end
+	rows.Font("rollFont", L["Names in Russian, Korean or Chinese keep the game's font, so their letters show."])
 	rows.Slider("rollTextSize", L["Size"], 70, 140, 5, "%d%%", 100, L["How big the text is, next to its usual size."])
 	local OUTLINES = { [0] = L["None"], L["Thin"], L["Thick"] }
-	rows.Slider("rollOutline", L["Outline"], 0, 2, 1, function(value) return OUTLINES[value] or "" end, 1,
+	rows.Outline("rollOutline", L["Outline"], 2, OUTLINES,
 		L["A black border round the letters: easier to read with no panel behind them."])
 
 	stack:Header(content, L["Time left"])
-	rows.Choices(L["Bar texture:"], "rollBarTexture", {
-		{ "flat", L["Flat"] },
-		{ "smooth", L["Smooth"], L["The game's status bar texture."] },
-	})
+	rows.Texture(L["Bar texture:"], "rollBarTexture", L["The bar's fill. Below the game's own few: any other " ..
+		"addon shares (through LibSharedMedia)."], nil, { 1, 0.82, 0 }, L["Flat"])
 	rows.Swatch(rows.Choices(L["Bar color:"], "rollBarColor", {
 		{ "quality", L["The item's quality"] },
 		{ "gold", L["Gold"] },
@@ -109,7 +97,7 @@ function ns.CreateRollStylePanel(kit)
 	rows.Slider("rollBarHeight", L["Bar height"], 2, 10, 1, "%d", 1, L["How tall the bar for the time left is."])
 
 	stack:Header(content, L["Picks"])
-	local function Words(db) return db.rollStyle and db.rollPicks == "words" end
+	local function Words(db) return rows.On(db) and db.rollPicks == "words" end
 	rows.Choices(L["Shown as:"], "rollPicks", {
 		{ "icons", L["Icons"], L["The game's dice and coin before each name."] },
 		{ "words", L["Words"], L["Need, Greed or Transmog after each name, in their colors."] },
@@ -123,7 +111,7 @@ function ns.CreateRollStylePanel(kit)
 		"who won."])
 
 	stack:Header(content, L["Winner"])
-	local function Marked(db) return db.rollStyle and db.rollWinner ~= "plain" end
+	local function Marked(db) return rows.On(db) and db.rollWinner ~= "plain" end
 	rows.Choices(L["Winner's row:"], "rollWinner", {
 		{ "lit", L["Lit"], L["A glow along the row, a crown and the number in its color."] },
 		{ "crown", L["A crown"], L["A crown and the number in its color."] },

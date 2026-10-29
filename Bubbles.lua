@@ -43,14 +43,14 @@ DEFAULTS.bubblesStyle = true
 DEFAULTS.bubblesBack = "game"   -- behind the words: "game" (the game's bubble), "dark", "custom" (bubblesBackR/G/B), "none"
 DEFAULTS.bubblesBackR, DEFAULTS.bubblesBackG, DEFAULTS.bubblesBackB = 0.2, 0.12, 0.3
 DEFAULTS.bubblesAlpha = 1       -- ...its opacity
-DEFAULTS.bubblesEdge = "thin"   -- ...Dark and Custom's edge: "thin" (a line round it) or "none"
+DEFAULTS.bubblesEdge = "general" -- ...Dark and Custom's edge: "none", "thin", "thick", "custom" (general: General's)
 DEFAULTS.bubblesTail = true     -- ...the tail pointing at who's talking
-DEFAULTS.bubblesFont = "game"   -- the words' font (ns.QUEST_ITEM_FONTS' names)
-DEFAULTS.bubblesOutline = 0     -- ...outline: 0 none, 1 thin, 2 thick, 3 thick with a drop shadow
+DEFAULTS.bubblesFont = "general" -- the words' font (ns.QUEST_ITEM_FONTS' names; general: the Style hub's General page)
+DEFAULTS.bubblesOutline = -1    -- ...outline: 0 none, 1 thin, 2 thick, 3 thick with a drop shadow (-1: General's)
 -- (and bubblesTextScale, their size: Core.lua)
 
 local function Look()
-	return ns.db and ns.db.bubblesStyle and ns.db or DEFAULTS
+	return ns.StyleLook("bubblesStyle")
 end
 ns.BubbleLook = Look
 
@@ -109,6 +109,7 @@ function ns.MakeBubbleSkin(parent)
 	end
 	tail:SetDesaturated(true)
 	skin.tail = tail
+	skin.border = ns.MakeStyleEdges(skin, "BORDER")
 	return skin
 end
 
@@ -119,10 +120,12 @@ function ns.DressBubbleSkin(skin, look)
 	if not r then return end
 	local alpha = tonumber(look.bubblesAlpha) or 1
 	skin.back:SetVertexColor(r, g, b, alpha)
-	local edged = look.bubblesEdge == "thin"
-	for _, edge in ipairs(skin.edges) do
-		edge:SetShown(edged)
-		edge:SetVertexColor(0.65, 0.65, 0.65, 0.7 * alpha)
+	for _, edge in ipairs(skin.edges) do edge:Hide() end -- (the old 1-pixel lines: ours now, any thickness)
+	-- (Thin and Thick: a soft grey, as the bubble's always had; Custom: its own.)
+	local kind, size, er, eg, eb = ns.StyleBorder(look, "bubblesEdge", { 0.65, 0.65, 0.65 })
+	skin.border:SetShown(kind == "line")
+	if kind == "line" then
+		ns.DressStyleEdges(skin.border, size, er, eg, eb, look.bubblesEdge == "custom" and alpha or 0.7 * alpha, false)
 	end
 	skin.tail:SetVertexColor(r, g, b, alpha)
 	skin.tail:SetShown(look.bubblesTail and true or false)
@@ -267,7 +270,7 @@ local function StyleBubbles()
 	if not (C_ChatBubbles and C_ChatBubbles.GetAllChatBubbles) then
 		return
 	end
-	local look = ns.db and ns.db.bubblesStyle and ns.db or nil
+	local look = ns.StyleOn("bubblesStyle") and ns.StyleLook("bubblesStyle") or nil
 	if not look and not next(faded) and not next(scaled) and not next(restyled) and not next(skins) then
 		return
 	end
@@ -281,6 +284,7 @@ local function StyleBubbles()
 		end
 	end
 end
+ns.RefreshBubbleStyle = StyleBubbles -- (the Style pages, as their settings change)
 
 -- A bubble like the game's: its nine-slice where the client has one, else
 -- the older bubble textures. (Speech from behind you, the Style page's preview.)
@@ -526,7 +530,7 @@ watcher:SetScript("OnEvent", ns.Profiled("chat bubbles event", function(self, ev
 		ns.ApplyBubbles()
 	-- (Also while the Style page is on, or any bubble is still styled from
 	-- before.) (And while the page is on at all, to keep new bubbles off the top.)
-	elseif ns.db and (ns.db.handleBubbles or ns.db.bubblesStyle or Styled()) then
+	elseif ns.db and (ns.db.handleBubbles or ns.StyleOn("bubblesStyle") or Styled()) then
 		watchLeft = WATCH_FOR
 		self:SetScript("OnUpdate", OnUpdate)
 	end

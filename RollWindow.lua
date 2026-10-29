@@ -48,10 +48,10 @@ DEFAULTS.rollStyle = true
 DEFAULTS.rollPanel = "rounded"     -- cards on: "rounded" (the game's roll frame's edge), "flat" (a thin line), "none"
 DEFAULTS.rollAlpha = 0.88          -- ...their background's opacity
 DEFAULTS.rollDensity = "roomy"     -- player rows: "roomy" or "compact"
-DEFAULTS.rollFont = "game"         -- the text's font (ns.QUEST_ITEM_FONTS' names)
+DEFAULTS.rollFont = "general"      -- the text's font (ns.QUEST_ITEM_FONTS' names; general: General's)
 DEFAULTS.rollTextSize = 1          -- ...times its usual size
-DEFAULTS.rollOutline = 0           -- ...outline: 0 none, 1 thin, 2 thick
-DEFAULTS.rollBarTexture = "flat"   -- the time left's bar: "flat" or "smooth" (the game's status bar)
+DEFAULTS.rollOutline = -1          -- ...outline: 0 none, 1 thin, 2 thick (-1: General's)
+DEFAULTS.rollBarTexture = "general" -- the time left's bar: "flat" or a texture (ns.StyleTexturePath; general: General's)
 DEFAULTS.rollBarColor = "quality"  -- ...its color: the item's "quality", "gold" or "custom" (rollBarR/G/B)
 DEFAULTS.rollBarR, DEFAULTS.rollBarG, DEFAULTS.rollBarB = 1, 0.82, 0
 DEFAULTS.rollBarHeight = 3
@@ -65,7 +65,7 @@ DEFAULTS.rollWinnerColor = "gold"  -- ...its light and number: "gold" or "custom
 DEFAULTS.rollWinnerR, DEFAULTS.rollWinnerG, DEFAULTS.rollWinnerB = 1, 0.82, 0
 
 local function Look()
-	return ns.db and ns.db.rollStyle and ns.db or DEFAULTS
+	return ns.StyleLook("rollStyle")
 end
 local styleVersion = 1 -- (one more each time the look changes: cards and rows put in it again)
 
@@ -613,7 +613,6 @@ local function NewCard(index, parent)
 	return card
 end
 
-local SMOOTH_BAR = "Interface\\TargetingFrame\\UI-StatusBar"
 
 -- A card in the look: its panel, text and the time left's bar.
 local function StyleCard(card, look)
@@ -624,9 +623,8 @@ local function StyleCard(card, look)
 	local height = look.rollBarHeight
 	card.track:SetHeight(height + 2)
 	card.bar:SetHeight(height)
-	if look.rollBarTexture == "smooth" then
-		card.bar:SetTexture(SMOOTH_BAR)
-	else
+	-- (Flat, or the game's: a color of its own, BarColor's; else the texture, tinted.)
+	if look.rollBarTexture == "flat" or not ns.SetStyleTexture(card.bar, look.rollBarTexture) then
 		card.bar:SetVertexColor(1, 1, 1, 1) -- (BarColor's colour texture, untinted)
 	end
 end
@@ -638,7 +636,7 @@ local function BarColor(card, look, r, g, b)
 	elseif look.rollBarColor == "custom" then
 		r, g, b = look.rollBarR, look.rollBarG, look.rollBarB
 	end
-	if look.rollBarTexture == "smooth" then
+	if look.rollBarTexture ~= "flat" and ns.StyleTexturePath(look.rollBarTexture) then
 		card.bar:SetVertexColor(r, g, b, 0.9)
 	else
 		card.bar:SetColorTexture(r, g, b, 0.9)

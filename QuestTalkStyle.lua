@@ -98,32 +98,22 @@ function ns.CreateQuestTalkStylePanel(kit)
 			{ "right", L["Right"], SIDE_TIP }, { "left", L["Left"], SIDE_TIP },
 		}, SideOn)
 	end
-	local listY = stack:Add(kit.Slider(content, "questTalkListY", L["List height on the screen"], 20, 80, 1,
-		"%d%%", 100, function()
-			ns.GetDB().questTalkSpot = nil -- (the slider decides again)
+	local listLine = stack:Add(kit.BoxLine(content), "label")
+	local listY = listLine:Box(L["List height on the screen"], "questTalkListY", 20, 80, 1, "%d", 100,
+		L["How far up the screen the list of replies starts: its top edge, from the bottom of the screen. " ..
+		"Changing this also forgets where you dragged the list to."], function()
+			ns.GetDB().questTalkSpot = nil -- (the box decides again)
 			Changed()
-		end), "slider")
-	kit.Tooltip(listY, L["How far up the screen the list of replies starts: its top edge, from the bottom of " ..
-		"the screen. Moving this also forgets where you dragged the list to."])
+		end, nil, "%")
 	kit.GreyUnless(listY, rows.On)
 
 	stack:Header(content, L["Words"])
-	local font = kit.Dropdown(content, "questTalkFont", function()
-		local list = {}
-		for _, info in ipairs(ns.QUEST_ITEM_FONTS or {}) do list[#list + 1] = { value = info[1], text = info[2] } end
-		return list
-	end, 200, Changed)
-	if font then
-		local fontName = stack:Add(kit.Label(content, "GameFontHighlight", L["Font:"]), "label")
-		font:SetPoint("LEFT", fontName, "RIGHT", 10, 0) -- (just after the word: a lone dropdown, no column to line up with)
-		kit.GreyUnless(font, rows.On)
-		kit.Tooltip(font, L["The game's: each part in its own (the quest window's for the words). Russian, " ..
-			"Korean or Chinese text keeps the game's, so its letters show."])
-	end
+	rows.Font("questTalkFont", L["The game's: each part in its own (the quest window's for the words). Russian, " ..
+		"Korean or Chinese text keeps the game's, so its letters show."])
 	rows.Slider("questTalkTextSize", L["Text size"], 70, 150, 5, "%d%%", 100,
 		L["How big the words are, next to their usual size."])
 	local OUTLINES = { [0] = L["None"], L["Thin"], L["Thick"] }
-	rows.Slider("questTalkOutline", L["Outline"], 0, 2, 1, function(value) return OUTLINES[value] or "" end, 1,
+	rows.Outline("questTalkOutline", L["Outline"], 2, OUTLINES,
 		L["A black border round the letters: for light words with no panel behind them."])
 
 	-- Using it.

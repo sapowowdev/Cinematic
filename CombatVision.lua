@@ -248,7 +248,7 @@ function ns.PlayCombatVision(enter, cine)
 		screen:EnableMouse(false)
 		ns.AddOverlay(screen)
 	end
-	Play(screen, ns.db, enter, UIParent:GetWidth(), UIParent:GetHeight(), 1)
+	Play(screen, ns.StyleLook("combatVision"), enter, UIParent:GetWidth(), UIParent:GetHeight(), 1)
 	if cine == nil then cine = ns.lastCinematic and true or false end
 	ns.PlayCombatCueSound(enter and "enter" or "leave", cine) -- (CombatSoundRules.lua)
 end

@@ -303,6 +303,85 @@ local function Slider(parent, key, label, minV, maxV, step, fmt, scale, onChange
 	return slider
 end
 
+-- A line of small number boxes, each with its name before it, in place of
+-- a slider each (the Nameplate Style page's W and H boxes): the mouse wheel
+-- steps a box, or a number's typed and Enter pressed. `scale` and `fmt` as
+-- Slider's; a name may be blank (the box beside the one before); unit: a
+-- word after the box (sec), the number alone in it.
+local function BoxLine(parent)
+	local line = CreateFrame("Frame", nil, parent)
+	line:SetSize(10, 22)
+	local right = 0
+	function line.Box(_, label, key, minV, maxV, step, fmt, scale, tip, onChange, width, unit)
+		scale = scale or 1
+		RecordKey(parent, key)
+		local name = Label(line, "GameFontHighlight", label)
+		name:SetPoint("LEFT", line, "LEFT", right, 0)
+		name.searchSkip = true
+		local box = ns.SkinEditBox(CreateFrame("EditBox", nil, line, "InputBoxTemplate"))
+		box:SetSize(width or 36, 20)
+		box:SetPoint("LEFT", name, "RIGHT", label ~= "" and 8 or 0, 0)
+		box:SetAutoFocus(false)
+		box:SetJustifyH("RIGHT")
+		box:SetMaxLetters(6)
+		box:EnableMouseWheel(true)
+		box.searchLabel = label
+		right = right + (label ~= "" and name:GetStringWidth() + 8 or 0) + (width or 36) + 18
+		if unit then
+			local after = Label(line, "GameFontHighlight", unit)
+			after:SetPoint("LEFT", box, "RIGHT", 4, 0)
+			after.searchSkip = true
+			right = right + after:GetStringWidth() + 4
+		end
+		line:SetWidth(right)
+		local function Now()
+			return (ns.GetDB()[key] or 0) * scale
+		end
+		local function Shown(value)
+			return type(fmt) == "function" and fmt(value) or fmt:format(value)
+		end
+		local function Set(value)
+			value = math.max(minV, math.min(maxV, math.floor(value / step + 0.5) * step))
+			ns.GetDB()[key] = value / scale
+			box:SetText(box:HasFocus() and tostring(value) or Shown(value))
+			box.edited = nil
+			if onChange then onChange(value) end
+		end
+		box:SetScript("OnMouseWheel", function(self, delta)
+			if self:IsEnabled() then Set(Now() + delta * step) end
+		end)
+		box:SetScript("OnEditFocusGained", function(self)
+			self:SetText(tostring(math.floor(Now() / step + 0.5) * step))
+			self:HighlightText()
+			self.edited = nil
+		end)
+		-- (Only a number typed in it is saved on leaving it.)
+		box:SetScript("OnTextChanged", function(self, typed)
+			if typed then self.edited = true end
+		end)
+		box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+		box:SetScript("OnEscapePressed", function(self)
+			self.cancelled = true
+			self:ClearFocus()
+		end)
+		box:SetScript("OnEditFocusLost", function(self)
+			local typed = tonumber((self:GetText():match("%-?[%d%.]+")))
+			if typed and self.edited and not self.cancelled then
+				Set(typed)
+			end
+			self.cancelled, self.edited = nil, nil
+			self:SetText(Shown(Now()))
+		end)
+		box.Refresh = function(self)
+			if not self:HasFocus() then self:SetText(Shown(Now())) end
+		end
+		controls[#controls + 1] = box
+		Tooltip(box, (tip and tip .. " " or "") .. L["Scroll the mouse wheel over it, or type a number and press Enter."])
+		return box, name
+	end
+	return line
+end
+
 -- Greys a control out unless test(db) holds (checkbox labels dim too).
 local function GreyUnless(control, test)
 	local refresh = control.Refresh
@@ -424,6 +503,24 @@ local function Dropdown(parent, key, choices, width, onChange)
 					if onChange then onChange(choice.value) end
 					Refresh()
 				end)
+			-- (choice.texture: a strip of it at the entry's right, as the Style
+			-- pages' texture lists show each; tinted choice.tint.)
+			if choice.texture and radio and radio.AddInitializer then
+				radio:AddInitializer(function(button)
+					if not button.AttachTexture then return end
+					local strip = button:AttachTexture()
+					if choice.atlas then strip:SetAtlas(choice.texture) else strip:SetTexture(choice.texture) end
+					strip:SetSize(90, 12)
+					strip:SetPoint("RIGHT", button, "RIGHT", -6, 0)
+					local tint = choice.tint or { 0.3, 0.75, 0.35 }
+					strip:SetVertexColor(tint[1], tint[2], tint[3], 1)
+					-- (Grey last, both ways: the menu's pooled textures came back
+					-- in their own colors with only SetDesaturated, before the rest.)
+					local grey = choice.atlas and true or false
+					strip:SetDesaturated(grey)
+					if strip.SetDesaturation then strip:SetDesaturation(grey and 1 or 0) end
+				end)
+			end
 			local db = ns.GetDB()
 			if choice.enabled and db and radio and radio.SetEnabled then
 				radio:SetEnabled(choice.enabled(db) and true or false)
@@ -1209,12 +1306,15 @@ do
 		-- (section: a row of its own, its name before it: the game's frames,
 		-- then Cinematic's own)
 		{ name = "Style", pages = {
+			{ "Style General", "Interface\\Icons\\INV_Misc_Gear_08", label = "General" },
 			{ "Nameplate Style", "Interface\\Icons\\Ability_Marksmanship", label = "Nameplates", section = "Game" },
 			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names", section = "Game" },
 			{ "Cast Bar Style", "Interface\\Icons\\Spell_Nature_Lightning", label = "Cast bars", section = "Game" },
 			{ "Bubble Style", "Interface\\Icons\\Ability_Warrior_RallyingCry", label = "Chat bubbles",
 				section = "Game" },
 			{ "Tooltip Style", "Interface\\Icons\\INV_Misc_Note_05", label = "Tooltips", section = "Game" },
+			{ "Personal Style", "Interface\\Icons\\Spell_Holy_SealOfVengeance", label = "Personal resources",
+				section = "Game" },
 			{ "Letterbox Style", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", label = "Letterbox",
 				section = "Cinematic" },
 			{ "Quest Talk Style", "Interface\\Icons\\INV_Scroll_02", label = "Quest talk", section = "Cinematic" },
@@ -12527,7 +12627,7 @@ ns.lowHealthKit = { CreateScrollPage = CreateScrollPage, Label = Label, PageShow
 	PageSwitch = PageSwitch, AddControl = function(control) controls[#controls + 1] = control end,
 	Header = Header, CreateKeybindButton = CreateKeybindButton, RefreshKeybinds = RefreshKeybinds,
 	StopListening = StopListening, IconPicker = IconPicker, FitContentHeight = FitContentHeight,
-	Choice = Choice, OpenColorPicker = OpenColorPicker }
+	Choice = Choice, OpenColorPicker = OpenColorPicker, BoxLine = BoxLine }
 
 -- The pages are built once the language is known (Locales.lua): first the
 -- text this file made as it ran is translated again.
@@ -12628,6 +12728,15 @@ ns.OnLanguage(function()
 	end
 	if ns.CreateTooltipStylePanel then -- (TooltipStyle.lua)
 		ns.CreateTooltipStylePanel(ns.lowHealthKit)
+	end
+	if ns.CreatePersonalStylePanel then -- (PersonalStyle.lua)
+		ns.CreatePersonalStylePanel(ns.lowHealthKit)
+	end
+	if ns.CreateGeneralStylePanel then -- (GeneralStyle.lua)
+		ns.CreateGeneralStylePanel(ns.lowHealthKit)
+	end
+	if ns.CreatePlateCastStylePanel then -- (PlateCastStyle.lua)
+		ns.CreatePlateCastStylePanel(ns.lowHealthKit)
 	end
 	CreateEffectsPanel()
 	CreateTintPanel()

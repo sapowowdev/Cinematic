@@ -142,6 +142,9 @@ function ns.CreatePersonalResourcesPanel(kit)
 		L["Your player frame, pet frame and personal resource display in CineMode: kept up while you recover " ..
 		"after a fight or run low on mana, and held back at the start of a fight until there's something to " ..
 		"see. When they come up at all (always, in fights, in places) is their rows' on the Standard Frames page."])
+	-- Their look: the Style hub's Personal resources page (PersonalStyle.lua).
+	ns.StyleLink(content, title, "Personal Style", L["Opens the Style hub's Personal resources page: how the " ..
+		"bars look."], kit.Tooltip)
 	local stack = kit.Stack(intro, "label")
 	local function Tick(key, label, tip, enabledBy)
 		local check = stack:Add(kit.Check(content, key, label, tip), "check")

@@ -11,6 +11,15 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-29", page = "Style General", title = "Style hub: General",
+		text = "One switch for every Style page, and a bar texture, font, outline and border every page " ..
+		"follows unless you give it its own, with a preview of several pages at once." },
+	{ date = "2026-10-29", page = "Personal Style", title = "Personal resources style",
+		text = "The bars under your character have a page of their own in the Style hub: their texture and " ..
+		"border, the health bar's color, each bar's size and your class resource's, with presets and a preview." },
+	{ date = "2026-10-29", page = "Cast Bar Style", title = "Cast bars style",
+		text = "Cast bars on nameplates have a page of their own in the Style hub: their size, fill and colors, " ..
+		"border, icon, spell name and the seconds left, with presets and a preview." },
 	{ date = "2026-10-29", page = "Tooltip Style", title = "Tooltips style",
 		text = "Tooltips have a page of their own in the Style hub: a dark or colored background, an edge in a " ..
 		"unit's or item's color, the words' font, size and outline, names in class colors, and where the health " ..

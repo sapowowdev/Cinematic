@@ -84,15 +84,11 @@ local LOOKS = {
 local DEFAULTS = ns.DEFAULTS
 DEFAULTS.questTalkStyled = true
 DEFAULTS.questTalkAlpha = 1      -- the panels' opacity (their fill, edge and page)
-DEFAULTS.questTalkFont = "game"  -- the words' font (ns.QUEST_ITEM_FONTS' names; game: each part's own)
+DEFAULTS.questTalkFont = "general" -- the words' font (ns.QUEST_ITEM_FONTS' names; game: each part's own; general: General's)
 DEFAULTS.questTalkTextSize = 1   -- ...times their usual size
-DEFAULTS.questTalkOutline = 0    -- ...outline: 0 none, 1 thin, 2 thick
+DEFAULTS.questTalkOutline = -1   -- ...outline: 0 none, 1 thin, 2 thick (-1: General's)
 local function Styled(key)
-	local db = ns.db
-	if db and db.questTalkStyled then
-		return db[key]
-	end
-	return DEFAULTS[key]
+	return ns.StyleLook("questTalkStyled")[key]
 end
 local function CurrentLook()
 	return LOOKS[Styled("questTalkStyle")] or LOOKS.parchment

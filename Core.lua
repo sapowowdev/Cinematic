@@ -4395,6 +4395,18 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.questTalkProfileV1 = true
 		end
+		-- The Style pages' shared settings (bar texture, font, outline) follow
+		-- the Style hub's General page now: everyone's start on General, saved
+		-- profiles dropping theirs. Once.
+		if not ns.db.styleGeneralV1 then
+			for key in pairs(ns.SHARED_STYLE or {}) do
+				ns.db[key] = DEFAULTS[key]
+				for _, saved in pairs(ns.db.profiles or {}) do
+					if type(saved) == "table" then saved[key] = nil end
+				end
+			end
+			ns.db.styleGeneralV1 = true
+		end
 		-- The Style hub's pages are on to start with now (their defaults look
 		-- as the page off did: the switch is there to compare). Once.
 		if not ns.db.stylePagesOnV1 then

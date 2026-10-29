@@ -14,22 +14,21 @@ DEFAULTS.tooltipStyle = true          -- the page's switch (off: these defaults,
 DEFAULTS.tooltipBack = "game"         -- the background: "game", "dark" or "custom" (tooltipBackR/G/B)
 DEFAULTS.tooltipBackR, DEFAULTS.tooltipBackG, DEFAULTS.tooltipBackB = 0.1, 0.08, 0.16
 DEFAULTS.tooltipAlpha = 1             -- ...its opacity
-DEFAULTS.tooltipEdge = "game"         -- the edge: "game", "thin" (black), "colored" (the unit's or item's) or "none"
-DEFAULTS.tooltipFont = "game"         -- the words' font (ns.QUEST_ITEM_FONTS' names)
+DEFAULTS.tooltipEdge = "general"      -- the edge: "game", "none", "thin", "thick", "colored" (the unit's or item's), "custom"
+DEFAULTS.tooltipFont = "general"      -- the words' font (ns.QUEST_ITEM_FONTS' names; general: General's)
 DEFAULTS.tooltipTextSize = 1          -- ...times their usual size
-DEFAULTS.tooltipOutline = 0           -- ...outline: 0 none, 1 thin, 2 thick
+DEFAULTS.tooltipOutline = -1          -- ...outline: 0 none, 1 thin, 2 thick (-1: General's)
 DEFAULTS.tooltipNames = "game"        -- names: "game" or "class" (players' class, NPCs' reaction colors)
 DEFAULTS.tooltipBar = "under"         -- the health bar: "under" (the game's place), "top" (over the tooltip) or "none"
-DEFAULTS.tooltipBarTexture = "game"   -- ...its texture: "game", "flat" or "smooth"
+DEFAULTS.tooltipBarTexture = "general" -- ...its texture: "game" or a texture (ns.StyleTexturePath; general: General's)
 DEFAULTS.tooltipBarHeight = 8         -- ...its height
 
 local function Look()
-	return ns.db and ns.db.tooltipStyle and ns.db or DEFAULTS
+	return ns.StyleLook("tooltipStyle")
 end
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local DARK = { 0.03, 0.03, 0.04 }
-local BAR_TEXTURES = { flat = WHITE, smooth = "Interface\\TargetingFrame\\UI-StatusBar" }
 
 local function Readable(value)
 	return value ~= nil and not (issecretvalue and issecretvalue(value))
@@ -89,6 +88,7 @@ local function MakeSkin(parent, inside)
 	skin.back = skin:CreateTexture(nil, "BACKGROUND", nil, -7)
 	skin.back:SetAllPoints()
 	skin.back:SetTexture(WHITE)
+	skin.border = ns.MakeStyleEdges(skin, "BORDER")
 	skin.edges = {}
 	for i, side in ipairs(SIDES) do
 		local edge = skin:CreateTexture(nil, "BORDER")
@@ -107,14 +107,13 @@ local function DressSkin(skin, look, r, g, b)
 	local br, bg, bb = BackColor(look)
 	skin.back:SetShown(br ~= nil)
 	if br then skin.back:SetVertexColor(br, bg, bb, alpha) end
-	local edge = look.tooltipEdge
-	local er, eg, eb = 0, 0, 0
-	if edge == "colored" then er, eg, eb = r or 0.6, g or 0.6, b or 0.6 end
-	for _, line in ipairs(skin.edges) do
-		line:SetShown(edge == "thin" or edge == "colored")
-		line:SetVertexColor(er, eg, eb, 1)
-	end
-	skin:SetShown(br ~= nil or edge == "thin" or edge == "colored")
+	for _, line in ipairs(skin.edges) do line:Hide() end -- (the old 1-pixel lines: ours now, any thickness)
+	local kind, size, er, eg, eb = ns.StyleBorder(look, "tooltipEdge")
+	if kind == "colored" then er, eg, eb = r or 0.6, g or 0.6, b or 0.6 end
+	local lined = kind == "line" or kind == "colored"
+	skin.border:SetShown(lined)
+	if lined then ns.DressStyleEdges(skin.border, size, er, eg, eb, 1, false) end
+	skin:SetShown(br ~= nil or lined)
 end
 
 -- The game's nine-slice: its fill (Center) at the look's opacity, or faded
@@ -205,15 +204,17 @@ local function DressBar(bar, tooltip, look)
 	end
 	if Readable(height) then bar:SetHeight(height) end
 	bar:SetAlpha(where == "none" and 0 or 1)
-	local texture = look and BAR_TEXTURES[look.tooltipBarTexture]
-	if texture then
-		bar:SetStatusBarTexture(texture)
-	elseif barOwn.atlas and bar.SetStatusBarTexture then
+	if look and ns.SetBarTexture(bar, look.tooltipBarTexture) then
+		return
+	end
+	if barOwn.atlas and bar.SetStatusBarTexture then
 		local own = bar:GetStatusBarTexture()
 		if own and own.SetAtlas then own:SetAtlas(barOwn.atlas) end
 	elseif barOwn.file then
 		bar:SetStatusBarTexture(barOwn.file)
 	end
+	local fill = bar:GetStatusBarTexture()
+	if fill and fill.SetDesaturated then fill:SetDesaturated(false) end
 end
 
 -- One tooltip dressed as the look says (look nil: as the game has it).
@@ -251,7 +252,7 @@ end
 -- The name line of a unit's tooltip in its class or reaction color.
 local function ColorName(tooltip)
 	local look = Look()
-	if not (ns.db and look.tooltipNames == "class") then return end
+	if not (ns.StyleOn("tooltipStyle") and look.tooltipNames == "class") then return end
 	local ok, _, unit = pcall(tooltip.GetUnit, tooltip)
 	if not (ok and unit) then return end
 	local r, g, b = UnitColor(unit)
@@ -263,14 +264,14 @@ local function ColorName(tooltip)
 end
 
 local function Apply(tooltip)
-	local active = ns.db and ns.db.tooltipStyle
+	local active = ns.StyleOn("tooltipStyle")
 	if not active and not next(skins) and not next(touched) then return end
-	Dress(tooltip, active and ns.db or nil, ColorOf(tooltip))
+	Dress(tooltip, active and Look() or nil, ColorOf(tooltip))
 end
 
 -- Every tooltip again, and the fonts and bar (the page's settings changing).
 function ns.RefreshTooltipStyle()
-	local look = ns.db and ns.db.tooltipStyle and ns.db or nil
+	local look = ns.StyleOn("tooltipStyle") and Look() or nil
 	DressFonts(look)
 	if GameTooltip then DressBar(_G.GameTooltipStatusBar or GameTooltip.StatusBar, GameTooltip, look) end
 	for _, name in ipairs(TOOLTIPS) do
@@ -422,7 +423,10 @@ function ns.MakeTooltipPreview(parent, width)
 		end
 		bar:SetHeight(tonumber(look.tooltipBarHeight) or 8)
 		bar:SetShown(look.tooltipBar ~= "none")
-		bar:SetStatusBarTexture(BAR_TEXTURES[look.tooltipBarTexture] or BAR_TEXTURES.smooth)
+		if not ns.SetBarTexture(bar, look.tooltipBarTexture) then
+			bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+			bar:GetStatusBarTexture():SetDesaturated(false)
+		end
 		bar:SetStatusBarColor(0, 0.83, 0)
 	end
 	holder:SetScript("OnShow", holder.Refresh)
@@ -480,12 +484,8 @@ function ns.CreateTooltipStylePanel(kit)
 	})
 	rows.Swatch(last, "tooltipBack", { "tooltipBackR", "tooltipBackG", "tooltipBackB" },
 		L["The background's color, for Custom."])
-	rows.Choices(L["Edge:"], "tooltipEdge", {
-		{ "game", L["The game's"] },
-		{ "thin", L["Thin black"] },
-		{ "colored", L["In its color"], L["A unit's class or reaction color, an item's quality."] },
-		{ "none", L["None"] },
-	})
+	rows.Border(L["Edge:"], "tooltipEdge", { game = true, colored = true }, L["The tooltip's edge. In its color: " ..
+		"a unit's class or reaction color, an item's quality. Custom: its thickness and color under it."])
 	rows.Slider("tooltipAlpha", L["Opacity"], 20, 100, 5, "%d%%", 100, L["How see-through the background is."])
 
 	stack:Header(content, L["Words"])
@@ -498,7 +498,7 @@ function ns.CreateTooltipStylePanel(kit)
 	rows.Slider("tooltipTextSize", L["Text size"], 80, 140, 5, "%d%%", 100,
 		L["How big the words are, next to their usual size."])
 	local OUTLINES = { [0] = L["None"], L["Thin"], L["Thick"] }
-	rows.Slider("tooltipOutline", L["Outline"], 0, 2, 1, function(value) return OUTLINES[value] or "" end, 1,
+	rows.Outline("tooltipOutline", L["Outline"], 2, OUTLINES,
 		L["A black border round the letters, for see-through backgrounds."])
 
 	stack:Header(content, L["Health bar"])
@@ -507,12 +507,9 @@ function ns.CreateTooltipStylePanel(kit)
 		{ "top", L["Along the top"] },
 		{ "none", L["None"] },
 	})
-	local function BarOn(db) return db.tooltipStyle and db.tooltipBar ~= "none" end
-	rows.Choices(L["Texture:"], "tooltipBarTexture", {
-		{ "game", L["The game's"] },
-		{ "flat", L["Flat"] },
-		{ "smooth", L["Smooth"] },
-	}, BarOn)
+	local function BarOn(db) return rows.On(db) and db.tooltipBar ~= "none" end
+	rows.Texture(L["Texture:"], "tooltipBarTexture", L["The health bar's fill. Below the game's own few: any " ..
+		"other addon shares (through LibSharedMedia)."], BarOn, { 0, 0.83, 0 })
 	rows.Slider("tooltipBarHeight", L["Height"], 2, 12, 1, "%d", nil, L["The health bar's height."], BarOn)
 
 	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))

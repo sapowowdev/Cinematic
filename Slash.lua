@@ -101,6 +101,9 @@ local function PrintDebugHelp()
 	print("  /cine debug turn - turn handling while walking (8 seconds)")
 	print("  /cine debug unitframes - log every part of the player, pet, target and focus frames (names, textures, sizes, held hidden) to the saved log")
 	print("  /cine debug plates - nameplate settings, and how the plates (and your target) are sorted")
+	print("  /cine debug textures - a strip of every bar texture the Style pages offer, to see which this client has")
+	print("  /cine debug platetextures - the textures your target's nameplate is drawn with (for the game's plate Styles)")
+	print("  /cine debug prdtextures - the personal resource display's textures and their alpha (its border pieces)")
 	print("  /cine debug cdm - each Cooldown Manager spell: its cooldown, charges, what it costs and in which resource (run in and out of combat)")
 	print("  /cine debug range - what the game says about how far your target and units with name-only plates are")
 	print("  /cine debug platedebuffs - whether auras are secret now, and your debuffs on your target as the game reads them")
@@ -1203,6 +1206,12 @@ local function HandleSlash(msg)
 			tostring(ns.orbitFrame:GetScript("OnUpdate") ~= nil), tostring(MoveViewUpStart ~= nil)))
 	elseif cmd == "debug" and arg == "cooldowns" then
 		ns.ReportCooldowns()
+	elseif cmd == "debug" and arg == "textures" then
+		ns.ShowStyleTextures()
+	elseif cmd == "debug" and arg == "platetextures" then
+		ns.ReportPlateTextures()
+	elseif cmd == "debug" and arg == "prdtextures" then
+		ns.ReportPlateTextures("prd")
 	elseif cmd == "debug" and arg == "newplayer" then
 		-- (Your profiles and their settings stay; picking one carries on from them.)
 		ns.SaveProfile()
