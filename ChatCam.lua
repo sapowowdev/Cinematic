@@ -458,7 +458,10 @@ local function StepMove(elapsed)
 	elseif turn.kind == "track" then
 		-- (Toward the speed wanted, no harder than MAX_ACCEL; at rest with none wanted: over.)
 		local step = MAX_ACCEL * elapsed
-		speed = (turn.speed or 0) + math.max(-step, math.min(step, (turn.want or 0) - (turn.speed or 0)))
+		if convo and (turn.right and 1 or -1) * (turn.amount - convo.base) >= TRACK_MAX then
+			turn.want = 0 -- (the safeguard, whatever's steering it: see TRACK_MAX)
+		end
+		speed =(turn.speed or 0) + math.max(-step, math.min(step, (turn.want or 0) - (turn.speed or 0)))
 		over = speed <= 0 and (turn.want or 0) <= 0
 		speed = math.max(0, speed)
 	else
@@ -1301,6 +1304,12 @@ local function OnUpdate(_, elapsed)
 			-- TRACK_CATCH. Only a good bubble (see TAIL_MIDDLE) counts, and not
 			-- mid-swing or mid-zoom.
 			local tracking = turn.moving and turn.kind == "track" and not turn.stopping
+			if tracking and turn.want > 0 and not (speaker and speaker.name == convo.on) then
+				-- (Someone else talking now: the look below no longer steers it, and
+				-- left going it ran on at full speed, 338 degrees round in 22 seconds.)
+				Say(("%s isn't the one talking now: stopping at %+.1f deg"):format(convo.on or "?", turn.amount))
+				turn.want = 0
+			end
 			if speaker and speaker.name == convo.on and not convo.check and not convo.search
 				and now >= (convo.trackAt or 0)
 				and (tracking or (turn.moving and turn.kind == "drift" and not turn.stopping)

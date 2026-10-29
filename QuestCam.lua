@@ -375,6 +375,7 @@ local ZOOM_SPEED_EXTRA = 0.3 -- ...plus this many yards per second
 local ZOOM_SETTLE_SPEED = 0.5 -- yards per second once the path's done
 local ZOOM_SETTLED = 0.4     -- seconds held still at the goal before it counts as done
 local ZOOM_STILL = 0.002     -- yards per frame: less is holding still
+local LEAVE_ZOOM_STOP = 0.6  -- seconds a zoom back out takes to ease to a stop as you talk to someone again
 local zoomer = { moving = false }
 
 local function Zooming()
@@ -968,6 +969,16 @@ local function OnEvent(_, event)
 			cam.clickSide = cam.since - lastClick.at <= CLICK_WINDOW and lastClick.side or nil
 			cam.left = PickSide()
 			cam.startAt = now + delay
+			-- Still zooming back out from the last one (or the Chat Cam's): it
+			-- eases to a stop, the rest held again till you walk off from here.
+			if zoomer.leaving and zoomer.moving then
+				local x, y = PlayerPosition()
+				zoomer.pending = { to = zoomer.goal, x = x, y = y, since = now, walked = 0,
+					speed = zoomer.leavingSpeed }
+				EaseZoomStop(LEAVE_ZOOM_STOP)
+				zoomer.leaving = false
+				Note("talking again: zoom out stopped, held")
+			end
 		elseif not cam.active and now > (cam.windowAt or 0) then
 			local extra = math.min(WINDOW_EXTRA, delay)
 			cam.startAt = math.max((cam.startAt or now) + extra, now + extra)
@@ -1107,7 +1118,7 @@ local function OnUpdate(_, elapsed)
 			zoomer.pending = nil
 			ZoomTo(pending.to, math.min(ns.db.questCamZoomMaxTime or math.huge,
 				math.abs(pending.to - GetCameraZoom()) / (pending.speed or ns.db.questCamZoomOutSpeed)))
-			zoomer.leaving = true
+			zoomer.leaving, zoomer.leavingSpeed = true, pending.speed
 			HurryZoom(ZOOM_HURRY)
 		end
 	end

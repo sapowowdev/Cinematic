@@ -521,8 +521,9 @@ local function HandleSlash(msg)
 			or "event now: none (or set to no camera)")
 		local d = ns.seatDebug
 		if d then
-			ns.Print(("last right-click %.0f sec ago: world tooltip was \"%s\" (%.1f sec before), seat word match: %s"):format(
-				GetTime() - d.at, tostring(d.name), d.nameAge, tostring(d.seat)))
+			ns.Print(("last right-click %.0f sec ago: world tooltip was \"%s\" (%.1f sec before), seat word match: %s, held %s"):format(
+				GetTime() - d.at, tostring(d.name), d.nameAge, tostring(d.seat),
+				d.held and ("%.2f sec (a click under 0.4)"):format(d.held) or "-"))
 		else
 			ns.Print("no right-click seen since login")
 		end

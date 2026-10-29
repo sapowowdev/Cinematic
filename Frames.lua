@@ -7123,11 +7123,12 @@ end
 -- focus and target of target frames hidden, CineMode or not, for those who
 -- only want the bars. A section per frame, a Standard Frames row per part
 -- (FRAMES.Hidden). One texture (FrameTexture) draws the portrait ring, the name box and
--- the bars' borders, so the frame art goes as a whole. Frames laid out as
--- retail's (and WoW Forever's) only: others haven't these fields.
+-- the bars' borders, so the frame art goes as a whole. Retail's (and WoW
+-- Forever's) frame fields, then the classic clients' (their globals: _G.,
+-- or @ for one named after the frame, as TargetFrame and FocusFrame share them).
 do
 	local PLAYER = {
-		Portrait = { "PlayerFrameContainer.PlayerPortrait" },
+		Portrait = { "PlayerFrameContainer.PlayerPortrait", "_G.PlayerPortrait" },
 		Level = { "PlayerFrameContent.PlayerFrameContentMain.LevelBackgroundCircle", "_G.PlayerLevelText" },
 		Name = { "_G.PlayerName" },
 		-- The health and power bars (the containers retail and WoW Forever
@@ -7146,7 +7147,11 @@ do
 			"PlayerFrameContent.PlayerFrameContentMain.StatusTexture",
 			"PlayerFrameContent.PlayerFrameContentContextual.PlayerPortraitCornerIcon",
 			-- (The aggro glow, under the key the game keeps it on every client.)
-			"threatIndicator" },
+			"threatIndicator",
+			"_G.PlayerFrameTexture", "_G.PlayerFrameVehicleTexture", "_G.PlayerFrameFlash",
+			"_G.PlayerStatusTexture", "_G.PlayerStatusGlow", "_G.PlayerAttackBackground",
+			-- (Classic's dark backdrop behind the bars, a texture of its own.)
+			"_G.PlayerFrameBackground" },
 		-- The damage and healing numbers on the portrait (feedbackText: where
 		-- the game keeps them on every client).
 		CombatText = { "feedbackText", "PlayerFrameContent.PlayerFrameContentMain.HitIndicator.HitText",
@@ -7157,7 +7162,8 @@ do
 		PvP = { "PlayerFrameContent.PlayerFrameContentContextual.PVPIcon",
 			"PlayerFrameContent.PlayerFrameContentMain.PvpBackgroundIcon",
 			"PlayerFrameContent.PlayerFrameContentContextual.PrestigePortrait",
-			"PlayerFrameContent.PlayerFrameContentContextual.PrestigeBadge", "_G.PlayerPVPTimerText" },
+			"PlayerFrameContent.PlayerFrameContentContextual.PrestigeBadge", "_G.PlayerPVPTimerText",
+			"_G.PlayerPVPIcon", "_G.PlayerPrestigePortrait", "_G.PlayerPrestigeBadge" },
 		-- (The rest Zzz, the group leader's crown, the role and combat icons
 		-- and the raid group number.)
 		Icons = { "PlayerFrameContent.PlayerFrameContentContextual.PlayerRestLoop",
@@ -7165,7 +7171,10 @@ do
 			"PlayerFrameContent.PlayerFrameContentContextual.GuideIcon",
 			"PlayerFrameContent.PlayerFrameContentContextual.RoleIcon",
 			"PlayerFrameContent.PlayerFrameContentContextual.AttackIcon",
-			"PlayerFrameContent.PlayerFrameContentContextual.GroupIndicator" },
+			"PlayerFrameContent.PlayerFrameContentContextual.GroupIndicator",
+			"_G.PlayerRestIcon", "_G.PlayerRestGlow", "_G.PlayerLeaderIcon", "_G.PlayerMasterIcon",
+			"_G.PlayerGuideIcon", "_G.PlayerFrameRoleIcon", "_G.PlayerAttackIcon", "_G.PlayerAttackGlow",
+			"_G.PlayerFrameGroupIndicator" },
 	}
 	-- (Fields on TargetFrame, and on FocusFrame, built the same way.)
 	local TARGET = {}
@@ -7197,24 +7206,28 @@ do
 		return list
 	end
 	for part, paths in pairs({
-		Portrait = { "TargetFrameContainer.Portrait" },
+		Portrait = { "TargetFrameContainer.Portrait", "@Portrait" },
 		Level = { "TargetFrameContent.TargetFrameContentMain.LevelBackgroundCircle",
 			"TargetFrameContent.TargetFrameContentMain.LevelText",
-			"TargetFrameContent.TargetFrameContentContextual.HighLevelTexture" },
+			"TargetFrameContent.TargetFrameContentContextual.HighLevelTexture",
+			"@TextureFrameLevelText", "@TextureFrameHighLevelTexture" },
 		-- (The coloured strip behind it with it.)
 		Name = { "TargetFrameContent.TargetFrameContentMain.Name",
-			"TargetFrameContent.TargetFrameContentMain.ReputationColor" },
+			"TargetFrameContent.TargetFrameContentMain.ReputationColor",
+			"@TextureFrameName", "@NameBackground" },
 		Health = { "TargetFrameContent.TargetFrameContentMain.HealthBarsContainer", "healthbar" },
 		Power = { "TargetFrameContent.TargetFrameContentMain.ManaBar", "manabar" },
 		Numbers = { "healthbar.TextString", "healthbar.LeftText", "healthbar.RightText",
 			"manabar.TextString", "manabar.LeftText", "manabar.RightText" },
 		Art = { "TargetFrameContainer.FrameTexture", "TargetFrameContainer.Flash",
-			"TargetFrameContainer.BossPortraitFrameTexture", "threatIndicator" },
+			"TargetFrameContainer.BossPortraitFrameTexture", "threatIndicator",
+			"@TextureFrameTexture", "@Flash", "@Background" },
 		-- (PvpBackgroundIcon: the flag WoW Forever shows by the level, tested.)
 		PvP = { "TargetFrameContent.TargetFrameContentContextual.PvpIcon",
 			"TargetFrameContent.TargetFrameContentContextual.PvpBackgroundIcon",
 			"TargetFrameContent.TargetFrameContentContextual.PrestigePortrait",
-			"TargetFrameContent.TargetFrameContentContextual.PrestigeBadge" },
+			"TargetFrameContent.TargetFrameContentContextual.PrestigeBadge",
+			"@TextureFramePVPIcon", "@TextureFramePrestigePortrait", "@TextureFramePrestigeBadge" },
 		-- (The group leader's crown, the quest and pet battle icons, and the
 		-- raid target marker: skull, moon... BossIcon: retail's quest "!" and
 		-- rare star by the bars.)
@@ -7223,7 +7236,9 @@ do
 			"TargetFrameContent.TargetFrameContentContextual.GuideIcon",
 			"TargetFrameContent.TargetFrameContentContextual.QuestIcon",
 			"TargetFrameContent.TargetFrameContentContextual.BossIcon",
-			"TargetFrameContent.TargetFrameContentContextual.PetBattleIcon" },
+			"TargetFrameContent.TargetFrameContentContextual.PetBattleIcon",
+			"@TextureFrameLeaderIcon", "@TextureFrameRaidTargetIcon", "@TextureFrameQuestIcon",
+			"@TextureFramePetBattleIcon" },
 	}) do
 		TARGET[part] = paths
 	end
@@ -7246,7 +7261,8 @@ do
 	-- The target of target frames (the target's and the focus's): a portrait,
 	-- a name, the bars and the frame art, and on older frames numbered debuffs
 	-- (TargetFrameToTDebuff1...). (In ns, not a local: see the cap above.)
-	ns.UNIT_PARTS_TOT = { Portrait = { "Portrait" }, Name = { "Name" }, Art = { "FrameTexture" },
+	ns.UNIT_PARTS_TOT = { Portrait = { "Portrait", "@Portrait" }, Name = { "Name", "@TextureFrameName" },
+		Art = { "FrameTexture", "@TextureFrameTexture", "@Background" },
 		Health = { "HealthBar", "healthbar" }, Power = { "ManaBar", "manabar" } }
 	if _G.TargetFrameToTDebuff1 then
 		ns.UNIT_PARTS_TOT.Auras = function(frame)
@@ -7287,8 +7303,13 @@ do
 		return "unitPart" .. (same and "Target" or entry[4]) .. part
 	end
 
-	-- A field on a frame (_G. for a global of its own).
+	-- A field on a frame (_G. for a global of its own, @ for the global named
+	-- after the frame: @Portrait on TargetFrame is TargetFramePortrait).
 	local function Field(frame, path)
+		if path:sub(1, 1) == "@" then
+			local name = frame.GetName and frame:GetName()
+			path = name and "_G." .. name .. path:sub(2) or ""
+		end
 		local value = frame
 		for name in path:gmatch("[^.]+") do
 			if name == "_G" and value == frame then
@@ -7365,7 +7386,12 @@ do
 
 	-- Whether this client's frames have the parts (the Unit Frames page shows the grid then).
 	function ns.HasUnitFrameParts()
-		return _G.PlayerFrame ~= nil and Field(_G.PlayerFrame, PLAYER.Portrait[1]) ~= nil
+		for _, path in ipairs(_G.PlayerFrame and PLAYER.Portrait or {}) do
+			if Field(_G.PlayerFrame, path) then
+				return true
+			end
+		end
+		return false
 	end
 
 	-- (Settings unitPart<frame><part>, ticked = shown: see ns.UNIT_PART_FRAMES.)

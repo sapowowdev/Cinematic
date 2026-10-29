@@ -412,6 +412,7 @@ function ns.CustomizePanel(parent, width, onChange, skinned)
 		Rounded(option, option.icon)
 		option.name = Text(option, "GameFontHighlight", "")
 		option.name:SetPoint("TOPLEFT", 10, -6)
+		option.name:SetWordWrap(false)
 		-- (a layout Cinematic makes for you: a gold tag beside its name)
 		option.tag = Text(option, "GameFontHighlightSmall", "Cinematic", GOLD)
 		option.tag:SetPoint("LEFT", option.name, "RIGHT", 8, 0)
@@ -494,13 +495,22 @@ function ns.CustomizePanel(parent, width, onChange, skinned)
 			-- (an icon when the choice has one, the text beside it)
 			option.icon:SetTexture(choice.icon)
 			option.icon:SetShown(choice.icon ~= nil)
-			option.name:SetPoint("TOPLEFT", choice.icon and 46 or 10, -6)
+			local nameX = choice.icon and 46 or 10
+			option.name:SetPoint("TOPLEFT", nameX, -6)
+			option.name:SetWidth(0)
 			option.name:SetText(choice.label)
 			option.tag:SetShown(choice.made == true)
 			option.layout = choice.made and MadeLayout(choice) or nil
 			local regenerate = option.layout ~= nil and ns.LayoutState(option.layout) ~= nil
 			option.regenerate:SetShown(regenerate)
-			option.line:SetWidth(panelW - 28 - (choice.icon and 56 or 20) - (regenerate and 104 or 0))
+			-- (Regenerate as wide as its word, and the name cut short before the
+			-- tag would slip under it)
+			local regenW = math.max(64, math.ceil(option.regenerate.text:GetStringWidth()) + 20)
+			option.regenerate:SetWidth(regenW)
+			local room = panelW - 28 - nameX - (regenerate and regenW + 16 or 8)
+				- (choice.made and math.ceil(option.tag:GetStringWidth()) + 8 or 0)
+			if option.name:GetStringWidth() > room then option.name:SetWidth(room) end
+			option.line:SetWidth(panelW - 28 - (choice.icon and 56 or 20) - (regenerate and regenW + 8 or 0))
 			option.line:SetText(choice.line)
 			option:Show()
 		end

@@ -709,6 +709,8 @@ end
 -- together. The world tooltip's name is noted as it appears (before the
 -- tooltip options hide it); a right-click while it names a seat, followed by
 -- the brief snap onto the seat (a quick move that stops), counts as sitting.
+-- Only a quick click counts: right-click held to steer or turn isn't one (the
+-- game only uses a right-click on release, if it wasn't held).
 local lastWorldName, lastWorldNameAt = nil, 0
 local seatClickAt = -math.huge
 local SEAT_CLICK_WINDOW = 4   -- seconds between the seat's name appearing and the click
@@ -785,6 +787,8 @@ function ns.HookCameraInput()
 		end
 	end
 	local seatX, seatY
+	local seatDownAt, seatDownName = -math.huge, nil
+	local SEAT_CLICK_HOLD = 0.4 -- seconds: a right-click held longer is steering, not a click
 	local function Seated(how)
 		seatClickAt = -math.huge
 		emoteEvent = "Chair" -- the latest choice wins
@@ -792,6 +796,7 @@ function ns.HookCameraInput()
 	end
 	local seatWatcher = CreateFrame("Frame")
 	seatWatcher:RegisterEvent("GLOBAL_MOUSE_DOWN")
+	seatWatcher:RegisterEvent("GLOBAL_MOUSE_UP")
 	seatWatcher:RegisterEvent("PLAYER_STOPPED_MOVING")
 	seatWatcher:SetScript("OnEvent", function(_, event, button)
 		local now = GetTime()
@@ -799,10 +804,22 @@ function ns.HookCameraInput()
 			if button == "RightButton" then
 				ns.seatDebug = { name = lastWorldName, nameAge = now - lastWorldNameAt,
 					seat = IsSeatName(lastWorldName), at = now }
+				seatDownAt, seatDownName = -math.huge, nil
 				if now - lastWorldNameAt <= SEAT_CLICK_WINDOW and IsSeatName(lastWorldName) then
-					seatClickAt = now
+					seatDownAt, seatDownName = now, lastWorldName
 					seatX, seatY = Position()
 				end
+			end
+		elseif event == "GLOBAL_MOUSE_UP" then
+			if button == "RightButton" and seatDownName then
+				local held = now - seatDownAt
+				if ns.seatDebug then
+					ns.seatDebug.held = held
+				end
+				if held <= SEAT_CLICK_HOLD then
+					seatClickAt = now
+				end
+				seatDownAt, seatDownName = -math.huge, nil
 			end
 		elseif now - seatClickAt <= SEAT_SNAP_WINDOW then
 			Seated("snap (movement stopped)")
