@@ -446,8 +446,7 @@ ns.PROFILE_MODULES = {
 		tip = "Standing still starts the AFK camera and every event's camera can start music; the cameras " ..
 		"don't wait for things to calm down after a fight, auto-run carries on in cities and instances (as RP " ..
 		"walk always does), and the death camera runs in instances too. NPCs talking bring the chat camera, " ..
-		"those chatting nearby straight away, and it doesn't look round for speakers off screen. The zoom " ..
-		"resets on login and /reload.",
+		"those chatting nearby straight away, and it doesn't look round for speakers off screen.",
 		apply = function(set)
 			-- (Chat Cam: off to start with, on here.)
 			if ns.DEFAULTS.chatCamSearch ~= nil then
@@ -464,7 +463,6 @@ ns.PROFILE_MODULES = {
 			set("runOffInCities", false)
 			set("runOffInInstances", false)
 			set("deathOffInInstances", false)
-			set("loginZoom", true) -- (Quality of life > General)
 		end },
 
 	-- The look
