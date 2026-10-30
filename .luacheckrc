@@ -10,7 +10,7 @@ ignore = { "542", "212/self", "421", "422", "431" }
 globals = {
 	"CinematicDB", "CinematicCharDB", "SlashCmdList", "StaticPopupDialogs", "ColorPickerFrame", "DAMAGE_TEXT_FONT",
 	"ClickCastFrames",
-	"Cinematic_Toggle", "Cinematic_ToggleUI", "Cinematic_Reload", "BINDING_NAME_CINEMATIC_RELOAD", "Cinematic_StartCam", "Cinematic_FlyBy", "Cinematic_ShowTooltips", "Cinematic_ToggleTooltips", "Cinematic_ToggleVisualEffects",
+	"Cinematic_Toggle", "Cinematic_ToggleUI", "Cinematic_Reload", "BINDING_NAME_CINEMATIC_RELOAD", "Cinematic_StartCam", "Cinematic_StopCamera", "Cinematic_FlyBy", "Cinematic_ShowTooltips", "Cinematic_ToggleTooltips", "Cinematic_ToggleVisualEffects",
 	"Cinematic_CameraWheel", "BINDING_NAME_CINEMATIC_CAMWHEEL", "Cinematic_ToggleVision",
 	"BINDING_NAME_CINEMATIC_VISION_HEAL", "BINDING_NAME_CINEMATIC_VISION_QUEST", "BINDING_NAME_CINEMATIC_VISION_DUEL",
 	"BINDING_NAME_CINEMATIC_VISION_ROLL",
@@ -19,7 +19,7 @@ globals = {
 	"BINDING_HEADER_CINEMATIC", "BINDING_NAME_CINEMATIC_SHOWTOOLTIPS", "BINDING_NAME_CINEMATIC_TOGGLETOOLTIPS", "BINDING_NAME_CINEMATIC_TOGGLEEFFECTS",
 	"BINDING_NAME_CINEMATIC_TOGGLE", "BINDING_NAME_CINEMATIC_HIDEUI",
 	"BINDING_NAME_CINEMATIC_CAM_VISTA", "BINDING_NAME_CINEMATIC_CAM_IDLE", "BINDING_NAME_CINEMATIC_CAM_TELE",
-	"BINDING_NAME_CINEMATIC_CAM_FISH", "BINDING_NAME_CINEMATIC_CAM_DEATH", "BINDING_NAME_CINEMATIC_CAM_COZY",
+	"BINDING_NAME_CINEMATIC_CAM_FISH", "BINDING_NAME_CINEMATIC_CAM_DEATH", "BINDING_NAME_CINEMATIC_STOPCAM", "BINDING_NAME_CINEMATIC_CAM_COZY",
 }
 
 -- The WoW API the addon uses (add new ones here as they come up)

@@ -1,10 +1,10 @@
--- The Style hub's Quest item button page: how the big button for the nearest
+-- Quest Vision's Quest Item Button tab: how the big button for the nearest
 -- quest's item looks (QuestItemButton.lua draws it, by ns.QuestItemLook):
 -- size, shape, its frame, the icon zoomed in, a glow while it's ready, its
 -- cooldown as the game's sweep or a draining fill with the seconds left, and
 -- its numbers' font. A preview at the top: the button ready, and cooling down,
--- drawn by the same code as the real one. Turning it on: the Vision hub's
--- Quest Vision page.
+-- drawn by the same code as the real one. Turning it on: the Vision tab
+-- (Options.lua).
 
 local _, ns = ...
 local L = ns.L
@@ -88,11 +88,11 @@ end
 
 function ns.CreateQuestItemStylePanel(kit)
 	local canvas, content = kit.CreateScrollPage()
-	local title = kit.Label(content, "GameFontNormalLarge", L["Quest item button"])
-	title:SetPoint("TOPLEFT", 16, -16)
+	local title = kit.Label(content, "GameFontNormalLarge", L["Quest Item Button"])
+	ns.QuestTabs(content, title, 3)
 	local intro = kit.PageIntro(content, title,
-		L["How the big button for the nearest quest's item looks. Turning it on: the Vision hub's Quest Vision " ..
-		"page. Where it sits: the extra ability button's place in Edit Mode. Changes show at once (its size " ..
+		L["How the big button for the nearest quest's item looks. Turning it on: the Vision tab. " ..
+		"Where it sits: the extra ability button's place in Edit Mode. Changes show at once (its size " ..
 		"after a fight, if you're in one)."])
 
 	local preview -- (below: drawn again as each setting changes)
@@ -168,5 +168,5 @@ function ns.CreateQuestItemStylePanel(kit)
 
 	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))
 	canvas:Hide()
-	kit.RegisterSubpage(canvas, "Quest Item Style", L["Quest item button"])
+	kit.RegisterSubpage(canvas, "Quest Item Style", L["Quest Item Button"])
 end

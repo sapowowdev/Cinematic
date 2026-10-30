@@ -1472,47 +1472,49 @@ do
 		-- (label: the name on its icon, when the page is registered under another)
 		-- (the look and the sound: the visual effects' pages, then Audio)
 		{ name = "Atmosphere", colors = { Visuals = { 0.65, 0.45, 0.9 }, Audio = { 0.3, 0.7, 0.5 } }, pages = {
-			{ "Effects", "Interface\\Icons\\Spell_Holy_Restoration", label = "General", section = "Visuals" },
+			{ "Effects", "Interface\\Icons\\Spell_Holy_Restoration", label = "General" }, -- (in no section: a band of its own)
 			{ "Tint", "Interface\\Icons\\INV_Misc_Gem_Variety_02", section = "Visuals" },
+			-- (tabOf: no icon of its own, a folder tab on that page's (ns.PageTabs))
+			{ "Tint Style", "Interface\\Icons\\INV_Misc_Gem_Variety_02", tabOf = "Tint" },
+			{ "Letterbox", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", section = "Visuals" },
+			{ "Letterbox Style", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", tabOf = "Letterbox" },
 			{ "Graphics+", "Interface\\Icons\\INV_Misc_Gem_Pearl_04", section = "Visuals" },
 			{ "Audio", "Interface\\Icons\\INV_Misc_Drum_01", section = "Audio" },
 		} },
 		-- (section: its pages on a band in its color, its name above it; all in
-		-- one row: the game's frames (the nameplates' parts first), then
-		-- Cinematic's own. The picked page's band in gold, the rest faded.)
-		{ name = "Style", colors = {
-			Game = { 0.35, 0.6, 0.9 }, Cinematic = { 0.65, 0.45, 0.9 },
+		-- one row: the HUD's frames, then what floats over heads in the world.
+		-- The picked page's band in gold, the rest faded. Cinematic's own looks
+		-- are Style tabs on their own pages. under: in the settings list under
+		-- UI Manager, not under Cinematic.)
+		{ name = "Style", under = "UI Manager", colors = {
+			HUD = { 0.35, 0.6, 0.9 }, Overhead = { 0.65, 0.45, 0.9 },
 		}, pages = {
 			{ "Style General", "Interface\\Icons\\INV_Misc_Gear_08", label = "General" },
-			{ "Nameplate Style", "Interface\\Icons\\Ability_Marksmanship", label = "Nameplates", section = "Game" },
-			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names", section = "Game" },
-			{ "Cast Bar Style", "Interface\\Icons\\Spell_Nature_Lightning", label = "Cast bars", section = "Game" },
-			{ "Bubble Style", "Interface\\Icons\\Ability_Warrior_RallyingCry", label = "Chat bubbles",
-				section = "Game" },
-			{ "Tooltip Style", "Interface\\Icons\\INV_Misc_Note_05", label = "Tooltips", section = "Game" },
-			{ "Unit Style", "Interface\\Icons\\INV_Misc_Head_Human_01", label = "Unit frames",
-				section = "Game" },
-			{ "Raid Style", "Interface\\Icons\\INV_Misc_GroupNeedMore", label = "Raid frames", section = "Game" },
+			{ "Unit Style", "Interface\\Icons\\INV_Misc_Head_Human_01", label = "Unit frames", section = "HUD" },
+			{ "Raid Style", "Interface\\Icons\\INV_Misc_GroupNeedMore", label = "Raid frames", section = "HUD" },
 			{ "Personal Style", "Interface\\Icons\\Spell_Holy_SealOfVengeance", label = "Personal Resource Display",
-				section = "Game" },
-			{ "Letterbox Style", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", label = "Letterbox",
-				section = "Cinematic" },
-			{ "Quest Talk Style", "Interface\\Icons\\INV_Scroll_02", label = "Quest talk", section = "Cinematic" },
-			{ "Quest Item Style", "Interface\\Icons\\INV_Misc_Key_03", label = "Quest item button",
-				section = "Cinematic" },
-			{ "Roll Style", "Interface\\Icons\\INV_Misc_Dice_02", label = "Roll Vision", section = "Cinematic" },
-			{ "Combat Style", "Interface\\Icons\\Ability_DualWield", label = "Combat Vision", section = "Cinematic" },
-			{ "Vitals Style", "Interface\\Icons\\Spell_Shadow_LifeDrain02", label = "Vitals Vision",
-				section = "Cinematic" },
+				section = "HUD" },
+			{ "Tooltip Style", "Interface\\Icons\\INV_Misc_Note_05", label = "Tooltips", section = "HUD" },
+			{ "Nameplate Style", "Interface\\Icons\\Ability_Marksmanship", label = "Nameplates", section = "Overhead" },
+			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names", section = "Overhead" },
+			{ "Cast Bar Style", "Interface\\Icons\\Spell_Nature_Lightning", label = "Cast bars", section = "Overhead" },
+			{ "Bubble Style", "Interface\\Icons\\Ability_Warrior_RallyingCry", label = "Chat bubbles",
+				section = "Overhead" },
 		} },
 		-- (General and the dev copy's Wind Guide in no section: plain icons)
 		{ name = "Visions", colors = { Combat = { 0.85, 0.3, 0.25 }, World = { 0.35, 0.6, 0.9 } }, pages = {
 			{ "Vision", "Interface\\Icons\\Ability_EyeOfTheOwl", label = "General" },
 			{ "Heal Vision", "Interface\\Icons\\Spell_Holy_FlashHeal", section = "Combat" },
 			{ "Combat Vision", "Interface\\Icons\\Ability_Warrior_OffensiveStance", section = "Combat" },
+			-- (tabOf: no icon of its own, a folder tab on that page's (ns.PageTabs))
+			{ "Combat Style", "Interface\\Icons\\Ability_DualWield", tabOf = "Combat Vision" },
 			{ "Vitals Vision", "Interface\\Icons\\Spell_Shadow_LifeDrain02", section = "Combat" },
+			{ "Vitals Style", "Interface\\Icons\\Spell_Shadow_LifeDrain02", tabOf = "Vitals Vision" },
 			{ "Quest Vision", "Interface\\Icons\\INV_Misc_Head_Dragon_01", section = "World" },
+			{ "Quest Talk Style", "Interface\\Icons\\INV_Scroll_02", tabOf = "Quest Vision" },
+			{ "Quest Item Style", "Interface\\Icons\\INV_Misc_Key_03", tabOf = "Quest Vision" },
 			{ "Roll Vision", "Interface\\Icons\\INV_Misc_Dice_01", section = "World" },
+			{ "Roll Style", "Interface\\Icons\\INV_Misc_Dice_02", tabOf = "Roll Vision" },
 			{ "Wind Guide", "Interface\\Icons\\Spell_Nature_Cyclone", dev = true },
 		} },
 		-- (the wheels are WheelsPage.lua's pages)
@@ -1534,6 +1536,7 @@ do
 			{ "All changes", "Interface\\Icons\\INV_Misc_Book_11", section = "Updates" },
 			{ "Socials", "Interface\\Icons\\INV_Letter_15", section = "People" },
 			{ "Thanks", "Interface\\Icons\\INV_ValentinesCard02", section = "People" },
+			{ "Profiler", "Interface\\Icons\\INV_Misc_PocketWatch_02", dev = true }, -- (ProfilerPage.lua)
 		} },
 	}
 	-- Pages still being worked on: "(WIP)" after the name on their icon's mouseover.
@@ -1544,6 +1547,10 @@ do
 	local TILE, TILE_GAP, EDGE = 36, 6, 12
 	local BAR = 30 -- (the search box and Reset page, above the icons)
 	local byName = {} -- tile by the name its page was registered under (English or shown)
+	-- (the icon lit for a tile: its own, or for a page's other tab the page's)
+	local function Lit(tile)
+		return tile and tile.tabOf and byName[tile.tabOf] or tile
+	end
 
 	local LABEL_H, BAND_PAD, SECTION_GAP = 14, 4, 10 -- (a section's name above its band; bands apart)
 	local BELOW = 10 -- (room under the icons, above the line to the page)
@@ -1556,7 +1563,7 @@ do
 	local function PaintBands(hub)
 		if not hub.bands then return end
 		for _, band in pairs(hub.bands) do
-			local lit = hub.current and band.tiles[hub.current]
+			local lit = hub.current and band.tiles[Lit(hub.current)]
 			local c = lit and GOLD or hub.colors and hub.colors[band.section] or PLAIN
 			band:SetColorTexture(c[1], c[2], c[3], lit and 0.14 or 0.08)
 			for _, line in ipairs(band.edges) do line:SetColorTexture(c[1], c[2], c[3], lit and 0.45 or 0.25) end
@@ -1684,10 +1691,10 @@ do
 		local previous = hub.current
 		if previous then
 			if previous.canvas ~= tile.canvas then previous.canvas:Hide() end
-			Light(previous, false)
+			Light(Lit(previous), false)
 		end
 		hub.current = tile
-		Light(tile, true)
+		Light(Lit(tile), true)
 		PaintBands(hub)
 		if tile.onSelect then tile.onSelect() end
 		tile.canvas:Show()
@@ -1697,9 +1704,15 @@ do
 
 	-- (made when its first page comes, so it's listed where that page would be)
 	local function CreateHub(hub)
+		-- (hub.under: listed under that hub, made first, not under Cinematic)
+		local parentHub
+		for _, each in ipairs(HUBS) do
+			if each.name == hub.under then parentHub = each end
+		end
+		if parentHub and not parentHub.frame then CreateHub(parentHub) end
 		local frame = CreateFrame("Frame")
 		frame.name = L[hub.name]
-		frame.parent = "Cinematic"
+		frame.parent = parentHub and L[parentHub.name] or "Cinematic"
 		hub.frame, hub.tiles = frame, {}
 		hub.host = CreateFrame("Frame", nil, frame)
 		hub.host:SetPoint("TOPLEFT", 0, -EDGE)
@@ -1734,11 +1747,17 @@ do
 		end)
 		frame:Hide()
 		if category and Settings and Settings.RegisterCanvasLayoutSubcategory then
-			local sub = Settings.RegisterCanvasLayoutSubcategory(category, frame, L[hub.name])
+			local parentSub = parentHub and subpages[parentHub.name] or category
+			local sub = Settings.RegisterCanvasLayoutSubcategory(parentSub, frame, L[hub.name])
+			-- (the hub it's under starts open in the list, so this one shows)
+			if parentHub then
+				if parentSub.SetExpanded then parentSub:SetExpanded(true) else parentSub.expanded = true end
+			end
 			Settings.RegisterAddOnCategory(sub)
 			subpages[hub.name] = sub
 		else
 			subpages[hub.name] = frame
+			if parentHub then parentHub.frame.collapsed = false end
 			if InterfaceOptions_AddCategory then InterfaceOptions_AddCategory(frame) end
 		end
 	end
@@ -1817,7 +1836,12 @@ do
 						if tab.setSelect then
 							tab.setSelect(function() Select(tile) end)
 						end
-						hub.tiles[#hub.tiles + 1] = tile
+						if page.tabOf then
+							tile.tabOf = page.tabOf
+							tile:Hide()
+						else
+							hub.tiles[#hub.tiles + 1] = tile
+						end
 						if i == 1 then
 							byName[name], byName[english] = tile, tile
 						end
@@ -1847,6 +1871,11 @@ do
 			Select(tile)
 		end
 		return tile.hub.name
+	end
+
+	-- A hub page shown, from inside the settings (its folder tab: ns.PageTabs).
+	function ns.ShowHubPage(name)
+		return HubTab(name)
 	end
 
 	-- A hub page's icon by its English name (nil for a page with none).
@@ -2950,6 +2979,18 @@ local function CreateDeathPanel()
 	local delay = stack:Add(Slider(content, "deathOrbitDelay", L["Start after"], 0, 10, 0.5, L["%.1f sec"]), "slider")
 	Tooltip(delay, L["How long after you die before the camera starts turning."])
 	GreyUnless(delay, IfOn)
+	local afterBoss = stack:Add(Check(content, "deathAfterBoss", L["Wait for boss fights to end"],
+		L["Dying while a boss fight is on, you keep your own view to watch the rest of it. The death " ..
+		"camera starts once the encounter ends (a kill or a wipe), if you're still dead."]), "check")
+	GreyUnless(afterBoss, IfOn)
+	local selfRes = stack:Add(Check(content, "deathOffWithSelfRes", L["Not with a soulstone or Reincarnation"],
+		L["When the release popup offers a way to come back yourself (a soulstone, Reincarnation, an " ..
+		"ankh...), there's no death camera: you keep your own view to pick your moment."]), "check")
+	GreyUnless(selfRes, IfOn)
+	local exitButton = stack:Add(Check(content, "deathExitButton", L["Exit camera button"],
+		L["A button under the release popup while the death camera's on: click it for your own view back " ..
+		"until you release or come back. The Stop the camera key binding does the same."]), "check")
+	GreyUnless(exitButton, IfOn)
 
 	stack:Header(content, L["Rotation"])
 	local right = stack:Add(Check(content, "deathOrbitRight", L["Turn clockwise"]), "check")
@@ -2975,6 +3016,54 @@ local function CreateDeathPanel()
 	GreyUnless(level, IfOn)
 
 	stack:Header(content, L["Screen"])
+	-- Hide all except: the Mouseover page's groups, ticked (deathKeepGroups:
+	-- ns.HoverGroupId -> true). (The release and resurrect popups always show.)
+	local KEEP_TIP = L["In CineMode the death camera hides all the frames it fades (bars, chat, unit frames...). " ..
+		"The Mouseover page's groups ticked here stay up throughout, party or raid frames say, to watch " ..
+		"your group. The release and resurrect popups always show."]
+	-- (None until the settings load: the pages are built first.)
+	local function KeepGroups()
+		return ns.db and ns.GetHoverGroups() or {}
+	end
+	local function KeepTicked(group)
+		local kept = ns.GetDB().deathKeepGroups
+		return kept ~= nil and kept[ns.HoverGroupId(group)] and true or false
+	end
+	local function ToggleKeep(group)
+		local db = ns.GetDB()
+		db.deathKeepGroups = db.deathKeepGroups or {}
+		local id = ns.HoverGroupId(group)
+		db.deathKeepGroups[id] = not db.deathKeepGroups[id] or nil
+	end
+	RecordKey(content, "deathKeepGroups")
+	local okKeep, keep = ns.MenuDropdown(content)
+	if okKeep and keep and keep.SetupMenu then
+		stack:Add(Label(content, "GameFontHighlight", L["Hide all except"]), "label")
+		keep:SetWidth(260)
+		keep.searchSkip = true -- (it shows the current ticks, not a label)
+		keep:SetupMenu(function(_, root)
+			for _, group in ipairs(KeepGroups()) do
+				root:CreateCheckbox(group.name, function() return KeepTicked(group) end, function()
+					ToggleKeep(group)
+					return MenuResponse and MenuResponse.Refresh
+				end)
+			end
+		end)
+		if keep.SetSelectionText then
+			keep:SetSelectionText(function()
+				local ticked = {}
+				for _, group in ipairs(KeepGroups()) do
+					if KeepTicked(group) then ticked[#ticked + 1] = group.name end
+				end
+				return #ticked > 0 and table.concat(ticked, ", ") or L["None"]
+			end)
+		end
+		keep.Refresh = function(self) self:GenerateMenu() end
+		controls[#controls + 1] = keep
+		stack:Add(keep, "dropdown")
+		Tooltip(keep, KEEP_TIP)
+		GreyUnless(keep, IfOn)
+	end
 	local screen = stack:Add(Check(content, "deathScreen", L["Darken the screen"],
 		L["The world dims and goes cold and gray-blue, with a heavy vignette closing in from the " ..
 		"edges. It clears when you release or come back."]), "check")
@@ -3366,34 +3455,37 @@ local function CreateEffectsPanel()
 
 	local subtitle = PageIntro(content, title,
 		L["How the game world looks in CineMode (or over the normal UI, with Start in CineMode off on the " ..
-		"main page): letterbox bars, vignette, inn glow, weather and depth of field. The color grading is " ..
-		"on the Tint tab. The UI isn't tinted. Names and nameplates are on the Nameplates page."])
+		"main page): vignette, inn glow, weather and depth of field. The letterbox bars and the color " ..
+		"grading have pages of their own (Letterbox, Tint). The UI isn't tinted. Names and nameplates are " ..
+		"on the Nameplates page."])
 
 	local master = VisualEffectsSwitch(content, subtitle)
 
-	-- Show in: a row each for the letterbox, tint, vignette and weather, as
-	-- the Standard Frames page's (GridRows.lua): where and when each shows.
-	-- A row off everywhere switches its effect off (its own switch follows).
+	-- Show in: a row each for the vignette and weather, as the Standard
+	-- Frames page's (GridRows.lua): where and when each shows. A row off
+	-- everywhere switches its effect off (its own switch follows). (The
+	-- letterbox's and tint's rows: their own pages, LetterboxStyle.lua.)
 	local gridHeader = Header(content, L["Show in"], master, -18)
 	gridHeader:SetPoint("TOPLEFT", master, "BOTTOMLEFT", 2, -18)
 	local gridNote = PageIntro(content, gridHeader,
 		L["Where and when each effect shows in CineMode. Always: everywhere. Combat: In combat, Calm Timer (after a " ..
 		"fight, till it's run out), Out of combat (the rest of the time), In a camera mode (flights, AFK, cozy and the " ..
 		"rest). Location: the places. Nothing ticked: it's off."])
-	local EFFECT_LABELS = { letterbox = L["Letterbox"], tint = L["Tint"], vignette = L["Vignette"], weather = L["Weather"] }
+	local EFFECT_LABELS = { vignette = L["Vignette"], weather = L["Weather"] }
 	local effectRows = { opts = { quiet = true, cam = true, anyFight = true } }
 	for _, effect in ipairs(ns.EFFECT_GRID) do
-		local key, alwaysKey = "effect:" .. effect, effect .. "Always"
-		effectRows[#effectRows + 1] = { key = key, label = EFFECT_LABELS[effect], alwaysKey = alwaysKey,
-			alwaysOn = function() return ns.GetDB()[alwaysKey] end,
-			setAlways = function(value) ns.GetDB()[alwaysKey] = value end,
-			alwaysTip = L["Shows all through CineMode. (The other columns then have nothing to add.)"],
-			apply = function()
-				local switch = ns.EFFECT_SWITCHES[effect]
-				if switch then ns.GetDB()[switch] = ns.RowOnAnywhere(key, ns.GetDB()[alwaysKey]) end
-				ns.letterboxDirty = true
-				if ns.RefreshTint then ns.RefreshTint() end
-			end }
+		if EFFECT_LABELS[effect] then
+			local key, alwaysKey = "effect:" .. effect, effect .. "Always"
+			effectRows[#effectRows + 1] = { key = key, label = EFFECT_LABELS[effect], alwaysKey = alwaysKey,
+				alwaysOn = function() return ns.GetDB()[alwaysKey] end,
+				setAlways = function(value) ns.GetDB()[alwaysKey] = value end,
+				alwaysTip = L["Shows all through CineMode. (The other columns then have nothing to add.)"],
+				apply = function()
+					local switch = ns.EFFECT_SWITCHES[effect]
+					if switch then ns.GetDB()[switch] = ns.RowOnAnywhere(key, ns.GetDB()[alwaysKey]) end
+					if ns.RefreshTint then ns.RefreshTint() end
+				end }
+		end
 	end
 	local lastGridRow = ns.ShowTable(content, gridNote, effectRows, L["Visual Effects"])
 
@@ -3515,16 +3607,14 @@ local function CreateTintPanel()
 	local canvas, content = CreateScrollPage()
 
 	local title = Label(content, "GameFontNormalLarge", L["Tint"])
-	title:SetPoint("TOPLEFT", 16, -16)
+	ns.EffectTabs(content, title, "tint", 2)
 
 	local subtitle = PageIntro(content, title,
-		L["The color grading over the game world: a preset, the time of day and each zone's mood. The " ..
-		"Enable visual effects switch (the General tab's too) turns it off with the rest, and the General tab's " ..
-		"Turn off in grid says where it doesn't show. The UI isn't tinted."])
-	local master = VisualEffectsSwitch(content, subtitle)
+		L["The color grading over the game world: a preset, the time of day and each zone's mood. Where and " ..
+		"when it shows: the Tint tab. The UI isn't tinted."])
 
-	local lookHeader = Header(content, L["Preset"], master, -18)
-	lookHeader:SetPoint("TOPLEFT", master, "BOTTOMLEFT", 2, -18)
+	local lookHeader = Header(content, L["Preset"], subtitle, -18)
+	lookHeader:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -18)
 
 	local choices = {}
 	for _, preset in ipairs(ns.TINT_PRESETS) do
@@ -3610,13 +3700,13 @@ local function CreateTintPanel()
 	end
 	controls[#controls + 1] = presetText
 
-	local strength = Slider(content, "tintStrength", L["Strength"], 5, 100, 5, "%d%%", 100, ns.RefreshTint)
-	strength:SetPoint("TOPLEFT", presetText, "BOTTOMLEFT", 2, -30)
+	-- (The strengths, the drift and the zone borders' timing: the Tint tab's,
+	-- LetterboxStyle.lua.)
 
 	-- Custom colour swatch
 	local swatch = CreateFrame("Button", nil, content)
 	swatch:SetSize(22, 22)
-	swatch:SetPoint("TOPLEFT", strength, "BOTTOMLEFT", 0, -24)
+	swatch:SetPoint("TOPLEFT", presetText, "BOTTOMLEFT", 2, -16)
 	local swatchBorder = swatch:CreateTexture(nil, "BACKGROUND")
 	swatchBorder:SetAllPoints()
 	swatchBorder:SetColorTexture(0.6, 0.6, 0.6, 1)
@@ -3640,25 +3730,9 @@ local function CreateTintPanel()
 		end)
 	end)
 
-	-- Strength drift
-	local drift = Check(content, "tintDrift", L["Subtle drift"],
-		L["The tint's strength slowly wanders up and down over a few minutes, so a still scene " ..
-		"feels a little more alive. Paused while this page is open."])
-	drift:SetPoint("TOPLEFT", swatch, "BOTTOMLEFT", -2, -12)
-	drift:HookScript("OnClick", function()
-		Refresh() -- grey out / enable the amount slider
-		ns.RefreshTint()
-	end)
-
-	local driftAmount = Slider(content, "tintDriftAmount", L["Drift amount"], 2, 15, 1, "+/-%d%%", 100,
-		ns.RefreshTint)
-	driftAmount:SetPoint("TOPLEFT", drift, "BOTTOMLEFT", 4, -26)
-	Tooltip(driftAmount, L["How far the strength wanders either way, as a share of the strength."])
-	GreyUnless(driftAmount, function(db) return db.tintDrift end)
-
 	-- Time of day: which clock, strength, your own phases
-	local timeHeader = Header(content, L["Time of day"], driftAmount, -24)
-	timeHeader:SetPoint("TOPLEFT", driftAmount, "BOTTOMLEFT", -4, -24)
+	local timeHeader = Header(content, L["Time of day"], swatch, -24)
+	timeHeader:SetPoint("TOPLEFT", swatch, "BOTTOMLEFT", -2, -24)
 	local timeHelp = Label(content, "GameFontHighlightSmall",
 		L["For the Time of day and Zone + time of day presets, and the time of day message."])
 	timeHelp:SetPoint("TOPLEFT", timeHeader, "BOTTOMLEFT", 0, -6)
@@ -3693,15 +3767,9 @@ local function CreateTintPanel()
 		clockControl = previous
 	end
 
-	-- Time of day: strength and your own phase colours
-	local timeStrength = Slider(content, "timeTintStrength", L["Time of day strength"], 0, 100, 5, "%d%%", 100,
-		ns.RefreshTint)
-	timeStrength:SetPoint("TOPLEFT", clockControl, "BOTTOMLEFT", 4, -30)
-	Tooltip(timeStrength, L["How strongly the time-of-day color applies, in Time of day and " ..
-		"Zone + time of day. Lower it for softer nights; 0 leaves just the zone mood."])
-
+	-- Time of day: your own phase colours (its strength: the Tint tab's)
 	local phaseLabel = Label(content, "GameFontHighlight", L["Phases (click a color to change it)"])
-	phaseLabel:SetPoint("TOPLEFT", timeStrength, "BOTTOMLEFT", -4, -24)
+	phaseLabel:SetPoint("TOPLEFT", clockControl, "BOTTOMLEFT", 0, -16)
 	local previousPhase = phaseLabel
 	for i, phase in ipairs(ns.GetTimePhases()) do
 		local name = phase.name
@@ -4027,29 +4095,13 @@ local function CreateTintPanel()
 		end
 	end)
 
-	-- Crossing a zone border: how the old zone's tint gives way to the new one.
-	local borderLabel = Label(content, "GameFontHighlight", L["At zone borders"])
-	borderLabel:SetPoint("TOPLEFT", zoneMore, "BOTTOMLEFT", 0, -18)
-	local zoneFade = Slider(content, "zoneFadeTime", L["Fade time"], 0.5, 10, 0.5, L["%.1f sec"])
-	zoneFade:SetPoint("TOPLEFT", borderLabel, "BOTTOMLEFT", 2, -26)
-	Tooltip(zoneFade, L["With a Zone tint preset, crossing into a zone with a different mood " ..
-		"fades the old mood out over this long, pauses, then fades the new one in over " ..
-		"this long."])
-	local gapFlying = Slider(content, "zoneGapFlying", L["Pause between tints when flying"], 0, 20, 1, L["%d sec"])
-	gapFlying:SetPoint("TOPLEFT", zoneFade, "BOTTOMLEFT", 0, -34)
-	Tooltip(gapFlying, L["Untinted time between the two zones' moods while you're in the air, " ..
-		"where you see the old zone's ground for longer (snow under an ember tint looks red)."])
-	local gapGround = Slider(content, "zoneGapTime", L["Pause between tints on the ground"], 0, 10, 0.5, L["%.1f sec"])
-	gapGround:SetPoint("TOPLEFT", gapFlying, "BOTTOMLEFT", 0, -34)
-	Tooltip(gapGround, L["The same pause when you cross a border on foot or riding."])
-
 	canvas:SetScript("OnShow", PageShown(function()
 		Refresh()
 		ns.SetTintPreview(true)
 	end, content))
 	canvas:SetScript("OnHide", function() ns.SetTintPreview(false) end)
 	canvas:Hide()
-	RegisterSubpage(canvas, "Tint")
+	RegisterSubpage(canvas, "Tint Style", L["Tint"])
 end
 
 -- Sub-page: Graphics+, the game's graphics settings past its menu's most
@@ -7404,7 +7456,8 @@ do
 			return math.min(1, 0.35 + (t - 6) / 2 * 0.65)
 		end
 		-- (Shown again: at its row's look at once, as a plate just come.)
-		preview:SetScript("OnShow", function(self) self.snap = true end)
+		-- (Hooked: StylePopout's own OnShow fits it to the page's width.)
+		preview:HookScript("OnShow", function(self) self.snap = true end)
 		preview.snap = true
 		preview:SetScript("OnUpdate", function(self, elapsed)
 			local time = ns.GetDB().plateStyleFadeTime or 1.5
@@ -10367,7 +10420,7 @@ local function CreateVisionPanel()
 	-- QuestMobs): their plates kept up, a quest icon on them and on the target frame.
 	canvas, content = CreateScrollPage()
 	title = Label(content, "GameFontNormalLarge", L["Quest Vision"])
-	title:SetPoint("TOPLEFT", 16, -16)
+	ns.QuestTabs(content, title, 1)
 	note = PageIntro(content, title,
 		L["Mobs and NPCs you still need for a quest objective keep their nameplates up, with a quest mark on " ..
 		"them and on your target frame, and the quest object in front of you glows."])
@@ -10454,7 +10507,7 @@ local function CreateVisionPanel()
 		"with the item the nearest tracked quest gives you to use, the one in the quest tracker. Click it or press its " ..
 		"key (Keybinds page). Shows near the quest's area, beside the game's own button when that's up. " ..
 		"It can't show, hide or move in a fight: it stays as it was until the fight ends."]
-		.. L[" Its look: the Style hub's Quest item button page."], function(value)
+		.. L[" Its look: the Quest Item Button tab."], function(value)
 		ns.GetDB().questItemButton = value
 		if ns.RefreshQuestItemButton then ns.RefreshQuestItemButton() end
 	end)
@@ -10479,11 +10532,7 @@ local function CreateVisionPanel()
 		questStack:Header(content, L["Talking to NPCs"])
 		-- Quest talk itself (questTalk; off to start with, on in the Cinema
 		-- profile). How it looks, the "Show the game's window" link and the
-		-- number keys: the Style hub's Quest talk page (QuestTalkStyle.lua), a
-		-- button away, right of the tick's label.
-		local styleLink = ns.StyleLink(content, title, "Quest Talk Style", L["Opens the Style hub's Quest talk " ..
-			"page: how the speech bubbles and reply list look, the \"Show the game's window\" link and the " ..
-			"number keys."], Tooltip)
+		-- number keys: the Quest talk tab (QuestTalkStyle.lua).
 		local talk = questStack:Add(Check(content, "questTalk", L["Custom dialogue frames"],
 			L["Talking to an NPC, what they say shows in a speech bubble over their head, and what you can say " ..
 			"back in a list near the bottom of the screen, instead of the game's gossip and quest windows. " ..
@@ -10492,13 +10541,11 @@ local function CreateVisionPanel()
 			"shows its objective and rewards on a card, with its buttons; click a reward to choose it. " ..
 			"\"Show the game's window\" on the card brings the game's window back for that conversation. " ..
 			"The game's popups (a cost to confirm, a party member's escort quest) come up as usual."] ..
-			L[" Its look: the Style hub's Quest talk page."], function(value)
+			L[" Its look: the Dialogue tab."], function(value)
 				ns.GetDB().questTalk = value
 				ApplyTalk()
 			end), "check")
 		talk:HookScript("OnClick", Refresh) -- (grey out / enable what needs it)
-		styleLink:ClearAllPoints()
-		styleLink:SetPoint("LEFT", talk.searchEdges.right, "RIGHT", 16, 0) -- (its label)
 		-- Where they go (the bubble and list; with quest talk off, the game's windows).
 		local PLACES = {
 			{ value = "fixed", text = L["Default"] },
@@ -10594,7 +10641,7 @@ local function CreateVisionPanel()
 		putBack:SetText(L["Put them back"])
 		Tooltip(putBack, L["Drag the list of replies to move it, and the bubble while it isn't over an NPC. " ..
 			"This forgets where you dropped them: each opens in its usual place again."] .. "\n\n" ..
-			L["With quest talk off, it forgets where you dragged the game's gossip and quest window."])
+			L["With custom dialogue frames off, it forgets where you dragged the game's gossip and quest window."])
 		putBack:SetScript("OnClick", function()
 			ns.GetDB().questTalkSpot = nil
 			ns.GetDB().questTalkBubbleSpot = nil
@@ -10613,14 +10660,12 @@ local function CreateVisionPanel()
 	if ns.hasRollWindow then
 		canvas, content = CreateScrollPage()
 		title = Label(content, "GameFontNormalLarge", L["Roll Vision"])
-		title:SetPoint("TOPLEFT", 16, -16)
+		ns.RollTabs(content, title, 1)
 		note = PageIntro(content, title,
 			L["In a group, items rolled on show in a window instead of only as lines in chat: each item, a bar " ..
 			"for the time left, and everyone's pick (need, greed, transmog) and number, the winner lit at the top. " ..
 			"It opens as an item drops, just under the game's roll frame, so you can see who's picked what before you choose, and takes its place once you have. Each item fades a few seconds after it's won (point at them to keep them). It stays with the game's roll frames: with \"Drag windows to move them\" on, dragging either moves both. " ..
 			"/cine rolls shows the latest rolls."])
-		ns.StyleLink(content, title, "Roll Style", L["Opens the Style hub's Roll Vision page: how the roll " ..
-			"window looks."], Tooltip)
 		local rollSwitch = PageSwitch(content, "rollWindow", L["Enable page"],
 			L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
 			"when you turn this back on."], note, function() ns.RefreshRollWindow() end)
@@ -13387,6 +13432,7 @@ ns.OnLanguage(function()
 	CreateNameStylePanel()
 	CreateTargetArrowPanel()
 	if ns.CreateLetterboxStylePanel then -- (LetterboxStyle.lua)
+		ns.CreateEffectPanel(ns.lowHealthKit, "letterbox")
 		ns.CreateLetterboxStylePanel(ns.lowHealthKit)
 	end
 	if ns.CreateQuestItemStylePanel then -- (QuestItemStyle.lua)
@@ -13426,6 +13472,7 @@ ns.OnLanguage(function()
 		ns.CreatePlateCastStylePanel(ns.lowHealthKit)
 	end
 	CreateEffectsPanel()
+	ns.CreateEffectPanel(ns.lowHealthKit, "tint") -- (LetterboxStyle.lua: its Show in row)
 	CreateTintPanel()
 	CreateGraphicsPanel()
 	CreateAudioPanel()
@@ -13445,6 +13492,9 @@ ns.OnLanguage(function()
 	if ns.CreateWhatsNewPanels then
 		ns.CreateWhatsNewPanels({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
+	end
+	if ns.CreateProfilerPanel then -- (ProfilerPage.lua: the dev copy only, CinematicDev.toc)
+		ns.CreateProfilerPanel(ns.lowHealthKit)
 	end
 	-- The dev build's own pages, at the very end (ModuleEditor.lua, Layouts.lua).
 	if ns.isDev and ns.CreateModuleEditor then

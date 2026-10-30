@@ -67,6 +67,28 @@ function ns.AddOverlay(frame)
 	end
 end
 
+-- The release and resurrect popups are never hidden: dying, offered a
+-- resurrect, or at your corpse or a spirit healer with the UI hidden (by our
+-- key or the game's), it comes back. (CineMode's fade still hides the rest:
+-- the death camera's included. The popups are never faded.)
+local resWatcher = CreateFrame("Frame")
+for _, event in ipairs({ "PLAYER_DEAD", "RESURRECT_REQUEST", "CORPSE_IN_RANGE", "CONFIRM_XP_LOSS" }) do
+	pcall(resWatcher.RegisterEvent, resWatcher, event) -- (each client that has them)
+end
+resWatcher:SetScript("OnEvent", function()
+	if UIParent:IsShown() then
+		return
+	end
+	if SetUIVisibility then
+		SetUIVisibility(true)
+	elseif not InCombatLockdown() then
+		UIParent:Show()
+	end
+	if UIParent:IsShown() then
+		Restore()
+	end
+end)
+
 function ns.ToggleUI()
 	local show = not UIParent:IsShown()
 	if not show then

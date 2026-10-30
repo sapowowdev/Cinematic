@@ -15,7 +15,7 @@ local PAGES = {
 	{ "Tooltips", "Tooltip Style", { "tooltipBarTexture", "tooltipFont", "tooltipOutline", "tooltipEdge" } },
 	{ "Cast bars", "Cast Bar Style", { "plateCastFill", "plateCastFont", "plateCastOutline", "plateCastBorder" } },
 	{ "Chat bubbles", "Bubble Style", { "bubblesFont", "bubblesOutline", "bubblesEdge" } },
-	{ "Quest talk", "Quest Talk Style", { "questTalkFont", "questTalkOutline" } },
+	{ "Dialogue", "Quest Talk Style", { "questTalkFont", "questTalkOutline" } },
 	{ "Quest item button", "Quest Item Style", { "questItemFont", "questItemOutline", "questItemFrame" } },
 	{ "Roll Vision", "Roll Style", { "rollBarTexture", "rollFont", "rollOutline" } },
 	{ "Combat Vision", "Combat Style", { "combatFont", "combatOutline" } },
@@ -125,16 +125,17 @@ local CELLS = {
 	{ "Personal Resource Display", "MakePersonalPreview" },
 	{ "Tooltips", "MakeTooltipPreview" },
 	{ "Chat bubbles", "MakeBubblePreview" },
-	{ "Quest talk", "MakeQuestTalkPreview" },
+	{ "Dialogue", "MakeQuestTalkPreview" },
 	{ "Roll Vision", "MakeRollPreview" },
 	{ "Quest item button", "MakeQuestItemPreview" },
 	{ "Combat Vision", "MakeCombatPreview", sized = true }, -- (sized: given the screen's height)
 }
-local CELL_H, ROTATE_SECONDS, FADE_SECONDS = 250, 6, 0.6
+local ROTATE_SECONDS, FADE_SECONDS = 6, 0.6
+local NAME_H = 24 -- (the page's name over the screen; the screen as high as every Style preview's)
 
 local function MakePreview(parent, width)
 	local holder = CreateFrame("Frame", nil, parent)
-	holder:SetSize(width, 24 + CELL_H)
+	holder:SetSize(width, NAME_H + ns.StylePreviewHeight())
 	local name = holder:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	name:SetPoint("TOPLEFT", 0, -5)
 	name.searchSkip = true
@@ -145,18 +146,19 @@ local function MakePreview(parent, width)
 	for _, info in ipairs(CELLS) do
 		local make = ns[info[2]]
 		if make then
-			local cell = make(holder, width, info.sized and CELL_H or nil)
+			local cell = make(holder, width, info.sized and ns.StylePreviewHeight() or nil)
 			cell:SetScript("OnShow", nil) -- (drawn by holder:Refresh)
-			cell:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -24)
-			cell:SetPoint("TOPRIGHT", holder, "TOPRIGHT", 0, -24) -- (as wide as the page makes it)
+			cell:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -NAME_H)
+			cell:SetPoint("TOPRIGHT", holder, "TOPRIGHT", 0, -NAME_H) -- (as wide as the page makes it)
 			if cell.SetClipsChildren then cell:SetClipsChildren(true) end
 			-- (Held to the screen's size after each drawing, its own too: Roll
 			-- Vision's sizes itself to its cards as they tick.)
 			local own = cell.Refresh
 			function cell:Refresh(...)
 				if own then own(self, ...) end
-				if math.abs(self:GetHeight() - CELL_H) > 0.5 then
-					self:SetHeight(CELL_H)
+				local height = ns.StylePreviewHeight()
+				if math.abs(self:GetHeight() - height) > 0.5 then
+					self:SetHeight(height)
 				end
 				ns.RecutStyleScene(self) -- (its shape: the screen's width may have changed too)
 			end
@@ -199,11 +201,13 @@ local function MakePreview(parent, width)
 		fading = { index = was, time = 0 }
 		holder:Refresh()
 	end
-	-- (The arrows, top right above the screen.)
-	for _, side in ipairs({ { 24, "Prev", -1 }, { 0, "Next", 1 } }) do
+	-- (The arrows, in the screen's top right as the other previews' buttons,
+	-- over the pages fading in.)
+	for _, side in ipairs({ { 30, "Prev", -1 }, { 6, "Next", 1 } }) do
 		local arrow = CreateFrame("Button", nil, holder)
 		arrow:SetSize(24, 24)
-		arrow:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -side[1], 0)
+		arrow:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -side[1], -NAME_H - 4)
+		arrow:SetFrameLevel(holder:GetFrameLevel() + 30)
 		local art = "Interface\\Buttons\\UI-SpellbookIcon-" .. side[2] .. "Page-"
 		arrow:SetNormalTexture(art .. "Up")
 		arrow:SetPushedTexture(art .. "Down")
@@ -266,7 +270,7 @@ function ns.CreateGeneralStylePanel(kit)
 	local rows = ns.StyleRows(kit, content, stack, Changed, "styleGeneral")
 
 	preview = MakePreview(content, 480)
-	preview.keepHeight = true -- (its name over the screen: StylePopout widens it only)
+	preview.headHeight = NAME_H -- (its name over the screen: StylePages.lua)
 	stack:Add(preview, "label")
 	local pop = ns.StylePopout(preview, kit.Tooltip) -- (StylePages.lua)
 	-- (left of the arrows, not over them)

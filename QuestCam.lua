@@ -1179,7 +1179,23 @@ local function OnUpdate(_, elapsed)
 			HurryZoom(ZOOM_HURRY)
 		end
 	end
-	StepSequence(now)
+	-- A button down on the camera that isn't yours yet (with the window open a
+	-- quick click on the quest giver doesn't count, see ns.IsMouseOnCamera):
+	-- the turn and tilt stop with your speed back at once, and nothing new
+	-- starts till you let go. (They held the speed at the drift's crawl, so
+	-- that first moment of your drag didn't turn, and a short drag never did.)
+	local pressed = cam.active and not cam.handedOver and ns.MouseCameraPressed()
+	if pressed then
+		for _, m in pairs(movers) do
+			if m.moving then
+				Note("button down: " .. m.cvar .. " paused")
+				StopMove(m)
+				RestoreSpeed(m.cvar)
+			end
+		end
+	else
+		StepSequence(now)
+	end
 	if busy or Zooming() or zoomer.release then
 		Log(now)
 	end

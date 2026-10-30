@@ -24,6 +24,7 @@ local function SetBindingNames()
 	BINDING_NAME_CINEMATIC_CAM_FISH = "Cinematic: " .. L["Start the fish camera"]
 	BINDING_NAME_CINEMATIC_CAM_TELE = "Cinematic: " .. L["Start the tele camera"]
 	BINDING_NAME_CINEMATIC_CAM_DEATH = "Cinematic: " .. L["Test the death camera"]
+	BINDING_NAME_CINEMATIC_STOPCAM = "Cinematic: " .. L["Stop the camera"]
 	BINDING_NAME_CINEMATIC_SHOWTOOLTIPS = "Cinematic: " .. L["Show hidden tooltips (hold)"]
 	BINDING_NAME_CINEMATIC_TOGGLETOOLTIPS = "Cinematic: " .. L["Toggle tooltip hiding"]
 	BINDING_NAME_CINEMATIC_RELOAD = "Cinematic: " .. L["Reload the UI"]
@@ -575,6 +576,9 @@ DEFAULTS.runCameraDelay = 5
 DEFAULTS.walkOffInCities, DEFAULTS.walkOffInInstances = false, false
 DEFAULTS.runOffInCities, DEFAULTS.runOffInInstances = true, true
 DEFAULTS.deathOffInInstances = true -- (no death camera in dungeons and raids: the group's waiting)
+DEFAULTS.deathAfterBoss = true    -- dying in a boss fight, it waits for the encounter to end
+DEFAULTS.deathOffWithSelfRes = false -- none when you can come back yourself (soulstone, Reincarnation...)
+DEFAULTS.deathExitButton = true   -- an Exit camera button under the release popup meanwhile
 -- No camera mode in battlegrounds and arenas (flight has none there anyway).
 for _, cam in ipairs(ns.CAMERA_OFF_CAMS) do
 	if not (ns.CAMERA_OFF_NEVER[cam[1]] or {}).BGs then
@@ -2008,6 +2012,11 @@ function ns.IsCameraOffHere(cam)
 	if db.cameraModes == false then
 		return true
 	end
+	-- Stopped (ns.StopCamera): off until what started it is over.
+	local stopped = ns.stoppedCam
+	if stopped and (stopped == cam or (stopped == "still" and ns.STILL_CAMS[cam])) then
+		return true
+	end
 	-- Started by hand (camera wheel or key binding): runs wherever you are.
 	if (ns.manualCam and ns.manualCam == (cam == "idle" and "afk" or cam))
 		or (cam == "death" and GetTime() < (ns.deathTestUntil or 0)) then
@@ -2027,6 +2036,58 @@ function ns.IsCameraOffHere(cam)
 	return ns.CameraRowsOff(cam)
 end
 ns.IsCameraOffHere = ns.Profiled("IsCameraOffHere", ns.IsCameraOffHere)
+
+-- The Stop camera key binding and the death camera's Exit camera button: the
+-- camera running now (ns.activeCam) stops, and stays off until what started
+-- it is over (ns.UpdateStoppedCam): released or revived, landed, auto-walk or
+-- auto-run ended, the quest window closed, or you move. The standing-still
+-- cameras go together, so stopping one doesn't hand over to another.
+ns.STILL_CAMS = { idle = true, cozy = true, vista = true, fish = true, tele = true }
+function ns.StopCamera()
+	local cam = ns.activeCam
+	if not cam then
+		return false
+	end
+	ns.manualCam = nil -- (one started from a key binding or the camera wheel)
+	if GetTime() < (ns.deathTestUntil or 0) then
+		ns.deathTestUntil = 0
+		ns.StandUpFromDeathTest()
+	end
+	ns.stoppedCam = ns.STILL_CAMS[cam] and "still" or cam
+	ns.Log("camera", "stopped by hand: " .. cam)
+	return true
+end
+
+-- Every frame from the orbit: a stopped camera's trigger over, it may run again.
+function ns.UpdateStoppedCam(dead, onTaxi, walking, autoRunning, atNPC)
+	local cam = ns.stoppedCam
+	if not cam then
+		return
+	end
+	local on
+	if cam == "death" then
+		on = dead
+	elseif cam == "flight" then
+		on = onTaxi
+	elseif cam == "walk" then
+		on = walking
+	elseif cam == "run" then
+		on = autoRunning
+	elseif cam == "quest" then
+		on = atNPC
+	else
+		on = not ns.playerMoving -- (the standing-still cameras and Chat Cam)
+	end
+	if not on then
+		ns.stoppedCam = nil
+	end
+end
+
+function Cinematic_StopCamera()
+	if ns.db and not ns.StopCamera() then
+		ns.Print(L["no camera running"])
+	end
+end
 
 -- Tracking doesn't keep the minimap up here (Minimap page, "Except in").
 -- Going by where you are, not your PvP flag: PvP here means battlegrounds and
@@ -5866,7 +5927,6 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			ns.LoginZoom()
 		end
 	elseif event == "PLAYER_LOGOUT" then
-		ns.LogoutZoom()
 		ns.SaveProfile()
 		ns.MusicTrace(("LOGOUT volume %s music %s"):format(GetCVar("Sound_MusicVolume"), GetCVar("Sound_EnableMusic")))
 		-- Put the player's music/name/nameplate settings back before they're saved.

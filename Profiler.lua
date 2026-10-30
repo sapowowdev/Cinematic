@@ -134,6 +134,8 @@ local function GameMetric(kind, metric)
 	return nil
 end
 
+ns.ProfileGameMetric = GameMetric -- (ProfilerPage.lua's graph)
+
 local GAME_KINDS = { "addon", "overall", "app" }
 local GAME_SPIKES = { "CountTimeOver1Ms", "CountTimeOver5Ms", "CountTimeOver10Ms" }
 
@@ -244,6 +246,35 @@ local function BuildReport()
 	return lines
 end
 
+-- The finished profile as figures, for the Profiler page (ProfilerPage.lua):
+-- each section a frame, biggest first, its parts under it.
+local function Summary(lines)
+	local seconds = math.max(run.elapsed, 0.001)
+	local frames = math.max(run.frames, 1)
+	local function Row(name, stat)
+		return { name = name, ms = stat.time / frames, calls = stat.calls / frames, average = stat.time / stat.calls,
+			worst = stat.max, kb = stat.kb / seconds }
+	end
+	local summary = { lines = lines, seconds = seconds, fps = frames / seconds, frameMs = seconds * 1000 / frames,
+		startState = run.startState, endState = State(), worst = run.worst, spikes = run.spikes,
+		overhead = run.overhead, sections = {}, total = 0, kb = 0, finished = time() }
+	for _, name in ipairs(Sorted(sections)) do
+		local stat = sections[name]
+		local row = Row(name, stat)
+		row.children = {}
+		for _, childName in ipairs(stat.children and Sorted(stat.children) or {}) do
+			row.children[#row.children + 1] = Row(childName, stat.children[childName])
+		end
+		summary.sections[#summary.sections + 1] = row
+		summary.total, summary.kb = summary.total + row.ms, summary.kb + row.kb
+	end
+	if run.gameFrames > 0 then
+		summary.game = { addon = run.game.addon / run.gameFrames, overall = run.game.overall / run.gameFrames,
+			app = run.game.app / run.gameFrames }
+	end
+	return summary
+end
+
 function ns.StopProfile()
 	if not run then
 		return false
@@ -254,6 +285,14 @@ function ns.StopProfile()
 	local lines = BuildReport()
 	for _, line in ipairs(lines) do
 		ns.Log("cpu", line)
+	end
+	ns.lastProfile = Summary(lines)
+	if run.quiet then
+		-- (Started from the Profiler page: the results are there.)
+		ns.Print(("cpu profile done (%.3f ms a frame measured): the Profiler page has it"):format(
+			ns.lastProfile.total))
+		run = nil
+		return true
 	end
 	-- Chat: the summary, then the biggest sections.
 	-- (Sub-parts and counts: the log only.)
@@ -277,7 +316,8 @@ function ns.StopProfile()
 	return true
 end
 
-function ns.StartProfile(seconds)
+-- (quiet: no report in chat or its window at the end, just ns.lastProfile)
+function ns.StartProfile(seconds, quiet)
 	if run then
 		return false
 	end
@@ -292,7 +332,7 @@ function ns.StartProfile(seconds)
 	run = {
 		frames = 0, elapsed = 0, frameMs = 0, worst = 0, spikes = { [1] = 0, [5] = 0, [16] = 0 },
 		game = { addon = 0, overall = 0, app = 0 }, gameFrames = 0, gameSpikes = {},
-		startState = State(),
+		startState = State(), quiet = quiet,
 	}
 	ns.profiling = true
 	run.overhead = Calibrate()

@@ -36,8 +36,8 @@ local KEY_ADDRESSES = {
 	chatPeekChannelList = "Chat/Other",
 	-- (with the rows as dropdowns, what rows without a Calm Timer of their own go by)
 	combatShowCalm = "Standard Frames/top",
-	-- (the effects' switches, set from their row of the Visual Effects grid)
-	letterbox = "Effects/Show in", vignette = "Effects/Show in", weatherTint = "Effects/Show in",
+	-- (the effects' switches, set from their row of the Visual Effects grid, or the Letterbox page's)
+	letterbox = "Letterbox/Show in", vignette = "Effects/Show in", weatherTint = "Effects/Show in",
 }
 -- Lists whose rows go with the same rows of the grids: a row's rule or the
 -- roles it shows for is where that row is.
@@ -468,10 +468,10 @@ ns.PROFILE_MODULES = {
 		end },
 
 	-- The look
-	{ key = "no-letterbox", name = "No letterbox", scope = { "Effects/Show in" },
+	{ key = "no-letterbox", name = "No letterbox", scope = { "Letterbox/Show in" },
 		tip = "No letterbox: the other effects show over the normal UI.",
 		apply = function(set) set("letterbox", false) end },
-	{ key = "effects-in-cameras", name = "Effects only in cameras", scope = { "Effects/Show in" },
+	{ key = "effects-in-cameras", name = "Effects only in cameras", scope = { "Effects/Show in", "Letterbox/Show in", "Tint/Show in" },
 		tip = "The letterbox, tint, vignette and weather only while a camera mode runs; no soft edges.",
 		apply = function(set)
 			for _, effect in ipairs(ns.EFFECT_GRID) do
@@ -479,13 +479,13 @@ ns.PROFILE_MODULES = {
 			end
 			set("depthOfField", false)
 		end },
-	{ key = "letterbox-in-fights", name = "Letterbox stays in fights", scope = { "Effects/Show in" },
+	{ key = "letterbox-in-fights", name = "Letterbox stays in fights", scope = { "Letterbox/Show in" },
 		tip = "Fights don't bring the letterbox down.",
 		apply = function(set) set("letterboxOffInCombat", false) end },
 	{ key = "rain-view-distance", name = "Reduce View Distance in Rain", scope = { "Effects/Show in" },
 		tip = "In CineMode, rain pulls the view distance in from yours, all the way in a downpour.",
 		apply = function(set) set("rainViewScale", 1) end },
-	{ key = "no-time-message", name = "No time of day message", scope = { "Tint/Time of day" },
+	{ key = "no-time-message", name = "No time of day message", scope = { "Tint Style/Time of day" },
 		tip = "No time of day title under the zone name.",
 		apply = function(set) set("timeOfDayMessage", false) end },
 	{ key = "vitals-vision", name = "Vitals Vision on", scope = { "Vitals Vision" },

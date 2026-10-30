@@ -2074,6 +2074,13 @@ do
 		return (group.preset and byPreset[group.preset]) or (not group.preset and byName[group.name]) or nil
 	end
 
+	-- What a setting picking groups saves for one: a default group's preset
+	-- (kept through renames), or the name of one you made.
+	function ns.HoverGroupId(group)
+		local preset = ns.HoverGroupPreset(group)
+		return preset and preset.preset or group.name
+	end
+
 	-- A group's icon: a default group's own, or the one picked for it.
 	function ns.HoverGroupIcon(group)
 		local preset = ns.HoverGroupPreset(group)
@@ -2311,7 +2318,7 @@ function ns.IsCamShowOn(key) return IsListOn("camShow", key, NO_DEFAULTS) end
 local tickTables = {
 	hovered = {}, triggered = {}, pinged = {}, mouseRows = {}, mouseGroups = {}, events = {},
 	combatShown = {}, placeLists = {}, auraOnly = {}, cooldownBarUp = {},
-	partsHovered = {}, partsHeldUntil = {},
+	partsHovered = {}, partsHeldUntil = {}, deathKept = {},
 }
 
 -- "group:<group>", a group's key in the shown lists, made once for each
@@ -6962,6 +6969,15 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- would normally keep it up (the release button is a popup: it stays).
 	-- Hovering still shows it.
 	local deathFade = cinematic and ns.IsDeathCinematic and ns.IsDeathCinematic()
+	-- (But the rows of the groups picked on the Death Cam page: up throughout.)
+	local deathKept = wipe(tickTables.deathKept)
+	if deathFade and ns.db.deathKeepGroups then
+		for _, group in ipairs(ns.GetHoverGroups()) do
+			if ns.db.deathKeepGroups[ns.HoverGroupId(group)] then
+				for _, key in ipairs(group.members or NO_DEFAULTS) do deathKept[key] = true end
+			end
+		end
+	end
 	-- Chat Cam's Ultra immersive: through a conversation the whole UI goes,
 	-- CineMode or not, hovering and all (typing still shows the input box).
 	local immersive = ns.ChatCamImmersive and ns.ChatCamImmersive() or false
@@ -7021,7 +7037,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 			and not fightingShown and (fadeChat or entry.group ~= "chat") then
 			target = 0
 		end
-		if deathFade and not hovered[row] and not typingShown then
+		if deathFade and deathKept[row] then
+			target = 1
+		elseif deathFade and not hovered[row] and not typingShown then
 			target = 0
 		end
 		if immersive and not typingShown then

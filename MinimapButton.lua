@@ -137,49 +137,6 @@ local function FormatTime(seconds)
 	return (L["%d:%02d left"]):format(math.floor(seconds / 60), math.floor(seconds % 60))
 end
 
-local STRENGTHS = { 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1 }
-
--- Strength choices: fixed steps (finer values are set with the sliders in
--- settings). Compared as whole percents (slider values aren't exact).
-local function Percent(value)
-	return value and math.floor(value * 100 + 0.5)
-end
-
-local function AddStrengthChoices(menu, get, set)
-	for _, value in ipairs(STRENGTHS) do
-		menu:CreateRadio(("%d%%"):format(Percent(value)),
-			function() return Percent(get()) == Percent(value) end, function() set(value) end)
-	end
-end
-
--- VFX section: tint strength, 0% being off. Presets, colours, the
--- vignette and the rest are in settings. A strength above 0% also brings back
--- a tint preset that was switched off in settings.
-local function AddTintMenu(root, db)
-	root:CreateDivider()
-	root:CreateTitle("VFX")
-
-	local strength = root:CreateButton(L["Tint"])
-	AddStrengthChoices(strength, function()
-		return db.tintPreset == "none" and 0 or db.tintStrength
-	end, function(value)
-		db.tintStrength = value
-		if value > 0 and db.tintPreset == "none" then
-			db.tintPreset = db.tintPresetBeforeOff or ns.DEFAULTS.tintPreset
-			db.tintPresetBeforeOff = nil
-		end
-		ns.RefreshTint()
-	end)
-end
-
--- Audio section: the Audio page's master music switch.
-local function AddAudioMenu(root, db)
-	root:CreateDivider()
-	root:CreateTitle(L["Audio"])
-	root:CreateCheckbox(L["Enable page"], function() return db.musicInCinematic end,
-		function() db.musicInCinematic = not db.musicInCinematic end)
-end
-
 local MENU_MARGIN = 12 -- pixels between the menu and the screen edges
 
 local function KeepOffEdges(menu)
@@ -242,12 +199,6 @@ local function ShowMenu(owner)
 			Print(L["minimap button hidden. Bring it back with /cine button or the " ..
 				"\"Show minimap button\" option."])
 		end)
-		-- (The CineMode page's "Turn off in: Combat": stored the other way round.)
-		root:CreateCheckbox(L["Turn off in combat"],
-			function() return not db.stayInCombat end,
-			function() db.stayInCombat = not db.stayInCombat end)
-		AddAudioMenu(root, db)
-		AddTintMenu(root, db)
 		root:CreateDivider()
 		root:CreateButton(L["Open settings"], ns.OpenOptions)
 	end)

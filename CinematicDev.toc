@@ -118,5 +118,6 @@ ChangelogCommits.lua
 # (made by Tools/commits.sh, not kept in git)
 ChangelogCommits.dev.lua
 WhatsNew.lua
+ProfilerPage.lua
 MinimapButton.lua
 Reload.lua

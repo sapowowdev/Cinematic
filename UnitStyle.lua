@@ -459,13 +459,24 @@ function ns.MakeUnitStylePreview(parent, width, onPick)
 	caption:SetPoint("TOPLEFT", 6, -5)
 	caption:SetText(L["Preview"])
 	caption.searchSkip = true
+	-- (The frames on a stage their layout's size, its margins even, kept in
+	-- the middle however wide the preview is.)
+	local right, bottom = 0, 0
+	for _, sample in pairs(SAMPLES) do
+		local size = sample.small and 22 or 34
+		right = math.max(right, sample.x + sample.w + size + 6)
+		bottom = math.max(bottom, -sample.y + size + 6)
+	end
+	local stage = CreateFrame("Frame", nil, holder)
+	stage:SetSize(right + 14, bottom + 30) -- (the layout's left and top margins, on the other sides too)
+	stage:SetPoint("CENTER")
 	local samples = {}
 	for _, info in ipairs(FRAMES) do
 		local id, sample = info[1], SAMPLES[info[1]]
-		local unit = CreateFrame("Button", nil, holder)
+		local unit = CreateFrame("Button", nil, stage)
 		local size = sample.small and 22 or 34
 		unit:SetSize(sample.w + size + 6, size + 6)
-		unit:SetPoint("TOPLEFT", holder, "TOPLEFT", sample.x, sample.y)
+		unit:SetPoint("TOPLEFT", stage, "TOPLEFT", sample.x, sample.y)
 		unit.portrait = unit:CreateTexture(nil, "ARTWORK")
 		unit.portrait:SetSize(size, size)
 		unit.portrait:SetPoint(sample.flip and "RIGHT" or "LEFT", unit, sample.flip and "RIGHT" or "LEFT", 0, 0)

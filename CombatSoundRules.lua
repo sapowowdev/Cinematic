@@ -1,4 +1,5 @@
--- Combat Vision's sounds: rules, each for entering or leaving combat, with a
+-- Combat Vision's sounds: rules, each for entering or leaving combat (or, on
+-- the Boss tab, a boss pulled, killed or a wipe: ENCOUNTER_END), with a
 -- condition in the rules' words (boss, raid, cinemode...; none: any fight)
 -- and a list of sounds. As a fight starts or ends, the first rule that fits
 -- plays one of its sounds at random (not the one it played last), at its own
@@ -14,20 +15,22 @@ local _, ns = ...
 local L = ns.L
 
 -- The rules, saved as text so profiles and shared strings carry them: rules
--- apart by ";", each "<in|out>#<condition>#<id>@<volume %>,...".
-ns.DEFAULTS.combatSounds = "in#boss#233484@60,316724@60,316723@60;in##700@100;out##698@100"
+-- apart by ";", each "<in|out|kill|wipe>#<condition>#<id>@<volume %>,...".
+ns.DEFAULTS.combatSounds = "in#boss#233484@100;kill#boss#;wipe#boss#"
 ns.DEFAULTS.combatCueVolume = 0.8
 
 local SOUND = {} -- id -> its entry in ns.COMBAT_SOUNDS
 for _, entry in ipairs(ns.COMBAT_SOUNDS or {}) do SOUND[entry[1]] = entry end
 ns.COMBAT_SOUND = SOUND
 
--- Text -> { { edge = "in"|"out", rule = text, sounds = { { id, volume 0-1 }... } }... }
+local EDGES = { ["in"] = true, out = true, kill = true, wipe = true }
+
+-- Text -> { { edge = "in"|"out"|"kill"|"wipe", rule = text, sounds = { { id, volume 0-1 }... } }... }
 function ns.ParseCombatSounds(text)
 	local rules = {}
 	for chunk in (text or ""):gmatch("[^;]+") do
 		local edge, rule, list = chunk:match("^(%a+)#([^#]*)#(.*)$")
-		if edge == "in" or edge == "out" then
+		if EDGES[edge] then
 			local sounds = {}
 			for id, volume in list:gmatch("(%d+)@(%d+)") do
 				sounds[#sounds + 1] = { tonumber(id), math.min(100, tonumber(volume)) / 100 }
@@ -129,16 +132,40 @@ function ns.PlayCombatSound(id, volume)
 	C_Timer.After(done + 0.05, RestoreWhenDone)
 end
 
--- The first rule for edge ("enter" or "leave") that fits now (its condition
--- read with the rules' entering or leaving true, and cinemode as cine says).
+-- A boss fight's rule: its condition has the word boss (the Boss tab's).
+local function IsBossRule(rule)
+	return ((" " .. (rule.rule or "") .. " "):lower():find("[^%w_]boss[^%w_]")) ~= nil
+end
+
+-- The first rule for edge ("enter", "leave", or a boss fight's end: "kill",
+-- "wipe") that fits now (its condition read with the rules' entering or
+-- leaving true, and cinemode as cine says): the boss fights' rules first,
+-- then the rest. A boss fight's end is read as leaving, with boss true (the
+-- encounter's over by then). Leaving combat just after one: no sound, so it
+-- doesn't cut the kill's or wipe's.
+local SIDE = { enter = "in", leave = "out", kill = "kill", wipe = "wipe" }
+local END_QUIET = 8 -- seconds after a kill's or wipe's sound with none for leaving combat
 local lastPlayed = {} -- rule's place -> the id it played last
+local endSoundAt = -math.huge
 local function Pick(edge, cine)
+	if edge == "leave" and GetTime() - endSoundAt < END_QUIET then return nil end
 	local rules = ns.ParseCombatSounds(ns.db.combatSounds)
-	local side = edge == "enter" and "in" or "out"
-	ns.combatEdge, ns.combatEdgeCine = edge, cine
+	local side = SIDE[edge]
+	ns.combatEdge, ns.combatEdgeCine = edge == "enter" and "enter" or "leave", cine
 	local ok, facts = pcall(ns.RuleFactsNow)
 	ns.combatEdge = nil
+	if ok and (side == "kill" or side == "wipe") then
+		facts = setmetatable({ boss = true }, { __index = facts })
+	end
+	local order = {}
 	for place, rule in ipairs(rules) do
+		if IsBossRule(rule) then order[#order + 1] = place end
+	end
+	for place, rule in ipairs(rules) do
+		if not IsBossRule(rule) then order[#order + 1] = place end
+	end
+	for _, place in ipairs(order) do
+		local rule = rules[place]
 		if rule.edge == side then
 			local fits = not rule.rule:find("%S")
 			if not fits and ok then
@@ -151,13 +178,14 @@ local function Pick(edge, cine)
 				local i = math.random(#sounds)
 				if #sounds > 1 and sounds[i][1] == lastPlayed[place] then i = i % #sounds + 1 end
 				lastPlayed[place] = sounds[i][1]
+				if side == "kill" or side == "wipe" then endSoundAt = GetTime() end
 				return sounds[i]
 			end
 		end
 	end
 end
 
--- The sound for a fight starting or ending, a moment later (so a boss's
+-- The sound for a fight starting or ending (or a boss's: "kill", "wipe"), a moment later (so a boss's
 -- frames are up to tell it's a boss fight).
 function ns.PlayCombatCueSound(edge, cine)
 	C_Timer.After(0.25, function()
@@ -178,7 +206,9 @@ end)
 
 -- The page's part: the cue volume, the rules (each its condition, its
 -- sounds with their volume, a play and remove button) and a window to pick
--- sounds from. kit, content, stack: the Visions page's.
+-- sounds from. kit, content, stack: the Visions page's. boss: the Boss tab's
+-- part, its boss fights' rules; else the Combat tab's, the rest. (One list
+-- saved, each tab showing its own.)
 local RULE_W, ROW_H = 520, 24
 local picker -- (below)
 
@@ -214,10 +244,26 @@ local function VolumeSlider(parent, onChange, onRelease)
 	return slider
 end
 
-function ns.CombatSoundRulesSection(kit, content, stack)
+-- A rule's edge on its button, and the next one a click switches to (the
+-- Boss tab's go pulled, killed, wipe).
+local NEXT = { ["in"] = "out", out = "in", kill = "in", wipe = "in" }
+local BOSS_NEXT = { ["in"] = "kill", kill = "wipe", wipe = "in", out = "in" }
+
+function ns.CombatSoundRulesSection(kit, content, stack, boss)
+	local function EdgeText(edge)
+		if edge == "kill" then return "|cff5dcaa5" .. L["Boss killed"] .. "|r" end
+		if edge == "wipe" then return "|cff9a9a9a" .. L["Wipe"] .. "|r" end
+		if edge == "in" then return "|cffe24b4a" .. (boss and L["Boss pulled"] or L["Entering combat"]) .. "|r" end
+		return "|cff5dcaa5" .. L["Leaving combat"] .. "|r"
+	end
+	local function Mine(rule) return IsBossRule(rule) == (boss and true or false) end
 	stack:Header(content, L["Sounds"])
-	stack:Help(content,
-		L["Rules for the sounds, read top to bottom as a fight starts or ends: the first that fits plays one " ..
+	stack:Help(content, boss
+		and L["Sounds for boss fights, read before the Combat tab's: as a boss is pulled, killed or your group " ..
+		"wipes, the first rule that fits plays one of its sounds at random. A rule here has Boss fight in its " ..
+		"condition (taken out, it moves to the Combat tab). Each sound's slider sets it next to the others, the " ..
+		"cue volume sets them all."]
+		or L["Rules for the sounds, read top to bottom as a fight starts or ends: the first that fits plays one " ..
 		"of its sounds at random. A rule's condition uses the rules' words (Boss fight, Raids, In CineMode...); " ..
 		"none: any fight. Each sound's slider sets it next to the others, the cue volume sets them all. They " ..
 		"play on the Ambience channel, its volume set for them and put back after."])
@@ -265,7 +311,8 @@ function ns.CombatSoundRulesSection(kit, content, stack)
 		head.up:SetPoint("LEFT", head.rule, "RIGHT", 6, 0)
 		head.remove = SmallButton(head, "x")
 		head.remove:SetPoint("LEFT", head.up, "RIGHT", 4, 0)
-		kit.Tooltip(head.edge, L["As a fight starts or as it ends. Click to switch."])
+		kit.Tooltip(head.edge, boss and L["As the boss is pulled, as it dies or as your group wipes. Click to switch."]
+			or L["As a fight starts or as it ends. Click to switch."])
 		kit.Tooltip(head.rule, L["When this rule fits. Click to write it in the rule editor; empty: any fight."])
 		kit.Tooltip(head.up, L["Move this rule up: it's read before the ones below it."])
 		kit.Tooltip(head.remove, L["Remove this rule and its sounds."])
@@ -312,99 +359,115 @@ function ns.CombatSoundRulesSection(kit, content, stack)
 	local addRule = SmallButton(box, L["Add a rule"], 120)
 	local defaults = SmallButton(box, L["Back to the defaults"], 160)
 	defaults:SetPoint("LEFT", addRule, "RIGHT", 8, 0)
-	kit.Tooltip(addRule, L["A new rule above the last one, for the fights you pick."])
-	kit.Tooltip(defaults, L["The rules as they come: horns for a boss fight, a sword drawn for the rest, and " ..
-		"sheathed after."])
+	kit.Tooltip(addRule, boss and L["A new rule for boss fights, first on this tab."]
+		or L["A new rule above the last one, for the fights you pick."])
+	kit.Tooltip(defaults, boss and L["This tab's rules as they come: a war horn as a boss is pulled; a kill and a wipe, no sound yet."]
+		or L["This tab's rules as they come: none, so other fights start and end quietly."])
 	addRule:SetScript("OnClick", function()
-		table.insert(rules, math.max(1, #rules), { edge = "in", rule = "boss", sounds = {} })
+		if boss then
+			table.insert(rules, 1, { edge = "in", rule = "boss", sounds = {} })
+		else
+			table.insert(rules, math.max(1, #rules), { edge = "in", rule = "", sounds = {} })
+		end
 		Save()
 	end)
 	defaults:SetScript("OnClick", function()
-		ns.GetDB().combatSounds = ns.DEFAULTS.combatSounds
-		Load()
-		Rebuild()
+		-- (Only this tab's put back: the other tab's kept.)
+		local list = {}
+		for _, rule in ipairs(ns.ParseCombatSounds(ns.DEFAULTS.combatSounds)) do
+			if Mine(rule) then list[#list + 1] = rule end
+		end
+		for _, rule in ipairs(rules) do
+			if not Mine(rule) then list[#list + 1] = rule end
+		end
+		rules = list
+		Save()
 	end)
 
 	function Rebuild()
 		for _, head in ipairs(heads) do head:Hide() head.add:Hide() end
 		for _, row in ipairs(rows) do row:Hide() row.sound = nil end
-		local y, n = 0, 0
+		local y, n, shown, before = 0, 0, 0, nil
 		for i, rule in ipairs(rules) do
-			local head = Head(i)
-			head:ClearAllPoints()
-			head:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -y)
-			head:Show()
-			y = y + ROW_H + 2
-			head.number:SetText(i .. ".")
-			head.edge:SetText(rule.edge == "in" and "|cffe24b4a" .. L["Entering combat"] .. "|r"
-				or "|cff5dcaa5" .. L["Leaving combat"] .. "|r")
-			head.rule:SetText(rule.rule:find("%S") and ns.ColoredRule(rule.rule) or L["Any fight"])
-			head.up:SetEnabled(i > 1)
-			head.edge:SetScript("OnClick", function()
-				rule.edge = rule.edge == "in" and "out" or "in"
-				Save()
-			end)
-			head.up:SetScript("OnClick", function()
-				rules[i], rules[i - 1] = rules[i - 1], rules[i]
-				Save()
-			end)
-			head.remove:SetScript("OnClick", function()
-				table.remove(rules, i)
-				Save()
-			end)
-			head.rule:SetScript("OnClick", function()
-				ns.OpenRuleEditor({
-					label = (L["Sound rule %d"]):format(i),
-					Text = function() return rule.rule end,
-					SetText = function() end,
-					Close = function(text)
-						rule.rule = (text or ""):gsub("[#;]", ""):match("^%s*(.-)%s*$")
-						Save()
-					end,
-					ResetToGrid = function()
-						rule.rule = ""
-						Save()
-					end,
-				})
-			end)
-			for _, sound in ipairs(rule.sounds) do
-				n = n + 1
-				local row = Row(n)
-				row:ClearAllPoints()
-				row:SetPoint("TOPLEFT", box, "TOPLEFT", 26, -y)
-				row:Show()
-				y = y + 22
-				row.sound = nil -- (no saving while it's set)
-				local entry = SOUND[sound[1]]
-				row.name:SetText(SoundName(sound[1]) .. (entry and ("  |cff808080%.1f s|r"):format(entry[4]) or ""))
-				row.slider:SetValue(math.floor(sound[2] * 100 + 0.5))
-				row.percent:SetText(("%d%%"):format(math.floor(sound[2] * 100 + 0.5)))
-				row.sound = sound
-				row.remove:SetScript("OnClick", function()
-					for k, other in ipairs(rule.sounds) do
-						if other == sound then table.remove(rule.sounds, k) break end
-					end
+			if Mine(rule) then
+				shown = shown + 1
+				local above = before -- (the one this tab shows above it)
+				before = i
+				local head = Head(i)
+				head:ClearAllPoints()
+				head:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -y)
+				head:Show()
+				y = y + ROW_H + 2
+				head.number:SetText(shown .. ".")
+				head.edge:SetText(EdgeText(rule.edge))
+				head.rule:SetText(rule.rule:find("%S") and ns.ColoredRule(rule.rule) or L["Any fight"])
+				head.up:SetEnabled(above ~= nil)
+				head.edge:SetScript("OnClick", function()
+					rule.edge = (boss and BOSS_NEXT or NEXT)[rule.edge] or "in"
 					Save()
 				end)
+				head.up:SetScript("OnClick", function()
+					rules[i], rules[above] = rules[above], rules[i]
+					Save()
+				end)
+				head.remove:SetScript("OnClick", function()
+					table.remove(rules, i)
+					Save()
+				end)
+				head.rule:SetScript("OnClick", function()
+					ns.OpenRuleEditor({
+						label = (L["Sound rule %d"]):format(shown),
+						Text = function() return rule.rule end,
+						SetText = function() end,
+						Close = function(text)
+							rule.rule = (text or ""):gsub("[#;]", ""):match("^%s*(.-)%s*$")
+							Save()
+						end,
+						ResetToGrid = function()
+							rule.rule = ""
+							Save()
+						end,
+					})
+				end)
+				for _, sound in ipairs(rule.sounds) do
+					n = n + 1
+					local row = Row(n)
+					row:ClearAllPoints()
+					row:SetPoint("TOPLEFT", box, "TOPLEFT", 26, -y)
+					row:Show()
+					y = y + 22
+					row.sound = nil -- (no saving while it's set)
+					local entry = SOUND[sound[1]]
+					row.name:SetText(SoundName(sound[1]) .. (entry and ("  |cff808080%.1f s|r"):format(entry[4]) or ""))
+					row.slider:SetValue(math.floor(sound[2] * 100 + 0.5))
+					row.percent:SetText(("%d%%"):format(math.floor(sound[2] * 100 + 0.5)))
+					row.sound = sound
+					row.remove:SetScript("OnClick", function()
+						for k, other in ipairs(rule.sounds) do
+							if other == sound then table.remove(rule.sounds, k) break end
+						end
+						Save()
+					end)
+				end
+				if #rule.sounds == 0 then
+					local row = Row(n + 1)
+					n = n + 1
+					row:ClearAllPoints()
+					row:SetPoint("TOPLEFT", box, "TOPLEFT", 26, -y)
+					row:Show()
+					row.name:SetText("|cff808080" .. L["No sounds: silent"] .. "|r")
+					row.slider:Hide()
+					row.percent:SetText("")
+					row.play:Hide()
+					row.remove:Hide()
+					y = y + 22
+				end
+				head.add:ClearAllPoints()
+				head.add:SetPoint("TOPLEFT", box, "TOPLEFT", 26, -y)
+				head.add:Show()
+				head.add:SetScript("OnClick", function() picker.Open(rule, Save) end)
+				y = y + 28
 			end
-			if #rule.sounds == 0 then
-				local row = Row(n + 1)
-				n = n + 1
-				row:ClearAllPoints()
-				row:SetPoint("TOPLEFT", box, "TOPLEFT", 26, -y)
-				row:Show()
-				row.name:SetText("|cff808080" .. L["No sounds: silent"] .. "|r")
-				row.slider:Hide()
-				row.percent:SetText("")
-				row.play:Hide()
-				row.remove:Hide()
-				y = y + 22
-			end
-			head.add:ClearAllPoints()
-			head.add:SetPoint("TOPLEFT", box, "TOPLEFT", 26, -y)
-			head.add:Show()
-			head.add:SetScript("OnClick", function() picker.Open(rule, Save) end)
-			y = y + 28
 		end
 		for _, row in ipairs(rows) do
 			local on = row.sound ~= nil
@@ -416,9 +479,11 @@ function ns.CombatSoundRulesSection(kit, content, stack)
 		if kit.FitContentHeight then kit.FitContentHeight(content) end
 	end
 
-	-- (Rebuilt each time the page shows: a profile or reset may have changed them.)
-	box.Refresh = function(self)
-		if self:IsVisible() then Load() Rebuild() end
+	-- (Rebuilt each time the page shows: a profile, reset or the other tab may
+	-- have changed them. The page's showing, not the box's: a tab's box is
+	-- shown only after the controls refresh.)
+	box.Refresh = function()
+		if content:IsVisible() then Load() Rebuild() end
 	end
 	box.pageSwitch = false
 	kit.AddControl(box)
@@ -480,6 +545,11 @@ function picker.Open(rule, save)
 			hl:SetColorTexture(1, 1, 1, 0.08)
 			frame.groups[g] = button
 		end
+		local divider = frame:CreateTexture(nil, "ARTWORK")
+		divider:SetColorTexture(1, 0.82, 0, 0.25)
+		divider:SetWidth(1)
+		divider:SetPoint("TOPLEFT", 178, -4)
+		divider:SetPoint("BOTTOMLEFT", 178, 4)
 		frame.rows = {}
 		for r = 1, PICK_ROWS do
 			local row = CreateFrame("Frame", nil, frame)
@@ -514,7 +584,7 @@ function picker.Open(rule, save)
 	end
 
 	local order = {}
-	local side = rule.edge
+	local side = rule.edge == "in" and "in" or "out" -- (a boss's kill or wipe: the leaving groups)
 	for _, group in ipairs(ns.COMBAT_SOUND_GROUPS) do
 		if group[2] == side then order[#order + 1] = group[1] end
 	end
@@ -523,7 +593,7 @@ function picker.Open(rule, save)
 	end
 	frame.group, frame.offset = order[1], 0
 	frame.search:SetText("")
-	frame.title:SetText(rule.edge == "in" and L["Sounds for entering combat"] or L["Sounds for leaving combat"])
+	frame.title:SetText(L["Sounds"])
 
 	local function Has(id)
 		for k, sound in ipairs(rule.sounds) do

@@ -1,11 +1,11 @@
--- The Style hub's Quest talk page: quest talk itself (its switch, questTalk:
+-- Quest Vision's Quest talk tab: quest talk itself (its switch, questTalk:
 -- off, the game's own gossip and quest windows) and how it looks (QuestTalk.lua
 -- draws it): the panels behind the NPC's words, your replies and the quest's card
 -- (parchment, the game's chat bubble, dark or none), their opacity, and the
 -- words' font, size and outline. A preview at the top: a bubble and its
 -- replies, dressed by quest talk's own code. Then its controls (the "Show
 -- the game's window" link, the number keys). Where it sits (and where the
--- game's windows do, with it off): the Visions hub's Quest Vision page.
+-- game's windows do, with it off): the Vision tab (Options.lua).
 
 local _, ns = ...
 local L = ns.L
@@ -16,11 +16,11 @@ local PRESET_KEYS = { "questTalkStyle", "questTalkAlpha", "questTalkFont", "ques
 
 function ns.CreateQuestTalkStylePanel(kit)
 	local canvas, content = kit.CreateScrollPage()
-	local title = kit.Label(content, "GameFontNormalLarge", L["Quest talk"])
-	title:SetPoint("TOPLEFT", 16, -16)
+	local title = kit.Label(content, "GameFontNormalLarge", L["Dialogue"])
+	ns.QuestTabs(content, title, 2)
 	local intro = kit.PageIntro(content, title,
-		L["Quest talk, and how it looks: the panels behind the NPC's words, your replies and the quest's card, " ..
-		"and the words themselves. Where it sits: the Visions hub's Quest Vision page. Changes show at once, " ..
+		L["NPC dialogue, and how it looks: the panels behind the NPC's words, your replies and the quest's card, " ..
+		"and the words themselves. Where it sits: the Vision tab. Changes show at once, " ..
 		"here and on a conversation going on."])
 
 	local preview -- (below: drawn again as each setting changes)
@@ -30,7 +30,7 @@ function ns.CreateQuestTalkStylePanel(kit)
 	end
 
 	local switch = kit.PageSwitch(content, "questTalkStyled", L["Enable page"],
-		L["On: quest talk looks as this page says. Off: parchment, in the game's fonts (the preview shows " ..
+		L["On: the dialogue looks as this page says. Off: parchment, in the game's fonts (the preview shows " ..
 		"that too). Each setting keeps its value for when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")
 	local rows = ns.StyleRows(kit, content, stack, Changed, "questTalk")
@@ -41,7 +41,7 @@ function ns.CreateQuestTalkStylePanel(kit)
 	kit.AddControl(preview)
 
 	rows.PresetMenu({
-		{ L["Cinematic's"], L["Parchment, as quest talk has always looked (the defaults)."], {} },
+		{ L["Cinematic's"], L["Parchment, as the dialogue has always looked (the defaults)."], {} },
 		{ L["Bubble"], L["The game's own chat bubble."], { questTalkStyle = "bubble" } },
 		{ L["Dark"], L["Light words on dark, see-through panels, in Arial Narrow."],
 			{ questTalkStyle = "dark", questTalkAlpha = 0.8, questTalkFont = "arial" } },
@@ -138,5 +138,5 @@ function ns.CreateQuestTalkStylePanel(kit)
 
 	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))
 	canvas:Hide()
-	kit.RegisterSubpage(canvas, "Quest Talk Style", L["Quest talk"])
+	kit.RegisterSubpage(canvas, "Quest Talk Style", L["Dialogue"])
 end

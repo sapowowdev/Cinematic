@@ -209,6 +209,9 @@ function ns.StyleScene(frame, focus, shade)
 		scene = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
 		scene:SetAllPoints()
 		frame.styleScene = scene
+		-- (Cut again at each new size: one sized by its anchors, as General's
+		-- screens, is cut before it has its width.)
+		frame:HookScript("OnSizeChanged", ns.RecutStyleScene)
 	end
 	scene:SetTexture(SCENE)
 	shade = shade or 1
@@ -243,6 +246,54 @@ function ns.StyleLink(content, title, page, tip, Tooltip)
 	Tooltip(button, tip)
 	button:SetScript("OnClick", function() ns.OpenOptions(page) end)
 	return button
+end
+
+-- Folder tabs at the top of a page split into pages (Vitals Vision's Vision
+-- and Style, each its own hub page with one icon: tabOf in Options.lua's
+-- HUBS). list: { label, page, tip } each (page: its English name), picked:
+-- this page's. Gives the panel (its line); the page's title goes under it.
+function ns.PageTabs(content, list, picked)
+	local tabs = {}
+	for i, each in ipairs(list) do tabs[i] = { each[1], each[3] } end
+	local panel, _, Show, base = ns.FolderTabs(content, tabs, function(i)
+		if i ~= picked then ns.ShowHubPage(list[i][2]) end
+	end)
+	base:SetPoint("TOPLEFT", content, "TOPLEFT", 8, -(ns.FOLDER_TAB_HEIGHT + 16))
+	-- (the panel: just its top edge, a line across the page under the tabs)
+	panel:SetPoint("TOPLEFT", base)
+	panel:SetPoint("RIGHT", content, "RIGHT", -8, 0)
+	panel:SetHeight(1)
+	Show(picked)
+	return panel
+end
+
+-- A Vision page's two tabs: Vision (vision, its page) and Style (style's),
+-- picked 1 or 2, a tip each. title: the page's, put under them.
+function ns.VisionTabs(content, title, vision, style, picked, visionTip, styleTip)
+	local L = ns.L
+	local panel = ns.PageTabs(content, {
+		{ L["Vision"], vision, visionTip },
+		{ L["Style"], style, styleTip },
+	}, picked)
+	title:ClearAllPoints()
+	title:SetPoint("TOPLEFT", panel, "BOTTOMLEFT", 8, -14)
+	return panel
+end
+
+-- Quest Vision's three tabs: Vision, Dialogue and Quest Item Button
+-- (picked 1, 2 or 3). title: the page's, put under them.
+function ns.QuestTabs(content, title, picked)
+	local L = ns.L
+	local panel = ns.PageTabs(content, {
+		{ L["Vision"], "Quest Vision", L["Quest mobs' nameplates and marks, the quest item button, the glow on " ..
+			"quest objects, and where the dialogue sits."] },
+		{ L["Dialogue"], "Quest Talk Style", L["How the dialogue looks, the \"Show the game's window\" link and " ..
+			"the number keys."] },
+		{ L["Quest Item Button"], "Quest Item Style", L["How the quest item button looks."] },
+	}, picked)
+	title:ClearAllPoints()
+	title:SetPoint("TOPLEFT", panel, "BOTTOMLEFT", 8, -14)
+	return panel
 end
 
 -- A page's one Test button, in its preview's top right corner (over what the
@@ -446,27 +497,35 @@ end
 
 -- Every preview the page's width (from the column's edge to the page's right,
 -- less a margin), 270 high at 16:9: the height a 480-wide one has at the
--- screen's shape (as the full-screen ones need). keepHeight: one with a height
--- of its own (General's, its name over the screen). A spot of its size holds
--- where the stack put it (the stack places what's next from the spot:
--- stackSpot), the preview on its top left. Set again as it shows (and a frame
--- later, once the page is laid out) and when the page is resized.
+-- screen's shape (as the full-screen ones need). headHeight: room over the
+-- screen (General's, its name). A spot of its size holds where the stack put
+-- it (the stack places what's next from the spot: stackSpot), the preview on
+-- its top left. Set again as it shows (and a frame later, once the page is
+-- laid out) and when the page is resized.
 local PREVIEW_W, PAGE_MARGIN = 480, 16
+function ns.StylePreviewHeight()
+	return math.floor(PREVIEW_W * UIParent:GetHeight() / math.max(UIParent:GetWidth(), 1) + 0.5)
+end
+-- Gives true if it was resized and refreshed.
 local function FitPreview(preview)
-	if popped == preview then return end
+	if popped == preview or not preview.stackSpot then return end
 	local left, right = preview.stackSpot:GetLeft(), preview.stackSpot:GetParent():GetRight()
-	local width = left and right and math.max(PREVIEW_W, math.floor(right - left - PAGE_MARGIN)) or PREVIEW_W
-	local height = preview:GetHeight()
-	if not preview.keepHeight then
-		height = math.floor(PREVIEW_W * UIParent:GetHeight() / math.max(UIParent:GetWidth(), 1) + 0.5)
-	end
+	-- (Not laid out yet: left as it is, not shrunk back; OnShow fits it again.)
+	if not (left and right) then return end
+	local width = math.max(PREVIEW_W, math.floor(right - left - PAGE_MARGIN))
+	local height = ns.StylePreviewHeight() + (preview.headHeight or 0)
 	if math.abs(preview:GetWidth() - width) < 0.5 and math.abs(preview:GetHeight() - height) < 0.5 then return end
 	preview:SetSize(width, height)
 	ns.RecutStyleScene(preview)
 	-- (Not before the settings are there to draw from: the pages are built
 	-- while the addon loads, and count as shown then. Its OnShow fits it again.)
-	if preview.Refresh and ns.db and preview:IsVisible() then preview:Refresh() end
+	if preview.Refresh and ns.db and preview:IsVisible() then
+		preview:Refresh()
+		return true
+	end
 end
+-- (A preview's own Refresh fits it first: one left narrow is caught on a replay.)
+ns.FitStylePreview = FitPreview
 
 local function WidePreview(preview)
 	local parent = preview:GetParent()

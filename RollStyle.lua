@@ -1,9 +1,9 @@
--- The Style hub's Roll Vision page: how the window of the group's loot rolls
+-- Roll Vision's Style tab: how the window of the group's loot rolls
 -- looks (RollWindow.lua draws it): its cards, their text, the bar for the
 -- time left, each player's pick and number, and the winner's row. A preview
 -- at the top, two cards drawn by the window's own code (ns.MakeRollPreview);
 -- Show a test roll brings up the real window too, with made-up drops. Turning
--- it on: the Visions hub's Roll Vision page.
+-- it on: the Vision tab (Options.lua). Both in the Visions hub under one icon.
 
 local _, ns = ...
 local L = ns.L
@@ -13,16 +13,22 @@ local L = ns.L
 local PRESET_KEYS = { "rollPanel", "rollAlpha", "rollDensity", "rollFont", "rollTextSize", "rollOutline",
 	"rollBarTexture", "rollBarColor", "rollBarHeight", "rollPicks", "rollNumbers", "rollWinner", "rollWinnerColor" }
 
+-- The two pages' tabs (picked: 1 Vision, 2 Style).
+function ns.RollTabs(content, title, picked)
+	ns.VisionTabs(content, title, "Roll Vision", "Roll Style", picked,
+		L["Turning it on, and which rolls it shows."], L["How the roll window looks."])
+end
+
 function ns.CreateRollStylePanel(kit)
 	if not ns.hasRollWindow then -- (no loot history on this client: no window to style)
 		return
 	end
 	local canvas, content = kit.CreateScrollPage()
 	local title = kit.Label(content, "GameFontNormalLarge", L["Roll Vision"])
-	title:SetPoint("TOPLEFT", 16, -16)
+	ns.RollTabs(content, title, 2)
 	local intro = kit.PageIntro(content, title,
 		L["How the window of the group's loot rolls looks: its cards, the bar for the time left, and each " ..
-		"player's pick and number. Turning it on: the Visions hub's Roll Vision page. Changes show at once, " ..
+		"player's pick and number. Turning it on: the Vision tab. Changes show at once, " ..
 		"here and on the window."])
 
 	local preview -- (below: drawn again as each setting changes)

@@ -1,9 +1,10 @@
--- The Style hub's Letterbox page: how the letterbox bars look and come in
--- (Effects.lua draws them, by ns.LetterboxLook). Their height by a share of
+-- The Letterbox and Tint pages (their Show in rows), and Letterbox's Style
+-- tab: how the letterbox bars look and come in (Effects.lua draws them, by ns.LetterboxLook). Their height by a share of
 -- the screen or by a film's frame, color, opacity, a feathered inner edge, a
 -- line along it, and sliding or fading in, over the UI's fade or a time of
 -- their own. A preview at the top, drawn by the same code as the real bars.
--- When they show at all: the Visual Effects page's Show in grid.
+-- When they show at all: the Letterbox tab (ns.CreateEffectPanel). Both in the
+-- Atmosphere hub under one icon.
 
 local _, ns = ...
 local L = ns.L
@@ -13,13 +14,114 @@ local L = ns.L
 local PRESET_KEYS = { "letterboxSizeBy", "letterboxSize", "letterboxAspect", "letterboxColor", "letterboxAlpha",
 	"letterboxEdge", "letterboxFeather", "letterboxLine", "letterboxMotion", "letterboxTime" }
 
+-- The Atmosphere hub's effects with a page of their own: a Show in row on
+-- the first tab, the look on the Style tab (English: L at the call, once the
+-- language is set). page: the first tab's page, style: the Style tab's.
+local EFFECT_PAGES = {
+	letterbox = { name = "Letterbox", page = "Letterbox", style = "Letterbox Style",
+		tip = "Where and when the bars show.", styleTip = "How the letterbox bars look and come in.",
+		intro = "Black bars at the top and bottom of the screen in CineMode, like a film's. Where and when they " ..
+			"show: the row below (nothing ticked: off). Their size and look: the Style tab. The Visual Effects " ..
+			"page's Enable page turns them off too." },
+	tint = { name = "Tint", page = "Tint", style = "Tint Style",
+		tip = "Where and when the tint shows.",
+		styleTip = "The color grading: a preset, the time of day and each zone's mood.",
+		intro = "The color grading over the game world in CineMode. Where and when it shows: the row below " ..
+			"(nothing ticked: off). Its preset, the time of day and the zones' tints: the Style tab. The Visual " ..
+			"Effects page's Enable page turns it off too. The UI isn't tinted." },
+}
+
+-- Under the Tint tab's row: how strong it is, its drift, and the zone
+-- borders' timing, each slider on one line with its name (stack: inline).
+EFFECT_PAGES.tint.More = function(kit, content, stack)
+	stack:Header(content, L["How strong"])
+	local strength = stack:Add(kit.Slider(content, "tintStrength", L["Strength"], 5, 100, 5, "%d%%", 100,
+		ns.RefreshTint), "slider")
+	kit.Tooltip(strength, L["How strongly the tint colors the world, for every preset."])
+	local timeStrength = stack:Add(kit.Slider(content, "timeTintStrength", L["Time of day strength"], 0, 100, 5,
+		"%d%%", 100, ns.RefreshTint), "slider")
+	kit.Tooltip(timeStrength, L["How strongly the time-of-day color applies, in Time of day and " ..
+		"Zone + time of day. Lower it for softer nights; 0 leaves just the zone mood."])
+	local drift = stack:Add(kit.Check(content, "tintDrift", L["Subtle drift"],
+		L["The tint's strength slowly wanders up and down over a few minutes, so a still scene " ..
+		"feels a little more alive. Paused while the Style tab is open."]), "check")
+	drift:HookScript("OnClick", function()
+		kit.Refresh() -- (grey out / enable the amount slider)
+		ns.RefreshTint()
+	end)
+	local driftAmount = stack:Add(kit.Slider(content, "tintDriftAmount", L["Drift amount"], 2, 15, 1, "+/-%d%%", 100,
+		ns.RefreshTint), "slider")
+	kit.Tooltip(driftAmount, L["How far the strength wanders either way, as a share of the strength."])
+	kit.GreyUnless(driftAmount, function(db) return db.tintDrift end)
+
+	-- Crossing a zone border: how the old zone's tint gives way to the new one.
+	stack:Header(content, L["At zone borders"])
+	local zoneFade = stack:Add(kit.Slider(content, "zoneFadeTime", L["Fade time"], 0.5, 10, 0.5, L["%.1f sec"]),
+		"slider")
+	kit.Tooltip(zoneFade, L["With a Zone tint preset, crossing into a zone with a different mood " ..
+		"fades the old mood out over this long, pauses, then fades the new one in over " ..
+		"this long."])
+	local gapFlying = stack:Add(kit.Slider(content, "zoneGapFlying", L["Pause between tints when flying"], 0, 20, 1,
+		L["%d sec"]), "slider")
+	kit.Tooltip(gapFlying, L["Untinted time between the two zones' moods while you're in the air, " ..
+		"where you see the old zone's ground for longer (snow under an ember tint looks red)."])
+	local gapGround = stack:Add(kit.Slider(content, "zoneGapTime", L["Pause between tints on the ground"], 0, 10, 0.5,
+		L["%.1f sec"]), "slider")
+	kit.Tooltip(gapGround, L["The same pause when you cross a border on foot or riding."])
+end
+
+-- An effect's two tabs (picked: 1 its Show in, 2 Style). title: the page's,
+-- put under them.
+function ns.EffectTabs(content, title, effect, picked)
+	local info = EFFECT_PAGES[effect]
+	local panel = ns.PageTabs(content, {
+		{ L[info.name], info.page, L[info.tip] },
+		{ L["Style"], info.style, L[info.styleTip] },
+	}, picked)
+	title:ClearAllPoints()
+	title:SetPoint("TOPLEFT", panel, "BOTTOMLEFT", 8, -14)
+end
+
+-- An effect's first tab: its Show in row (effect:<effect>, as the Visual
+-- Effects page's rows: off everywhere switches it off).
+function ns.CreateEffectPanel(kit, effect)
+	local info = EFFECT_PAGES[effect]
+	local canvas, content = kit.CreateScrollPage()
+	local title = kit.Label(content, "GameFontNormalLarge", L[info.name])
+	ns.EffectTabs(content, title, effect, 1)
+	local intro = kit.PageIntro(content, title, L[info.intro])
+	local stack = kit.Stack(intro, "label")
+	local header = stack:Header(content, L["Show in"])
+	local key, alwaysKey = "effect:" .. effect, effect .. "Always"
+	local lastRow = ns.ShowTable(content, header, {
+		opts = { quiet = true, cam = true, anyFight = true }, underHeader = true,
+		{ key = key, label = L[info.name], alwaysKey = alwaysKey,
+			alwaysOn = function() return ns.GetDB()[alwaysKey] end,
+			setAlways = function(value) ns.GetDB()[alwaysKey] = value end,
+			alwaysTip = L["Shows all through CineMode. (The other columns then have nothing to add.)"],
+			apply = function()
+				local switch = ns.EFFECT_SWITCHES and ns.EFFECT_SWITCHES[effect]
+				if switch then ns.GetDB()[switch] = ns.RowOnAnywhere(key, ns.GetDB()[alwaysKey]) end
+				ns.letterboxDirty = true
+				if ns.RefreshTint then ns.RefreshTint() end
+			end },
+	}, L[info.name])
+	stack:Continue(lastRow, "label")
+	if info.More then
+		info.More(kit, content, kit.Stack(lastRow, "label", true))
+	end
+	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))
+	canvas:Hide()
+	kit.RegisterSubpage(canvas, info.page)
+end
+
 function ns.CreateLetterboxStylePanel(kit)
 	local canvas, content = kit.CreateScrollPage()
 	local title = kit.Label(content, "GameFontNormalLarge", L["Letterbox"])
-	title:SetPoint("TOPLEFT", 16, -16)
+	ns.EffectTabs(content, title, "letterbox", 2)
 	local intro = kit.PageIntro(content, title,
-		L["How the bars at the top and bottom of the screen look and come in. When they show: the Visual " ..
-		"Effects page's Show in grid. Changes show at once, here and on the bars."])
+		L["How the bars at the top and bottom of the screen look and come in. When they show: the Letterbox " ..
+		"tab. Changes show at once, here and on the bars."])
 
 	local preview -- (below: drawn again as each setting changes)
 	local function Changed()

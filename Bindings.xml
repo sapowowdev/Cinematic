@@ -70,6 +70,9 @@
 	<Binding name="CINEMATIC_CAM_DEATH" category="ADDONS">
 		Cinematic_StartCam("death")
 	</Binding>
+	<Binding name="CINEMATIC_STOPCAM" category="ADDONS">
+		Cinematic_StopCamera()
+	</Binding>
 	<Binding name="CINEMATIC_SHOWTOOLTIPS" category="ADDONS" runOnUp="true">
 		Cinematic_ShowTooltips(keystate)
 	</Binding>

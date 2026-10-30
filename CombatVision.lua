@@ -50,7 +50,7 @@ DEFAULTS.combatBossAlways = true       -- its Show in row's Always
 DEFAULTS.combatBossHold = 2.5          -- seconds it stays, between its fades
 DEFAULTS.combatBossSub = true          -- the dungeon and difficulty under the name
 DEFAULTS.combatBossCount = true        -- "Boss 2 of 3" over it, where the Journal knows (on the pull)
--- Its look, apart from the cue's (the Style page's Boss card tab: BOSS_FIELDS):
+-- Its look, apart from the cue's (the Style page's Boss tab: BOSS_FIELDS):
 -- a gold name over a line in the lower third, the dungeon under it.
 DEFAULTS.combatBossPlace = "third"
 DEFAULTS.combatBossBarScale = 0.62
@@ -851,6 +851,11 @@ watcher:SetScript("OnEvent", function(_, event, ...)
 		if Plain(tostring, success) == "1" then bossRun.preAt = -math.huge end -- (a boss down: the next may show before its pull)
 		BossLog(("encounter ended, success %s: %s"):format(Plain(tostring, success) or "secret",
 			Plain(tostring, success) == "1" and "the next boss's card may show before its pull" or "a card before a pull stays held"))
+		-- (The Boss tab's sounds for a kill or a wipe.)
+		local result = Plain(tostring, success)
+		if db.combatVision and result then
+			ns.PlayCombatCueSound(result == "1" and "kill" or "wipe", ns.lastCinematic and true or false)
+		end
 	elseif event == "PLAYER_TARGET_CHANGED" then
 		if db.combatBossTarget and UnitExists("target") then CardBeforePull("target", "combatBossTarget") end
 	else
@@ -922,7 +927,7 @@ local function PageTabs(kit, content, stack, onPick)
 	end
 	local TABS = {
 		{ "combat", L["Combat"], L["The cue going into a fight and coming out of it."] },
-		{ "boss", L["Boss card"], L["A boss's name as a title card, as its fight starts or before it."] },
+		{ "boss", L["Boss"], L["A boss's name as a title card, as its fight starts or before it."] },
 	}
 	for i, info in ipairs(TABS) do
 		local tab = CreateFrame("Button", nil, content)
@@ -1022,17 +1027,21 @@ local function PageTabs(kit, content, stack, onPick)
 	return parts
 end
 
--- The Visions hub's page: turning it on, and when it shows.
+-- The pages' tabs: Vision (turning it on, when it shows) and Style (how it
+-- looks), both in the Visions hub under one icon.
+local function CombatTabs(content, title, picked)
+	ns.VisionTabs(content, title, "Combat Vision", "Combat Style", picked,
+		L["Turning it on, and when it shows."], L["How the cue looks."])
+end
+
+-- The Vision tab: turning it on, and when it shows.
 function ns.CreateCombatVisionPanel(kit)
 	local canvas, content = kit.CreateScrollPage()
 	local title = kit.Label(content, "GameFontNormalLarge", L["Combat Vision"])
-	title:SetPoint("TOPLEFT", 16, -16)
+	CombatTabs(content, title, 1)
 	local intro = kit.PageIntro(content, title,
 		L["A cue for a few seconds as you go into a fight and come out of it: a word on the screen or in a " ..
-		"letterbox bar, a pulse round the screen's edges, an icon and a sound. How it looks: the Style hub's " ..
-		"Combat Vision page."])
-	ns.StyleLink(content, title, "Combat Style", L["Opens the Style hub's Combat Vision page: how the cue " ..
-		"looks."], kit.Tooltip)
+		"letterbox bar, a pulse round the screen's edges, an icon and a sound. How it looks: the Style tab."])
 	local function Changed() end
 	local switch = kit.PageSwitch(content, "combatVision", L["Enable page"],
 		L["On: the cue shows as this page says. Off: never. Each setting keeps its value for when you turn " ..
@@ -1096,6 +1105,8 @@ function ns.CreateCombatVisionPanel(kit)
 				recordKeys = { "combatBossPull", "combatBossTarget", "combatBossNear" } },
 		}, L["Boss card"])
 		stack:Continue(bossRow, "label")
+
+		ns.CombatSoundRulesSection(kit, content, stack, true) -- (its boss fights' sounds)
 	end)
 	parts.Finish()
 
@@ -1163,6 +1174,7 @@ function ns.MakeCombatPreview(parent, width, fixedH, kind)
 		if not self:IsVisible() then
 			return -- (the kit refreshes every page's controls)
 		end
+		if ns.FitStylePreview(self) then return end -- (resized: it played from there)
 		local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
 		local previewH = fixedH or math.floor(width * screenH / math.max(screenW, 1) + 0.5)
 		self:SetHeight(previewH)
@@ -1182,14 +1194,14 @@ function ns.MakeCombatPreview(parent, width, fixedH, kind)
 	return preview
 end
 
--- The Style hub's page: how the cue looks, a preview at the top.
+-- The Style tab: how the cue looks, a preview at the top.
 function ns.CreateCombatStylePanel(kit)
 	local canvas, content = kit.CreateScrollPage()
 	local title = kit.Label(content, "GameFontNormalLarge", L["Combat Vision"])
-	title:SetPoint("TOPLEFT", 16, -16)
+	CombatTabs(content, title, 2)
 	local intro = kit.PageIntro(content, title,
-		L["How the cue going into a fight and coming out of it looks. When it shows: the Visions hub's " ..
-		"Combat Vision page. Changes play at once in the preview."])
+		L["How the cue going into a fight and coming out of it looks. When it shows: the Vision tab. Changes " ..
+		"play at once in the preview."])
 
 	local preview, lastKind = nil, tabNow == "boss" and "boss" or "in"
 	local function Replay(kind)
@@ -1200,7 +1212,7 @@ function ns.CreateCombatStylePanel(kit)
 	content.combatChanged = Changed
 
 	local switch = kit.PageSwitch(content, "combatVision", L["Enable page"],
-		L["On: the cue shows as the Visions hub's Combat Vision page says, looking as this page says. Off: " ..
+		L["On: the cue shows as the Vision tab says, looking as this page says. Off: " ..
 		"never. Each setting keeps its value for when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")
 	-- The look's rows edit the cue's settings, or on the Boss card tab the
@@ -1237,7 +1249,7 @@ function ns.CreateCombatStylePanel(kit)
 	-- Test: the preview's cue again, and on your screen (going in, then coming
 	-- out; or the Boss card).
 	ns.StylePreviewTest(preview, kit, L["Plays the cue in the preview and on your screen, as it will look: " ..
-		"going in, then coming out (on the Boss card tab, the card)."], function()
+		"going in, then coming out (on the Boss tab, the card)."], function()
 			preview:Refresh()
 			if lastKind == "boss" then
 				ns.PlayCombatVision(true, nil, SampleBoss(ns.StyleLook("combatVision")))

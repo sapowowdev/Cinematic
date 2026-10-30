@@ -1863,14 +1863,21 @@ end
 
 -- The Style hub's Vitals Vision page: the theme, our art and Blizzard's, the
 -- shadow and the effects, a preview at the top with the edges closing in.
--- When it shows: the Visions hub's Vitals Vision page.
+-- When it shows: the Vision tab (the Vitals Vision page). Both in the Visions
+-- hub under one icon, a folder tab each (VitalsTabs).
+local function VitalsTabs(content, title, picked)
+	ns.VisionTabs(content, title, "Vitals Vision", "Vitals Style", picked,
+		L["When the edges close in, the health bars and how fast."],
+		L["How it looks: the theme, our art and Blizzard's, the shadow and the heartbeat."])
+end
+
 function ns.CreateVitalsStylePanel(kit)
 	local canvas, content = kit.CreateScrollPage()
 	local title = kit.Label(content, "GameFontNormalLarge", L["Vitals Vision"])
-	title:SetPoint("TOPLEFT", 16, -16)
+	VitalsTabs(content, title, 2)
 	local intro = kit.PageIntro(content, title,
 		L["How the low-health edges look: the theme, our art and Blizzard's, the shadow and the effects. When " ..
-		"they show: the Visions hub's Vitals Vision page. Changes show at once in the preview."])
+		"they show: the Vision tab. Changes show at once in the preview."])
 	local preview
 	local function Changed()
 		ns.RefreshLowHealth()
@@ -2313,7 +2320,7 @@ function ns.CreateVitalsStylePanel(kit)
 		L["How much this theme throbs, next to Throb above."], ThemeBeating, "%")
 	rows.Check("lowHealthFlash", L["Flash on big hits"],
 		L["The edges flash in the theme's color when a hit takes a lot at once. (What counts as big: the " ..
-		"Vitals Vision page.)"])
+		"Vision tab.)"])
 	tabbed.Finish(general)
 
 	-- The art, in two layers: ours, and Blizzard's (the game's own screen
@@ -2618,14 +2625,12 @@ end
 function ns.CreateVitalsVisionPanel(kit)
 	local canvas, content = kit.CreateScrollPage()
 	local title = kit.Label(content, "GameFontNormalLarge", L["Vitals Vision"])
-	title:SetPoint("TOPLEFT", 16, -16)
+	VitalsTabs(content, title, 1)
 	local intro = kit.PageIntro(content, title,
 		L["Your health at a glance, without the portrait: as it drops, the screen's edges close in, with your " ..
 		"theme's art soaking in from them (blood, smoke, a glow in its color), a " ..
 		"heartbeat that quickens as you weaken and a flash on big hits. Auto picks a theme for your class " ..
 		"and spec. The death screen takes over if you die."])
-	ns.StyleLink(content, title, "Vitals Style", L["Opens the Style hub's Vitals Vision page: its theme, our " ..
-		"art and Blizzard's, the shadow and the heartbeat."], kit.Tooltip)
 	local function Changed()
 		ns.RefreshLowHealth()
 	end

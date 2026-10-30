@@ -1002,6 +1002,11 @@ local function IsMouseOnCamera()
 	return mouseCameraHeld and true or (IsMouselooking and IsMouselooking()) or false
 end
 ns.IsMouseOnCamera = IsMouseOnCamera -- (QuestTalk: the bubble while the camera moves)
+-- A button down on the camera at all, even before IsMouseOnCamera counts it
+-- (QuestCam: its turn pauses meanwhile).
+function ns.MouseCameraPressed()
+	return mouseCameraHeld and true or false
+end
 
 -- Turning left or right, by keys or mouse: the facing direction changing
 -- faster than TURN_RATE, or a turn key held (where facing is hidden).
@@ -2417,9 +2422,113 @@ function ns.IsDead()
 end
 
 -- Dead with the death camera to watch: cinematic mode stays on (popups like
--- the release button aren't faded, so it's still there).
+-- the release button aren't faded, so it's still there). Waiting out a boss
+-- fight (Death Cam page), it holds off while the encounter's on, so you can
+-- watch the fight, and starts as it ends. With a way to come back yourself
+-- (soulstone, Reincarnation...) and that set, none at all. (Neither for
+-- /cine deathtest.)
+do
+	local selfRes = { at = -1 }
+	-- A self-resurrect offered on the release popup: retail's list, else
+	-- classic's soulstone text. (Once a frame: asked many times in one.)
+	function ns.CanSelfResurrect()
+		local now = GetTime()
+		if selfRes.at == now then
+			return selfRes.can
+		end
+		local can = false
+		local info = _G.C_DeathInfo
+		if info and info.GetSelfResurrectOptions then
+			local ok, options = pcall(info.GetSelfResurrectOptions)
+			can = ok and type(options) == "table" and #options > 0 or false
+		elseif _G.HasSoulstone then
+			local ok, text = pcall(_G.HasSoulstone)
+			can = ok and ns.Flag(text) and true or false
+		end
+		selfRes.at, selfRes.can = now, can
+		return can
+	end
+end
+
 function ns.IsDeathCinematic()
-	return ns.IsDead() and not ns.IsCameraOffHere("death")
+	if not ns.IsDead() or ns.IsCameraOffHere("death") then
+		return false
+	end
+	if GetTime() < (ns.deathTestUntil or 0) then
+		return true
+	end
+	local encounter = _G.IsEncounterInProgress
+	return not ((ns.db.deathAfterBoss and encounter and ns.Flag(encounter()))
+		or (ns.db.deathOffWithSelfRes and ns.CanSelfResurrect()))
+end
+
+-- Exit camera: a button under the release popup while the death camera's on
+-- (the popup isn't faded), stopping it for this death (ns.StopCamera), in a
+-- box drawn like the popup's. With no popup to find (a UI of its own, say),
+-- it sits high in the middle. (Death Cam page: deathExitButton.)
+do
+	local box
+	local function MakeBox()
+		box = CreateFrame("Frame", nil, UIParent)
+		box:SetFrameStrata("DIALOG")
+		box:SetSize(180, 48)
+		box:EnableMouse(true) -- (clicks on the box don't reach the world)
+		-- The popup's own border and background (retail), else the classic dialog box's.
+		local ok, border = pcall(CreateFrame, "Frame", nil, box, "DialogBorderTemplate")
+		if ok then
+			border:SetAllPoints()
+		elseif _G.BackdropTemplateMixin then
+			_G.Mixin(box, _G.BackdropTemplateMixin)
+			box:SetBackdrop({
+				bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+				edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+				tile = true, tileSize = 32, edgeSize = 32,
+				insets = { left = 11, right = 12, top = 12, bottom = 11 },
+			})
+		end
+		local button = CreateFrame("Button", nil, box, "UIPanelButtonTemplate")
+		button:SetFrameLevel(box:GetFrameLevel() + 5)
+		button:SetSize(140, 22)
+		button:SetPoint("CENTER")
+		button:SetText(L["Exit camera"])
+		button:SetScript("OnClick", function()
+			ns.StopCamera()
+			box:Hide()
+		end)
+		box.anchor = false -- (placed below: nil is "no popup")
+		ns.AddOverlay(box) -- (stays with the UI hidden, like the death screen)
+	end
+	function ns.UpdateDeathExit(on)
+		if not (on and ns.db.deathExitButton) then
+			if box then box:Hide() end
+			return
+		end
+		if not box then
+			MakeBox()
+		end
+		local ok, popup = false, nil
+		if StaticPopup_FindVisible then
+			ok, popup = pcall(StaticPopup_FindVisible, "DEATH")
+		end
+		popup = ok and popup or nil
+		if popup ~= box.anchor then
+			box.anchor = popup
+			box:ClearAllPoints()
+			if popup then
+				box:SetPoint("TOP", popup, "BOTTOM", 0, -4)
+			else
+				box:SetPoint("TOP", UIParent, "TOP", 0, -260)
+			end
+		end
+		if not box:IsShown() then
+			box:Show()
+			local left, top = box:GetLeft(), box:GetTop()
+			ns.DeathTestLog(("exit button: %s popup, visible %s, alpha %.2f, at %s,%s, strata %s, parent shown %s"):format(
+				popup and "under the" or "no", tostring(box:IsVisible()), box:GetEffectiveAlpha(),
+				left and ("%d"):format(left) or "?", top and ("%d"):format(top) or "?", box:GetFrameStrata(),
+				tostring(UIParent:IsVisible())))
+		end
+	end
 end
 
 -- Your own zooming: you've picked a distance, so the death camera leaves it.
@@ -2984,12 +3093,12 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	-- body. Cinematic mode is off while you're dead (the UI comes back for the
 	-- release button), so this runs without it, and in combat too.
 	local dead = ns.IsDead()
-	ns.orbit.deadSince = dead and (ns.orbit.deadSince or now) or nil
+	-- (From when its camera may start: a boss fight it waited out counts from its end.)
+	ns.orbit.deadSince = dead and ns.IsDeathCinematic() and (ns.orbit.deadSince or now) or nil
 	if not dead then
 		ns.StandUpFromDeathTest() -- (the wheel's test is over)
 	end
-	local deathCam = dead and ns.db.enabled and now - ns.orbit.deadSince >= ns.db.deathOrbitDelay
-		and ns.IsDeathCinematic()
+	local deathCam = ns.orbit.deadSince ~= nil and ns.db.enabled and now - ns.orbit.deadSince >= ns.db.deathOrbitDelay
 	-- The game's camera follow is off meanwhile, so it can't pull the view back.
 	-- It goes off as you die, not as the tilt starts: switched off then, while
 	-- it was still easing the view after your fall, it jolted the tilt's start.
@@ -3002,6 +3111,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	end
 	ns.ApplyCVarSet(ns.DEATH_CVARS, followOff)
 	ns.UpdateDeathTilt(deathCam, elapsed)
+	ns.UpdateDeathExit(followOff)
 	-- RP walk camera: only while auto-walking (auto-run in walk mode; walking by
 	-- hand cancels the cameras). Stop and stand, and it's the standing-still
 	-- camera again.
@@ -3009,6 +3119,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	local walking = not onTaxi and ns.IsRPWalking and ns.IsRPWalking()
 	local autoRunning = not onTaxi and not walking and ns.IsAutoRunning and ns.IsAutoRunning()
 	ns.NoteTravel(walking, autoRunning) -- (for the cameras' delays)
+	ns.UpdateStoppedCam(dead, onTaxi, walking, autoRunning, atNPC)
 	local travel = (walking and not ns.IsCameraOffHere("walk") and "walk")
 		or (autoRunning and not ns.IsCameraOffHere("run") and "run") or nil
 	if travel == "walk" and ns.IsCozy() then
@@ -4422,7 +4533,8 @@ function ns.UpdateTaxi()
 end
 
 -- Reset zoom (Quality of life): after a login or /reload (Core.lua calls it),
--- glide to a set camera distance rather than wherever it was left.
+-- go to a set camera distance rather than wherever it was left.
+-- (Zooming on PLAYER_LOGOUT before a /reload does nothing: tested.)
 function ns.ZoomToSet(when)
 	if not (ns.Setting("loginZoom") and GetCameraZoom) then
 		return
@@ -4437,13 +4549,6 @@ function ns.ZoomToSet(when)
 end
 
 function ns.LoginZoom()
-	-- (a moment in: the camera's distance can still be settling as the world shows;
-	-- after a /reload the zoom usually ran under the loading screen and this does nothing)
+	-- (a moment in: the camera's distance can still be settling as the world shows)
 	C_Timer.After(1, function() ns.ZoomToSet("login") end)
-end
-
--- On the way out (PLAYER_LOGOUT, also sent by a /reload): start the zoom now, so it
--- glides while the reload's loading screen is up rather than once you're back.
-function ns.LogoutZoom()
-	ns.ZoomToSet("logout")
 end
