@@ -57,7 +57,7 @@ for i = #TRIGGERS, 1, -1 do
 		if event.key == TRIGGERS[i].key and event.forever and ns.isRetail then table.remove(TRIGGERS, i) end
 	end
 end
--- (The chat camera: ChatCam.lua, the dev copy only; no music or CineMode switch yet.)
+-- (The chat camera: ChatCam.lua; no music or CineMode switch yet.)
 if ns.ChatCamCommand then
 	TRIGGERS[#TRIGGERS + 1] = { key = "Chat", camera = "chatCamera", cameras = { "chat", "none" }, off = "none" }
 	TRIGGERS[#TRIGGERS + 1] = { key = "ChatNearby", camera = "chatNearbyCamera", cameras = { "chat", "none" },

@@ -57,6 +57,7 @@ ChatCopy.lua
 Bubbles.lua
 Speech.lua
 SpeakerWatch.lua
+ChatCam.lua
 Campfire.lua
 HunterAmmo.lua
 DragEquip.lua

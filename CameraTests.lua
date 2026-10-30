@@ -12,7 +12,7 @@
 --     (Cinematic_StartCam), the Hearthstone's cast pretended for the whole test.
 --   The death camera: its key binding's own 30-second test (you lie down).
 --   The quest camera: a conversation with nobody (ns.QuestCamTest).
---   Chat Cam: a made-up conversation (ChatCam.lua, the dev copy).
+--   Chat Cam: a made-up conversation (ChatCam.lua).
 --   The flight, RP walk and auto-run cameras: pretended (below).
 -- While one runs, ns.cameraTesting lets the cameras start with the game's
 -- Settings window open (they wait for menus otherwise).

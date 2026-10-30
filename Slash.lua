@@ -367,7 +367,7 @@ local function HandleSlash(msg)
 		if ns.speechWatch and ns.ShowSpeechBehind then
 			ns.ShowSpeechBehind("CHAT_MSG_SAY", "Cinematic", "This is how speech from behind you looks.")
 		end
-	elseif cmd == "chatcam" and ns.ChatCamCommand then -- (ChatCam.lua: the dev copy only)
+	elseif cmd == "chatcam" and ns.ChatCamCommand then -- (ChatCam.lua)
 		ns.ChatCamCommand(arg)
 	elseif cmd == "debug" and arg == "speakers" then
 		ns.Print("log where speaking NPCs' bubbles and plates are on screen: " .. OnOff(ns.ToggleSpeakerWatch())

@@ -444,11 +444,13 @@ ns.PROFILE_MODULES = {
 	{ key = "pure-cameras", name = "Pure: cameras", scope = { "Cameras/Triggers", "Camera Settings/Chat Cam" },
 		tip = "Standing still starts the AFK camera and every event's camera can start music; the cameras " ..
 		"don't wait for things to calm down after a fight, auto-run carries on in cities and instances (as RP " ..
-		"walk always does), and the death camera runs in instances too. NPCs chatting nearby bring the chat " ..
-		"camera straight away, and it doesn't look round for speakers off screen.",
+		"walk always does), and the death camera runs in instances too. NPCs talking bring the chat camera, " ..
+		"those chatting nearby straight away, and it doesn't look round for speakers off screen.",
 		apply = function(set)
-			-- (Chat Cam: the dev build's only, for now.)
+			-- (Chat Cam: off to start with, on here.)
 			if ns.DEFAULTS.chatCamSearch ~= nil then
+				set("chatCamera", "chat")
+				set("chatNearbyCamera", "chat")
 				set("chatNearbyDelay", 0)
 				set("chatCamSearch", false)
 			end

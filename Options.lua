@@ -2900,7 +2900,7 @@ local function CreateDeathPanel()
 		"Die row's Music is ticked on the Cameras page."], 280)
 end
 
--- Chat Cam (ChatCam.lua: the dev copy only), started by NPCs talking; laid
+-- Chat Cam (ChatCam.lua), started by NPCs talking; laid
 -- out as the Quest Cam's below.
 local function CreateChatCamPanel()
 	local content, top, title = CameraSection(L["Chat Cam"], "Chat Cam")
@@ -3156,7 +3156,7 @@ local function CreateCameraSettingsPanel()
 	CreateAutoRunPanel()
 	CreateDeathPanel()
 	CreateQuestPanel()
-	if ns.ChatCamCommand then -- (ChatCam.lua: the dev copy only)
+	if ns.ChatCamCommand then -- (ChatCam.lua)
 		CreateChatCamPanel()
 	end
 
@@ -11605,7 +11605,7 @@ local KEYBINDS = {
 	{ action = "CINEMATIC_TOGGLETOOLTIPS", label = L["Toggle tooltip hiding"],
 		tip = L["Turns the Tooltips page on or off (its Enable page switch)."] },
 }
-if ns.ChatCamCommand then -- (ChatCam.lua: the dev copy only, so here rather than in Bindings.xml)
+if ns.ChatCamCommand then -- (ChatCam.lua, so here rather than in Bindings.xml)
 	KEYBINDS[#KEYBINDS + 1] = { action = "CLICK CinematicChatTargetButton:LeftButton",
 		label = L["Target the last speaker"], section = L["Chat Cam"],
 		tip = L["Targets the last NPC who spoke near you (your character turns their head to them). " ..

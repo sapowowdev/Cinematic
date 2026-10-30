@@ -1,4 +1,4 @@
--- Chat Cam (a prototype, in the dev copy only: CinematicDev.toc): as NPCs
+-- Chat Cam (off to start with; the Cinema profile turns it on): as NPCs
 -- talk, the camera zooms in (as the quest cam does), swings toward whoever's
 -- talking, drifts slowly to and fro while they go on, and swings again only
 -- when someone else speaks. Once it's over, it turns back and zooms back out.
@@ -198,8 +198,8 @@ local watcher = CreateFrame("Frame")
 -- The Cameras page's rows (each "chat" or "none"): "NPCs you talk
 -- to" (chatCamera) and "NPCs chatting nearby" (chatNearbyCamera, once you've
 -- stood still chatNearbyDelay seconds: see Ambient).
-ns.DEFAULTS.chatCamera = "chat"
-ns.DEFAULTS.chatNearbyCamera = "chat"
+ns.DEFAULTS.chatCamera = "none"        -- (the Cinema profile's cameras: "chat", ProfileModules.lua)
+ns.DEFAULTS.chatNearbyCamera = "none"
 ns.DEFAULTS.chatNearbyDelay = 10
 -- Its section on the Camera Settings page.
 ns.DEFAULTS.chatCamDistance = 4      -- yards it zooms in to (if you're further out)
@@ -1454,8 +1454,8 @@ end
 -- Targeting the last speaker (which turns your character's head to them).
 -- Addons can't target, or clear a target: TargetUnit and ClearTarget are
 -- protected, only a key press or click may. So a secure button whose
--- /targetexact names them, pressed by its key (Key Bindings page, the dev copy
--- only: CLICK CinematicChatTargetButton:LeftButton, no Bindings.xml entry).
+-- /targetexact names them, pressed by its key (Key Bindings page:
+-- CLICK CinematicChatTargetButton:LeftButton, no Bindings.xml entry).
 -- The name's set as each real line comes, out of fights (a secure button
 -- can't change in one).
 local targetButton = CreateFrame("Button", "CinematicChatTargetButton", UIParent, "SecureActionButtonTemplate")

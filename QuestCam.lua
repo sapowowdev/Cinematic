@@ -1308,7 +1308,7 @@ function ns.QuestCamBusy()
 	return cam.active or #cam.steps > 0 or movers.yaw.moving or movers.pitch.moving
 end
 
--- The Chat Cam (ChatCam.lua, the dev copy) borrows the eased zoom:
+-- The Chat Cam (ChatCam.lua) borrows the eased zoom:
 -- it's stepped here (OnUpdate) whoever started it, and stops if you zoom.
 function ns.QuestCamZoomTo(distance, T)
 	ns.TakeOverZoom()
