@@ -3231,8 +3231,10 @@ ticker:RegisterEvent("PLAYER_LEVEL_UP")
 ticker:RegisterEvent("PLAYER_STOPPED_MOVING")
 ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg1, arg2)
 	if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-		ns.newInstall = CinematicDB == nil -- (for the welcome window: Welcome.lua)
+		-- (for the welcome window: Welcome.lua. resetKept: Reset addon's, Profiles.lua)
+		ns.newInstall = CinematicDB == nil or CinematicDB.resetKept == true
 		CinematicDB = CinematicDB or {}
+		CinematicDB.resetKept = nil
 		ns.db = CinematicDB
 		-- Floating world text (the XP gained over you, and damage numbers with it:
 		-- one font) drawn in a font whose letters are specks too small to see.

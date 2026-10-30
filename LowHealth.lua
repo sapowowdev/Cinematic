@@ -114,6 +114,7 @@ local level, flash = 0, 0 -- the screen's: shown (0-1), the hit flash (0-1)
 local liftSpeed = 0 -- (lifting now: a share of all the way a second)
 local lastHealth -- (share, for spotting big hits)
 local test -- the page's test running: { from, to, time, start, hits }
+local glimpse -- (the welcome window's quick look shown: true till the edges settle, after its test too)
 local secretCurve -- (health that's secret: its alpha from the game, by this curve)
 -- (Health secret, so Update can't see hits: the hit event's, since the last
 -- frame. Lost: a share of your health.)
@@ -887,6 +888,7 @@ local function Update(_, elapsed)
 	-- Settled with nothing showing (and not secret: that's left running, as
 	-- the game's alpha follows your health with no events to go by here).
 	if not shown and not secret and not test and level == 0 and flash == 0 then
+		glimpse = nil
 		driver:Hide()
 	end
 end
@@ -908,6 +910,7 @@ function ns.TestLowHealth()
 	db = db or ns.GetDB()
 	test = { from = db.lowHealthTestFrom, to = db.lowHealthTestTo, time = db.lowHealthTestTime,
 		start = GetTime(), hits = db.lowHealthTestHits }
+	glimpse = nil
 	lastHealth = test.from
 	Wake()
 end
@@ -936,15 +939,17 @@ function ns.FlashVitals(seconds)
 	db = db or ns.GetDB()
 	test ={ from = GLIMPSE_FROM, to = GLIMPSE_TO, time = GLIMPSE_TIME, start = GetTime(), hits = true,
 		hold = seconds or 2, quiet = true }
+	glimpse = true
 	lastHealth = test.from
 	Wake()
 end
 
 -- That look cut short (another level picked): gone at once, not eased out,
--- then back to your own health.
+-- then back to your own health. (Its test done, its edges still easing out
+-- are cut too: else they'd show on the next level.)
 function ns.StopVitalsFlash()
-	if not (test and test.quiet) then return end
-	test, testShare, lastHealth = nil, nil, nil
+	if not (test and test.quiet) and not (glimpse and not test) then return end
+	test, testShare, lastHealth, glimpse = nil, nil, nil, nil
 	level, flash, liftSpeed = 0, 0, 0
 	ClearSparks(screen)
 	if frame then frame:Hide() end

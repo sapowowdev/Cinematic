@@ -219,8 +219,49 @@ local function Haze(theme)
 		size = { 0.35, 0.6 }, life = { 3, 5 }, rate = 45, hit = { 3, 4 } })
 end
 
+-- Each theme's own defaults for the Style page (the look field above), as set
+-- with the dev copy's DEV SET DEFAULT.
+local LOOKS = {
+	wounds = { lowHealthBloodReach = 0, lowHealthGameAlpha = 0.75 },
+	rage = { lowHealthBloodAlpha = 0.1, lowHealthBloodReach = 0.2, lowHealthGameAlpha = 0.7 },
+	holylight = { lowHealthGameReach = 0.4, lowHealthGameAlpha = 0.15 },
+	judgement = { lowHealthGameReach = 0.1 },
+	claws = { lowHealthBloodReach = 0.2, lowHealthGamePattern = 6225366, lowHealthGameAlpha = 0.9 },
+	lonewolf = { lowHealthBloodAlpha = 0.65, lowHealthGameAlpha = 0.65 },
+	thorns = { lowHealthBloodReach = 0.25 },
+	poison = { lowHealthBloodReach = 0.05, lowHealthGameReach = 0.85, lowHealthGameAlpha = 0.81 },
+	bruise = { lowHealthBloodAlpha = 0.65, lowHealthBloodReach = 0.05 },
+	shadow = { lowHealthGameReach = 1 },
+	ward = { lowHealthBloodAlpha = 0.79, lowHealthGameReach = 0.2, lowHealthGameAlpha = 0.31 },
+	feathers = { lowHealthGameReach = 0.35 },
+	void = { lowHealthBloodAlpha = 0.91, lowHealthBloodReach = 0.9, lowHealthGameReach = 0.9,
+		lowHealthGameAlpha = 0.95 },
+	storm = { lowHealthBloodAlpha = 1, lowHealthGameReach = 0.05, lowHealthGameMask = 1802909,
+		lowHealthGameColors = "theme", lowHealthGameAlpha = 0.25 },
+	gale = { lowHealthBloodAlpha = 0.85, lowHealthBloodReach = 0.4, lowHealthGameMask = 6225363,
+		lowHealthGameAlpha = 1, lowHealthSparks = false },
+	water = { lowHealthBloodAlpha = 0.35, lowHealthBloodReach = 0, lowHealthGameAlpha = 0.85 },
+	arcane = { lowHealthBloodReach = 0.4 },
+	fire = { lowHealthGameReach = 0.05 },
+	frost = { lowHealthBloodAlpha = 0.23 },
+	decay = { lowHealthBloodReach = 0 },
+	felfire = { lowHealthBloodAlpha = 0.76, lowHealthBloodReach = 0.45, lowHealthGameReach = 0,
+		lowHealthGameAlpha = 0.81 },
+	eclipse = { lowHealthBloodAlpha = 0.61, lowHealthGameColors = "own", lowHealthGameAlpha = 0.71 },
+	leaves = { lowHealthBloodAlpha = 0.12, lowHealthGameReach = 0.8, lowHealthGameAlpha = 0.91 },
+	bloodrune = { lowHealthBloodAlpha = 0.21, lowHealthBloodReach = 0.05, lowHealthGamePattern = 4876486,
+		lowHealthGameColors = "theme" },
+	runefrost = { lowHealthGameReach = 0.1 },
+	plague = { lowHealthBloodReach = 0.75, lowHealthGameReach = 0.2 },
+	stagger = { lowHealthBloodAlpha = 0.29, lowHealthGameAlpha = 0.69 },
+	mist = { lowHealthBloodAlpha = 0.48, lowHealthGameAlpha = 0.38 },
+	bear = { lowHealthBloodAlpha = 0.23, lowHealthBloodReach = 0.3 },
+	outlaw = { lowHealthBloodAlpha = 0.94, lowHealthGameAlpha = 0.31 },
+}
+
 ns.LOW_HEALTH_THEME = {} -- (by key)
 for _, theme in ipairs(ns.LOW_HEALTH_THEMES) do
+	theme.look = theme.look or LOOKS[theme.key]
 	Haze(theme)
 	ns.LOW_HEALTH_THEME[theme.key] = theme
 end

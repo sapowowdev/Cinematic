@@ -649,7 +649,12 @@ function ns.ResetAddon()
 	for _, switch in ipairs(PROFILE_SWITCHES) do
 		if ns.db[switch.turnedOn] and GetCVar(switch.cvar) == "1" then SetCVar(switch.cvar, "0") end
 	end
-	CinematicDB, CinematicCharDB = nil, nil
+	-- (The dev copy keeps the Vitals Vision theme looks made with DEV SET
+	-- DEFAULT: work for LowHealthThemes.lua, not settings. resetKept: still a
+	-- fresh install to Core.lua.)
+	local themeEdits = ns.isDev and CinematicDB and CinematicDB.vitalsThemeEdits
+	CinematicDB = themeEdits and { vitalsThemeEdits = themeEdits, resetKept = true } or nil
+	CinematicCharDB = nil
 	ns.db.profiles = {} -- (so logout's ns.SaveProfile writes into nothing kept)
 	ReloadUI()
 end
