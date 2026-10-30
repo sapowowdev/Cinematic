@@ -26,8 +26,8 @@ local function Colored(color, text)
 	return ("|cff%02x%02x%02x%s|r"):format(color[1] * 255, color[2] * 255, color[3] * 255, text)
 end
 
--- The pieces of a rule, a line of buttons each in the editors (here and the
--- Rules section): { name, colour, { { word, label }... } }. Made when asked,
+-- The pieces of a rule, a line of buttons each in the rule editor:
+-- { name, colour, { { word, label }... } }. Made when asked,
 -- once the language is known.
 function ns.RulePieces()
 	local location = { { "world", L["Open World"] }, { "city", L["Cities"] }, { "inn", L["Inns"] },
@@ -520,10 +520,6 @@ end
 function ns.CloseRuleEditor()
 	if editor then editor:Hide() end
 end
-
--- The rows made with an Edit of their own: their rules are edited on them
--- (the Advanced Frames page's Rules section lists the others).
-ns.GRID_RULE_KEYS = {}
 
 -- Whether key's a raid-style party frames' row, which follows the raid
 -- frames' on purpose. (Frames.lua loads after this: looked up when asked.)
@@ -1136,7 +1132,7 @@ end
 -- The Standard Frames table, a row per item, as dropdowns (ShowTable does
 -- the rest: its kit is the page helpers it shares). Returns the last row's
 -- label, to place what comes below.
-function ns.GridTable(content, columnTop, rows, kit, ...)
+function ns.GridTable(content, columnTop, rows, kit)
 	local LABEL_WIDTH, ROW_HEIGHT, COLUMNS = kit.labelWidth, kit.rowHeight, kit.columns
 	local Tooltip = kit.Tooltip
 	local LAYOUT = { roles = kit.rolesMenu, edit = true }
@@ -1148,10 +1144,6 @@ function ns.GridTable(content, columnTop, rows, kit, ...)
 	local lastLabel = columnTop
 	for r, item in ipairs(rows) do
 		local y = -kit.headingHeight - 4 - (r - 1) * ROW_HEIGHT
-		if not item.alwaysOnly then -- (no rule: there's nothing for one to decide)
-			kit.RuleTarget(item.key, item.label, ...)
-			ns.GRID_RULE_KEYS[item.key] = true -- (edited here: the Rules section leaves it out)
-		end
 		local rowLabel = kit.Label(content, "GameFontHighlight", item.label)
 		rowLabel:SetPoint("TOPLEFT", columnTop, "TOPLEFT", 0, y - 5)
 		rowLabel:SetWidth(LABEL_WIDTH - 4 - ns.GRID_DOT_ROOM)

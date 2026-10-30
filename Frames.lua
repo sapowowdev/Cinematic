@@ -2162,8 +2162,8 @@ function ns.IsGamePadOn()
 	return C_GamePad ~= nil and GetCVarBool("GamePadEnable")
 end
 
--- Frames added on the Advanced Frames page ("extra:<name>") start out like
--- the supported addons': up in combat and with an enemy targeted.
+-- Frames added on the Advanced Frames page ("extra:<name>") start out with
+-- nothing ticked: faded the whole time in CineMode until their row says.
 local function IsExtraKey(key)
 	return key:find("^extra:") ~= nil
 end
@@ -2193,7 +2193,7 @@ function ns.IsCombatShowOn(key)
 			return ns.IsCombatShowOn(ROW_FALLBACK[key])
 		end
 		if IsExtraKey(key) then
-			return true
+			return false
 		end
 		if ns.LIST_DEFAULTS.combatShow[key] ~= nil then
 			return ns.LIST_DEFAULTS.combatShow[key]
@@ -2212,7 +2212,7 @@ local function IsListOn(list, key, defaults)
 			return IsListOn(list, ROW_FALLBACK[key], defaults)
 		end
 		if IsExtraKey(key) then
-			return defaults == ENEMY_SHOW_DEFAULT
+			return false
 		end
 		local more = ns.LIST_DEFAULTS[list]
 		return defaults[key] or (more and more[key]) or false
@@ -7418,6 +7418,52 @@ do
 		end
 		skipped[name] = true
 		AddModeChanged()
+	end
+
+	-- The Advanced Frames page's search: every named frame add mode could
+	-- pick (other addons', not faded yet), wherever it is, so frames under a
+	-- window covering the screen can still be found. { name, source (the addon
+	-- that made it), lower (both, lowercased, to match against) }, by name.
+	local function Addable(name, frame)
+		return not IsForbidden(frame) and type(frame.IsObjectType) == "function" and frame:IsObjectType("Frame")
+			and frame:GetName() == name and Pickable(frame)
+	end
+	function ns.FindAddableFrames()
+		local found = {}
+		for name, frame in pairs(_G) do
+			-- (pcall: a mixin table can look like a frame and error on its methods.)
+			if type(name) == "string" and IsFrame(frame) then
+				local ok, yes = pcall(Addable, name, frame)
+				if ok and yes then
+					local _, source = GlobalSource(name)
+					found[#found + 1] = { name = name, source = source, lower = (name .. " " .. (source or "")):lower() }
+				end
+			end
+		end
+		table.sort(found, function(a, b) return a.name < b.name end)
+		return found
+	end
+
+	-- A gold box over the frame a search match points at (nil: none). Whether
+	-- it's on screen to mark.
+	local marker
+	function ns.MarkFrame(name)
+		if marker then marker:Hide() end
+		local frame = name and _G[name]
+		if not (IsFrame(frame) and not IsForbidden(frame) and ns.Flag(frame:IsVisible())) then
+			return false
+		end
+		if not marker then
+			marker = CreateFrame("Frame", nil, UIParent)
+			marker:SetFrameStrata("TOOLTIP")
+			local fill = marker:CreateTexture(nil, "BACKGROUND")
+			fill:SetAllPoints()
+			fill:SetColorTexture(1, 0.82, 0, 0.3)
+		end
+		marker:ClearAllPoints()
+		marker:SetAllPoints(frame)
+		marker:Show()
+		return true
 	end
 
 	local function EndAddMode()

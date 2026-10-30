@@ -1337,6 +1337,9 @@ L["To fade something else, hover over it and type |cffffd100/cine add|r, or type
 L["Hover over the frames you want to fade (move this window out of the way, or close it), then click Stop or type /cine add mode again to fade them all. The game's own frames and ones already faded are left out. /cine add cancel drops them."] = "Pasa el ratón por encima de los marcos que quieras desvanecer (aparta esta ventana o ciérrala), luego haz clic en Detener o escribe /cine add mode otra vez para desvanecerlos todos. Los marcos del propio juego y los que ya se desvanecen se dejan fuera. /cine add cancel los descarta."
 L["Stop"] = "Detener"
 L["Pick frames by hovering"] = "Elegir marcos pasando el ratón"
+L["Find frames by name or addon"] = "Buscar marcos por nombre o accesorio"
+L["Type part of a frame's name or of the addon that made it. Hover over a match to see it marked on screen, click it to fade it. Only other addons' frames that aren't faded yet are listed."] = "Escribe parte del nombre de un marco o del accesorio que lo creó. Pasa el ratón por encima de un resultado para verlo marcado en pantalla y haz clic para desvanecerlo. Solo se listan marcos de otros accesorios que aún no se desvanecen."
+L["Not on screen right now."] = "No está en pantalla ahora."
 L["Hide the UI"] = "Ocultar la interfaz"
 L["Like Blizzard's Alt+Z: hides the whole UI, but keeps the tint, letterbox and time-of-day title. Press again (or Blizzard's key) to bring it back."] = "Como Alt+Z de Blizzard: oculta toda la interfaz, pero mantiene el tinte, las franjas y el título de la hora del día. Pulsa otra vez (o la tecla de Blizzard) para que vuelva."
 L["Turns CineMode on or off, like /cine."] = "Activa o desactiva CineMode, como /cine."
@@ -2333,7 +2336,7 @@ L["Friendly plates in dungeons and raids"] = "Placas amistosas en mazmorras y ba
 L["FlareUI support"] = "Compatibilidad con FlareUI"
 L["FlareUI's unit frames, resource bars, buffs, quest tracker, party and raid frames fade in CineMode, following the Standard Frames rows of the frames they replace."] = "Los marcos de unidad, barras de recursos, beneficios, seguimiento de misiones y marcos de grupo y banda de FlareUI se desvanecen en CineMode, siguiendo las filas de Marcos estándar de los marcos que sustituyen."
 L["Custom Visibility Rules"] = "Reglas de visibilidad personalizadas"
-L["Give any frame, nameplate row or unit frame part a rule of its own instead of its ticks, like \"In combat AND (Open World OR BGs & Arenas)\". Build it with buttons at the bottom of the Advanced Frames page."] = "Da a cualquier marco, fila de placas de nombre o parte de un marco de unidad una regla propia en lugar de sus casillas, como \"En combate Y (Mundo abierto O CB y arenas)\". Créala con botones al final de la página Marcos avanzados."
+L["Give any frame, nameplate row or unit frame part a rule of its own instead of its ticks, like \"In combat AND (Open World OR BGs & Arenas)\". Click Edit on its row to build it with buttons."] = "Da a cualquier marco, fila de placas de nombre o parte de un marco de unidad una regla propia en lugar de sus casillas, como \"En combate Y (Mundo abierto O CB y arenas)\". Haz clic en Editar en su fila para crearla con botones."
 L["The party and raid frames show only who needs healing. Pick where it works on the Heal Vision page."] = "Los marcos de grupo y de banda muestran solo a quien necesita sanación. Elige dónde funciona en la página Heal Vision."
 L["A calculator button on your talents window opens a talent planner that looks just like it, starting from your talents. Plan a build, see the level it needs, then copy it over to your talents window to apply."] = "Un botón de calculadora en tu ventana de talentos abre un planificador de talentos igual que ella, empezando por tus talentos. Planea una configuración, mira el nivel que necesita y cópiala a tu ventana de talentos para aplicarla."
 L["Retail profile"] = "Perfil Retail"
@@ -2853,9 +2856,6 @@ L["Green: it'd show in CineMode right now. Grey: it'd be hidden. None: its rule 
 L["Closes the editor, keeping the rule."] = "Cierra el editor y conserva la regla."
 L["Empty: its ticks decide."] = "Vacía: deciden sus casillas."
 L["Not finished: %s. Its ticks decide until it is."] = "Sin terminar: %s. Deciden sus casillas hasta que lo esté."
-L["Add a rule for..."] = "Añadir una regla para..."
-L["Removes this rule: its ticks decide again."] = "Quita esta regla: sus casillas vuelven a decidir."
-L["A rule in place of a row's ticks, for the Unit Frames page's parts (every other grid has an Edit on its rows). Like \"combat and (world or bg)\". Pick one to add it, or click a rule to open it in the editor."] = "Una regla en lugar de las casillas de una fila, para las partes de la página Marcos de unidad (las demás cuadrículas tienen Editar en sus filas). Como \"combat and (world or bg)\". Elige una para añadirla, o haz clic en una regla para abrirla en el editor."
 
 -- What's new: Wheels page
 L["Wheels page"] = "Página de ruedas"

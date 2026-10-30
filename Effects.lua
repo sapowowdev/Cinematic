@@ -1327,7 +1327,7 @@ ns.InPvPFight = InPvPFight
 -- plateCombatPvP<kind> while flagged for PvP, or Always or Grouped on the
 -- Nameplates page, which keep a row up everywhere / in a party or raid
 -- whatever its other boxes say).
--- A row with a rule (Rules section, key plate:<row>) goes by it instead,
+-- A row with a rule (its row's Edit, key plate:<row>) goes by it instead,
 -- in fights and out: nil without one. (Keys made once each, not each frame.)
 -- Hidden by its roles button while you're that role: no, whatever the rest says.
 local PLATE_RULE_KEY = setmetatable({}, { __index = function(keys, kind)

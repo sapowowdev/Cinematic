@@ -124,8 +124,7 @@ ns.CHANGELOG_FEATURES = {
 		text = "The party and raid frames show only who needs healing. Pick where it works on the Heal Vision page." },
 	{ date = "2026-10-19", page = "Advanced Frames", title = "Custom Visibility Rules",
 		text = "Give any frame, nameplate row or unit frame part a rule of its own instead of its ticks, like " ..
-		"\"In combat AND (Open World OR BGs & Arenas)\". Build it with buttons at the bottom of the Advanced " ..
-		"Frames page." },
+		"\"In combat AND (Open World OR BGs & Arenas)\". Click Edit on its row to build it with buttons." },
 	{ date = "2026-10-19", page = "Advanced Frames", title = "FlareUI support",
 		text = "FlareUI's unit frames, resource bars, buffs, quest tracker, party and raid frames fade in " ..
 		"CineMode, following the Standard Frames rows of the frames they replace." },

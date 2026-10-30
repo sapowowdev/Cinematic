@@ -4201,16 +4201,6 @@ local function CreateAudioPanel()
 	RegisterSubpage(canvas, "Audio")
 end
 
--- What a rule can be for (RulesSection): the rows the pages make, as they
--- make them: { key, label, path = { page, grid... } }, once each.
-local ruleTargets, ruleTargetKeys = {}, {}
-local function RuleTarget(key, label, ...)
-	if not ruleTargetKeys[key] then
-		ruleTargetKeys[key] = true
-		ruleTargets[#ruleTargets + 1] = { key = key, label = label, path = { ... } }
-	end
-end
-
 -- The frames tables (Standard Frames, Gamepad, Advanced Frames): the
 -- name, then a column per situation ({ heading, isOn, list, needs "stay
 -- cinematic in combat", tip }): Always, the fights and targets, then the
@@ -4333,7 +4323,7 @@ end
 
 -- The page helpers the dropdown grids share (GridRows.lua's ns.GridRow).
 ns.GRID_KIT = { controls = controls, rolesMenu = ROLES_MENU, Label = Label, Tooltip = Tooltip,
-	FrameHeading = FrameHeading, RuleTarget = RuleTarget, RecordKey = RecordKey, RecordRow = RecordRow,
+	FrameHeading = FrameHeading, RecordKey = RecordKey, RecordRow = RecordRow,
 	Refresh = Refresh, headingHeight = FRAME_HEADING_HEIGHT, ShowBox = ShowBox, RowShown = RowShown }
 
 -- Sub-page: the cameras (CameraRows.lua). A row per trigger (an emote, a
@@ -4975,8 +4965,6 @@ local function CreateCamerasPanel()
 		local function Key() return rowKey end
 		local function SetAlways(value) ns.GetDB().cameraRows[id .. ".always"] = value end
 		parts = ns.ListRowParts(Key, FRAME_COLUMNS, nil, SetAlways, { anyFight = true, omit = omit, calmItem = calmItem })
-		RuleTarget(rowKey, RowLabel(id), "Cameras")
-		ns.GRID_RULE_KEYS[rowKey] = true
 		local when = ns.GridRow(ns.GRID_KIT, drawer, 0, WHEN_LAYOUT, {
 			band = 1,
 			always = { isOn = function() return ns.CameraRowAlways(id) end, set = SetAlways,
@@ -5045,7 +5033,7 @@ end
 
 -- The Standard Frames table under anchor: a row per frame (COMBAT_SHOW
 -- items), a column per situation. Used by the Gamepad and Chat pages too.
--- ...: where the rows are, for the Rules section's menu. The Chat page's rows
+-- ...: where the rows are (page, then section). The Chat page's rows
 -- aren't frames: rows.labelWidth widens the names, rows.columnTips[c] is a
 -- column's tip, rows.noHeadings leaves the headings out (a row added later
 -- under a table's), and a row's alwaysOn() / setAlways(value) are its Always
@@ -5061,7 +5049,7 @@ local function ShowTable(content, anchor, rows, ...)
 	-- (The rows as dropdowns where the client has menus: GridRows.lua.)
 	if ns.GRID_MENUS then
 		return ns.GridTable(content, columnTop, rows, setmetatable(
-			{ labelWidth = LABEL_WIDTH, rowHeight = ROW_HEIGHT, columns = COLUMNS }, { __index = ns.GRID_KIT }), ...)
+			{ labelWidth = LABEL_WIDTH, rowHeight = ROW_HEIGHT, columns = COLUMNS }, { __index = ns.GRID_KIT }))
 	end
 	for c, column in ipairs(rows.noHeadings and {} or COLUMNS) do
 		FrameHeading(content, column[1]):SetPoint("TOPLEFT", columnTop, "TOPLEFT",
@@ -5076,9 +5064,6 @@ local function ShowTable(content, anchor, rows, ...)
 	local lastLabel = columnTop
 	for r, item in ipairs(rows) do
 		local y = -FRAME_HEADING_HEIGHT - 4 - (r - 1) * ROW_HEIGHT
-		if not item.alwaysOnly then -- (no rule: there's nothing for one to decide)
-			RuleTarget(item.key, item.label, ...)
-		end
 		local rowLabel = Label(content, "GameFontHighlight", item.label)
 		rowLabel:SetPoint("TOPLEFT", columnTop, "TOPLEFT", 0, y - 5)
 		rowLabel:SetWidth(LABEL_WIDTH - 4)
@@ -5646,8 +5631,6 @@ local function CreatePortraitsPanel()
 					section.keys[#section.keys + 1] = part[1]
 					local key = "unitPart" .. section.unit .. part[1]
 					local y = gridTop - FRAME_HEADING_HEIGHT - 4 - (r - 1) * ROW_HEIGHT
-					RuleTarget(key, part[2], "Unit frame parts", section.title)
-					ns.GRID_RULE_KEYS[key] = true -- (edited on its row: the Rules section leaves it out)
 					RecordKey(content, key)
 					for _, list in ipairs(LISTS) do
 						RecordKey(content, list)
@@ -6543,13 +6526,9 @@ local function CreatePlatesPanel()
 		local function Available()
 			return part or ns.HasPlateSettings(kind[1])
 		end
-		-- (Its rule, in place of its ticks: edited on the row where the grid
-		-- has an Edit, else in the Rules section, Advanced Frames page.)
+		-- (Its rule, in place of its ticks: edited on the row.)
 		local ruleKey = "plate:" .. kind[1]
-		RuleTarget(ruleKey, kind[2], "Nameplates",
-			kind.rulePath or part and "Plate parts" or kind[1]:find("Target$") and "Your target" or "Plates")
 		local layout = top.layout
-		if layout.edit then ns.GRID_RULE_KEYS[ruleKey] = true end
 		local function RuleKey() return ruleKey end
 		if layout.roles then
 			for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
@@ -6563,8 +6542,7 @@ local function CreatePlatesPanel()
 				set = function(value) Set(alwaysKey, value) end, tip = ALWAYS_TIP .. tip },
 			menus = { [ns.GRID_COMBAT] = combat, [ns.GRID_TARGET] = targets, [ns.GRID_LOCATION] = places },
 			help = { [ns.GRID_COMBAT] = L["Shown in fights: any of them, or only while you're PvP flagged."] },
-			-- (Without an Edit here, a rule from the Rules section greys its ticks.)
-			enabled = function() return Available() and (layout.edit or not ns.RuleTest(ruleKey)) end,
+			enabled = Available,
 			roles = layout.roles and { key = RuleKey } or nil,
 			rule = layout.edit and { key = RuleKey, label = function() return kind[2] end,
 				changed = function()
@@ -6670,8 +6648,7 @@ local function CreatePlatesPanel()
 			if (not part.icon) == (not ours) and not (part[1] == "Level" and ns.isRetail) then
 				r = r + 1
 				UNIT_ROW_TIPS["Part" .. part[1]] = part[3] .. (part.icon and iconTip or partTip)
-				AddPlateRow(top, r, { "Part" .. part[1], part[2],
-					rulePath = ours and "Cinematic plate parts" or nil })
+				AddPlateRow(top, r, { "Part" .. part[1], part[2] })
 			end
 		end
 		EndSection(section, lastLabel)
@@ -6742,8 +6719,6 @@ local function CreatePlatesPanel()
 		end
 		-- Its roles and rule (name:<row>), on the row.
 		local ruleKey = ns.NameRuleKey(key)
-		RuleTarget(ruleKey, label, "Nameplates", "Names")
-		ns.GRID_RULE_KEYS[ruleKey] = true
 		for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
 			RecordKey(content, list)
 			RecordRow(content, list, ruleKey)
@@ -6779,7 +6754,7 @@ local function CreatePlatesPanel()
 		"rest of their nameplates fades, or shows just their names, so your group can still see what's marked. " ..
 		"Unticked, they fade with the plates (the Plate Parts row decides them on the plates that are up)."]
 		.. markerRangeTip
-	AddPlateRow(namesTop, r + 1, { "PartMarker", L["Raid Marker"], rulePath = "Raid markers" })
+	AddPlateRow(namesTop, r + 1, { "PartMarker", L["Raid Marker"] })
 	EndSection(namesSection, lastLabel)
 
 	-- Your target: its plate and its name, whatever its kind's rows say, a
@@ -8698,8 +8673,6 @@ do
 				group[#group + 1] = { WHEN_NAMES[word[1]], function() return ns.GetDB()[key] and true or false end,
 					function() ns.GetDB()[key] = not ns.GetDB()[key] end }
 			end
-			RuleTarget(whenKey, info.full .. " (" .. L["Nameplates"] .. ")", "Nameplate Style")
-			ns.GRID_RULE_KEYS[whenKey] = true
 			for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
 				RecordKey(content, list)
 				RecordRow(content, list, whenKey)
@@ -9144,205 +9117,6 @@ do
 	end
 end
 
--- Rules: a boolean expression in place of a row's ticks (db.frameRules: row
--- key -> text; see ns.CompileRule), for the rows without an Edit of their
--- own: the Nameplates page's, the Unit frame parts grids', supported addons'
--- and custom frames (the frames tables' rows are edited on them, GridRows.lua).
--- At the bottom of the Advanced Frames page, under anchor: a rule each line,
--- its words in their colours, opened in the rule editor (GridRows.lua) with a
--- click. Returns a function that lays the rules out again.
-local function RulesSection(content, anchor)
-	local ROW_WIDTH = FRAME_LABEL_WIDTH + 8 * FRAME_COLUMN_WIDTH
-	local rulesHeader = Header(content, L["Custom Visibility Rules"], anchor, -28)
-	-- (Its intro behind a "?" beside the header.)
-	local intro = PageIntro(content, rulesHeader,
-		L["A rule in place of a row's ticks, for the Unit Frames page's parts (every other grid has an Edit on its " ..
-		"rows). Like \"combat and (world or bg)\". Pick one to add it, or click a rule to open it in the editor."])
-	RecordKey(content, "frameRules") -- (the page's Reset empties them)
-
-	-- What a rule here can be for: the rows the pages registered that have
-	-- no Edit of their own (the custom frames have theirs).
-	local function Targets()
-		local targets = {}
-		for _, target in ipairs(ruleTargets) do
-			if not ns.GRID_RULE_KEYS[target.key] then targets[#targets + 1] = target end
-		end
-		return targets
-	end
-
-	local ruleRows = {} -- (made as needed, reused)
-	local RebuildRules
-	local function Rules()
-		local db = ns.GetDB()
-		db.frameRules = db.frameRules or {}
-		return db.frameRules
-	end
-	-- What else a rule changing needs: a nameplate row its game settings on,
-	-- unit frame parts applied again.
-	local function Changed(key)
-		local text = Rules()[key]
-		local kind = key:match("^plate:(.+)")
-		if kind and text and text:find("%S") and ns.EnablePlateRow then
-			ns.EnablePlateRow(kind)
-		elseif key:find("^unitPart") and ns.ApplyUnitFrameParts then
-			ns.ApplyUnitFrameParts()
-		end
-	end
-	local function SetRule(key, text)
-		Rules()[key] = text
-		Changed(key)
-		RebuildRules()
-		Refresh()
-	end
-	-- The rule editor on a rule (or a new one): kept as typed, gone if it's
-	-- left empty.
-	local function Open(key, label)
-		ns.OpenRuleEditor({ label = label,
-			Text = function() return Rules()[key] or "" end,
-			SetText = function(text)
-				Rules()[key] = text
-				RebuildRules()
-			end,
-			Close = function(text) SetRule(key, text:find("%S") and text or nil) end,
-			ResetToGrid = function() SetRule(key, nil) end,
-		})
-	end
-
-	-- The menu that adds a rule: what has none yet, in submenus by page
-	-- (and grid, and row).
-	local addMenu
-	local ok, made = ns.MenuDropdown(content)
-	if ok and made and made.SetupMenu then
-		addMenu = made
-		addMenu:SetWidth(220)
-		addMenu:SetPoint("TOPLEFT", intro, "BOTTOMLEFT", 0, -8)
-		addMenu:SetDefaultText(L["Add a rule for..."])
-		addMenu:SetupMenu(function(_, root)
-			local db = ns.GetDB()
-			if not db then return end
-			local menus = {}
-			for _, target in ipairs(Targets()) do
-				local key = target.key
-				if not (db.frameRules and db.frameRules[key]) then
-					local menu, path = root, ""
-					for _, step in ipairs(target.path) do
-						path = path .. "\001" .. step
-						menus[path] = menus[path] or menu:CreateButton(step)
-						menu = menus[path]
-					end
-					menu:CreateButton(target.label, function() Open(key, target.label) end)
-				end
-			end
-		end)
-	end
-	local rowsTop = CreateFrame("Frame", nil, content)
-	rowsTop:SetSize(1, 1)
-	rowsTop:SetPoint("TOPLEFT", addMenu or intro, "BOTTOMLEFT", 0, -8)
-	local none = Label(content, "GameFontDisableSmall", L["None yet."])
-	none:SetPoint("TOPLEFT", rowsTop, "TOPLEFT", 4, -2)
-
-	-- A rule row: what it's for, its rule (a click opens it) and a remove
-	-- button, and a line saying whether it reads and what it gives right now.
-	local function RuleRow(index)
-		local row = ruleRows[index]
-		if row then return row end
-		row = CreateFrame("Frame", nil, content)
-		row:SetSize(ROW_WIDTH, 56)
-		row.label = Label(row, "GameFontHighlight", "")
-		row.label:SetPoint("TOPLEFT", 4, -4)
-		row.label:SetWidth(ROW_WIDTH - 8)
-		row.label:SetJustifyH("LEFT")
-		row.label:SetWordWrap(false)
-		row.rule = ns.PanelButton(row)
-		row.rule:SetSize(ROW_WIDTH - 40, 20)
-		row.rule:SetPoint("TOPLEFT", 6, -20)
-		local text = row.rule:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-		text:SetWordWrap(false)
-		row.rule:SetFontString(text)
-		text:ClearAllPoints()
-		text:SetPoint("LEFT", 6, 0)
-		text:SetPoint("RIGHT", -6, 0)
-		text:SetJustifyH("LEFT")
-		row.rule:SetScript("OnClick", function() Open(row.key, row.name) end)
-		Tooltip(row.rule, L["Click to open the editor."])
-		row.status = Label(row, "GameFontNormalSmall", "")
-		row.status:SetPoint("TOPLEFT", 6, -44)
-		row.status:SetWidth(ROW_WIDTH - 8)
-		row.status:SetJustifyH("LEFT")
-		row.remove = ns.SkinClose(CreateFrame("Button", nil, row, "UIPanelCloseButton"))
-		row.remove:SetSize(24, 24)
-		row.remove:SetPoint("LEFT", row.rule, "RIGHT", 4, 0)
-		row.remove:SetScript("OnClick", function() SetRule(row.key, nil) end)
-		Tooltip(row.remove, L["Removes this rule: its ticks decide again."])
-		ruleRows[index] = row
-		return row
-	end
-
-	-- Whether each rule reads and what it gives now.
-	local function UpdateStatus()
-		local facts = ns.RuleFactsNow()
-		for _, row in ipairs(ruleRows) do
-			if row:IsShown() then
-				local text = Rules()[row.key] or ""
-				local test, err = ns.CompileRule(text)
-				if not test then
-					row.status:SetText("|cffff6060" .. (L["Not finished: %s. Its ticks decide until it is."]):format(err) .. "|r")
-				else
-					row.status:SetText(test(facts) and "|cff60ff60" .. L["Right now: shown"] .. "|r"
-						or "|cffffd100" .. L["Right now: hidden"] .. "|r")
-				end
-				row.rule:SetSkinTint(not test and 1 or nil, 0.45, 0.45)
-			end
-		end
-	end
-	-- The rules in the pages' order (those on the frames tables left out).
-	function RebuildRules()
-		local db = ns.GetDB()
-		local rules = db and db.frameRules or {}
-		local index, last = 0, nil
-		local listed = {}
-		local function Add(key, label, path)
-			index = index + 1
-			listed[key] = true
-			local row = RuleRow(index)
-			row.key, row.name = key, label
-			row.label:SetText((#path > 0 and "|cff999999" .. table.concat(path, " > ") .. " >|r " or "") .. label)
-			row.rule:SetText(ns.ColoredRule(rules[key]))
-			row:ClearAllPoints()
-			row:SetPoint("TOPLEFT", last or rowsTop, last and "BOTTOMLEFT" or "TOPLEFT", 0, last and -4 or 0)
-			row:Show()
-			last = row
-		end
-		for _, target in ipairs(Targets()) do
-			if type(rules[target.key]) == "string" and rules[target.key]:find("%S") then
-				Add(target.key, target.label, target.path)
-			end
-		end
-		-- (Rules for rows this client doesn't have: kept, listed by their keys.)
-		for key, text in pairs(rules) do
-			if not listed[key] and not ns.GRID_RULE_KEYS[key] and type(text) == "string" and text:find("%S") then
-				Add(key, key, {})
-			end
-		end
-		for i = index + 1, #ruleRows do ruleRows[i]:Hide() end
-		none:SetShown(index == 0)
-		UpdateStatus()
-		FitContentHeight(content)
-	end
-	local ticker = CreateFrame("Frame", nil, content)
-	local since = 0
-	ticker:SetScript("OnUpdate", function(_, elapsed)
-		since = since + elapsed
-		if since > 0.5 then since = 0 UpdateStatus() end
-	end)
-	local reset = resetHooks[content]
-	resetHooks[content] = function()
-		if reset then reset() end
-		RebuildRules()
-	end
-	return RebuildRules
-end
-
 -- Sub-page listing the built-in frames, each with a checkbox to keep it shown.
 local RefreshExtras
 
@@ -9445,13 +9219,12 @@ RefreshExtras = function()
 		-- (A built-in frame kept up has its rows on the Standard Frames page.)
 		if not item.picked and item.added then
 			local key = "extra:" .. item.name
-			ns.GRID_RULE_KEYS[key] = true -- (its rule's edited on its row: not in the Rules section)
-			-- (For the page's Reset: just these rows of the shared lists.)
+			-- (For the page's Reset: just these rows of the shared lists, and its rule.)
 			for c = 2, #THIRD_PARTY_COLUMNS do
 				RecordKey(extrasPanel, THIRD_PARTY_COLUMNS[c][3])
 				RecordRow(extrasPanel, THIRD_PARTY_COLUMNS[c][3], key)
 			end
-			for _, list in ipairs({ "calmShow", "tankHide", "healerHide", "damageHide" }) do
+			for _, list in ipairs({ "calmShow", "tankHide", "healerHide", "damageHide", "frameRules" }) do
 				RecordKey(extrasPanel, list)
 				RecordRow(extrasPanel, list, key)
 			end
@@ -9468,12 +9241,6 @@ RefreshExtras = function()
 
 	GetExtraHeadings():SetShown(#items > 0)
 	extrasPanel.empty:SetShown(#items == 0)
-	-- (The Rules section, below the last of them.)
-	if extrasPanel.rulesAnchor then
-		extrasPanel.rulesAnchor:ClearAllPoints()
-		extrasPanel.rulesAnchor:SetPoint("TOPLEFT", #items > 0 and extraRows[#items] or extrasPanel.empty, "BOTTOMLEFT")
-		extrasPanel.rebuildRules()
-	end
 	FitContentHeight(extrasPanel)
 end
 
@@ -10929,8 +10696,6 @@ local function CreateVisionPanel()
 				L["Heal Vision out of fights while you have a living enemy targeted."]),
 			Item(L["Friend targeted"], "healVisionTargetFriendly",
 				L["Heal Vision out of fights while you have anything else targeted: friends, NPCs, dead enemies."]) }
-		RuleTarget("healVision", L["Heal Vision"], "Heal Vision")
-		ns.GRID_RULE_KEYS.healVision = true
 		for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
 			RecordKey(content, list)
 			RecordRow(content, list, "healVision")
@@ -11433,8 +11198,6 @@ local function CreateExtrasPanel()
 			row.suiteLabel = known.label:sub(#known.suite + 2)
 		end
 		local item = "addon:" .. known.key
-		RuleTarget(item, known.label, "Supported addons")
-		ns.GRID_RULE_KEYS[item] = true -- (its rule's edited on its row: not in the Rules section)
 		-- (For the page's Reset: just its rows of the shared lists.)
 		for c = 2, #COLUMNS do
 			RecordKey(content, COLUMNS[c][3])
@@ -11712,14 +11475,150 @@ local function CreateExtrasPanel()
 		end
 	end
 
+	-- Or find them by name: other addons' frames not faded yet, matching what's
+	-- typed (a frame's name or its addon's); hovering a match marks it on
+	-- screen, clicking it fades it.
+	local FIND_ROWS = 12
+	local made, find = pcall(CreateFrame, "EditBox", nil, content, "SearchBoxTemplate")
+	if not made or not find then
+		find = ns.SkinEditBox(CreateFrame("EditBox", nil, content, "InputBoxTemplate"))
+	end
+	find:SetSize(220, 20)
+	find:SetAutoFocus(false)
+	find.searchSkip = true
+	find:SetPoint("LEFT", addMode, "RIGHT", 40, 0)
+	if find.Instructions then
+		find.Instructions:SetText(L["Find frames by name or addon"])
+	end
+	Tooltip(find, L["Type part of a frame's name or of the addon that made it. Hover over a match to see " ..
+		"it marked on screen, click it to fade it. Only other addons' frames that aren't faded yet are listed."])
+
+	local found = CreateFrame("Frame", nil, content)
+	found.searchSkip = true
+	found:SetPoint("TOPLEFT", find, "BOTTOMLEFT", -6, -2)
+	found:SetWidth(420)
+	found:SetFrameLevel(content:GetFrameLevel() + 20)
+	found:EnableMouse(true)
+	found:Hide()
+	local border = found:CreateTexture(nil, "BACKGROUND")
+	border:SetAllPoints()
+	border:SetColorTexture(0.45, 0.38, 0.2, 1)
+	local back = found:CreateTexture(nil, "BORDER")
+	back:SetPoint("TOPLEFT", 1, -1)
+	back:SetPoint("BOTTOMRIGHT", -1, 1)
+	back:SetColorTexture(0.05, 0.05, 0.05, 0.97)
+
+	local frames, matches, findRows, findOffset = nil, {}, {}, 0
+	local function FindRow(i)
+		if findRows[i] then return findRows[i] end
+		local row = CreateFrame("Button", nil, found)
+		row:SetHeight(20)
+		row:SetPoint("TOPLEFT", 4, -4 - (i - 1) * 20)
+		row:SetPoint("RIGHT", -4, 0)
+		local hl = row:CreateTexture(nil, "HIGHLIGHT")
+		hl:SetAllPoints()
+		hl:SetColorTexture(1, 1, 1, 0.1)
+		row.text = Label(row, "GameFontHighlight")
+		row.text:SetPoint("LEFT", 6, 0)
+		row.text:SetPoint("RIGHT", -6, 0)
+		row.text:SetWordWrap(false)
+		row:SetScript("OnEnter", function(self)
+			if self.entry and not ns.MarkFrame(self.entry.name) then
+				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+				GameTooltip:SetText(L["Not on screen right now."], 1, 1, 1, 1, true)
+				GameTooltip:Show()
+			end
+		end)
+		row:SetScript("OnLeave", function()
+			ns.MarkFrame(nil)
+			GameTooltip:Hide()
+		end)
+		row:SetScript("OnClick", function(self)
+			if not self.entry then return end
+			ns.MarkFrame(nil)
+			ns.AddUnderMouse(self.entry.name)
+			frames = nil -- (it's faded now: not a match any more)
+			find:SetText("")
+			find:ClearFocus()
+			RefreshExtras()
+		end)
+		findRows[i] = row
+		return row
+	end
+
+	-- The matches from findOffset on; the mouse wheel scrolls through the rest.
+	local function DrawFound()
+		local shown = math.min(#matches - findOffset, FIND_ROWS)
+		for i = 1, shown do
+			local entry, row = matches[findOffset + i], FindRow(i)
+			row.entry = entry
+			row.text:SetText("|cffffd100" .. entry.name .. "|r" ..
+				(entry.source and ("  |cff808080" .. entry.source .. "|r") or ""))
+			row:Show()
+		end
+		local lines = shown
+		local below = #matches - findOffset - shown
+		if #matches == 0 or below > 0 then
+			lines = lines + 1
+			local row = FindRow(lines)
+			row.entry = nil
+			row.text:SetText(#matches == 0 and L["|cff808080Nothing found|r"] or
+				("|cff808080" .. L["Scroll for %d more"]:format(below) .. "|r"))
+			row:Show()
+		end
+		for i = lines + 1, #findRows do findRows[i]:Hide() end
+		found:SetHeight(lines * 20 + 8)
+	end
+	found:EnableMouseWheel(true)
+	found:SetScript("OnMouseWheel", function(_, delta)
+		findOffset = math.max(0, math.min(findOffset - delta, #matches - FIND_ROWS))
+		DrawFound()
+	end)
+
+	-- Names starting with what's typed first, then the shortest (an addon's
+	-- main window before its parts).
+	local function UpdateFound()
+		local query = (find:GetText() or ""):match("^%s*(.-)%s*$"):lower()
+		if query == "" then
+			found:Hide()
+			return
+		end
+		frames = frames or ns.FindAddableFrames()
+		matches = {}
+		for _, entry in ipairs(frames) do
+			if entry.lower:find(query, 1, true) then
+				matches[#matches + 1] = entry
+			end
+		end
+		table.sort(matches, function(a, b)
+			local aStarts = a.lower:sub(1, #query) == query
+			local bStarts = b.lower:sub(1, #query) == query
+			if aStarts ~= bStarts then return aStarts end
+			if #a.name ~= #b.name then return #a.name < #b.name end
+			return a.name < b.name
+		end)
+		findOffset = 0
+		DrawFound()
+		found:Show()
+	end
+	find:HookScript("OnTextChanged", UpdateFound)
+	-- A fresh look at the frames each time you start searching (addons make
+	-- frames as they go).
+	find:HookScript("OnEditFocusGained", function()
+		frames = nil
+		UpdateFound()
+	end)
+	find:HookScript("OnEscapePressed", function(self)
+		self:SetText("")
+		self:ClearFocus()
+	end)
+	canvas:HookScript("OnHide", function()
+		found:Hide()
+		ns.MarkFrame(nil)
+	end)
+
 	content.empty = Label(content, "GameFontDisableSmall", L["None yet."])
 	content.empty:SetPoint("TOPLEFT", addMode, "BOTTOMLEFT", 0, -12)
-
-	-- Rules (a test), at the bottom: placed by RefreshExtras.
-	content.rulesAnchor = CreateFrame("Frame", nil, content)
-	content.rulesAnchor:SetSize(1, 1)
-	content.rulesAnchor:SetPoint("TOPLEFT", content.empty, "BOTTOMLEFT")
-	content.rebuildRules = RulesSection(content, content.rulesAnchor)
 
 	canvas:SetScript("OnShow", PageShown(function()
 		if ns.GetDB() then
