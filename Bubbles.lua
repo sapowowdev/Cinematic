@@ -70,9 +70,7 @@ end
 local ROMAN = not ({ ruRU = true, koKR = true, zhCN = true, zhTW = true })[GetLocale and GetLocale() or ""]
 function ns.BubbleFont(look, file, flags)
 	if ROMAN then
-		for _, font in ipairs(ns.QUEST_ITEM_FONTS or {}) do
-			if font[1] == look.bubblesFont and font[3] then file = font[3] end
-		end
+		file = ns.StyleFontFile(look.bubblesFont) or file
 	end
 	local outline = tonumber(look.bubblesOutline) or 0
 	return file, ns.OutlinedFlags and ns.OutlinedFlags(flags, math.min(outline, 2)) or flags

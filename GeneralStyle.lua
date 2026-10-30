@@ -101,9 +101,7 @@ function ns.MakeGeneralPlatePreview(parent, width)
 		if file and height then
 			local font, outline = general.styleFont, tonumber(general.styleOutline) or -1
 			if ROMAN then
-				for _, info in ipairs(ns.QUEST_ITEM_FONTS or {}) do
-					if info[1] == font and info[3] then file = info[3] end
-				end
+				file = ns.StyleFontFile(font) or file
 			end
 			if outline >= 0 and ns.OutlinedFlags then flags = ns.OutlinedFlags(flags, outline) end
 			name:SetFont(file, height, flags or "")

@@ -254,9 +254,7 @@ function ns.MakeRaidStylePreview(parent, width, onPick)
 			local file, height, flags = object:GetFont()
 			local font, outline = view.ufFont, tonumber(view.ufOutline) or 0
 			if ROMAN then
-				for _, info in ipairs(ns.QUEST_ITEM_FONTS or {}) do
-					if info[1] == font and info[3] then file = info[3] end
-				end
+				file = ns.StyleFontFile(font) or file
 			end
 			if outline >= 0 and ns.OutlinedFlags then flags = ns.OutlinedFlags(flags, outline) end
 			if file and height then tile.name:SetFont(file, height * (tonumber(view.ufNameSize) or 1), flags or "") end

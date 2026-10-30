@@ -69,6 +69,139 @@ ns.QUEST_ITEM_FONTS = {
 local FONT_FILES = {}
 for _, font in ipairs(ns.QUEST_ITEM_FONTS) do FONT_FILES[font[1]] = font[3] end
 ns.OnLanguage(function() ns.QUEST_ITEM_FONTS[1][2] = L["The game's"] end)
+
+-- Fonts other addons share through LibSharedMedia (none of theirs bundled)
+-- come after these, as "lsm:<its name>".
+local function SharedMedia()
+	local stub = _G.LibStub
+	return stub and stub("LibSharedMedia-3.0", true)
+end
+
+-- Whether a font file has small letters: a font with only capitals (some
+-- shared ones) draws every small letter as the same box. So: a-z all one
+-- width while A-Z aren't (a fixed-width font has both even), it's capitals
+-- only. Cached per file. (Widths kept for /cine debug fonts; refusals
+-- counted there too.)
+local LOWER, UPPER = "abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+local readable, measured, tries, probe = {}, {}, {}, nil
+local function Widths(letters)
+	local widths, even = {}, true
+	for letter in letters:gmatch(".") do
+		probe:SetText(letter)
+		widths[#widths + 1] = probe:GetStringWidth()
+		if math.abs(widths[#widths] - widths[1]) > 0.5 then even = false end
+	end
+	return widths, even
+end
+local function Readable(path)
+	if readable[path] ~= nil then return readable[path] end
+	if not probe then
+		-- (Shown, see-through: the game may not load a font for hidden text.)
+		local holder = CreateFrame("Frame", nil, UIParent)
+		holder:SetSize(1, 1)
+		holder:SetPoint("BOTTOMLEFT")
+		holder:SetAlpha(0)
+		probe = holder:CreateFontString(nil, "ARTWORK")
+		probe:SetPoint("BOTTOMLEFT")
+	end
+	local ok, set = pcall(probe.SetFont, probe, path, 20, "")
+	if not ok or set == false then
+		-- (Refused: not loaded yet, or not there. Kept, uncached, so it's
+		-- measured again when next asked; a missing file just shows the
+		-- game's font.)
+		tries[path] = (tries[path] or 0) + 1
+		measured[path] = ("refused %d times, kept"):format(tries[path])
+		return true
+	end
+	local lower, lowerEven = Widths(LOWER)
+	local upper, upperEven = Widths(UPPER)
+	probe:SetText("")
+	readable[path] = not (lowerEven and not upperEven)
+	measured[path] = ("a i m %.1f %.1f %.1f, A I M %.1f %.1f %.1f"):format(lower[1], lower[9], lower[13],
+		upper[1], upper[9], upper[13])
+	return readable[path]
+end
+
+-- A shared font's file, whether or not it's readable (nil: no longer there).
+local function SharedFile(value)
+	local name = type(value) == "string" and value:match("^lsm:(.+)")
+	local media = name and SharedMedia()
+	if media then
+		local ok, path = pcall(media.Fetch, media, "font", name, true)
+		if ok and path then return path end
+	end
+end
+
+-- A font value's file (nil: the game's, or a shared one no longer there or
+-- with no small letters).
+function ns.StyleFontFile(value)
+	if FONT_FILES[value] then return FONT_FILES[value] end
+	local path = SharedFile(value)
+	if path and Readable(path) then return path end
+end
+
+-- /cine debug fonts: every font shared through LibSharedMedia, its file, and
+-- whether it has small letters (left out of the lists if not).
+function ns.ReportStyleFonts()
+	local media = SharedMedia()
+	if not (media and media.List) then
+		ns.Print("Fonts: no LibSharedMedia addon loaded, so only our five.")
+		return
+	end
+	local ok, names = pcall(media.List, media, "font")
+	names = ok and names or {}
+	-- (All measured again, then again when listed, once the files the game
+	-- hadn't loaded have had time to.)
+	wipe(readable)
+	wipe(tries)
+	for _, name in ipairs(names) do
+		local path = SharedFile("lsm:" .. name)
+		if path then Readable(path) end
+	end
+	ns.Print("Fonts: measuring, the list in 4 seconds...")
+	C_Timer.After(4, function()
+		local left = 0
+		for _, name in ipairs(names) do
+			local path = SharedFile("lsm:" .. name)
+			local good = path and Readable(path)
+			if not good then left = left + 1 end
+			ns.Print(("  %s%s|r %s - %s (%s)"):format(good and "|cff80ff80" or "|cffff6060", name,
+				good and "kept" or "LEFT OUT", tostring(path), path and measured[path] or "no file"))
+		end
+		ns.Print(("Fonts: %d shared, %d left out (no small letters: a-z all one width, A-Z not). Refused: the " ..
+			"game wouldn't set it on our measuring text (asked once now, again 4 seconds later)."):format(#names, left))
+	end)
+end
+
+-- A font value's name, as the lists show it.
+function ns.StyleFontName(value)
+	for _, info in ipairs(ns.QUEST_ITEM_FONTS) do
+		if info[1] == value then return info[2] end
+	end
+	return type(value) == "string" and value:match("^lsm:(.+)") or tostring(value)
+end
+
+-- The list, for a dropdown: { value, text } each, ours first, then the
+-- shared ones (sorted; any with a file of ours left out).
+function ns.StyleFontChoices()
+	local list, known = {}, {}
+	for _, info in ipairs(ns.QUEST_ITEM_FONTS) do
+		list[#list + 1] = { value = info[1], text = info[2] }
+		if info[3] then known[info[3]:lower()] = true end
+	end
+	local media = SharedMedia()
+	if media and media.List then
+		local ok, names = pcall(media.List, media, "font")
+		local shared = {}
+		for _, name in ipairs(ok and names or {}) do
+			local path = ns.StyleFontFile("lsm:" .. name) -- (nil for one with no small letters: left out)
+			if path and not known[path:lower()] then shared[#shared + 1] = { value = "lsm:" .. name, text = name } end
+		end
+		table.sort(shared, function(a, b) return a.text:lower() < b.text:lower() end)
+		for _, choice in ipairs(shared) do list[#list + 1] = choice end
+	end
+	return list
+end
 -- (A cooldown this short is the global cooldown: no fill, seconds or dimmed glow for it.)
 local GCD = 1.5
 
@@ -189,7 +322,7 @@ function ns.StyleQuestItem(parts, look, size)
 	-- The numbers: the font's file, sized to the button, outlined.
 	local SCALE = { [parts.count] = 14 / 52, [parts.hotkey] = 12 / 52, [parts.seconds] = 0.36 }
 	for text, base in pairs(parts.fonts) do
-		local file = FONT_FILES[look.questItemFont] or base[1]
+		local file = ns.StyleFontFile(look.questItemFont) or base[1]
 		if file then
 			text:SetFont(file, math.max(6, math.floor(size * SCALE[text] + 0.5)),
 				ns.OutlinedFlags(base[3], look.questItemOutline))

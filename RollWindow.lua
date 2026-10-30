@@ -79,9 +79,7 @@ local function StyleText(text, look)
 		return
 	end
 	if ROMAN then
-		for _, font in ipairs(ns.QUEST_ITEM_FONTS or {}) do
-			if font[1] == look.rollFont and font[3] then file = font[3] end
-		end
+		file = ns.StyleFontFile(look.rollFont) or file
 	end
 	text:SetFont(file, size * look.rollTextSize, ns.OutlinedFlags(flags, look.rollOutline))
 end

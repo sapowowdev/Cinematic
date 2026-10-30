@@ -608,23 +608,18 @@ function ns.StyleRows(kit, content, stack, changed, switchKey, fieldOf)
 		return rows.Swatch(name, nil, keys, tip, test)
 	end
 
-	-- A Font: row, its dropdown (ns.QUEST_ITEM_FONTS) just after the word; the
-	-- row as tall as the dropdown, so the next row clears it.
+	-- A Font: row, its dropdown (ns.StyleFontChoices: ours, then other addons'
+	-- shared ones) just after the word; the row as tall as the dropdown, so
+	-- the next row clears it.
 	-- (A shared one: General first, named for the font it gives the page.)
-	local function FontName(value)
-		for _, info in ipairs(ns.QUEST_ITEM_FONTS or {}) do
-			if info[1] == value then return info[2] end
-		end
-		return tostring(value)
-	end
 	function rows.Font(key, tip, test)
 		local font = kit.Dropdown(content, K(key), function()
 			local list = {}
 			local general = ns.GeneralStyleValue(key)
 			if general ~= nil then
-				list[1] = { value = "general", text = ns.L["General"] .. " (" .. FontName(general) .. ")" }
+				list[1] = { value = "general", text = ns.L["General"] .. " (" .. ns.StyleFontName(general) .. ")" }
 			end
-			for _, info in ipairs(ns.QUEST_ITEM_FONTS or {}) do list[#list + 1] = { value = info[1], text = info[2] } end
+			for _, choice in ipairs(ns.StyleFontChoices()) do list[#list + 1] = choice end
 			return list
 		end, 200, changed)
 		if not font then return end

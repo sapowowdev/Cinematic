@@ -105,6 +105,7 @@ local function PrintDebugHelp()
 	print("  /cine debug unitframes - log every part of the player, pet, target and focus frames (names, textures, sizes, held hidden) to the saved log")
 	print("  /cine debug plates - nameplate settings, and how the plates (and your target) are sorted")
 	print("  /cine debug textures - a strip of every bar texture the Style pages offer, to see which this client has")
+	print("  /cine debug fonts - every font other addons share, and which are left out (no small letters)")
 	print("  /cine debug platetextures - the textures your target's nameplate is drawn with (for the game's plate Styles)")
 	print("  /cine debug prdtextures - the personal resource display's textures and their alpha (its border pieces)")
 	print("  /cine debug cdm - each Cooldown Manager spell: its cooldown, charges, what it costs and in which resource (run in and out of combat)")
@@ -1231,6 +1232,8 @@ local function HandleSlash(msg)
 		ns.ReportSpellRange()
 	elseif cmd == "debug" and arg == "textures" then
 		ns.ShowStyleTextures()
+	elseif cmd == "debug" and arg == "fonts" then
+		ns.ReportStyleFonts()
 	elseif cmd == "debug" and arg == "platetextures" then
 		ns.ReportPlateTextures()
 	elseif cmd == "debug" and arg == "prdtextures" then

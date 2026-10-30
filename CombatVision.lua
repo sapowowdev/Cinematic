@@ -186,12 +186,7 @@ local function MakeCue(frame)
 end
 
 local function FontFile(look)
-	for _, font in ipairs(ns.QUEST_ITEM_FONTS or {}) do
-		if font[1] == look.combatFont and font[3] then
-			return font[3]
-		end
-	end
-	return (GameFontNormalHuge:GetFont())
+	return ns.StyleFontFile(look.combatFont) or (GameFontNormalHuge:GetFont())
 end
 
 -- The words at key (combatTextIn, combatTextOut) as shown: the defaults in

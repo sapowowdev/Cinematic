@@ -108,9 +108,7 @@ local function Font(fs)
 		return
 	end
 	if ROMAN then
-		for _, info in ipairs(ns.QUEST_ITEM_FONTS or {}) do
-			if info[1] == font and info[3] then file = info[3] end
-		end
+		file = ns.StyleFontFile(font) or file
 	end
 	local wanted = ns.OutlinedFlags and ns.OutlinedFlags(flags, outline) or flags or ""
 	local ok, err = pcall(fs.SetFont, fs, file, height * size, wanted)

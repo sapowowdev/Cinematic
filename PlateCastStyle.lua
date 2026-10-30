@@ -302,11 +302,7 @@ end
 -- The spell name's (and the timer's) font: the game's, or ours over it (a
 -- family, so every alphabet's letters show: ns.SetPlateNameFont).
 local function FontFile(look)
-	for _, font in ipairs(ns.QUEST_ITEM_FONTS or {}) do
-		if font[1] == look.plateCastFont then
-			return font[3]
-		end
-	end
+	return ns.StyleFontFile(look.plateCastFont)
 end
 
 -- (Its size: the page's Text size, the timer's times the bar's height too,

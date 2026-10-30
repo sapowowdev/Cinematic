@@ -170,9 +170,7 @@ local function DressFonts(look)
 				if own then
 					local file = own[1]
 					if ROMAN then
-						for _, info in ipairs(ns.QUEST_ITEM_FONTS or {}) do
-							if info[1] == look.tooltipFont and info[3] then file = info[3] end
-						end
+						file = ns.StyleFontFile(look.tooltipFont) or file
 					end
 					font:SetFont(file, own[2] * (tonumber(look.tooltipTextSize) or 1),
 						ns.OutlinedFlags and ns.OutlinedFlags(own[3], tonumber(look.tooltipOutline) or 0) or own[3])
