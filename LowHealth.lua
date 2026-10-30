@@ -191,6 +191,8 @@ local function SyncThemeLook(wanted, again)
 		if not NOT_THEMES[key] and db[key] == DEFAULTS[key] then
 			db[key] = value
 			values[key] = value
+		elseif db[key] == value then
+			values[key] = value -- (already the theme's: still the theme's, not theirs)
 		end
 	end
 	from.theme, from.values = wanted.key, values
@@ -347,6 +349,14 @@ local function WantedTheme(look)
 		key = ns.LowHealthAutoTheme()
 	end
 	return ns.LOW_HEALTH_THEME[key] or ns.LOW_HEALTH_THEMES[1]
+end
+
+-- After settings are put back wholesale (a page's Reset, a profile loaded or
+-- reset): those back at their defaults take the shown theme's own again.
+-- (SyncThemeLook alone skips a theme already put on, so they stayed plain.)
+function ns.ResyncVitalsLook()
+	db = db or ns.GetDB()
+	if db then SyncThemeLook(WantedTheme(), true) end
 end
 
 -- A drawer's textures, in parent (the screen's overlay, or the preview).

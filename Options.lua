@@ -654,6 +654,7 @@ local function ResetPage(content, only)
 		end
 	end
 	ns.letterboxDirty = true
+	if ns.ResyncVitalsLook then ns.ResyncVitalsLook() end -- (the theme's own look back on its settings)
 	if resetHooks[content] then resetHooks[content]() end
 	if ns.RefreshTint then ns.RefreshTint() end
 	if ns.ApplyBubbles then ns.ApplyBubbles() end

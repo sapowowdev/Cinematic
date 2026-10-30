@@ -53,6 +53,21 @@ if arg[1] then
 			end
 		end
 	end
+	-- Vitals Vision: a page's Reset (its settings back to the profile's) leaves
+	-- each theme's own look on them, not the plain defaults.
+	local db, base = ns.GetDB(), ns.ProfileBase()
+	for _, theme in ipairs(ns.LOW_HEALTH_THEMES) do
+		db.lowHealthTheme = theme.key
+		ns.ResyncVitalsLook()
+		for key in pairs(theme.look or {}) do db[key] = base[key] end
+		ns.ResyncVitalsLook()
+		for key, value in pairs(theme.look or {}) do
+			if db[key] ~= value then
+				print(("problem\tVitals theme %s: %s after a Reset is %s, not its %s"):format(theme.key, key,
+					tostring(db[key]), tostring(value)))
+			end
+		end
+	end
 	return
 end
 

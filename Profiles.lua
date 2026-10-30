@@ -34,6 +34,7 @@ local PROFILE_TABLES = {
 	"tankHide", "healerHide", "damageHide",
 	"markNames", -- (the Nameplates page's rows' own names)
 	"cameraRows", -- (the Cameras page's rows: CameraRows.lua)
+	"lowHealthFromTheme", -- (which of the profile's Vitals settings its theme put on, not the player)
 }
 ns.PROFILE_TABLES = PROFILE_TABLES
 ns.IS_PROFILE_TABLE = {}
@@ -286,6 +287,7 @@ local function Load(name)
 		db[k] = CopyTable(saved[k] or base[k])
 	end
 	ns.EnsureTables()
+	if ns.ResyncVitalsLook then ns.ResyncVitalsLook() end -- (its theme's own look onto settings at their defaults)
 end
 
 -- Game switches for profiles that use them: the Cooldown Manager
