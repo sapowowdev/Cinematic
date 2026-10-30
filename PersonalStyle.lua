@@ -1,4 +1,4 @@
--- The Style hub's Personal resources page: how the game's personal resource
+-- The Style hub's Personal Resource Display page: how the game's personal resource
 -- display (the bars under your character) looks. Its health and power bars'
 -- texture, border and background, the health bar's color, each bar's
 -- height, and your class resource's size. When the bars come up: the UI
@@ -22,10 +22,9 @@ DEFAULTS.prdHealthR, DEFAULTS.prdHealthG, DEFAULTS.prdHealthB = 0.2, 0.8, 0.4
 DEFAULTS.prdHealthHeight = 1         -- the health bar's height, times the game's
 DEFAULTS.prdPowerHeight = 1          -- the power bar's, times the game's
 DEFAULTS.prdPiecesScale = 1          -- your class resource (combo points, holy power, runes...), times its size
-DEFAULTS.prdMana = false             -- a mana bar of ours under them, when mana isn't your power (PersonalMana.lua)
-DEFAULTS.prdManaColor = "game"       -- ...its color: "game" or "custom" (prdManaR/G/B)
+DEFAULTS.prdManaColor = "game"       -- our mana bar's color (on: prdMana, PersonalResources.lua): "game" or "custom" (prdManaR/G/B)
 DEFAULTS.prdManaR, DEFAULTS.prdManaG, DEFAULTS.prdManaB = 0, 0.55, 1
-DEFAULTS.prdManaHeight = 1           -- ...its height, times the power bar's
+DEFAULTS.prdManaHeight = 0.65        -- ...its height, times the power bar's
 
 local function Look()
 	return ns.StyleLook("prdStyle")
@@ -176,6 +175,68 @@ local function DressSkin(skin, look)
 	if kind == "line" then ns.DressStyleEdges(skin.border, size, r, g, b, 1, true) end
 end
 
+-- The space between two bars with a border of ours: their lines (just
+-- outside each) a pixel apart, never over each other; no border: a pixel.
+-- nil: the game's own border (its own spacing). And how far the line
+-- reaches out of a bar (for what's under the last: the cast bar).
+function ns.PersonalBarGap(look)
+	if look == nil then look = ns.StyleOn("prdStyle") and Look() or nil end
+	if not look then return end
+	local kind, size = ns.StyleBorder(look, "prdBorder")
+	if kind == "game" then return end
+	if kind == "none" then return 1, 0 end
+	return size * 2 + 1, size
+end
+
+-- The power bar under the health bar, at the gap above while it's ours: its
+-- points on the health bar's holder moved, the game's put back after.
+local spaced -- { own = its points, ours = the points we gave it }, while moved
+
+local function Points(frame)
+	local points = {}
+	for i = 1, frame:GetNumPoints() do points[i] = { frame:GetPoint(i) } end
+	return points
+end
+
+local function SamePoints(a, b)
+	if #a ~= #b then return false end
+	for i = 1, #a do
+		for j = 1, 5 do if a[i][j] ~= b[i][j] then return false end end
+	end
+	return true
+end
+
+local function SetPoints(frame, points)
+	frame:ClearAllPoints()
+	for _, p in ipairs(points) do frame:SetPoint(p[1], p[2], p[3], p[4], p[5]) end
+end
+
+local function SpacePower(holder, power, gap)
+	if not power then return end
+	if spaced then
+		-- (Moved since by the game: its own spot is the new one.)
+		local ok, now = pcall(Points, power)
+		if ok and SamePoints(now, spaced.ours) then SetPoints(power, spaced.own) end
+		spaced = nil
+	end
+	if not (gap and holder) then return end
+	-- (Only its points under the holder: top to the holder's bottom.)
+	local ok, own = pcall(Points, power)
+	if not ok or #own == 0 then return end
+	local ours, moved = {}, false
+	for i, p in ipairs(own) do
+		ours[i] = { p[1], p[2], p[3], p[4], p[5] }
+		if p[2] == holder and type(p[1]) == "string" and p[1]:find("^TOP") and type(p[3]) == "string"
+			and p[3]:find("^BOTTOM") then
+			ours[i][5] = -gap
+			moved = true
+		end
+	end
+	if not moved then return end
+	SetPoints(power, ours)
+	spaced = { own = own, ours = Points(power) }
+end
+
 local faded = setmetatable({}, { __mode = "k" }) -- piece -> true, while faded out
 local skins = setmetatable({}, { __mode = "k" })
 local textured = setmetatable({}, { __mode = "k" }) -- bar -> true, while in a fill of ours
@@ -208,7 +269,8 @@ local function DressBar(bar, holder, look, heightKey, color)
 	-- Its height.
 	-- (Left alone at the game's height unless we'd changed it: Edit Mode's
 	-- own changes stay.)
-	local scale = look and tonumber(look[heightKey]) or 1
+	-- (No look: the defaults', the game's own height but for our mana bar.)
+	local scale = tonumber((look or ns.DEFAULTS)[heightKey]) or 1
 	if type(saved.height) == "number" and saved.height > 0 and (scale ~= 1 or sized[holder]) then
 		holder:SetHeight(saved.height * scale)
 		sized[holder] = scale ~= 1 or nil
@@ -258,12 +320,13 @@ function Apply()
 	-- (Its cost and the mana after it, on the bars as they are now: PersonalManaCost.lua.)
 	if ns.UpdateManaCost then ns.UpdateManaCost() end
 	local look = ns.StyleOn("prdStyle") and Look() or nil
-	if not look and not next(own) then return end
+	local mana = ns.PersonalManaBar and ns.PersonalManaBar()
+	if not look and not next(own) and not mana then return end
 	local r, g, b
 	if look then r, g, b = HealthColor(look) end
 	DressBar(health, holder, look, "prdHealthHeight", r and { r, g, b } or nil)
 	DressBar(power, nil, look, "prdPowerHeight")
-	local mana = ns.PersonalManaBar and ns.PersonalManaBar()
+	SpacePower(holder, power, ns.PersonalBarGap(look or false))
 	if mana then
 		CopyTrim(power, mana)
 		DressBar(mana, nil, look, "prdManaHeight")
@@ -363,9 +426,13 @@ function ns.MakePersonalPreview(parent, width)
 		local _, _, realHealth, realPower = Parts()
 		-- (The mana bar while it's ticked: a third bar, under the power bar, in
 		-- the power bar's game fill.)
-		local withMana = ns.PERSONAL_MANA and look.prdMana and true or false
+		local withMana = ns.PERSONAL_MANA and ns.db.prdMana and true or false
 		mana:SetShown(withMana)
-		pieces:SetPoint("TOP", withMana and mana or power, "BOTTOM", 0, -6)
+		-- (Spaced for the border: ns.PersonalBarGap.)
+		local gap, reach = ns.PersonalBarGap(look)
+		power:SetPoint("TOP", health, "BOTTOM", 0, -(gap or 3))
+		mana:SetPoint("TOP", power, "BOTTOM", 0, -(gap or 3))
+		pieces:SetPoint("TOP", withMana and mana or power, "BOTTOM", 0, -6 - (reach or 0))
 		for _, info in ipairs({ { health, realHealth, "prdHealthHeight", 10 }, { power, realPower, "prdPowerHeight", 8 },
 			{ mana, realPower, "prdManaHeight", 8 } }) do
 			local bar = info[1]
@@ -411,7 +478,7 @@ local PRESET_KEYS = { "prdTexture", "prdBorder", "prdBorderSize", "prdBorderR", 
 
 function ns.CreatePersonalStylePanel(kit)
 	local canvas, content = kit.CreateScrollPage()
-	local title = kit.Label(content, "GameFontNormalLarge", L["Personal resources"])
+	local title = kit.Label(content, "GameFontNormalLarge", L["Personal Resource Display"])
 	title:SetPoint("TOPLEFT", 16, -16)
 	local intro = kit.PageIntro(content, title,
 		L["How the personal resource display under your character looks: its health and power bars, and " ..
@@ -466,7 +533,8 @@ function ns.CreatePersonalStylePanel(kit)
 		nil, "%")
 	sizes:Box(L["Class resource"], "prdPiecesScale", 0, 100, 5, "%d", 100,
 		L["How big your class resource is (combo points, holy power, runes and the like), next to the game's."], nil, "%")
-	local function ManaOn(db) return rows.On(db) and Look().prdMana end
+	-- (The mana bar's rows: while it's on, on the UI Manager's Personal Resources page.)
+	local function ManaOn(db) return rows.On(db) and db.prdMana end
 	if ns.PERSONAL_MANA then
 		sizes:Box(L["Mana"], "prdManaHeight", 0, 100, 5, "%d", 100,
 			L["The mana bar's height, next to the power bar's."], ManaOn, "%")
@@ -481,13 +549,10 @@ function ns.CreatePersonalStylePanel(kit)
 	rows.Swatch(last, "prdHealthColor", { "prdHealthR", "prdHealthG", "prdHealthB" },
 		L["The health bar's color, for Custom."])
 
-	-- Mana under the power bar, when it isn't your power (PersonalMana.lua).
+	-- Mana under the power bar, when it isn't your power (PersonalMana.lua;
+	-- turned on on the UI Manager's Personal Resources page).
 	if ns.PERSONAL_MANA then
 		stack:Header(content, L["Mana bar"])
-		rows.Check("prdMana", L["Show your mana when it isn't your power"],
-			L["The game shows only your main power under your character: Maelstrom, Insanity, Astral Power, " ..
-			"rage or energy in a form. Ticked, your mana gets a bar of its own under it. When it comes up is the " ..
-			"Personal mana bar row on the Standard Frames page."])
 		local manaLast = rows.Choices(L["Color:"], "prdManaColor", {
 			{ "game", L["The game's"] },
 			{ "custom", L["Custom"], L["A color of your own (the swatch)."] },
@@ -498,5 +563,5 @@ function ns.CreatePersonalStylePanel(kit)
 
 	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))
 	canvas:Hide()
-	kit.RegisterSubpage(canvas, "Personal Style", L["Personal resources"])
+	kit.RegisterSubpage(canvas, "Personal Style", L["Personal Resource Display"])
 end

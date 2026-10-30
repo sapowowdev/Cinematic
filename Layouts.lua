@@ -182,6 +182,8 @@ local DESIGN = {
 -- (in it, the game stacks it above whatever pet or stance bar is up). The
 -- pet and stance bars and the vehicle leave button stay in theirs: pinned
 -- to bar 2, they went to the screen's top left on characters without it.
+-- The party frames raid-style (their line's first setting, '$: setting 4,
+-- UseRaidStylePartyFrames, 1).
 local PURE_CINEMA_SYSTEMS = {
 	"0 0 1 7 7 UIParent 0.0 45.0 -1 ##$$%/&('%)#+#,$",
 	"0 1 1 7 7 UIParent 0.0 45.0 -1 ##$$%/&('%(#,$",
@@ -199,7 +201,7 @@ local PURE_CINEMA_SYSTEMS = {
 	"3 0 1 8 7 UIParent -300.0 250.0 -1 $#3#",
 	"3 1 1 6 7 UIParent 300.0 250.0 -1 %#3#",
 	"3 2 1 6 7 UIParent 520.0 265.0 -1 %#&#3#",
-	"3 3 1 0 2 CompactRaidFrameManager 0.0 -7.0 -1 '#(#)#-=.+/#1$3#5#6(7-7$8(9(",
+	"3 3 1 0 2 CompactRaidFrameManager 0.0 -7.0 -1 '$(#)#-=.+/#1$3#5#6(7-7$8(9(",
 	"3 4 1 0 2 CompactRaidFrameManager 0.0 -5.0 -1 ,#-=.+/#0#1#2(3#5#6(7-7$8(9(",
 	"3 5 1 5 5 UIParent 0.0 0.0 -1 &#*$3#",
 	"3 6 1 5 5 UIParent 0.0 0.0 -1 -=.+/#4$5#6(7-7$8(9(",
@@ -245,8 +247,10 @@ ns.EDIT_MODE_LAYOUTS = {
 	[ns.LAYOUT_NAME] = { export = nil, design = DESIGN, bars = { 2, 3 },
 		client = "forever" },
 	-- Retail laid out like WoW Forever's default (the retail profile "Forever").
-	-- Not designed yet: a copy of Modern until its export string's in.
-	CINE_RETAIL_FOREVER_LAYOUT = { export = nil, design = {},
+	-- Not designed yet: a copy of Modern until its export string's in (its
+	-- party frames raid-style, as Forever's).
+	CINE_RETAIL_FOREVER_LAYOUT = { export = nil,
+		design = { { UNIT_FRAME, PARTY, nil, nil, nil, nil, nil, { [RAID_STYLE_PARTY] = 1 } } },
 		client = "retail" },
 	-- (the Pure Cinema profile's on retail)
 	["Personal Resource Centered"] = { systems = PURE_CINEMA_SYSTEMS,

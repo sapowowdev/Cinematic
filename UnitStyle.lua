@@ -217,13 +217,18 @@ local function DressSkin(skin, view)
 end
 
 -- A bar's fill as view says (view nil: the game's); color: its color, or
--- nil for the game's.
-local function DressBar(bar, view, r, g, b)
+-- nil for the game's. tint: a color for our fill where the game's is white
+-- (retail's health bar: its green is in the art, which ours doesn't have).
+local function DressBar(bar, view, r, g, b, tint)
 	if not (bar and bar.SetStatusBarTexture) or (bar.IsForbidden and bar:IsForbidden()) then return end
 	local saved = OwnOf(bar)
 	dressing = true
 	if view and ns.SetBarTexture(bar, view.ufTexture) then
 		saved.ours = true
+		local c = saved.color
+		if not r and tint and (not c or (c[1] > 0.95 and c[2] > 0.95 and c[3] > 0.95)) then
+			r, g, b = tint[1], tint[2], tint[3]
+		end
 	elseif saved.ours then
 		saved.ours = nil
 		local fill = saved.atlas or saved.file
@@ -335,6 +340,7 @@ end
 
 local hooked = setmetatable({}, { __mode = "k" })
 local Dress
+local HEALTH_GREEN = { 0, 0.8, 0 }
 
 -- One frame (id) as the page says, every game frame it covers.
 local function DressFrame(info)
@@ -346,7 +352,7 @@ local function DressFrame(info)
 			local health, power, text, portrait = Parts(frame)
 			local r, g, b
 			if view then r, g, b = HealthColor(view, unit) end
-			DressBar(health, view, r, g, b)
+			DressBar(health, view, r, g, b, HEALTH_GREEN)
 			DressBar(power, view)
 			DressName(text, view, unit)
 			DressPortrait(portrait, view, unit)

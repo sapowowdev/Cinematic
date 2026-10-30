@@ -4477,6 +4477,15 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.healVisionDefaultsV1 = true
 		end
+		-- The pet frame kept up until its health is full (Personal Resources)
+		-- off to start with now: off in every profile. Once.
+		if not ns.db.petWhenNotFullOffV1 then
+			ns.db.petWhenNotFull = false
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then saved.petWhenNotFull = nil end
+			end
+			ns.db.petWhenNotFullOffV1 = true
+		end
 		-- The letterbox's height and opacity moved to the Style hub's Letterbox
 		-- page: a height or opacity of your own turns it on, to keep them. Once.
 		if not ns.db.letterboxStyleV1 then

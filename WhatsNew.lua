@@ -251,6 +251,7 @@ local THANKS = {
 	"Gidgiddoni2000",
 	"andygoyap",
 	"sprdrgrllibby",
+	"zu_sushi",
 }
 
 local function CreateThanksPanel(kit)

@@ -11,7 +11,7 @@ local L = ns.L
 local PAGES = {
 	{ "Unit frames", "Unit Style", { "ufTexture", "ufFont", "ufOutline", "ufBorder" } },
 	{ "Raid frames", "Raid Style", { "rfTexture", "rfFont", "rfOutline", "rfBorder" } },
-	{ "Personal resources", "Personal Style", { "prdTexture", "prdBorder" } },
+	{ "Personal Resource Display", "Personal Style", { "prdTexture", "prdBorder" } },
 	{ "Tooltips", "Tooltip Style", { "tooltipBarTexture", "tooltipFont", "tooltipOutline", "tooltipEdge" } },
 	{ "Cast bars", "Cast Bar Style", { "plateCastFill", "plateCastFont", "plateCastOutline", "plateCastBorder" } },
 	{ "Chat bubbles", "Bubble Style", { "bubblesFont", "bubblesOutline", "bubblesEdge" } },
@@ -25,7 +25,8 @@ local KIND_NAMES = { texture = "Texture", font = "Font", outline = "Outline", bo
 -- Every page's look again (General's settings changing).
 local function RefreshAll()
 	for _, refresh in ipairs({ ns.RefreshPersonalStyle, ns.RefreshTooltipStyle, ns.RefreshBubbleStyle,
-		ns.RefreshQuestTalkStyle, ns.RefreshQuestItemStyle, ns.RefreshRollStyle, ns.RefreshPlateCastStyle }) do
+		ns.RefreshQuestTalkStyle, ns.RefreshQuestItemStyle, ns.RefreshRollStyle, ns.RefreshPlateCastStyle,
+		ns.RefreshUnitStyle, ns.RefreshRaidStyle }) do
 		if refresh then pcall(refresh) end
 	end
 end
@@ -123,7 +124,7 @@ local CELLS = {
 	{ "Unit frames", "MakeUnitStylePreview" },
 	{ "Raid frames", "MakeRaidStylePreview" },
 	{ "Nameplate", "MakeGeneralPlatePreview" },
-	{ "Personal resources", "MakePersonalPreview" },
+	{ "Personal Resource Display", "MakePersonalPreview" },
 	{ "Tooltips", "MakeTooltipPreview" },
 	{ "Chat bubbles", "MakeBubblePreview" },
 	{ "Quest talk", "MakeQuestTalkPreview" },
@@ -281,14 +282,14 @@ function ns.CreateGeneralStylePanel(kit)
 	stack:Header(content, L["Shared look"])
 	rows.Texture(L["Bar texture:"], "styleTexture", L["Every page's bars that follow General. The game's: " ..
 		"each page's own. Below the game's own few: any other addon shares (through LibSharedMedia)."], nil,
-		{ 0.25, 0.75, 0.3 }, L["Each page's own"])
+		{ 0.25, 0.75, 0.3 })
 	rows.Font("styleFont", L["Every page's words that follow General. The game's: each page's own. Russian, " ..
 		"Korean or Chinese text keeps the game's, so its letters show."])
 	rows.Outline("styleOutline", L["Outline"], 2, { [0] = L["None"], L["Thin"], L["Thick"] },
-		L["A black border round the letters, on every page that follows General. Each page's own: as each " ..
-		"page's default has it."], nil, L["Each page's own"])
-	rows.Border(L["Border:"], "styleBorder", { game = L["Each page's own"] }, L["The border round every page's " ..
-		"bars, panels and buttons that follow General. Each page's own: as each page's default has it. Custom: " ..
+		L["A black border round the letters, on every page that follows General. The game's: as each " ..
+		"page's default has it."], nil, L["The game's"])
+	rows.Border(L["Border:"], "styleBorder", { game = true }, L["The border round every page's " ..
+		"bars, panels and buttons that follow General. The game's: as each page's default has it. Custom: " ..
 		"its thickness and color under it."])
 
 	-- The game's own nameplate Style (retail's Options > Nameplates), shown

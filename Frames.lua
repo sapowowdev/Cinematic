@@ -1590,7 +1590,7 @@ ns.COMBAT_SHOW = {
 	-- Follows the resource bar's ticks until set (see ROW_FALLBACK).
 	{ key = "prdmana", label = L["Personal mana bar"], default = true, frames = { "CinematicPersonalMana" },
 		tip = L["Your mana under your character when it isn't your power (Elemental Shaman, Shadow Priest...): " ..
-			"with the Style hub's Personal resources page showing it."] },
+			"once it's on, on the Personal Resources page."] },
 	{ key = "target", label = L["Target"], default = true, frames = { "TargetFrame" } },
 	{ key = "tot", label = L["Target of target"], default = true, frames = { "TargetFrameToT" } },
 	{ key = "focus", label = L["Focus"], default = true, frames = { "FocusFrame" } },

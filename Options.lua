@@ -1424,7 +1424,7 @@ do
 			{ "Unit Style", "Interface\\Icons\\INV_Misc_Head_Human_01", label = "Unit frames",
 				section = "Game" },
 			{ "Raid Style", "Interface\\Icons\\INV_Misc_GroupNeedMore", label = "Raid frames", section = "Game" },
-			{ "Personal Style", "Interface\\Icons\\Spell_Holy_SealOfVengeance", label = "Personal resources",
+			{ "Personal Style", "Interface\\Icons\\Spell_Holy_SealOfVengeance", label = "Personal Resource Display",
 				section = "Game" },
 			{ "Letterbox Style", "Interface\\Icons\\Spell_Shadow_ShadesOfDarkness", label = "Letterbox",
 				section = "Cinematic" },
@@ -1836,27 +1836,27 @@ local function CreateRevealPanel()
 		"Buffs/debuffs page, the minimap on the Minimap page, the quest tracker on the Quest tracker page, " ..
 		"chat on the Chat page."])
 
-	-- Fading (full width): how fast the UI goes and comes back
-	local fadingHeader = Header(content, L["Fading"], subtitle, -20)
+	-- Each slider on one line with its name (an inline stack, as on Graphics+).
+	local stack = Stack(subtitle, "label", true)
 
-	local fadeIn = Slider(content, "fadeInTime", L["Fade in time"], 0, 10, 0.1, L["%.1f sec"])
-	fadeIn:SetPoint("TOPLEFT", fadingHeader, "BOTTOMLEFT", 2, -26)
+	-- Fading: how fast the UI goes and comes back
+	stack:Header(content, L["Fading"])
+
+	local fadeIn = stack:Add(Slider(content, "fadeInTime", L["Fade in time"], 0, 10, 0.1, L["%.1f sec"]), "slider")
 	Tooltip(fadeIn, L["How long things take to fade in out of combat: targeting something, a mouseover, " ..
 		"a window opening. In fights the Combat fade in time is used."])
 
-	local fadeOut = Slider(content, "fadeOutTime", L["Fade out time"], 0, 10, 0.1, L["%.1f sec"])
-	fadeOut:SetPoint("TOPLEFT", fadeIn, "BOTTOMLEFT", 0, -34)
+	local fadeOut = stack:Add(Slider(content, "fadeOutTime", L["Fade out time"], 0, 10, 0.1, L["%.1f sec"]), "slider")
 	Tooltip(fadeOut, L["How long things take to fade out, in and out of fights: letting go of a target, after a " ..
 		"mouseover, and after a fight once the Calm Timer below is over. The mouseover time (Mouseover " ..
 		"groups page) includes it: a time shorter than the fade just fades straight away."])
 
-	local combatFadeIn = Slider(content, "combatFadeInTime", L["Combat fade in time"], 0, 10, 0.1, L["%.1f sec"])
-	combatFadeIn:SetPoint("TOPLEFT", fadeOut, "BOTTOMLEFT", 0, -34)
+	local combatFadeIn = stack:Add(Slider(content, "combatFadeInTime", L["Combat fade in time"], 0, 10, 0.1,
+		L["%.1f sec"]), "slider")
 	Tooltip(combatFadeIn, L["How long things take to fade in during a fight: the UI coming back as " ..
 		"one starts, and anything else that shows mid-fight. Other times use the Fade in time."])
 
-	local calm = Slider(content, "calmTime", L["Calm Timer"], 0, 120, 5, L["%d sec after a fight"])
-	calm:SetPoint("TOPLEFT", combatFadeIn, "BOTTOMLEFT", 0, -34)
+	local calm = stack:Add(Slider(content, "calmTime", L["Calm Timer"], 0, 120, 5, L["%d sec after a fight"]), "slider")
 	Tooltip(calm, L["How long things take to settle back into CineMode after a fight. " ..
 		"Nameplates and names ticked In combat stay up this long (so they don't drop away " ..
 		"between pulls), and visual effects that step aside for fights wait this " ..
@@ -1892,7 +1892,7 @@ local function CreateRevealPanel()
 		-- (Just the checkbox below: a full Refresh on every step of a drag lags.)
 		if calmPet then calmPet:Refresh() end
 	end)
-	calmFull:SetPoint("TOPLEFT", calm, "BOTTOMLEFT", 0, -34)
+	stack:Add(calmFull, "slider")
 	Tooltip(calmFull, L["The Calm Timer runs out early once your health and power are back to full " ..
 		"after a fight (mana, energy and focus refilled; rage, runic power, Insanity and the like " ..
 		"drained). The seconds: how long things stay up once you're full, before they fade out at the " ..
@@ -1903,7 +1903,7 @@ local function CreateRevealPanel()
 	calmPet = Check(content, "calmEndsAtFullPet", L["Include your pet"],
 		L["With a pet out, the Calm Timer only ends early once its health is back to full as well. " ..
 		"No pet, or a dead one: just yours counts."])
-	calmPet:SetPoint("TOPLEFT", calmFull, "BOTTOMLEFT", 20, -14)
+	stack:Add(calmPet, "check", 16)
 	GreyUnless(calmPet, function(db) return db.calmEndsAtFull end)
 
 	-- Set aside for now (hidden, their settings kept as they are): the Exit
@@ -1953,40 +1953,46 @@ local function CreateRevealPanel()
 		control:Hide()
 	end
 
-	local combatTextHeader = Header(content, L["Combat text"], calmPet, -24)
-	combatTextHeader:SetPoint("TOPLEFT", calmPet, "BOTTOMLEFT", -22, -24)
+	-- (Standard Frames' In combat rows, brought up early.)
+	local hostileCast = Check(content, "fadeInOnHostileCast", L["Cast fade into combat"],
+		L["Out of combat, casting a spell at an enemy brings up the frames ticked In combat, as if the fight " ..
+		"had started: they fade in over the cast and are fully up as it lands. Instant spells bring them up " ..
+		"at the Combat fade in time."])
+	stack:Add(hostileCast, "check")
+	GreyUnless(hostileCast, function(db) return db.stayInCombat end)
+
+	stack:Header(content, L["Combat text"])
 
 	local combatText = Check(content, "hideCombatText", L["Hide combat text out of combat"],
 		L["No floating damage and healing numbers (like \"+10\" from a heal or regen) in cinematic " ..
 		"mode while you're out of combat. They come back the moment a fight starts and stay for the " ..
 		"Calm Timer after it, and your " ..
 		"combat text settings are put back when the UI returns."])
-	combatText:SetPoint("TOPLEFT", combatTextHeader, "BOTTOMLEFT", -2, -6)
+	stack:Add(combatText, "check")
 
 	local worldText = Check(content, "hideWorldText", L["Hide all floating text: XP, damage, healing (restart required)"],
 		L["The game has no way to hide just the XP you gain over your character: it draws that, " ..
 		"the damage and healing numbers, misses and the like all in one font. This blanks that " ..
 		"font, so they all go, always (not just in CineMode). Takes effect after you fully " ..
 		"restart the game; /reload isn't enough."])
-	worldText:SetPoint("TOPLEFT", combatText, "BOTTOMLEFT", 0, -2)
+	stack:Add(worldText, "check")
 	worldText:HookScript("OnClick", function()
 		StaticPopup_Show("CINEMATIC_WORLD_TEXT_RESTART")
 	end)
 
 	-- The red error text at the top of the screen, in and out of fights
 	-- (CineMode or not).
-	local errorsHeader = Header(content, L["Hide error messages"], worldText, -24)
-	errorsHeader:SetPoint("TOPLEFT", worldText, "BOTTOMLEFT", 2, -24)
+	stack:Header(content, L["Hide error messages"])
 
 	local errorsInCombat = Check(content, "hideErrorsInCombat", L["In combat"],
 		L["No red error text at the top of the screen (like \"Target not in line of sight\" or " ..
 		"\"Can't do that while moving\") while you're fighting, and for the Calm Timer after it."])
-	errorsInCombat:SetPoint("TOPLEFT", errorsHeader, "BOTTOMLEFT", -2, -6)
+	stack:Add(errorsInCombat, "check")
 
 	local errorsOutOfCombat = Check(content, "hideErrorsOutOfCombat", L["Out of combat"],
 		L["No red error text at the top of the screen (like \"Target not in line of sight\" or " ..
 		"\"Can't do that while moving\") while you're out of combat."])
-	errorsOutOfCombat:SetPoint("TOPLEFT", errorsInCombat, "BOTTOMLEFT", 0, -2)
+	stack:Add(errorsOutOfCombat, "check")
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -5223,17 +5229,11 @@ local function CreateCombatPanel()
 		calm:SetPoint("TOPLEFT", switch, "BOTTOMLEFT", 0, -2)
 		GreyUnless(calm, function(db) return db.stayInCombat end)
 	end
-	local hostileCast = Check(content, "fadeInOnHostileCast", L["Cast fade into combat"],
-		L["Out of combat, casting a spell at an enemy brings up the frames ticked In combat, as if the fight " ..
-		"had started: they fade in over the cast and are fully up as it lands. Instant spells bring them up " ..
-		"at the Combat fade in time."])
-	hostileCast:SetPoint("TOPLEFT", calm or switch, "BOTTOMLEFT", 0, -2)
-	GreyUnless(hostileCast, function(db) return db.stayInCombat end)
 
 	-- (Your player frame kept up while you recover: the Personal Resources page.)
 	local INDENT = 16
 	-- The lowest option so far, and how far in from the column edge it sits.
-	local lastCheck, lastIndent = hostileCast, 0
+	local lastCheck, lastIndent = calm or switch, 0
 
 	-- Pet happiness: classic hunters only.
 	if not ns.isRetail and select(2, UnitClass("player")) == "HUNTER" then

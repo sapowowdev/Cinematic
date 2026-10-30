@@ -2,8 +2,10 @@
 -- power bar, for when mana isn't the power it shows (Elemental and
 -- Enhancement Shaman, Shadow Priest, Balance Druid, druids in forms). The
 -- game has a bar for it (AlternatePowerBar) but keeps it hidden.
--- Off to start with: the Style hub's Personal resources page turns it on
--- (prdMana) and dresses it with the other two (PersonalStyle.lua).
+-- Off to start with: the UI Manager's Personal Resources page turns it on
+-- (prdMana, PersonalResources.lua), and can keep it to a few seconds after
+-- you use mana (prdManaRecent); the Style hub's Personal Resource Display page
+-- dresses it with the other two (PersonalStyle.lua).
 -- It's a child of the display, so it moves with Edit Mode and comes and goes
 -- with it. Its fade is the Standard Frames row Personal mana bar (prdmana,
 -- its stand-in CinematicPersonalMana: Frames.lua), which calls
@@ -16,7 +18,7 @@ local _, ns = ...
 
 local display = _G.PersonalResourceDisplayFrame
 if not (ns.isRetail and display) then return end
-ns.PERSONAL_MANA = true -- (the Style page's mana rows: shown)
+ns.PERSONAL_MANA = true -- (the mana rows on Personal Resources and its Style page: shown)
 
 local MANA = Enum and Enum.PowerType and Enum.PowerType.Mana or 0
 local GAME_FILL = "Interface\\TargetingFrame\\UI-StatusBar" -- (when the game's mana bar has none to copy)
@@ -30,14 +32,10 @@ local function Readable(value)
 	return value ~= nil and not (issecretvalue and issecretvalue(value))
 end
 
-local function Look()
-	return ns.StyleLook("prdStyle")
-end
-
--- Whether mana has a bar of its own now: ticked, the page on, and mana not
--- the power the display shows while you have some. (Secret: as it was.)
+-- Whether mana has a bar of its own now: ticked, and mana not the power the
+-- display shows while you have some. (Secret: as it was.)
 local function Wanted()
-	if not (ns.StyleOn("prdStyle") and Look().prdMana) then return false end
+	if not (ns.db and ns.db.prdMana) then return false end
 	local powerType = UnitPowerType("player")
 	local maxMana = UnitPowerMax("player", MANA)
 	if not (Readable(powerType) and Readable(maxMana)) then return shown end
@@ -160,12 +158,14 @@ local function Place()
 		local ok, bottom, powerBottom = pcall(function() return pieces:GetBottom(), power:GetBottom() end)
 		if ok and Readable(bottom) and Readable(powerBottom) and bottom < powerBottom then above = pieces end
 	end
+	-- (Spaced for a border of ours: PersonalStyle.lua.)
+	local gap = ns.PersonalBarGap and ns.PersonalBarGap() or GAP
 	bar:ClearAllPoints()
 	if above == power then
-		bar:SetPoint("TOPLEFT", power, "BOTTOMLEFT", 0, -GAP)
-		bar:SetPoint("TOPRIGHT", power, "BOTTOMRIGHT", 0, -GAP)
+		bar:SetPoint("TOPLEFT", power, "BOTTOMLEFT", 0, -gap)
+		bar:SetPoint("TOPRIGHT", power, "BOTTOMRIGHT", 0, -gap)
 	else
-		bar:SetPoint("TOP", above, "BOTTOM", 0, -GAP)
+		bar:SetPoint("TOP", above, "BOTTOM", 0, -gap)
 		local ok, width = pcall(power.GetWidth, power)
 		bar:SetWidth(ok and Readable(width) and width > 0 and width or 200)
 	end
@@ -215,8 +215,11 @@ local function PlaceCastBar()
 		local barLeft, barRight = bar:GetLeft(), bar:GetRight()
 		local castLeft, castRight = cast:GetLeft(), cast:GetRight()
 		if not (barTop and castTop and barLeft and castLeft) then return end
-		-- (Under our bar's top, side by side with it, and closer than the gap.)
-		local want = (barBottom - CAST_GAP) * bs
+		-- (Under our bar's top, side by side with it, and closer than the gap,
+		-- under any border line of ours.)
+		local reach
+		if ns.PersonalBarGap then reach = select(2, ns.PersonalBarGap()) end
+		local want = (barBottom - CAST_GAP - (reach or 0)) * bs
 		if castTop * cs > barTop * bs or castTop * cs <= want then return end
 		if castRight * cs < barLeft * bs or castLeft * cs > barRight * bs then return end
 		return CastPoints(cast), (castTop * cs - want) / cs
@@ -274,6 +277,61 @@ function ns.ColorPersonalMana(look)
 	end
 end
 
+-- Its alpha: while either row is faded (Frames.lua's fade, each tick) it
+-- takes its own row's; with both up it follows the display's. Times recent:
+-- how far it's faded in after you used mana (prdManaRecent; 1 while that's off).
+local held = false
+local rowHealth, rowLevel = 1, 1 -- (the rows' alphas, as last given)
+local recent = 1
+local function Paint()
+	if not bar then return end
+	local level = rowLevel * recent
+	if level < 1 or rowHealth < 1 then
+		if not held then bar:SetIgnoreParentAlpha(true) end
+		held = true
+		bar:SetAlpha(level)
+	elseif held then
+		held = false
+		bar:SetIgnoreParentAlpha(false)
+		bar:SetAlpha(1)
+	end
+end
+
+function ns.FadePersonalMana(health, level)
+	rowHealth, rowLevel = health, level
+	Paint()
+end
+
+-- Only for a while after you use mana (prdManaRecent: seconds; 0: always).
+-- Used: your mana went down, or (mana secret, in fights) a cast that costs mana.
+local RECENT_FADE = 0.3 -- seconds to fade in or out
+local lastUsed = -math.huge
+local lastMana -- (readable: the last seen, to tell a drop)
+
+local function RecentNow()
+	local seconds = ns.db and tonumber(ns.db.prdManaRecent) or 0
+	return seconds <= 0 or GetTime() - lastUsed < seconds
+end
+
+-- (Runs while it's in use and fading, or kept to a while: off otherwise.)
+local recentDriver = CreateFrame("Frame")
+recentDriver:Hide()
+recentDriver:SetScript("OnUpdate", function(self, elapsed)
+	local target = RecentNow() and 1 or 0
+	if recent ~= target then
+		local step = elapsed / RECENT_FADE
+		recent = target > recent and math.min(target, recent + step) or math.max(target, recent - step)
+		Paint()
+	elseif not shown or (ns.db and tonumber(ns.db.prdManaRecent) or 0) <= 0 then
+		self:Hide()
+	end
+end)
+
+local function Used()
+	lastUsed = GetTime()
+	if shown then recentDriver:Show() end
+end
+
 -- Shown or not (the Style page's settings changing, your spec or form
 -- changing). dressing: the Style page's own call, which dresses it next;
 -- else a bar just made is dressed here.
@@ -281,9 +339,14 @@ local function Update(dressing)
 	local want = Wanted()
 	local made = bar
 	if want and not Make() then want = false end
+	local was = shown
 	shown = want
 	if not bar then return end
 	if want then
+		-- (Coming up: faded in only if you've used mana lately.)
+		if not was then recent = RecentNow() and 1 or 0 end
+		recentDriver:Show()
+		Paint()
 		Place()
 		if not made and not dressing and ns.RefreshPersonalStyle then ns.RefreshPersonalStyle() end
 	end
@@ -304,26 +367,10 @@ function ns.PersonalManaBar()
 	return bar
 end
 
--- Each tick, after the fade (Frames.lua): while either row is faded it takes
--- its own row's alpha; with both up it follows the display's.
-local held = false
-function ns.FadePersonalMana(health, level)
-	if not bar then return end
-	if level < 1 or health < 1 then
-		if not held then bar:SetIgnoreParentAlpha(true) end
-		held = true
-		bar:SetAlpha(level)
-	elseif held then
-		held = false
-		bar:SetIgnoreParentAlpha(false)
-		bar:SetAlpha(1)
-	end
-end
-
 -- For /cine debug plates.
 function ns.DescribePersonalMana()
 	if not bar then
-		return ("mana bar: not made (ticked %s, page %s)"):format(tostring(Look().prdMana),
+		return ("mana bar: not made (ticked %s, style page %s)"):format(tostring(ns.db.prdMana),
 			tostring(ns.StyleOn("prdStyle")))
 	end
 	local powerType, maxMana = UnitPowerType("player"), UnitPowerMax("player", MANA)
@@ -339,13 +386,14 @@ function ns.DescribePersonalMana()
 	local okArt, powerAtlas, powerFile = pcall(function() return powerFill:GetAtlas(), powerFill:GetTexture() end)
 	local function Shown(value) return okArt and Readable(value) and tostring(value) or "?" end
 	return ("mana bar: %s, fill %s (%s), color %.2f %.2f %.2f, power bar's fill %s / %s, alpha %s%s, "
-		.. "power type %s, max mana %s, words: %s, cast bar %s"):format(
+		.. "power type %s, max mana %s, words: %s, cast bar %s, recent %.2f (%s s, used %s s ago)"):format(
 		shown and "in use" or "not in use", tostring(gameFill), atlas and "atlas" or "tinted", r or 0, g or 0, b or 0,
 		Shown(powerAtlas), Shown(powerFile),
 		okAlpha and Readable(alpha) and ("%.2f"):format(alpha) or "secret",
 		held and " (ours)" or "", Readable(powerType) and tostring(powerType) or "secret",
 		Readable(maxMana) and tostring(maxMana) or "secret", #words > 0 and table.concat(words, ", ") or "none",
-		castMoved and ("moved down %.1f"):format(castMoved.own[1][5] - castMoved.ours[1][5]) or "not moved")
+		castMoved and ("moved down %.1f"):format(castMoved.own[1][5] - castMoved.ours[1][5]) or "not moved",
+		recent, tostring(ns.db.prdManaRecent), lastUsed > -math.huge and ("%.1f"):format(GetTime() - lastUsed) or "never")
 end
 
 local watcher = CreateFrame("Frame")
@@ -355,10 +403,35 @@ watcher:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
 watcher:RegisterUnitEvent("UNIT_DISPLAYPOWER", "player")
 watcher:RegisterUnitEvent("UNIT_MAXPOWER", "player")
 watcher:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player")
-watcher:SetScript("OnEvent", function(_, event, _, powerToken)
+watcher:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+-- (A cast that costs mana, for when mana itself is secret.)
+local function CostsMana(spellID)
+	local getCost = C_Spell and C_Spell.GetSpellPowerCost
+	local ok, costs = pcall(getCost, spellID)
+	if not (getCost and ok and type(costs) == "table") then return false end
+	for _, info in ipairs(costs) do
+		if Readable(info.type) and info.type == MANA and (not Readable(info.cost) or info.cost > 0) then
+			return true
+		end
+	end
+	return false
+end
+watcher:SetScript("OnEvent", function(_, event, _, arg2, arg3)
 	if event == "UNIT_POWER_FREQUENT" then
 		-- (A secret token can't be compared: maybe mana.)
-		if not Readable(powerToken) or powerToken == "MANA" then UpdateValue() end
+		if not Readable(arg2) or arg2 == "MANA" then
+			local mana = UnitPower("player", MANA)
+			if Readable(mana) then
+				if lastMana and mana < lastMana then Used() end
+				lastMana = mana
+			else
+				lastMana = nil
+			end
+			UpdateValue()
+		end
+		return
+	elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+		if lastMana == nil and CostsMana(arg3) then Used() end
 		return
 	end
 	Update()

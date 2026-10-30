@@ -227,12 +227,17 @@ end
 
 local OUTLINES = { [0] = "", "OUTLINE", "THICKOUTLINE" }
 
+-- (Flag by flag: a font's own can come back spaced, "MONOCHROME, OUTLINE",
+-- and SetFont won't take a blank one between commas.)
 local function Outlined(flags, outline)
-	flags = (flags or ""):gsub("THICKOUTLINE", ""):gsub("OUTLINE", "")
-	if OUTLINES[outline] ~= "" then
-		flags = flags .. "," .. OUTLINES[outline]
+	local kept = {}
+	for flag in tostring(flags or ""):gmatch("[^,%s]+") do
+		if flag ~= "OUTLINE" and flag ~= "THICKOUTLINE" then kept[#kept + 1] = flag end
 	end
-	return (flags:gsub("^,+", ""):gsub(",+$", ""):gsub(",,+", ","))
+	if OUTLINES[outline] and OUTLINES[outline] ~= "" then
+		kept[#kept + 1] = OUTLINES[outline]
+	end
+	return table.concat(kept, ",")
 end
 ns.OutlinedFlags = Outlined -- (the Name Style page's preview)
 

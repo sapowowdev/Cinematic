@@ -598,13 +598,21 @@ local function StepZoom(elapsed)
 		speed = math.max(ZOOM_MIN_SPEED, pathSpeed * ZOOM_HEADROOM + ZOOM_SPEED_EXTRA)
 	end
 	SetZoomSpeed(speed)
-	-- Steer toward where the path will be shortly.
+	-- Steer toward where the path will be shortly. The commands add up in the
+	-- game: with the camera lagging behind (at the crawl after the path, or
+	-- slowed as you turned it), each one measured from the camera alone piled
+	-- more on (47 asking +46.6 yards for +5.4 moved), and it all went at once
+	-- when your speed came back. So never ask past the path from where the
+	-- commands so far already have it heading.
 	if now - zoomer.sentAt >= ZOOM_SEND_EVERY then
-		local miss = ZoomPath(math.min(T, t + ZOOM_LEAD * rate)) - zoom -- (positive: further out)
-		if math.abs(miss) > ZOOM_DONE then
+		local point = ZoomPath(math.min(T, t + ZOOM_LEAD * rate))
+		local miss = point - zoom -- (positive: further out)
+		local ahead = point - (zoomer.from + (zoomer.asked or 0)) -- (what's left past the commands sent)
+		local ask = (ahead > 0) == (miss > 0) and math.min(math.abs(miss) * ZOOM_GAIN, math.abs(ahead)) or 0
+		if math.abs(miss) > ZOOM_DONE and ask > 0 then
 			zoomer.sentAt = now
-			Send(miss < 0 and "CameraZoomIn" or "CameraZoomOut", math.abs(miss) * ZOOM_GAIN)
-			zoomer.sends, zoomer.asked = (zoomer.sends or 0) + 1, (zoomer.asked or 0) + miss * ZOOM_GAIN
+			Send(miss < 0 and "CameraZoomIn" or "CameraZoomOut", ask)
+			zoomer.sends, zoomer.asked = (zoomer.sends or 0) + 1, (zoomer.asked or 0) + (miss < 0 and -ask or ask)
 		end
 	end
 end

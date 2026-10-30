@@ -112,7 +112,14 @@ local function Font(fs)
 			if info[1] == font and info[3] then file = info[3] end
 		end
 	end
-	fs:SetFont(file, height * size, ns.OutlinedFlags and ns.OutlinedFlags(flags, outline) or flags)
+	local wanted = ns.OutlinedFlags and ns.OutlinedFlags(flags, outline) or flags or ""
+	local ok, err = pcall(fs.SetFont, fs, file, height * size, wanted)
+	if not ok then
+		-- (Flags the game won't take: kept as they were, and what they were logged.)
+		pcall(fs.SetFont, fs, file, height * size, flags or "")
+		ns.Log("questtalk", ("font: flags %q (own %q, outline %s) refused: %s"):format(tostring(wanted),
+			tostring(flags), tostring(outline), tostring(err)))
+	end
 end
 -- (What the words' look is now, to tell when it's changed.)
 local function FontKey()

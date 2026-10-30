@@ -17,9 +17,11 @@ DEFAULTS.fightWaitPower = true      -- the resource bar waits for your power to 
 DEFAULTS.fightWaitHealth = false    -- ...the health bar for your health
 DEFAULTS.fightWaitPortrait = false  -- ...the player frame for either
 DEFAULTS.drainWhenNotEmpty = true   -- "until full" also waits for rage, runic power and the like to drain to 0
-DEFAULTS.petWhenNotFull = true      -- the pet frame stays up after a fight until its health is full
+DEFAULTS.petWhenNotFull = false     -- the pet frame stays up after a fight until its health is full
 DEFAULTS.lowManaShare = 0           -- the resource bar shows whenever mana is under this share (0: off)
 DEFAULTS.lowManaPortrait = false    -- ...and the player frame too
+DEFAULTS.prdMana = false            -- a mana bar of ours under them, when mana isn't your power (PersonalMana.lua)
+DEFAULTS.prdManaRecent = 3          -- ...only for this many seconds after you use mana (0: always)
 
 -- The resource bar's stand-in (Frames.lua; none: no personal resource display).
 local personalPower = _G.CinematicPersonalPower
@@ -165,8 +167,8 @@ function ns.CreatePersonalResourcesPanel(kit)
 		L["Your player frame, pet frame and personal resource display in CineMode: kept up while you recover " ..
 		"after a fight or run low on mana, and held back at the start of a fight until there's something to " ..
 		"see. When they come up at all (always, in fights, in places) is their rows' on the Standard Frames page."])
-	-- Their look: the Style hub's Personal resources page (PersonalStyle.lua).
-	ns.StyleLink(content, title, "Personal Style", L["Opens the Style hub's Personal resources page: how the " ..
+	-- Their look: the Style hub's Personal Resource Display page (PersonalStyle.lua).
+	ns.StyleLink(content, title, "Personal Style", L["Opens the Style hub's Personal Resource Display page: how the " ..
 		"bars look."], kit.Tooltip)
 	local stack = kit.Stack(intro, "label")
 	local function Tick(key, label, tip, enabledBy)
@@ -196,15 +198,18 @@ function ns.CreatePersonalResourcesPanel(kit)
 	-- Low mana: the resource bar (and the player frame, ticked) whenever mana is low.
 	stack:Header(content, L["Low mana"])
 	local function Percent(value) return value == 0 and L["Off"] or ("%d%%"):format(value) end
+	-- (Greys just its tick below: the whole menu's Refresh on every step of a
+	-- drag froze the game.)
+	local portraitTick
 	local lowMana = stack:Add(kit.Slider(content, "lowManaShare", L["Show below this much mana"], 0, 90, 5,
-		Percent, 100, function() kit.Refresh() end), "slider")
+		Percent, 100, function() if portraitTick then portraitTick:Refresh() end end), "slider")
 	kit.Tooltip(lowMana, hasDisplay
 		and L["In CineMode, your resource bar shows whenever your mana is under this share, in a fight or " ..
 		"not: drinking, or saving mana for the pull. Off: 0."]
 		or L["In CineMode, your player frame shows whenever your mana is under this share, in a fight or " ..
 		"not: drinking, or saving mana for the pull. Off: 0."])
 	if hasDisplay then
-		Tick("lowManaPortrait", L["Your player frame too"],
+		portraitTick = Tick("lowManaPortrait", L["Your player frame too"],
 			L["Low mana brings up your player frame as well as your resource bar."],
 			function(db) return (db.lowManaShare or 0) > 0 end)
 	end
@@ -223,6 +228,33 @@ function ns.CreatePersonalResourcesPanel(kit)
 	end
 	Tick("fightWaitPortrait", L["Player frame waits for your health or power to change"],
 		L["The same for your player frame: it comes up once your health or your power changes."], Fights)
+
+	-- Mana under the power bar, when it isn't your power (PersonalMana.lua; its
+	-- look: the Style hub's Personal Resource Display page).
+	if ns.PERSONAL_MANA then
+		stack:Header(content, L["Mana bar"])
+		local function Update()
+			if ns.UpdatePersonalMana then ns.UpdatePersonalMana() end
+		end
+		stack:Add(kit.Check(content, "prdMana", L["Show your mana when it isn't your power"],
+			L["The game shows only your main power under your character: Maelstrom, Insanity, Astral Power, " ..
+			"rage or energy in a form. Ticked, your mana gets a bar of its own under it. When it comes up is the " ..
+			"Personal mana bar row on the Standard Frames page."], function(value)
+			ns.GetDB().prdMana = value
+			if ns.RefreshPersonalStyle then ns.RefreshPersonalStyle() end -- (shown and dressed)
+			kit.Refresh()
+		end), "check")
+		local recentLine = kit.BoxLine(content)
+		stack:Add(recentLine, "label", 20)
+		local recentBox = recentLine:Box(L["Only after you use mana, for"], "prdManaRecent", 0, 60, 1, "%d", 1,
+			L["The mana bar shows for this many seconds after you spend mana, then fades out until you spend " ..
+			"some again. 0: whenever it's up."], Update, 40, L["seconds"])
+		kit.GreyUnless(recentBox, function(db) return db.prdMana end)
+		-- (And after the page's Reset, or a profile loaded: shown as the settings are now.)
+		local updater = CreateFrame("Frame", nil, content)
+		updater.Refresh = Update
+		kit.AddControl(updater)
+	end
 
 	-- Mana on its bars: a cast's cost and your mana after it, under your
 	-- character and on your player frame (PersonalManaCost.lua, PersonalManaText.lua).
