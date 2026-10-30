@@ -1012,6 +1012,14 @@ local BANNER_SCALE = 3.3 -- the text's size (its font's, times this)
 local BANNER_COLOR = { 0.72, 0.11, 0.14 }
 local BANNER_BLEED = { { -0.7, 0 }, { 0.7, 0 }, { 0, -0.7 }, { 0, 0.7 }, { -0.4, 0.4 }, { 0.4, -0.4 } }
 local BANNER_BLEED_ALPHA, BANNER_TEXT_ALPHA = 0.16, 0.9
+-- Or "wasted" (a nod to crime-sandbox films and games): a flat black band with
+-- hard edges, "wasted" on it in red with a dark outline (a picture: drawn in
+-- Pricedown by Tools/wasted-banner/render.py; the font isn't shipped), in quicker
+-- and kept up longer. (The death screen's grey wash does the rest.)
+local WASTED_WAIT, WASTED_IN, WASTED_HOLD, WASTED_OUT = 1.5, 0.4, 5, 1 -- seconds
+local WASTED_HEIGHT, WASTED_ALPHA = 0.16, 0.5 -- share of the screen height; band opacity
+local WASTED_TEXTURE = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\Wasted"
+local WASTED_SIZE = 0.1 -- the picture's height, a share of the screen's (4:1 wide)
 local banner = { started = nil, was = nil, bleed = {} }
 
 local function CreateDeathBanner()
@@ -1049,6 +1057,14 @@ local function CreateDeathBanner()
 		banner.bleed[i] = Text("ARTWORK", offset[1], offset[2], BANNER_BLEED_ALPHA)
 	end
 	banner.text = Text("OVERLAY", 0, 0, BANNER_TEXT_ALPHA)
+	banner.flat = frame:CreateTexture(nil, "BACKGROUND")
+	banner.flat:SetColorTexture(0, 0, 0, WASTED_ALPHA)
+	banner.flat:SetPoint("LEFT")
+	banner.flat:SetPoint("RIGHT")
+	banner.flat:SetPoint("CENTER")
+	banner.wasted = frame:CreateTexture(nil, "OVERLAY")
+	banner.wasted:SetTexture(WASTED_TEXTURE)
+	banner.wasted:SetPoint("CENTER")
 	-- One size throughout. Growing it (the frame's scale each frame, or a
 	-- Scale animation) redraws the letters at whole font sizes, so it grew in
 	-- jumps, from its top left corner: it wobbled (tested).
@@ -1059,6 +1075,22 @@ end
 
 local function ShowDeathBanner()
 	local height = UIParent:GetHeight()
+	local wasted = db.deathBannerStyle == "wasted"
+	banner.wastedStyle = wasted
+	banner.middle:SetShown(not wasted)
+	banner.top:SetShown(not wasted)
+	banner.bottom:SetShown(not wasted)
+	banner.holder:SetShown(not wasted)
+	banner.flat:SetShown(wasted)
+	banner.wasted:SetShown(wasted)
+	if wasted then
+		banner.flat:SetHeight(height * WASTED_HEIGHT)
+		banner.wasted:SetSize(height * WASTED_SIZE * 4, height * WASTED_SIZE)
+		banner.started = GetTime()
+		banner.frame:SetAlpha(0)
+		banner.frame:Show()
+		return
+	end
 	banner.middle:SetHeight(height * BANNER_HEIGHT)
 	banner.top:SetHeight(height * BANNER_EDGE)
 	banner.bottom:SetHeight(height * BANNER_EDGE)
@@ -1075,7 +1107,7 @@ local function UpdateDeathBanner()
 	if not banner.frame then
 		return
 	end
-	local want = db.enabled and db.deathBanner and ns.IsDeathCinematic and ns.IsDeathCinematic() or false
+	local want = db.enabled and db.deathBannerStyle ~= "none" and ns.IsDeathCinematic and ns.IsDeathCinematic() or false
 	if want and banner.was == false then
 		ShowDeathBanner()
 	end
@@ -1083,14 +1115,18 @@ local function UpdateDeathBanner()
 	if not banner.started then
 		return
 	end
-	local t = GetTime() - banner.started - BANNER_WAIT -- (below 0: still waiting, unseen)
-	local total = BANNER_IN + BANNER_HOLD + BANNER_OUT
+	local wait, fadeIn, hold, fadeOut = BANNER_WAIT, BANNER_IN, BANNER_HOLD, BANNER_OUT
+	if banner.wastedStyle then
+		wait, fadeIn, hold, fadeOut = WASTED_WAIT, WASTED_IN, WASTED_HOLD, WASTED_OUT
+	end
+	local t = GetTime() - banner.started - wait -- (below 0: still waiting, unseen)
+	local total = fadeIn + hold + fadeOut
 	if t >= total or not want then
 		banner.started = nil
 		banner.frame:Hide()
 		return
 	end
-	local alpha = math.max(0, math.min(1, t / BANNER_IN, (total - t) / BANNER_OUT))
+	local alpha = math.max(0, math.min(1, t / fadeIn, (total - t) / fadeOut))
 	banner.frame:SetAlpha(alpha * alpha * (3 - 2 * alpha))
 end
 

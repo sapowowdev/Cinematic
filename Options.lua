@@ -2862,6 +2862,21 @@ local function CreateDeathPanel()
 	local function IfOn() return ns.TriggerAnyRow("Death") end
 
 	local stack = Stack(subtitle, "label", true)
+	local BANNER_TIP = L["Shortly after the death camera starts, words fade in across the middle of the " ..
+		"screen on a band, then fade away after a few seconds. \"YOU DIED\": dull red on a dark band with " ..
+		"soft edges. \"wasted\": red with a dark outline on a flat black band."]
+	local banner = Dropdown(content, "deathBannerStyle", {
+		{ value = "none", text = L["None"] },
+		{ value = "youdied", text = L["YOU DIED"] },
+		{ value = "wasted", text = L["wasted"] },
+	}, 180)
+	if banner then
+		banner.inlineName = L["Death banner"]
+		stack:Add(banner, "dropdown")
+		Tooltip(banner, BANNER_TIP)
+		GreyUnless(banner, IfOn)
+	end
+
 	stack:Header(content, L["Starting"])
 	local delay = stack:Add(Slider(content, "deathOrbitDelay", L["Start after"], 0, 10, 0.5, L["%.1f sec"]), "slider")
 	Tooltip(delay, L["How long after you die before the camera starts turning."])
@@ -2913,10 +2928,6 @@ local function CreateDeathPanel()
 		L["Released to a graveyard with no spirit healer's countdown, the dark edges stay as you walk " ..
 		"back, and lift the closer you get to your body, gone once you're there."]), "check")
 	GreyUnless(corpseRun, function(db) return IfOn(db) and db.deathScreen end)
-	local banner = stack:Add(Check(content, "deathBanner", L["Show \"YOU DIED\""],
-		L["Shortly after the death camera starts, \"YOU DIED\" fades in across the middle of the screen on a " ..
-		"dark band, then fades away after a few seconds."]), "check")
-	GreyUnless(banner, IfOn)
 
 	stack:Header(content, L["Music"])
 	local songBox = ns.SkinEditBox(CreateFrame("EditBox", nil, content, "InputBoxTemplate"))

@@ -585,7 +585,7 @@ DEFAULTS.deathScreen = true        -- dim, cold screen with a heavy vignette mea
 DEFAULTS.deathScreenStrength = 1
 DEFAULTS.deathVignetteTime = 10    -- seconds for its vignette to creep in
 DEFAULTS.deathVignetteSize = 0.35  -- ...and the fraction of the screen each edge covers then
-DEFAULTS.deathBanner = true        -- "YOU DIED" across the screen as it starts
+DEFAULTS.deathBannerStyle = "youdied" -- words across the screen as it starts: "none", "youdied", "wasted"
 DEFAULTS.deathCorpseRun = true     -- released with no wave to wait for, the vignette lifts as you near your body
 DEFAULTS.deathZoom = 4             -- yards it pulls back meanwhile
 DEFAULTS.deathOrbitPause = 0       -- (always one continuous turn)
@@ -3274,6 +3274,13 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			if ns.db["taxiZoom" .. key] == nil then
 				ns.db["taxiZoom" .. key] = ns.db["idleZoom" .. key]
 			end
+		end
+		-- The death banner was a tick box before it had styles.
+		if ns.db.deathBanner ~= nil then
+			if ns.db.deathBanner == false and ns.db.deathBannerStyle == nil then
+				ns.db.deathBannerStyle = "none"
+			end
+			ns.db.deathBanner = nil
 		end
 		-- An early build had one "keep the other faction's names" option.
 		if ns.db.plateEnemyNamesCinematic then

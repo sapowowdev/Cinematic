@@ -435,7 +435,7 @@ ns.PROFILE_MODULES = {
 			set("runCine", true)
 			set("deathCine", true)
 			set("deathScreen", false)
-			set("deathBanner", false)
+			set("deathBannerStyle", "none")
 			set("eventStillCamera", "afk")
 			for _, event in ipairs(MUSIC_EVENTS) do set("event" .. event .. "Music", true) end
 			set("musicCamWalk", true)
