@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-29", page = "Cameras", title = "Chat Cam",
+		text = "As NPCs talk, the camera zooms in and turns to whoever's speaking, then turns back and zooms " ..
+		"out once they're done. On in the Cinema profile; turn it on for NPCs you talk to or those chatting " ..
+		"nearby on the Cameras page." },
 	{ date = "2026-10-29", page = "Personal Resources", title = "Mana cost",
 		text = "While you cast, the mana a spell will take shows as a pale stretch on your mana bar, and its " ..
 		"numbers can show what you'll have left." },

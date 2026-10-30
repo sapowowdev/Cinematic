@@ -3766,3 +3766,10 @@ L["A page for the look of each part of your UI: unit, raid and arena frames, the
 	"bajo tu personaje, barras de lanzamiento, descripciones emergentes, bocadillos de chat, diálogo de misiones, " ..
 	"la ventana de tiradas de botín, el botón del objeto de misión y las franjas, cada una con preajustes y una " ..
 	"vista previa. Una página General fija una textura de barra, una fuente y un borde que todas siguen."
+-- What's new: Chat Cam (its title: above)
+L["As NPCs talk, the camera zooms in and turns to whoever's speaking, then turns back and zooms " ..
+	"out once they're done. On in the Cinema profile; turn it on for NPCs you talk to or those chatting " ..
+	"nearby on the Cameras page."] =
+	"Cuando los PNJ hablan, la cámara se acerca y se gira hacia quien habla, y luego vuelve y se aleja " ..
+	"cuando terminan. Activada en el perfil Cine; actívala para los PNJ con los que hablas o los que charlan " ..
+	"cerca en la página Cámaras."
