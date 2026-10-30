@@ -1458,8 +1458,11 @@ do
 		return band
 	end
 
+	local MIN_TILE = 28 -- (icons shrink this far to keep the bands on one row)
+
 	-- A hub with sections: each section's pages on its band, the bands in one
-	-- row (a band that won't fit starts another).
+	-- row, the icons a little smaller if that keeps them there (a band that
+	-- still won't fit starts another).
 	local function SectionLayout(hub, width)
 		local runs = {}
 		for _, tile in ipairs(hub.tiles) do
@@ -1470,12 +1473,16 @@ do
 			end
 			run[#run + 1] = tile
 		end
-		local high = TILE + BAND_PAD * 2
+		-- (all but the icons themselves: gaps, band padding, the page's edges)
+		local fixed = EDGE * 2 + (#runs - 1) * SECTION_GAP
+		for _, run in ipairs(runs) do fixed = fixed + (#run - 1) * TILE_GAP + BAND_PAD * 2 end
+		local size = math.max(MIN_TILE, math.min(TILE, math.floor((width - fixed) / math.max(1, #hub.tiles))))
+		local high = size + BAND_PAD * 2
 		local x, y = EDGE, -BAR - EDGE
 		local used = {}
 		-- (pages in no section: a band of their own too, with no name)
 		for index, run in ipairs(runs) do
-			local wide = #run * (TILE + TILE_GAP) - TILE_GAP + BAND_PAD * 2
+			local wide = #run * (size + TILE_GAP) - TILE_GAP + BAND_PAD * 2
 			if x > EDGE and x + wide > width - EDGE then
 				x, y = EDGE, y - LABEL_H - high - TILE_GAP
 			end
@@ -1487,7 +1494,8 @@ do
 			for i, tile in ipairs(run) do
 				band.tiles[tile] = true
 				tile:ClearAllPoints()
-				tile:SetPoint("TOPLEFT", band, "TOPLEFT", BAND_PAD + (i - 1) * (TILE + TILE_GAP), -BAND_PAD)
+				tile:SetSize(size, size)
+				tile:SetPoint("TOPLEFT", band, "TOPLEFT", BAND_PAD + (i - 1) * (size + TILE_GAP), -BAND_PAD)
 				tile:Show()
 			end
 			x = x + wide + SECTION_GAP

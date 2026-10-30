@@ -171,6 +171,70 @@ local function Place()
 	end
 end
 
+-- The game's cast bar, where Edit Mode put it just under the display: our
+-- bar grows the display down into it, so while ours is in use it's moved down
+-- to leave CAST_GAP. Put back while it's not, and for Edit Mode (which saves
+-- where it is). A cast bar placed elsewhere, or on the player frame: left.
+local CAST_GAP = 6 -- between our bar and the cast bar, in pixels
+local castMoved -- { own = its points, ours = the points we gave it }, while moved
+
+local function CastPoints(cast)
+	local points = {}
+	for i = 1, cast:GetNumPoints() do points[i] = { cast:GetPoint(i) } end
+	return points
+end
+
+local function SamePoints(a, b)
+	if #a ~= #b then return false end
+	for i = 1, #a do
+		for j = 1, 5 do if a[i][j] ~= b[i][j] then return false end end
+	end
+	return true
+end
+
+local function SetCastPoints(cast, points)
+	cast:ClearAllPoints()
+	for _, p in ipairs(points) do cast:SetPoint(p[1], p[2], p[3], p[4], p[5]) end
+end
+
+local function PlaceCastBar()
+	local cast = _G.PlayerCastingBarFrame
+	if not (cast and cast.GetNumPoints) then return end
+	if castMoved then
+		-- (Moved since by the game: its own spot is the new one.)
+		local ok, now = pcall(CastPoints, cast)
+		if ok and SamePoints(now, castMoved.ours) then SetCastPoints(cast, castMoved.own) end
+		castMoved = nil
+	end
+	local editing = _G.EditModeManagerFrame and _G.EditModeManagerFrame.IsEditModeActive
+		and _G.EditModeManagerFrame:IsEditModeActive()
+	if not (shown and bar) or editing or cast.attachedToPlayerFrame then return end
+	local ok, own, shift = pcall(function()
+		local bs, cs = bar:GetEffectiveScale(), cast:GetEffectiveScale()
+		local barTop, barBottom, castTop = bar:GetTop(), bar:GetBottom(), cast:GetTop()
+		local barLeft, barRight = bar:GetLeft(), bar:GetRight()
+		local castLeft, castRight = cast:GetLeft(), cast:GetRight()
+		if not (barTop and castTop and barLeft and castLeft) then return end
+		-- (Under our bar's top, side by side with it, and closer than the gap.)
+		local want = (barBottom - CAST_GAP) * bs
+		if castTop * cs > barTop * bs or castTop * cs <= want then return end
+		if castRight * cs < barLeft * bs or castLeft * cs > barRight * bs then return end
+		return CastPoints(cast), (castTop * cs - want) / cs
+	end)
+	if not (ok and own and shift) then return end
+	local ours = {}
+	for i, p in ipairs(own) do ours[i] = { p[1], p[2], p[3], p[4], p[5] - shift } end
+	SetCastPoints(cast, ours)
+	castMoved = { own = own, ours = CastPoints(cast) }
+end
+
+local EventRegistry = _G.EventRegistry
+if EventRegistry and EventRegistry.RegisterCallback then
+	EventRegistry:RegisterCallback("EditMode.Enter", PlaceCastBar, "CinematicPersonalMana")
+	EventRegistry:RegisterCallback("EditMode.Exit", function() C_Timer.After(0, PlaceCastBar) end,
+		"CinematicPersonalManaExit")
+end
+
 local function Make()
 	local power = display.PowerBar
 	if bar or not (power and power.GetHeight) then return bar end
@@ -185,8 +249,8 @@ local function Make()
 	-- (Your class resource coming and going: under it or not.)
 	local pieces = display.ClassFrameContainer
 	if pieces and pieces.HookScript then
-		pieces:HookScript("OnShow", function() if shown then Place() end end)
-		pieces:HookScript("OnHide", function() if shown then Place() end end)
+		pieces:HookScript("OnShow", function() if shown then Place() C_Timer.After(0, PlaceCastBar) end end)
+		pieces:HookScript("OnHide", function() if shown then Place() C_Timer.After(0, PlaceCastBar) end end)
 	end
 	return bar
 end
@@ -225,6 +289,7 @@ local function Update(dressing)
 	end
 	bar:SetShown(want)
 	UpdateValue()
+	C_Timer.After(0, PlaceCastBar) -- (once our bar's spot has settled)
 end
 ns.UpdatePersonalMana = Update
 
@@ -274,12 +339,13 @@ function ns.DescribePersonalMana()
 	local okArt, powerAtlas, powerFile = pcall(function() return powerFill:GetAtlas(), powerFill:GetTexture() end)
 	local function Shown(value) return okArt and Readable(value) and tostring(value) or "?" end
 	return ("mana bar: %s, fill %s (%s), color %.2f %.2f %.2f, power bar's fill %s / %s, alpha %s%s, "
-		.. "power type %s, max mana %s, words: %s"):format(
+		.. "power type %s, max mana %s, words: %s, cast bar %s"):format(
 		shown and "in use" or "not in use", tostring(gameFill), atlas and "atlas" or "tinted", r or 0, g or 0, b or 0,
 		Shown(powerAtlas), Shown(powerFile),
 		okAlpha and Readable(alpha) and ("%.2f"):format(alpha) or "secret",
 		held and " (ours)" or "", Readable(powerType) and tostring(powerType) or "secret",
-		Readable(maxMana) and tostring(maxMana) or "secret", #words > 0 and table.concat(words, ", ") or "none")
+		Readable(maxMana) and tostring(maxMana) or "secret", #words > 0 and table.concat(words, ", ") or "none",
+		castMoved and ("moved down %.1f"):format(castMoved.own[1][5] - castMoved.ours[1][5]) or "not moved")
 end
 
 local watcher = CreateFrame("Frame")

@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-29", page = "Personal Resources", title = "Mana cost",
+		text = "While you cast, the mana a spell will take shows as a pale stretch on your mana bar, and its " ..
+		"numbers can show what you'll have left." },
 	{ date = "2026-10-29", page = "General", title = "Reload button",
 		text = "A Reload button on the screen and a key to reload the UI in one go, and after any reload the " ..
 		"windows you had open (these settings at your page, bags, map, the game's windows) open again." },

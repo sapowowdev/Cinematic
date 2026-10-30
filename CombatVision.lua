@@ -24,7 +24,7 @@ DEFAULTS.combatFont = "general"        -- QUEST_ITEM_FONTS (QuestItemButton.lua;
 DEFAULTS.combatSize = 34               -- the text's height on the screen
 DEFAULTS.combatOutlineR, DEFAULTS.combatOutlineG, DEFAULTS.combatOutlineB = 0, 0, 0 -- (black: the game's own)
 DEFAULTS.combatOutline = -1            -- 0 none, 1 thin, 2 thick (-1: General's, thin at the game's)
-DEFAULTS.combatInR, DEFAULTS.combatInG, DEFAULTS.combatInB = 0.89, 0.79, 0.34
+DEFAULTS.combatInR, DEFAULTS.combatInG, DEFAULTS.combatInB = 0.89, 0.13, 0.22 -- #E32038
 DEFAULTS.combatOutR, DEFAULTS.combatOutG, DEFAULTS.combatOutB = 0.49, 0.67, 0.73
 -- The pulse's colors, going in and coming out.
 DEFAULTS.combatPulseInR, DEFAULTS.combatPulseInG, DEFAULTS.combatPulseInB = 0.89, 0.79, 0.34

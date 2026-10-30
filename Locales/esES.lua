@@ -2393,6 +2393,9 @@ L["Tick Show speech from behind you on the Chat page and says and yells from peo
 -- LowHealth.lua and LowHealthThemes.lua: Vitals Vision
 L["Vitals Vision"] = "Visión vital"
 L["Vitals Vision test done."] = "Prueba de la Visión vital terminada."
+L["Vitals Vision demo stopped."] = "Demostración de la Visión vital detenida."
+L["Vitals Vision demo: no class called \"%s\"."] = "Demostración de la Visión vital: no hay ninguna clase llamada \"%s\"."
+L["Vitals Vision demo: a new theme every %s seconds (/cine vital demo to stop)."] = "Demostración de la Visión vital: un tema nuevo cada %s segundos (/cine vital demo para detenerla)."
 L["Game art"] = "Arte del juego"
 L["Low health"] = "Salud baja"
 L["Jade"] = "Jade"
@@ -3600,6 +3603,11 @@ L["Mana bar"] = "Barra de maná"
 L["Show your mana when it isn't your power"] = "Mostrar tu maná cuando no es tu poder"
 L["The game shows only your main power under your character: Maelstrom, Insanity, Astral Power, rage or energy in a form. Ticked, your mana gets a bar of its own under it. When it comes up is the Personal mana bar row on the Standard Frames page."] = "El juego solo muestra tu poder principal bajo tu personaje: Vorágine, Locura, Poder astral, o ira o energía en una forma. Marcado, tu maná tiene una barra propia debajo. Cuándo aparece lo decide la fila Barra de maná personal de la página Marcos estándar."
 L["The mana bar's color, for Custom."] = "El color de la barra de maná, para Personalizado."
+L["Resource bar"] = "Barra de recursos"
+L["Show mana cost indicator"] = "Mostrar indicador de coste de maná"
+L["Show remaining mana text"] = "Mostrar texto del maná restante"
+L["Under the indicator, while you cast: your mana's numbers on the bar show what you'll have once the cast is done, paler. The amount and the percent, whichever the game shows there (its Status Text setting); with the game's numbers off, the amount in the middle of the bar."] = "Bajo el indicador, mientras lanzas: los números de tu maná en la barra muestran lo que tendrás al acabar el lanzamiento, más pálidos. La cantidad y el porcentaje, los que muestre ahí el juego (su opción Texto de estado); con los números del juego desactivados, la cantidad en el centro de la barra."
+L["While you cast a spell that costs mana, the mana it will take shows as a pale stretch at the end of your mana: what's left after the cast is the fill to its left."] = "Mientras lanzas un hechizo que cuesta maná, el maná que gastará se ve como un tramo pálido al final de tu maná: lo que te queda tras el lanzamiento es el relleno a su izquierda."
 L["Opens the Style hub's Personal resources page: how the bars look."] = "Abre la página Recursos personales del centro Estilo: cómo se ven las barras."
 L["The bars' fill. Below the game's own few: any other addon shares (through LibSharedMedia)."] = "El relleno de las barras. Debajo de los pocos del juego: los que compartan otros addons (mediante LibSharedMedia)."
 L["The health bar's fill. Below the game's own few: any other addon shares (through LibSharedMedia)."] = "El relleno de la barra de salud. Debajo de los pocos del juego: los que compartan otros addons (mediante LibSharedMedia)."
@@ -3742,3 +3750,9 @@ L["A Reload button on the screen and a key to reload the UI in one go, and after
 	"windows you had open (these settings at your page, bags, map, the game's windows) open again."] =
 	"Un botón Recargar en la pantalla y una tecla para recargar la interfaz de una vez, y tras cualquier recarga " ..
 	"se vuelven a abrir las ventanas que tenías abiertas (esta configuración en tu página, las bolsas, el mapa, las ventanas del juego)."
+-- What's new: Mana cost
+L["Mana cost"] = "Coste de maná"
+L["While you cast, the mana a spell will take shows as a pale stretch on your mana bar, and its " ..
+	"numbers can show what you'll have left."] =
+	"Mientras lanzas, el maná que gastará un hechizo se ve como un tramo pálido en tu barra de maná, y sus " ..
+	"números pueden mostrar lo que te quedará."

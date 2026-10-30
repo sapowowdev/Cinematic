@@ -146,6 +146,7 @@ local function PrintDebugHelp()
 	print("  /cine debug flyby - the fly-by's state and the random ones planned")
 	print("  /cine debug flybys - print each fly-by's start and end, random ones too (again to stop)")
 	print("  /cine debug questtimer - say whether a quest timer is running and how its box fades")
+	print("  /cine vital demo [seconds] [classes] - a random spec's Vitals Vision theme every few seconds (5 if not given), its name on the screen; with classes (paladin warlock), each of their specs' in turn; again or off to stop")
 	print("  /cine debug vitals - Vitals Vision now: your health as read, how far in, the theme's art (run it in a fight)")
 	print("  /cine debug gameedge [number|back|blend|off] - step through the game's full-screen effect textures over the whole screen, one each time, to pick edges for Vitals Vision's Game art")
 	print("  /cine debug texreel [masks] [shots] [seconds] [from] | pause | off - play the game's full-screen effect textures as a slideshow to record, each with its number, file and name, and the time left; shots takes a screenshot of each")
@@ -472,6 +473,11 @@ local function HandleSlash(msg)
 		ns.ReportQuestTimer()
 	elseif cmd == "debug" and arg == "vitals" then
 		ns.ReportVitals()
+	elseif (cmd == "vital" or cmd == "vitals") and (arg == "demo" or arg:match("^demo ")) then
+		local words = {}
+		for word in arg:gmatch("%S+") do words[#words + 1] = word end
+		table.remove(words, 1) -- ("demo")
+		ns.VitalsDemo(words)
 	elseif cmd == "debug" and (arg == "gameedge" or arg:match("^gameedge ")) then
 		ns.ScoutGameEdges(arg:match("^gameedge%s*(.-)$"))
 	elseif cmd == "debug" and (arg == "texreel" or arg:match("^texreel ")) then

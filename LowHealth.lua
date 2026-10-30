@@ -108,6 +108,7 @@ local screen
 -- screen's only.)
 local gameArtTest
 local theme -- (the theme wanted)
+local demoTheme -- (/cine vital demo's theme now, over the one picked)
 local autoTheme, autoGameTheme -- (Auto's picks, ours and Game art's, until your talents change)
 local level, flash = 0, 0 -- the screen's: shown (0-1), the hit flash (0-1)
 local liftSpeed = 0 -- (lifting now: a share of all the way a second)
@@ -209,11 +210,15 @@ ns.VitalsThemeEdited = ThemeEdited
 -- Whether this client has a file: SetTexture says false for one it hasn't
 -- (drawn, it'd be the game's bright green). Many of the game's screen effects
 -- are retail's only. (A texture of its own, hidden: asking on one shown would
--- flash the green.)
+-- flash the green.) Classic clients don't always say, so there only the
+-- game's files known to work count: /cine debug gameedge's first nine.
 local FileLoads
 do
+	local CLASSIC_FILES = { [131140] = true, [131141] = true, [965906] = true, [965907] = true,
+		[985799] = true, [1273707] = true, [1305137] = true, [1305138] = true, [1610628] = true }
 	local probe
 	function FileLoads(file)
+		if not ns.isRetail and type(file) == "number" and not CLASSIC_FILES[file] then return false end
 		if not probe then
 			local holder = CreateFrame("Frame", nil, UIParent)
 			holder:Hide()
@@ -319,6 +324,7 @@ function ns.LowHealthAutoGameTheme()
 end
 
 local function WantedTheme(look)
+	if demoTheme then return demoTheme end
 	local key = (look or Look()).lowHealthTheme
 	if key == "autogame" then
 		key = ns.LowHealthAutoGameTheme()
@@ -928,7 +934,7 @@ end
 local GLIMPSE_FROM, GLIMPSE_TO, GLIMPSE_TIME = 0.7, 0.1, 1.4
 function ns.FlashVitals(seconds)
 	db = db or ns.GetDB()
-	test = { from = GLIMPSE_FROM, to = GLIMPSE_TO, time = GLIMPSE_TIME, start = GetTime(), hits = true,
+	test ={ from = GLIMPSE_FROM, to = GLIMPSE_TO, time = GLIMPSE_TIME, start = GetTime(), hits = true,
 		hold = seconds or 2, quiet = true }
 	lastHealth = test.from
 	Wake()
@@ -948,6 +954,159 @@ end
 function ns.StopLowHealthTest()
 	test = nil
 	Wake()
+end
+
+-- /cine vital demo <seconds> [classes]: a random spec's theme each few
+-- seconds (each once before any again; not Game art's, or the no-talents
+-- one), its name in the middle of the screen (with the class and spec it's
+-- for, in the class's colour, under it), your health falling to low in hits
+-- and held there. With classes: just their specs', in the menu's order,
+-- round again at the end. Again (or "off") to stop.
+do
+	local DEMO_FROM, DEMO_TO = 0.6, 0.1
+	local ticker, label, queue, classes
+	local whoText -- (by theme key: its classes and specs, coloured, a line each)
+	local classThemes -- (by class token: its specs' themes in order)
+	local function Build()
+		if whoText then return end
+		whoText, classThemes = {}, {}
+		for _, class in ipairs(ns.LOW_HEALTH_MENU) do
+			local name = LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[class[1]] or L[class[2]]
+			local color = RAID_CLASS_COLORS and RAID_CLASS_COLORS[class[1]]
+			local themes = {}
+			for _, spec in ipairs(class[3]) do
+				local info = ns.LOW_HEALTH_THEME[spec[2]]
+				if info and spec[1] ~= "No talents yet" then
+					local line = L[spec[1]] .. " " .. name
+					if color then
+						line = ("|cff%02x%02x%02x%s|r"):format(color.r * 255, color.g * 255, color.b * 255, line)
+					end
+					local list = whoText[info.key] or {} -- (one theme can be more than one spec's)
+					whoText[info.key] = list
+					list[#list + 1] = line
+					themes[#themes + 1] = info
+				end
+			end
+			classThemes[class[1]] = themes
+		end
+	end
+	local function Who(info)
+		Build()
+		return table.concat(whoText[info.key] or {}, ", ")
+	end
+	-- The class token for a name typed ("paladin", "death knight",
+	-- "deathknight", or the game's name for it in your language).
+	local function Squash(text)
+		return (text:lower():gsub("[%s_]", ""))
+	end
+	local function ClassToken(typed)
+		typed = Squash(typed)
+		for _, class in ipairs(ns.LOW_HEALTH_MENU) do
+			local localized = LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[class[1]]
+			if typed == Squash(class[1]) or typed == Squash(class[2]) or typed == Squash(L[class[2]])
+				or (localized and typed == Squash(localized)) then
+				return class[1]
+			end
+		end
+	end
+	local function Label()
+		if label then return label end
+		local holder = CreateFrame("Frame", nil, UIParent)
+		holder:SetAllPoints(UIParent)
+		holder:SetFrameStrata("HIGH")
+		holder:EnableMouse(false)
+		ns.AddOverlay(holder) -- (shown with the UI hidden too)
+		label = holder:CreateFontString(nil, "OVERLAY", "GameFont_Gigantic")
+		label:SetPoint("CENTER", 0, 120)
+		label:SetShadowOffset(2, -2)
+		label.who = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+		label.who:SetPoint("TOP", label, "BOTTOM", 0, -8)
+		label.who:SetWidth(UIParent:GetWidth() * 0.6)
+		label.who:SetShadowOffset(1, -1)
+		label.fade = holder:CreateAnimationGroup()
+		local fadeIn = label.fade:CreateAnimation("Alpha")
+		fadeIn:SetFromAlpha(0)
+		fadeIn:SetToAlpha(1)
+		fadeIn:SetDuration(0.4)
+		label.holder = holder
+		return label
+	end
+	local function Next(seconds)
+		if not (queue and queue[1]) then
+			Build()
+			queue = {}
+			if classes then
+				for _, token in ipairs(classes) do
+					for _, info in ipairs(classThemes[token]) do queue[#queue + 1] = info end
+				end
+			else
+				local seen = {}
+				for _, class in ipairs(ns.LOW_HEALTH_MENU) do
+					for _, info in ipairs(classThemes[class[1]]) do
+						if not seen[info] then
+							seen[info] = true
+							table.insert(queue, math.random(#queue + 1), info)
+						end
+					end
+				end
+			end
+			if not classes and queue[1] == demoTheme and #queue > 1 then -- (not the same twice in a row)
+				queue[1], queue[#queue] = queue[#queue], queue[1]
+			end
+		end
+		demoTheme = table.remove(queue, 1)
+		local text = Label()
+		text:SetText(L[demoTheme.name])
+		text.who:SetText(Who(demoTheme))
+		text.holder:Show()
+		text.fade:Stop()
+		text.fade:Play()
+		test = { from = DEMO_FROM, to = DEMO_TO, time = math.min(1.5, seconds / 3), start = GetTime(),
+			hits = true, hold = seconds + 1, quiet = true }
+		lastHealth = test.from
+		if screen then screen.shown = nil end
+		Wake()
+	end
+	-- words: what was typed after "demo", split at spaces: a number of
+	-- seconds, class names, or "off". (Nothing, while it's running: stop.)
+	function ns.VitalsDemo(words)
+		db = db or ns.GetDB()
+		local seconds, wanted, i = nil, {}, 1
+		while words[i] do
+			local word = words[i]
+			local token = ClassToken(word)
+			if not token and words[i + 1] then -- (two words: "death knight")
+				token = ClassToken(word .. words[i + 1])
+				if token then i = i + 1 end
+			end
+			if tonumber(word) then
+				seconds = tonumber(word)
+			elseif token then
+				wanted[#wanted + 1] = token
+			elseif word ~= "off" then
+				ns.Print(L["Vitals Vision demo: no class called \"%s\"."]:format(word))
+				return
+			end
+			i = i + 1
+		end
+		if ticker then
+			ticker:Cancel()
+			ticker, demoTheme, test = nil, nil, nil
+			if label then label.holder:Hide() end
+			if screen then screen.shown = nil end
+			Wake()
+			ns.Print(L["Vitals Vision demo stopped."])
+			if not words[1] then return end
+		end
+		for _, word in ipairs(words) do
+			if word == "off" then return end
+		end
+		classes, queue = wanted[1] and wanted, nil
+		seconds = math.max(1, seconds or 5)
+		Next(seconds)
+		ticker = C_Timer.NewTicker(seconds, function() Next(seconds) end)
+		ns.Print(L["Vitals Vision demo: a new theme every %s seconds (/cine vital demo to stop)."]:format(seconds))
+	end
 end
 
 -- A small camera shake, as a big hit might give (the dev copy's page has a

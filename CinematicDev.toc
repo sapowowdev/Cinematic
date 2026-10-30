@@ -90,6 +90,8 @@ BubbleStyle.lua
 TooltipStyle.lua
 PersonalStyle.lua
 PersonalMana.lua
+PersonalManaCost.lua
+PersonalManaText.lua
 PlateCastStyle.lua
 UnitStyle.lua
 RaidStyle.lua

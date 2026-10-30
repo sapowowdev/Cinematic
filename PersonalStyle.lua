@@ -89,6 +89,11 @@ local function Trim(frame)
 	if type(frame) ~= "table" then return pieces end
 	local fill = frame.GetStatusBarTexture and frame:GetStatusBarTexture()
 	local found = {}
+	-- (Copies of another bar's, on our mana bar: CopyTrim.)
+	for _, piece in ipairs(rawget(frame, "cineTrim") or {}) do
+		pieces[#pieces + 1] = piece
+		found[piece] = true
+	end
 	for key, value in pairs(frame) do
 		if type(key) == "string" and type(value) == "table" and value.SetAlpha and value ~= frame then
 			local lower = key:lower()
@@ -112,6 +117,41 @@ local function Trim(frame)
 		end
 	end
 	return pieces
+end
+
+-- The game's border and background art from one bar onto another (the
+-- power bar's onto our mana bar, which has none of its own): each texture
+-- piece again, in its art, layer and place. Once.
+local function CopyTrim(from, to)
+	if not (from and to) or to.cineTrim then return end
+	to.cineTrim = {}
+	for _, piece in ipairs(Trim(from)) do
+		if piece.GetObjectType and piece:GetObjectType() == "Texture" then
+			local ok, atlas, file, layer, sublevel = pcall(function()
+				local layerNow, sublevelNow = piece:GetDrawLayer()
+				return piece.GetAtlas and piece:GetAtlas(), piece:GetTexture(), layerNow, sublevelNow
+			end)
+			local readable = ok and not (issecretvalue and (issecretvalue(atlas) or issecretvalue(file)))
+			if readable and (atlas or file) then
+				local copy = to:CreateTexture(nil, layer or "BACKGROUND", nil, sublevel or 0)
+				if type(atlas) == "string" and atlas ~= "" then copy:SetAtlas(atlas) else copy:SetTexture(file) end
+				pcall(function() copy:SetVertexColor(piece:GetVertexColor()) end)
+				-- (Its points, on ours; placed by any other frame or unreadable: our size.)
+				local placed = pcall(function()
+					for i = 1, piece:GetNumPoints() do
+						local point, relativeTo, relPoint, x, y = piece:GetPoint(i)
+						if relativeTo ~= from then error("placed by another frame") end
+						copy:SetPoint(point, to, relPoint, x, y)
+					end
+				end)
+				if not placed or copy:GetNumPoints() == 0 then
+					copy:ClearAllPoints()
+					copy:SetAllPoints()
+				end
+				to.cineTrim[#to.cineTrim + 1] = copy
+			end
+		end
+	end
 end
 
 -- Our border and background, for any border but the game's: a dark ground
@@ -215,6 +255,8 @@ function Apply()
 	if not root then return end
 	-- (The mana bar: shown or not as the page says now, made if it's wanted.)
 	if ns.UpdatePersonalMana then ns.UpdatePersonalMana(true) end
+	-- (Its cost and the mana after it, on the bars as they are now: PersonalManaCost.lua.)
+	if ns.UpdateManaCost then ns.UpdateManaCost() end
 	local look = ns.StyleOn("prdStyle") and Look() or nil
 	if not look and not next(own) then return end
 	local r, g, b
@@ -223,6 +265,7 @@ function Apply()
 	DressBar(power, nil, look, "prdPowerHeight")
 	local mana = ns.PersonalManaBar and ns.PersonalManaBar()
 	if mana then
+		CopyTrim(power, mana)
 		DressBar(mana, nil, look, "prdManaHeight")
 		ns.ColorPersonalMana(look)
 	end

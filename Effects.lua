@@ -2705,6 +2705,8 @@ function ns.PrintPlatesDebug()
 	if ns.DescribePersonalPower then
 		ns.Print("personal resource bars: " .. ns.DescribePersonalPower())
 		if ns.DescribePersonalMana then ns.Print("  " .. ns.DescribePersonalMana()) end
+		if ns.DescribeManaCost then ns.Print("  " .. ns.DescribeManaCost()) end
+		if ns.DescribeManaText then ns.Print("  " .. ns.DescribeManaText()) end
 		local own = PersonalPlate()
 		if own and own.UnitFrame and not (own.IsForbidden and own:IsForbidden()) then
 			local _, fields = ns.DescribePlateParts(own.UnitFrame)
