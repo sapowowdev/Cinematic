@@ -53,7 +53,7 @@ themes = []
 for i in range(1, len(ns.LOW_HEALTH_THEMES) + 1):
     t = ns.LOW_HEALTH_THEMES[i]
     d = {k: py(t[k]) for k in ("key", "name", "edge", "body", "glow", "glowAlpha", "shadow", "flash",
-                               "pulse", "bpm", "sway", "sparks")}
+                               "pulse", "bpm", "sway", "sparks", "look")}
     if t.theirs:
         d["theirs"] = {"file": t.theirs[1], "own": None if t.theirs.own is None else bool(t.theirs.own)}
     themes.append(d)
@@ -68,8 +68,18 @@ for i in range(1, len(ns.LOW_HEALTH_MENU) + 1):
     e = ns.LOW_HEALTH_MENU[i]
     menu.append({"name": e[2], "specs": [{"spec": e[3][j][1], "key": e[3][j][2]} for j in range(1, len(e[3]) + 1)]})
 
-# The screenshots' order: the dev list in LowHealth.lua (EDGE_SCOUT), a pair each.
 lh = open(os.path.join(ADDON, "LowHealth.lua"), encoding="utf-8").read()
+# The settings' defaults (LowHealth.lua's DEFAULTS.lowHealth... lines): numbers, ticks and words.
+defaults = {}
+for key, value in re.findall(r"^DEFAULTS\.(lowHealth\w+) = (\S+)", lh, re.M):
+    if value in ("true", "false"):
+        defaults[key] = value == "true"
+    elif value.startswith('"'):
+        defaults[key] = value.strip('"')
+    else:
+        defaults[key] = float(value)
+
+# The screenshots' order: the dev list in LowHealth.lua (EDGE_SCOUT), a pair each.
 block = lh[lh.index("local EDGE_SCOUT = {"):lh.index("\n}", lh.index("local EDGE_SCOUT = {"))]
 order = [int(x) for x in re.findall(r"\{ (\d+), \"", block)]
 shots = sorted(f for f in os.listdir(SHOTS) if f.lower().endswith(".jpg"))
@@ -121,7 +131,8 @@ cx, cy = W / 2, H * 0.66
 world[(((X - cx) / 26) ** 2 + ((Y - cy) / 70) ** 2 < 1) | (((X - cx) ** 2 + (Y - (cy - 85)) ** 2) < 400)] = [0.12, 0.1, 0.1]
 img["world"] = b64(Image.fromarray((np.clip(world, 0, 1) * 255).astype(np.uint8)), "JPEG", quality=85)
 
-data = {"themes": themes, "patterns": patterns, "masks": masks, "menu": menu, "classic": classic, "img": img}
+data = {"themes": themes, "patterns": patterns, "masks": masks, "menu": menu, "classic": classic, "img": img,
+        "defaults": defaults, "edge": ns.LOW_HEALTH_BLIZZ_EDGE}
 page = open(os.path.join(HERE, "demo_template.html"), encoding="utf-8").read()
 page = page.replace("/*DATA*/null", json.dumps(data, separators=(",", ":")))
 with open(OUT, "w", encoding="utf-8") as f:
