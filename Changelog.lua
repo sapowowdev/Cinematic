@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-30", page = "Advanced Frames", title = "Find frames to fade",
+		text = "Type part of a frame's name, or of the addon that made it, to find frames to fade. Hover a " ..
+		"match to see it marked on screen, then click it to fade it." },
 	{ date = "2026-10-30", page = "Profiles", title = "Profile backups",
 		text = "Your own profiles are backed up once a day when they change and just before Delete or Reset, " ..
 		"and deleted ones are kept for 30 days. Bring one back with Backups on the Profiles page." },
