@@ -16,6 +16,7 @@ local ADDON_NAME, ns = ...
 local DEFAULT_SECONDS = 30
 local CHAT_ROWS = 6     -- sections printed to chat (all of them go in the log)
 local CHILD_ROWS = 12   -- parts listed under each section in the log
+local DEEP_CHILD_ROWS = 40 -- ...in a deep profile (every ns function timed)
 local CALIBRATE_CALLS = 2000
 
 local clock = debugprofilestop
@@ -73,9 +74,11 @@ local function Finish(name, isSection, started, memory, ...)
 	return ...
 end
 
+local wrappers = setmetatable({}, { __mode = "k" }) -- the functions ns.Profiled made
+
 -- fn wrapped to be timed as `name` while profiling. Return values pass through.
 function ns.Profiled(name, fn)
-	return function(...)
+	local wrapped = function(...)
 		if not ns.profiling then
 			return fn(...)
 		end
@@ -85,6 +88,43 @@ function ns.Profiled(name, fn)
 		end
 		return Finish(name, isSection, clock(), Memory(), fn(...))
 	end
+	wrappers[wrapped] = true
+	return wrapped
+end
+
+-- A deep profile (the Profiler page's): every function on ns is wrapped too
+-- while it runs, as "ns.<name>", and put back after. (Ones held elsewhere
+-- under another name aren't, nor local functions.) Left out: the profiler's
+-- own, the log's, and tiny ones called so often the wrapping would swamp them.
+local DEEP_SKIP = { Profiled = true, ProfileMark = true, ProfileStep = true, ProfileName = true,
+	ProfileCount = true, StartProfile = true, StopProfile = true, IsProfiling = true, ProfileGameMetric = true,
+	ProfileTimeLeft = true, ShowProfileTimer = true,
+	Print = true, Log = true, LogDetail = true, Verbose = true, Flag = true, Approach = true, GetDB = true }
+local deepOriginals = {} -- [key] = the function before it was wrapped
+local deepWrapped = {}   -- [key] = its wrapper
+
+local function WrapAll()
+	for key, value in pairs(ns) do
+		if type(value) == "function" and not DEEP_SKIP[key] and not wrappers[value] then
+			deepOriginals[key] = value
+		end
+	end
+	for key, original in pairs(deepOriginals) do
+		local wrapped = ns.Profiled("ns." .. key, original)
+		deepWrapped[key] = wrapped
+		ns[key] = wrapped
+	end
+end
+
+local function UnwrapAll()
+	for key, original in pairs(deepOriginals) do
+		-- (Only if it's still ours: something may have set its own since.)
+		if ns[key] == deepWrapped[key] then
+			ns[key] = original
+		end
+	end
+	wipe(deepOriginals)
+	wipe(deepWrapped)
 end
 
 -- For code that times itself (Core.lua's Step): the start, then the end.
@@ -186,8 +226,8 @@ local function BuildReport()
 			calls = calls + child.calls
 		end
 	end
-	Add("cpu profile: %.1f sec, %d frames (%.0f fps, %.2f ms a frame)", seconds, frames, frames / seconds,
-		seconds * 1000 / frames)
+	Add("cpu profile%s: %.1f sec, %d frames (%.0f fps, %.2f ms a frame)", run.deep and " (deep)" or "", seconds,
+		frames, frames / seconds, seconds * 1000 / frames)
 	Add("at the start: %s", run.startState)
 	Add("at the end: %s", State())
 	Add("measured: %.3f ms a frame (%.2f%% of the frame time), %.1f ms a second; memory made %.0f KB a second",
@@ -226,7 +266,7 @@ local function BuildReport()
 			stat.kb / seconds)
 		if stat.children then
 			for i, childName in ipairs(Sorted(stat.children)) do
-				if i > CHILD_ROWS then
+				if i > (run.deep and DEEP_CHILD_ROWS or CHILD_ROWS) then
 					break
 				end
 				local child = stat.children[childName]
@@ -257,7 +297,7 @@ local function Summary(lines)
 	end
 	local summary = { lines = lines, seconds = seconds, fps = frames / seconds, frameMs = seconds * 1000 / frames,
 		startState = run.startState, endState = State(), worst = run.worst, spikes = run.spikes,
-		overhead = run.overhead, sections = {}, total = 0, kb = 0, finished = time() }
+		overhead = run.overhead, sections = {}, total = 0, kb = 0, finished = time(), deep = run.deep }
 	for _, name in ipairs(Sorted(sections)) do
 		local stat = sections[name]
 		local row = Row(name, stat)
@@ -282,11 +322,14 @@ function ns.StopProfile()
 	ns.profiling = false
 	current = nil
 	watcher:Hide()
+	UnwrapAll()
 	local lines = BuildReport()
 	for _, line in ipairs(lines) do
 		ns.Log("cpu", line)
 	end
 	ns.lastProfile = Summary(lines)
+	-- (Chat up through CineMode for a while, so the line saying it's done is seen.)
+	if ns.PeekChat then ns.PeekChat(DEFAULT_CHAT_FRAME, 15) end
 	if run.quiet then
 		-- (Started from the Profiler page: the results are there.)
 		ns.Print(("cpu profile done (%.3f ms a frame measured): the Profiler page has it"):format(
@@ -316,8 +359,9 @@ function ns.StopProfile()
 	return true
 end
 
--- (quiet: no report in chat or its window at the end, just ns.lastProfile)
-function ns.StartProfile(seconds, quiet)
+-- (quiet: no report in chat or its window at the end, just ns.lastProfile;
+-- deep: every ns function timed too, see WrapAll)
+function ns.StartProfile(seconds, quiet, deep)
 	if run then
 		return false
 	end
@@ -332,8 +376,15 @@ function ns.StartProfile(seconds, quiet)
 	run = {
 		frames = 0, elapsed = 0, frameMs = 0, worst = 0, spikes = { [1] = 0, [5] = 0, [16] = 0 },
 		game = { addon = 0, overall = 0, app = 0 }, gameFrames = 0, gameSpikes = {},
-		startState = State(), quiet = quiet,
+		startState = State(), quiet = quiet, deep = deep,
 	}
+	if deep then
+		WrapAll()
+		-- (Steps handed over wrapped keep their own names.)
+		for key, wrapped in pairs(deepWrapped) do
+			stepNames[wrapped] = key
+		end
+	end
 	ns.profiling = true
 	run.overhead = Calibrate()
 	for _, metric in ipairs(GAME_SPIKES) do
@@ -342,11 +393,20 @@ function ns.StartProfile(seconds, quiet)
 	run.endsAt = GetTime() + (seconds or DEFAULT_SECONDS)
 	run.first = true
 	watcher:Show()
+	if ns.ShowProfileTimer then ns.ShowProfileTimer() end -- (the dev copy's countdown: ProfilerPage.lua)
 	return true
 end
 
 function ns.IsProfiling()
 	return run ~= nil
+end
+
+-- Seconds left in the profile under way (nil: none), and whether it's deep.
+function ns.ProfileTimeLeft()
+	if not run then
+		return nil
+	end
+	return math.max(0, run.endsAt - GetTime()), run.deep
 end
 
 watcher:SetScript("OnUpdate", function(_, elapsed)

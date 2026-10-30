@@ -6,9 +6,16 @@
 -- settings close, and its sections show here as bars, biggest first.
 local _, ns = ...
 
+ns.DEFAULTS.profilerPage = false -- its page's switch: off, nothing's sampled or saved
+
+local function PageOn()
+	return ns.db and ns.db.profilerPage
+end
+
 local HISTORY = 300 -- samples kept, one a second
 local GRAPH_HEIGHT = 110
 local CHILD_ROWS = 4 -- parts listed under each recorded section
+local DEEP_CHILD_ROWS = 12 -- ...in a deep one
 
 -- What was going on at a sample, most telling first.
 local STATE_NORMAL, STATE_CINE, STATE_FIGHT, STATE_SETTINGS = 1, 2, 3, 4
@@ -139,8 +146,8 @@ local function Digest()
 end
 
 local function Save()
-	if not CinematicDB then
-		return
+	if not (CinematicDB and PageOn()) then
+		return -- (off: what was saved last stays)
 	end
 	if not restored then
 		Restore() -- (a reload within a second of logging in: keep what was there)
@@ -165,6 +172,9 @@ local function Sample()
 	if not restored then
 		Restore()
 	end
+	if not PageOn() then
+		return
+	end
 	local metric = ns.ProfileGameMetric
 	local addon = metric and metric("addon", "RecentAverageTime")
 	if not addon then
@@ -179,8 +189,53 @@ end
 
 C_Timer.NewTicker(1, Sample)
 
--- The recording waiting for the settings to close: its length.
-local armedSeconds
+-- A countdown at the top of the screen while a profile runs (from the page or
+-- /cine debug cpu), then a while saying it's done. Our own frame: it stays up
+-- through CineMode.
+local DONE_SHOWN = 20 -- seconds the "done" line stays
+local timer = CreateFrame("Frame", nil, UIParent)
+timer:SetSize(360, 50)
+timer:SetPoint("TOP", 0, -110)
+timer:SetFrameStrata("HIGH")
+timer:Hide()
+local timerBack = timer:CreateTexture(nil, "BACKGROUND")
+timerBack:SetAllPoints()
+timerBack:SetColorTexture(0, 0, 0, 0.6)
+local timerText = timer:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+timerText:SetPoint("TOP", 0, -6)
+local timerNote = timer:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+timerNote:SetPoint("TOP", timerText, "BOTTOM", 0, -3)
+local doneAt, shownSecond
+timer:SetScript("OnUpdate", function(self)
+	local left, deep = ns.ProfileTimeLeft()
+	if left then
+		doneAt = nil
+		local second = math.ceil(left)
+		if second ~= shownSecond then -- (new text once a second, not every frame)
+			shownSecond = second
+			timerText:SetText(("Recording CPU%s  %d:%02d"):format(deep and " (deep)" or "",
+				math.floor(second / 60), second % 60))
+			timerNote:SetText("Play as usual  ·  /cine debug cpu stop ends it")
+		end
+		return
+	end
+	local now = GetTime()
+	if not doneAt then
+		doneAt, shownSecond = now, nil
+		timerText:SetText("|cff40ff40CPU recording done|r")
+		timerNote:SetText("/reload, then ask to check it (or open the Profiler page)")
+	elseif now - doneAt > DONE_SHOWN then
+		self:Hide()
+	end
+end)
+function ns.ShowProfileTimer()
+	doneAt, shownSecond = nil, nil
+	timer:Show()
+end
+
+-- The recording waiting for the settings to close: its length, and whether
+-- it's a deep one (every ns function timed).
+local armedSeconds, armedDeep
 local armer = CreateFrame("Frame")
 armer:Hide()
 armer:SetScript("OnUpdate", function(self)
@@ -188,10 +243,11 @@ armer:SetScript("OnUpdate", function(self)
 		return
 	end
 	self:Hide()
-	local seconds = armedSeconds
-	armedSeconds = nil
-	if ns.StartProfile(seconds, true) then
-		ns.Print(("cpu profile for %d seconds: play as usual (/cine debug cpu stop ends it early)"):format(seconds))
+	local seconds, deep = armedSeconds, armedDeep
+	armedSeconds, armedDeep = nil, nil
+	if ns.StartProfile(seconds, true, deep) then
+		ns.Print(("%s for %d seconds: play as usual (/cine debug cpu stop ends it early)"):format(
+			deep and "deep cpu profile" or "cpu profile", seconds))
 	end
 end)
 
@@ -221,7 +277,12 @@ function ns.CreateProfilerPanel(kit)
 	end
 
 	-- The graph.
-	local graphHeader = kit.Header(content, "Game's figure, the last five minutes", intro, -14)
+	local Refresh -- (below)
+	local switch = kit.PageSwitch(content, "profilerPage", "Enable page",
+		"On: the graph samples the game's figure every second and keeps it over a reload, and you can " ..
+		"record. Off (to start with): nothing is sampled or saved, and the last saved figures stay. " ..
+		"(/cine debug cpu works either way.)", intro, function() Refresh() end)
+	local graphHeader = kit.Header(content, "Game's figure, the last five minutes", switch, -14)
 	local graph = CreateFrame("Frame", nil, content)
 	graph:SetPoint("TOPLEFT", graphHeader, "BOTTOMLEFT", 0, -8)
 	graph:SetPoint("RIGHT", content, "RIGHT", -60, 0)
@@ -267,7 +328,7 @@ function ns.CreateProfilerPanel(kit)
 		if count == 0 then
 			empty:SetText(ns.ProfileGameMetric and ns.ProfileGameMetric("addon", "RecentAverageTime") == nil
 				and "The game's profiler isn't on this client: use a recording below."
-				or "No samples yet (one a second).")
+				or (PageOn() and "No samples yet (one a second)." or "Off: turn on Enable page to sample."))
 			empty:Show()
 		else
 			empty:Hide()
@@ -385,22 +446,26 @@ function ns.CreateProfilerPanel(kit)
 	end)
 
 	-- The recording.
-	local Refresh -- (below)
 	local recordHeader = kit.Header(content, "Recording (the addon's own timers)", stateText, -22)
 	local status
-	local function Arm(seconds)
-		if ns.IsProfiling() then
+	local function Arm(seconds, deep)
+		if ns.IsProfiling() or not PageOn() then
 			return
 		end
-		armedSeconds = seconds
+		armedSeconds, armedDeep = seconds, deep
 		armer:Show()
-		status:SetText(("Starts when you close the settings: %d seconds."):format(seconds))
+		status:SetText(("Starts when you close the settings: %d seconds%s."):format(seconds, deep and ", deep" or ""))
 	end
 	local record30 = Button("Record 30 s", 110, "Times the addon's busy parts for 30 seconds, starting when you " ..
 		"close the settings. Play as usual meanwhile; open this page again for the results.", function() Arm(30) end)
 	record30:SetPoint("TOPLEFT", recordHeader, "BOTTOMLEFT", 0, -8)
 	local record120 = Button("Record 2 min", 110, "The same for two minutes.", function() Arm(120) end)
 	record120:SetPoint("LEFT", record30, "RIGHT", 8, 0)
+	local recordDeep = Button("Record 2 min, deep", 140, "Two minutes with every one of the addon's functions " ..
+		"on ns timed too (not just its busy parts), each listed under the part that called it: to see what " ..
+		"inside a busy part costs. The timing itself costs about a microsecond a call, so the parts read " ..
+		"higher than they are.", function() Arm(120, true) end)
+	recordDeep:SetPoint("LEFT", record120, "RIGHT", 8, 0)
 	local stop = Button("Stop", 70, "Stops the recording now (or the one waiting for the settings to close).",
 		function()
 			armedSeconds = nil
@@ -408,7 +473,7 @@ function ns.CreateProfilerPanel(kit)
 			ns.StopProfile()
 			Refresh()
 		end)
-	stop:SetPoint("LEFT", record120, "RIGHT", 8, 0)
+	stop:SetPoint("LEFT", recordDeep, "RIGHT", 8, 0)
 	local copy = Button("Copy report", 110, "The last recording's full report as text, to copy (it's in /cine log " ..
 		"too).", function()
 			local last = ns.lastProfile
@@ -503,7 +568,8 @@ function ns.CreateProfilerPanel(kit)
 		if ns.IsProfiling() then
 			status:SetText("Recording now: close the settings and play; open this page again when it's done.")
 		elseif armedSeconds then
-			status:SetText(("Starts when you close the settings: %d seconds."):format(armedSeconds))
+			status:SetText(("Starts when you close the settings: %d seconds%s."):format(armedSeconds,
+				armedDeep and ", deep" or ""))
 		elseif not ns.lastProfile then
 			status:SetText("No recording yet since the last /reload.")
 		end
@@ -511,8 +577,9 @@ function ns.CreateProfilerPanel(kit)
 		local used = 0
 		if last then
 			if not (ns.IsProfiling() or armedSeconds) then
-				status:SetText(("Last recording: %s, %.0f s (%.0f fps). At the start: %s"):format(
-					date("%H:%M:%S", last.finished), last.seconds, last.fps, last.startState))
+				status:SetText(("Last recording%s: %s, %.0f s (%.0f fps). At the start: %s"):format(
+					last.deep and " (deep)" or "", date("%H:%M:%S", last.finished), last.seconds, last.fps,
+					last.startState))
 			end
 			local text = ("Measured |cffffd100%.3f ms a frame|r (%.2f%% of the %.2f ms frame), garbage %.0f KB a " ..
 				"second; frames over 1 / 5 / 16 ms: %d / %d / %d, worst %.2f ms"):format(last.total,
@@ -529,7 +596,7 @@ function ns.CreateProfilerPanel(kit)
 				used = used + 1
 				FillRow(used, section, false, biggest, last.total)
 				for c, child in ipairs(section.children) do
-					if c > CHILD_ROWS then break end
+					if c > (last.deep and DEEP_CHILD_ROWS or CHILD_ROWS) then break end
 					used = used + 1
 					FillRow(used, child, true, biggest, last.total)
 				end
@@ -546,6 +613,13 @@ function ns.CreateProfilerPanel(kit)
 	function Refresh()
 		DrawGraph()
 		DrawRecording()
+		local on = PageOn() and true or false
+		record30:SetEnabled(on)
+		record120:SetEnabled(on)
+		recordDeep:SetEnabled(on)
+		if not on and not ns.IsProfiling() and not armedSeconds then
+			status:SetText("Turn on Enable page to record.")
+		end
 	end
 	canvas:SetScript("OnShow", kit.PageShown(Refresh, content))
 	canvas:HookScript("OnShow", function() onSample = DrawGraph end)

@@ -3997,7 +3997,10 @@ end
 -- Called from UpdateOrbit each frame, before UpdateFlyBy.
 function ns.UpdateAutoFlyBy(now, onTaxi, cinematic, adjusting)
 	if not onTaxi then
-		autoFlyBys = { times = {} }
+		-- (Cleared once, as the flight ends: not a fresh plan every frame on the ground.)
+		if autoFlyBys.key ~= nil or autoFlyBys.times[1] then
+			autoFlyBys = { times = {} }
+		end
 		return
 	end
 	if not (ns.db.taxiFlyBy and cinematic and ns.FlightCameraOn()) or ns.FlightTakenOver() then

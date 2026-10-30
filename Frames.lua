@@ -4560,7 +4560,10 @@ local function Hidden(frame)
 end
 
 -- The spell an icon shows, if it says.
-local function ItemSpell(item)
+local ItemSpell
+do
+local INFO_SPELL_FIELDS = { "overrideSpellID", "spellID" }
+function ItemSpell(item)
 	if item.GetSpellID then
 		local ok, id = pcall(item.GetSpellID, item)
 		if ok and not Secret(id) and type(id) == "number" and id > 0 then return id end
@@ -4575,12 +4578,13 @@ local function ItemSpell(item)
 		and C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCooldownInfo then
 		local ok, info = pcall(C_CooldownViewer.GetCooldownViewerCooldownInfo, cooldownID)
 		if ok and type(info) == "table" then
-			for _, field in ipairs({ "overrideSpellID", "spellID" }) do
+			for _, field in ipairs(INFO_SPELL_FIELDS) do
 				local id = info[field]
 				if type(id) == "number" and not Secret(id) and id > 0 then return id end
 			end
 		end
 	end
+end
 end
 
 -- An icon's Cooldown Manager info (spellID, overrideSpellID, charges...), if it says.
@@ -4630,7 +4634,26 @@ do
 end
 
 -- A spell's cooldown: start and duration in seconds, or nil if the game won't say.
-local function SpellCooldown(id)
+-- (Asked for every Cooldown Manager icon ten times a second, and the game
+-- gives a new table each time: each answer is kept until the game says
+-- cooldowns changed, or for a second at most; a fight starting or ending
+-- too, as it changes what's secret.)
+local SpellCooldown
+do
+local NOT_KNOWN = false
+local keptStart, keptDuration, keptAt = {}, {}, {}
+local function Forget()
+	wipe(keptStart)
+	wipe(keptDuration)
+	wipe(keptAt)
+end
+local forgetter = CreateFrame("Frame")
+for _, event in ipairs({ "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES", "PLAYER_REGEN_DISABLED",
+	"PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD", "PLAYER_TALENT_UPDATE" }) do
+	pcall(forgetter.RegisterEvent, forgetter, event)
+end
+forgetter:SetScript("OnEvent", Forget)
+local function AskCooldown(id)
 	local ok, start, duration
 	if C_Spell and C_Spell.GetSpellCooldown then
 		local info
@@ -4646,6 +4669,21 @@ local function SpellCooldown(id)
 	end
 	return start, duration
 end
+function SpellCooldown(id)
+	local now = GetTime()
+	local at = keptAt[id]
+	if at and now - at < 1 then
+		local start = keptStart[id]
+		if start == NOT_KNOWN then
+			return nil
+		end
+		return start, keptDuration[id]
+	end
+	local start, duration = AskCooldown(id)
+	keptAt[id], keptStart[id], keptDuration[id] = now, start or NOT_KNOWN, duration
+	return start, duration
+end
+end
 
 -- A cooldown swipe's start and duration, in seconds, or nil.
 local function SwipeTimes(cooldown)
@@ -4659,8 +4697,31 @@ end
 
 -- Calls visit(frame, kind) for each icon ("item", one with a spell) and each
 -- cooldown swipe ("swipe") under frame (all: hidden ones too).
-local function EachCooldownPart(frame, depth, visit, all)
-	for _, child in ipairs({ frame:GetChildren() }) do
+-- (Looked through several times a second: each walk's list of children is
+-- kept and reused, one for each walk running inside another, not made anew.)
+local EachCooldownPart
+do
+local childLists, walking = {}, 0
+local function FillChildren(list, ...)
+	local count = select("#", ...)
+	for i = 1, count do
+		list[i] = (select(i, ...))
+	end
+	for i = count + 1, list.count or 0 do
+		list[i] = nil
+	end
+	list.count = count
+	return count
+end
+function EachCooldownPart(frame, depth, visit, all)
+	walking = walking + 1
+	local list = childLists[walking]
+	if not list then
+		list = {}
+		childLists[walking] = list
+	end
+	for i = 1, FillChildren(list, frame:GetChildren()) do
+		local child = list[i]
 		if all or not Hidden(child) then
 			local isCooldown = child.GetObjectType and child:GetObjectType() == "Cooldown"
 			if isCooldown then
@@ -4673,6 +4734,10 @@ local function EachCooldownPart(frame, depth, visit, all)
 			end
 		end
 	end
+	-- (A visit that errored leaves this a step high: the next walks just use
+	-- lists further in.)
+	walking = walking - 1
+end
 end
 
 local function Recharging(start, duration, now)
@@ -4833,7 +4898,7 @@ end
 
 -- A group's mode, and its Resources and Show Early seconds (nil: the default share).
 function ns.CooldownGroupSettings(group)
-	local set = ns.db.cooldownGroupDefaults[group] or {}
+	local set = ns.db.cooldownGroupDefaults[group] or NO_DEFAULTS
 	return set.mode or ns.COOLDOWN_GROUP_MODES[group] or "always", set.power, set.early
 end
 
@@ -4898,14 +4963,21 @@ end
 
 -- How long until an icon's spell is ready (sec, 0 when it is), and its
 -- cooldown; nil when it can't tell.
-local function IconTimeLeft(icon, id, now)
+local IconTimeLeft
+do
+-- (The first swipe's times, found by one function made once.)
+local swipeStart, swipeDuration
+local function FirstSwipe(part, kind)
+	if kind == "swipe" and not swipeStart then
+		swipeStart, swipeDuration = SwipeTimes(part)
+	end
+end
+function IconTimeLeft(icon, id, now)
 	local start, duration = SpellCooldown(id)
 	if not start then
-		EachCooldownPart(icon, 1, function(part, kind)
-			if kind == "swipe" and not start then
-				start, duration = SwipeTimes(part)
-			end
-		end)
+		swipeStart, swipeDuration = nil, nil
+		EachCooldownPart(icon, 1, FirstSwipe)
+		start, duration = swipeStart, swipeDuration
 	end
 	if start then
 		if not Recharging(start, duration, now) then
@@ -4919,6 +4991,7 @@ local function IconTimeLeft(icon, id, now)
 		return math.max(0, cast + length - now), length
 	end
 	return nil
+end
 end
 
 -- Whether you have the resources to cast a spell (mana, Maelstrom...): the
@@ -5067,23 +5140,31 @@ end
 -- bars and its tracked buffs and bars (bar: the viewer's name). all: hidden
 -- ones too (a buff that isn't up), for its page: the viewer's own icons in
 -- use when it says, else every icon in it.
-local function EachCooldownIcon(visit, all)
+local EachCooldownIcon
+do
+-- (One Item function made once, not one for each bar on every pass: the walk
+-- under way's visit and bar, kept aside while another walk runs inside it.)
+local visiting, visitingBar
+local function Item(part, kind)
+	if kind == "item" then
+		local id = ItemSpell(part)
+		if id then
+			iconSpell[part] = id
+		end
+		id = id or iconSpell[part]
+		if id then
+			ns.NoteCooldownIcon(part, id)
+			visiting(part, id, visitingBar)
+		end
+	end
+end
+function EachCooldownIcon(visit, all)
+	local outerVisit, outerBar = visiting, visitingBar
+	visiting = visit
 	for _, entry in ipairs(ns.managed) do
 		local name, frame = entry.name, entry.frame
 		if COOLDOWN_VIEWERS[name] or ns.COOLDOWN_BUFF_GROUPS[name] then
-			local function Item(part, kind)
-				if kind == "item" then
-					local id = ItemSpell(part)
-					if id then
-						iconSpell[part] = id
-					end
-					id = id or iconSpell[part]
-					if id then
-						ns.NoteCooldownIcon(part, id)
-						visit(part, id, name)
-					end
-				end
-			end
+			visitingBar = name
 			local pool = all and frame.itemFramePool
 			if type(pool) == "table" and type(pool.EnumerateActive) == "function" then
 				for part in pool:EnumerateActive() do Item(part, "item") end
@@ -5092,6 +5173,8 @@ local function EachCooldownIcon(visit, all)
 			end
 		end
 	end
+	visiting, visitingBar = outerVisit, outerBar
+end
 end
 
 -- The spells in the Cooldown Manager now, for its page, as its settings
@@ -5882,7 +5965,30 @@ local function SyncSwitches()
 end
 ns.SyncSwitches = SyncSwitches
 
-local function UpdateReadyOnly(elapsed, now)
+local UpdateReadyOnly
+do
+-- (Each pass's icons looked at by one function made once, with the pass's
+-- time and whether you're in a fight.)
+local passNow, passInCombat
+local function ReadyTarget(icon, id, bar)
+	local buffGroup = ns.COOLDOWN_BUFF_GROUPS[bar]
+	if buffGroup then
+		if not ns.CooldownBuffShows(ns.CooldownBuffMode(id, buffGroup), passInCombat) then
+			readyTargets[icon] = 0
+		end
+		return
+	end
+	local mode, _, power, earlyOn, seconds = ns.CooldownSpellMode(id, ns.COOLDOWN_BAR_GROUPS[bar])
+	if mode == "ready" then
+		readyTargets[icon] = (passInCombat and IconShows(icon, id, passNow, power, earlyOn, seconds)) and 1 or 0
+	elseif mode == "recharge" then
+		local left = IconTimeLeft(icon, id, passNow) -- (not knowing: faded)
+		readyTargets[icon] = (left and left > 0) and 1 or 0
+	elseif mode == "proc" then
+		readyTargets[icon] = ns.SpellGlowing(id, icon) and 1 or 0
+	end
+end
+function UpdateReadyOnly(elapsed, now)
 	SyncSwitches()
 	if not GroupHandled("cooldowns") or not ns.PageOn("handleCooldowns") then
 		return
@@ -5893,31 +5999,15 @@ local function UpdateReadyOnly(elapsed, now)
 		local db = ns.db
 		local any = next(db.cooldownReadyOnly) or next(db.cooldownRechargeOnly) or next(db.cooldownProcOnly)
 			or next(db.cooldownBuffMode)
-		for _, list in ipairs({ ns.COOLDOWN_BAR_GROUPS, ns.COOLDOWN_BUFF_GROUPS }) do
-			for _, group in pairs(list) do
-				any = any or ns.CooldownGroupSettings(group) ~= "always"
-			end
+		for _, group in pairs(ns.COOLDOWN_BAR_GROUPS) do
+			any = any or ns.CooldownGroupSettings(group) ~= "always"
+		end
+		for _, group in pairs(ns.COOLDOWN_BUFF_GROUPS) do
+			any = any or ns.CooldownGroupSettings(group) ~= "always"
 		end
 		if any then
-			local inCombat = InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
-			EachCooldownIcon(function(icon, id, bar)
-				local buffGroup = ns.COOLDOWN_BUFF_GROUPS[bar]
-				if buffGroup then
-					if not ns.CooldownBuffShows(ns.CooldownBuffMode(id, buffGroup), inCombat) then
-						readyTargets[icon] = 0
-					end
-					return
-				end
-				local mode, _, power, earlyOn, seconds = ns.CooldownSpellMode(id, ns.COOLDOWN_BAR_GROUPS[bar])
-				if mode == "ready" then
-					readyTargets[icon] = (inCombat and IconShows(icon, id, now, power, earlyOn, seconds)) and 1 or 0
-				elseif mode == "recharge" then
-					local left = IconTimeLeft(icon, id, now) -- (not knowing: faded)
-					readyTargets[icon] = (left and left > 0) and 1 or 0
-				elseif mode == "proc" then
-					readyTargets[icon] = ns.SpellGlowing(id, icon) and 1 or 0
-				end
-			end)
+			passNow, passInCombat = now, InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+			EachCooldownIcon(ReadyTarget)
 		end
 		ns.CenterCooldownIcons()
 	end
@@ -5937,6 +6027,7 @@ local function UpdateReadyOnly(elapsed, now)
 		end
 		readyAlpha[icon] = alpha < 1 and alpha or nil
 	end
+end
 end
 UpdateReadyOnly = ns.Profiled("UpdateReadyOnly", UpdateReadyOnly)
 
@@ -6758,6 +6849,9 @@ do
 	end
 end
 
+-- Where the mouse was when the hover checks last ran (see below).
+tickTables.hoverMouse = { at = -math.huge }
+
 function ns.UpdateFrames(cinematic, elapsed)
 	local now = GetTime()
 	UpdateReadyOnly(elapsed, now)
@@ -6842,9 +6936,24 @@ function ns.UpdateFrames(cinematic, elapsed)
 	local ownPartyRows = ns.db.raidStylePartySame == false
 	if cinematic and ns.db.mouseover then
 		local mouseRows = wipe(tickTables.mouseRows)
+		-- (Asked of every faded frame, many times a second: with the mouse
+		-- still, on the same thing, each frame's answer stands, asked again a
+		-- few times a second in case a frame showed or moved under it.)
+		local mouse = tickTables.hoverMouse
+		local x, y = GetCursorPosition()
+		local focus = MouseFocus()
+		local still = x == mouse.x and y == mouse.y and focus == mouse.focus and now - mouse.at < 0.25
+		if not still then
+			mouse.x, mouse.y, mouse.focus, mouse.at = x, y, focus, now
+		end
 		for _, entry in ipairs(ns.managed) do
 			entry.row = entry.row or ns.HoverRowFor(entry)
-			if ns.IsEntryHovered(entry) then
+			local over = entry.hoverWas
+			if not still or over == nil then
+				over = ns.IsEntryHovered(entry) and true or false
+				entry.hoverWas = over
+			end
+			if over then
 				mouseRows[ownPartyRows and entry.rspGroup or entry.row] = true
 			end
 		end
