@@ -108,6 +108,7 @@ ProfileModules.lua
 ProfileChoices.lua
 Profiles.lua
 Share.lua
+Backups.lua
 Welcome.lua
 Layouts.lua
 ModuleEditor.lua

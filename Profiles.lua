@@ -607,6 +607,7 @@ end
 function ns.RenameProfile(old, new)
 	if builtinByName[old] or ns.ProfileExists(new) then return false end
 	if old == ns.ActiveProfile() then ns.SaveProfile() end
+	if ns.RenameBackups then ns.RenameBackups(old, new) end -- (Backups.lua)
 	ns.db.profiles[new], ns.db.profiles[old] = ns.db.profiles[old], nil
 	ns.db.profileNotes[new], ns.db.profileNotes[old] = ns.db.profileNotes[old], nil
 	ns.db.profileIcons[new], ns.db.profileIcons[old] = ns.db.profileIcons[old], nil
@@ -621,6 +622,7 @@ end
 -- Deleting the active one switches to the default profile first.
 function ns.DeleteProfile(name)
 	if builtinByName[name] then return false end
+	if ns.BackupDeleted then ns.BackupDeleted(name) end -- (its last copy kept a while: Backups.lua)
 	if name == ns.ActiveProfile() then ns.SetProfile(DEFAULT_PROFILE) end
 	if ns.db.profile == name then ns.db.profile = DEFAULT_PROFILE end
 	ns.db.profiles[name] = nil
@@ -631,6 +633,7 @@ end
 
 -- Back to the profile's base: a built-in's own values, or the defaults.
 function ns.ResetProfile()
+	if ns.BackupProfile then ns.BackupProfile(ns.ActiveProfile(), "reset") end -- (Backups.lua)
 	ns.db.profiles[ns.ActiveProfile()] = nil
 	Load(ns.ActiveProfile())
 	SettingsChanged()

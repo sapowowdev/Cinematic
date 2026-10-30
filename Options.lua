@@ -11948,7 +11948,10 @@ local function NamePopup(text, accept, opts)
 			if box then
 				if opts.width then
 					usualWidth = box:GetWidth()
-					box:SetWidth(opts.width)
+					-- (No wider than the popup: the game doesn't widen it to fit,
+					-- so a wider box ran out past its edges.)
+					local room = (self:GetWidth() or 0) - 50
+					box:SetWidth(room > usualWidth and math.min(opts.width, room) or usualWidth)
 				end
 				box:SetText((opts.initial and opts.initial(data)) or data or "")
 				box:HighlightText()
@@ -12109,6 +12112,9 @@ local function IconPicker(canvas, onPick)
 	return picker
 end
 
+-- The game's right-click menus (not on Classic Era): a profile card's.
+local PROFILE_MENUS = MenuUtil and MenuUtil.CreateContextMenu and true or false
+
 local function CreateProfilesPanel()
 	local canvas, content = CreateScrollPage(true)
 
@@ -12178,6 +12184,9 @@ local function CreateProfilesPanel()
 	local function ProfileText(cell)
 		local hint = cell.name ~= active and L["Click to switch to it."]
 			or not ns.IsBuiltinProfile(cell.name) and L["Click to pick its icon."]
+		if PROFILE_MENUS then
+			hint = (hint and hint .. " " or "") .. L["Right-click for more."]
+		end
 		return "|cffffd100" .. ns.ProfileLabel(cell.name) .. "|r   " .. cell.tip
 			.. (hint and "\n|cff808080" .. hint .. "|r" or "")
 	end
@@ -12256,6 +12265,7 @@ local function CreateProfilesPanel()
 	end)
 	tips[#tips + 1] = newTip
 
+	local ProfileMenu -- (below)
 	local function GetCell(i)
 		if cells[i] then return cells[i] end
 		local cell = Card()
@@ -12263,8 +12273,11 @@ local function CreateProfilesPanel()
 		cell.changed = S.Text(cell, "GameFontHighlightSmall", L["(changed)"], S.DIM)
 		cell.changed:SetPoint("TOPRIGHT", -6, -6)
 		cell.changed.searchSkip = true
-		cell:SetScript("OnClick", function(self)
-			if self.name ~= active then
+		cell:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+		cell:SetScript("OnClick", function(self, mouse)
+			if mouse == "RightButton" then
+				ProfileMenu(self)
+			elseif self.name ~= active then
 				picker:Hide()
 				ns.SetProfile(self.name)
 				ns.PreviewProfile(self.name)
@@ -12314,39 +12327,85 @@ local function CreateProfilesPanel()
 		tips[#tips + 1] = tip
 		return button
 	end
-	local rename = Button(buttons, L["Rename"], 90, L["Rename the active profile (your own ones only)."], function()
-		local name = ns.ActiveProfile()
-		StaticPopup_Show("CINEMATIC_PROFILE_RENAME", nil, nil, name)
+	-- Sharing (Share.lua): a profile pasted in. Backups (Backups.lua): copies of
+	-- the active profile to go back to, and deleted ones. The rest is on a
+	-- card's right-click menu (ProfileMenu below), for that profile; clients
+	-- without the game's menus have buttons for the active one instead.
+	local backups = Button(buttons, L["Backups"], 90, L["Copies of the active profile from earlier days and from " ..
+		"just before Delete or Reset profile, to bring one back as a new profile. Deleted profiles too."], function()
+		ns.ShowBackups()
 	end)
-	rename:SetPoint("LEFT", buttons, "LEFT", 0, 0)
-	local note = Button(buttons, L["Description"], 96, L["Write what the active profile is for, shown when you point " ..
-		"at its icon (your own ones only)."], function()
-		local name = ns.ActiveProfile()
-		StaticPopup_Show("CINEMATIC_PROFILE_NOTE", nil, nil, name)
-	end)
-	note:SetPoint("LEFT", rename, "RIGHT", 8, 0)
-	local delete = Button(buttons, L["Delete"], 84, L["Delete the active profile (your own ones only), switching to %s."]:format(
-		ns.ProfileLabel(ns.DEFAULT_PROFILE)), function()
-		local name = ns.ActiveProfile()
-		StaticPopup_Show("CINEMATIC_PROFILE_DELETE", name, nil, name)
-	end)
-	delete:SetPoint("LEFT", note, "RIGHT", 8, 0)
-	local reset = Button(buttons, L["Reset profile"], 100, L["Put the active built-in profile back to its own values (your own " ..
-		"profiles keep your changes as you go)."], function()
-		StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ProfileLabel(ns.ActiveProfile()))
-	end)
-	reset:SetPoint("LEFT", delete, "RIGHT", 8, 0)
-	-- Sharing (Share.lua): the active profile as text, or one pasted in.
+	backups:SetPoint("LEFT", buttons, "LEFT", 0, 0)
 	local import = Button(buttons, L["Import"], 84, L["Add a profile someone shared with you, from the text they " ..
 		"gave you. Your own profiles stay as they are."], function()
 		ns.ShowImport()
 	end)
-	import:SetPoint("RIGHT", buttons, "RIGHT", 0, 0)
-	local export = Button(buttons, L["Export"], 84, L["The active profile as a line of text to copy and paste " ..
-		"wherever your friends will see it, so they can import it (your own ones only: everyone has the built-in ones)."], function()
-		ns.ShowExport()
-	end)
-	export:SetPoint("RIGHT", import, "LEFT", -8, 0)
+	import:SetPoint("LEFT", backups, "RIGHT", 8, 0)
+	local rename, note, delete, reset, export
+	if not PROFILE_MENUS then
+		rename = Button(buttons, L["Rename"], 90, L["Rename the active profile (your own ones only)."], function()
+			local name = ns.ActiveProfile()
+			StaticPopup_Show("CINEMATIC_PROFILE_RENAME", nil, nil, name)
+		end)
+		rename:SetPoint("LEFT", import, "RIGHT", 8, 0)
+		note = Button(buttons, L["Description"], 96, L["Write what the active profile is for, shown when you point " ..
+			"at its icon (your own ones only)."], function()
+			local name = ns.ActiveProfile()
+			StaticPopup_Show("CINEMATIC_PROFILE_NOTE", nil, nil, name)
+		end)
+		note:SetPoint("LEFT", rename, "RIGHT", 8, 0)
+		delete = Button(buttons, L["Delete"], 84, L["Delete the active profile (your own ones only), switching to %s."]:format(
+			ns.ProfileLabel(ns.DEFAULT_PROFILE)), function()
+			local name = ns.ActiveProfile()
+			StaticPopup_Show("CINEMATIC_PROFILE_DELETE", name, nil, name)
+		end)
+		delete:SetPoint("LEFT", note, "RIGHT", 8, 0)
+		reset = Button(buttons, L["Reset profile"], 100, L["Put the active built-in profile back to its own values (your own " ..
+			"profiles keep your changes as you go)."], function()
+			StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ProfileLabel(ns.ActiveProfile()))
+		end)
+		reset:SetPoint("TOPLEFT", backups, "BOTTOMLEFT", 0, -8)
+		export = Button(buttons, L["Export"], 84, L["The active profile as a line of text to copy and paste " ..
+			"wherever your friends will see it, so they can import it (your own ones only: everyone has the built-in ones)."], function()
+			ns.ShowExport()
+		end)
+		export:SetPoint("LEFT", reset, "RIGHT", 8, 0)
+	end
+	-- Right-clicking a card: what's done to a profile, for that one.
+	function ProfileMenu(cell)
+		if not PROFILE_MENUS then return end
+		local name = cell.name
+		local own = not ns.IsBuiltinProfile(name)
+		MenuUtil.CreateContextMenu(cell, function(_, root)
+			root:CreateTitle(ns.ProfileLabel(name))
+			if name ~= active then
+				root:CreateButton(L["Switch to it"], function() cell:Click("LeftButton") end)
+			end
+			if own then
+				root:CreateButton(L["Rename"], function() StaticPopup_Show("CINEMATIC_PROFILE_RENAME", nil, nil, name) end)
+				root:CreateButton(L["Description"], function() StaticPopup_Show("CINEMATIC_PROFILE_NOTE", nil, nil, name) end)
+				root:CreateButton(L["Change icon"], function() picker:Open(cell, name, ns.ProfileIcon(name)) end)
+				root:CreateButton(L["Export"], function() ns.ShowExport(name) end)
+			elseif name == active then
+				root:CreateButton(L["Reset profile"], function()
+					StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ProfileLabel(name))
+				end)
+			end
+			root:CreateButton(L["Backups"], function() ns.ShowBackups(name) end)
+			if own then
+				root:CreateDivider()
+				root:CreateButton("|cffff4040" .. L["Delete"] .. "|r", function()
+					StaticPopup_Show("CINEMATIC_PROFILE_DELETE", name, nil, name)
+				end)
+			end
+		end)
+	end
+
+	-- (Managing comes right under the cards and their box, Customize after.)
+	manageHeader:ClearAllPoints()
+	manageHeader:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -18)
+	customizeHeader:ClearAllPoints()
+	customizeHeader:SetPoint("TOPLEFT", reset or backups, "BOTTOMLEFT", 0, -22)
 
 	-- A card's place in the grid.
 	local function Place(cell, i)
@@ -12374,7 +12433,8 @@ local function CreateProfilesPanel()
 			local written = ns.ProfileNote(name)
 			cell.line:SetText(LEVELS[name] and LEVELS[name].line or written or L["Your own profile"])
 			cell.tip = builtin and builtin.tip or written
-				or L["Your own profile. Pick it, then Description to say what it's for."]
+				or (PROFILE_MENUS and L["Your own profile. Right-click it, then Description to say what it's for."]
+				or L["Your own profile. Pick it, then Description to say what it's for."])
 			-- (Gold for the active one, its name and edge.)
 			S.Color(cell.label, name == active and S.GOLD or S.WHITE)
 			cell:SetBackdropBorderColor(unpack(name == active and S.GOLD or S.EDGE))
@@ -12401,11 +12461,13 @@ local function CreateProfilesPanel()
 		box:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -10 - rows * (CARD_H + GAP))
 		customize:Refresh()
 		local own = active ~= nil and not ns.IsBuiltinProfile(active)
-		rename:SetEnabled(own)
-		note:SetEnabled(own)
-		delete:SetEnabled(own)
-		reset:SetEnabled(active ~= nil and not own)
-		export:SetEnabled(own)
+		if rename then
+			rename:SetEnabled(own)
+			note:SetEnabled(own)
+			delete:SetEnabled(own)
+			reset:SetEnabled(active ~= nil and not own)
+			export:SetEnabled(own)
+		end
 		FitContentHeight(content)
 	end
 	controls[#controls + 1] = { Refresh = function()

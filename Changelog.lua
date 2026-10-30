@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-30", page = "Profiles", title = "Profile backups",
+		text = "Your own profiles are backed up once a day when they change and just before Delete or Reset, " ..
+		"and deleted ones are kept for 30 days. Bring one back with Backups on the Profiles page." },
 	{ date = "2026-10-30", page = "Combat Vision", title = "Boss cards",
 		text = "A boss's name as a title card, as its fight starts or as you first target it or come near: on " ..
 		"the screen, in a letterbox bar or low on the left like a film, with its dungeon and which boss it is. " ..
