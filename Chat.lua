@@ -388,8 +388,9 @@ end
 -- with its text showed on screen. Bubbles kept from addons (in instances, on
 -- retail) can't be read: a new one turning up counts as the line's. Bubbles
 -- switched off peek as before. With "Show speech from behind
--- you" (db.chatSpeechBehind), one with no bubble shows low on the screen
--- instead (Speech.lua), while its chat window is faded, and never keeps chat up.
+-- you" (db.chatSpeechBehind, with the Chat bubbles page on), one with no
+-- bubble shows low on the screen instead (Speech.lua), while its chat window
+-- is faded, and never keeps chat up.
 local BUBBLE_SPEECH = {
 	CHAT_MSG_SAY = true, CHAT_MSG_YELL = true, CHAT_MSG_MONSTER_SAY = true, CHAT_MSG_MONSTER_YELL = true,
 }
@@ -421,7 +422,8 @@ local function SpeakOrPeek(line)
 			tostring(chatFrame:GetName()), tostring(chatFrame:IsShown()), tostring(chatFrame:IsVisible()),
 			tostring(chatFrame:GetEffectiveAlpha()), tostring(ns.db.chatSpeechBehind)))
 	end
-	if not (ns.db.chatSpeechBehind and ns.ShowSpeechBehind and ns.Flag(chatFrame:IsShown())) then
+	if not (ns.db.handleBubbles and ns.db.chatSpeechBehind and ns.ShowSpeechBehind
+			and ns.Flag(chatFrame:IsShown())) then
 		PeekWindow(chatFrame)
 	elseif ChatUnseen(chatFrame) or ns.db.speechBehindChatShown then
 		ns.ShowSpeechBehind(line[4], line[5], line[2], line[6])

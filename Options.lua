@@ -175,27 +175,63 @@ end
 -- Lays out a column of controls, each below the last, the same way on every
 -- page: headers and notes at the column edge, checkboxes 2 left of it (so the
 -- box lines up), sliders 2 right and edit boxes 6 right (their borders).
-local STACK_X = { header = 0, label = 0, dropdown = 0, check = -2, slider = 2, box = 6 }
+-- ("inline": a slider or dropdown on one line with its name, in an inline stack.)
+local STACK_X = { header = 0, label = 0, dropdown = 0, check = -2, slider = 2, box = 6, inline = 0 }
 local STACK_GAP = { -- [kind being added][kind above it]
-	header = { header = 6, label = 18, dropdown = 18, check = 18, slider = 24, box = 18 },
-	label = { header = 6, label = 6, dropdown = 6, check = 8, slider = 14, box = 4 },
-	dropdown = { header = 8, label = 6, dropdown = 8, check = 6, slider = 14, box = 8 },
-	check = { header = 6, label = 8, dropdown = 8, check = 2, slider = 14, box = 8 },
-	slider = { header = 26, label = 26, dropdown = 30, check = 26, slider = 34, box = 30 },
-	box = { header = 6, label = 4, dropdown = 8, check = 4, slider = 14, box = 8 },
+	header = { header = 6, label = 18, dropdown = 18, check = 18, slider = 24, box = 18, inline = 18 },
+	label = { header = 6, label = 6, dropdown = 6, check = 8, slider = 14, box = 4, inline = 8 },
+	dropdown = { header = 8, label = 6, dropdown = 8, check = 6, slider = 14, box = 8, inline = 8 },
+	check = { header = 6, label = 8, dropdown = 8, check = 2, slider = 14, box = 8, inline = 2 },
+	slider = { header = 26, label = 26, dropdown = 30, check = 26, slider = 34, box = 30, inline = 26 },
+	box = { header = 6, label = 4, dropdown = 8, check = 4, slider = 14, box = 8, inline = 6 },
+	inline = { header = 6, label = 8, dropdown = 8, check = 4, slider = 12, box = 6, inline = 4 },
 }
 
-local function Stack(anchor, kind)
-	local stack = { last = anchor, kind = kind or "header", indent = 0 }
+-- inline: each slider (and each dropdown given an inlineName) goes on one
+-- line with its name, as on Graphics+: the bars lined up past the stack's
+-- longest name, each value to its bar's right.
+local function Stack(anchor, kind, inline)
+	local stack = { last = anchor, kind = kind or "header", indent = 0, inline = inline, rows = {} }
 	-- Puts control below the last one. indent: how far right of the usual
 	-- place it sits (children of a checkbox); the next control is placed from it.
 	function stack:Add(control, controlKind, indent)
 		indent = indent or 0
-		control:SetPoint("TOPLEFT", self.last, "BOTTOMLEFT",
+		local placed = control
+		if self.inline and (controlKind == "slider" or control.inlineName) then
+			placed = self:InlineRow(control, controlKind)
+			controlKind = "inline"
+		end
+		placed:SetPoint("TOPLEFT", self.last, "BOTTOMLEFT",
 			STACK_X[controlKind] + indent - STACK_X[self.kind] - self.indent,
 			-STACK_GAP[controlKind][self.kind])
-		self.last, self.kind, self.indent = control, controlKind, indent
+		self.last, self.kind, self.indent = placed, controlKind, indent
 		return control
+	end
+	-- The line an inline control sits on, its name at the left.
+	function stack:InlineRow(control, controlKind)
+		local row = CreateFrame("Frame", nil, control:GetParent())
+		row:SetSize(1, 22)
+		local name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+		name:SetJustifyH("LEFT")
+		name:SetPoint("LEFT")
+		name:SetText(control.inlineName or control.searchLabel or "")
+		name.searchSkip = true
+		control.rowName = name
+		if controlKind == "slider" then
+			control.valueOnly = true
+			control:SetWidth(180)
+			control.title:ClearAllPoints()
+			control.title:SetPoint("LEFT", control, "RIGHT", 10, 0)
+			control.searchEdges = { top = control, bottom = control, left = name, right = control.title }
+		end
+		control.rowX = STACK_X[controlKind] -- (a slider's bar sits 2 right of where it's put)
+		self.rows[#self.rows + 1] = { row = row, control = control }
+		self.nameWidth = math.max(self.nameWidth or 0, name:GetStringWidth())
+		for _, each in ipairs(self.rows) do
+			each.control:ClearAllPoints()
+			each.control:SetPoint("LEFT", each.row, "LEFT", self.nameWidth + 20 + each.control.rowX, 0)
+		end
+		return row
 	end
 	function stack:Header(parent, text)
 		SetSection(parent, text)
@@ -290,7 +326,7 @@ local function Slider(parent, key, label, minV, maxV, step, fmt, scale, onChange
 
 	local function UpdateTitle(value)
 		local shown = "|cffffd100" .. (type(fmt) == "function" and fmt(value) or fmt:format(value)) .. "|r"
-		title:SetText(label == "" and shown or label .. ": " .. shown)
+		title:SetText((label == "" or slider.valueOnly) and shown or label .. ": " .. shown)
 	end
 	slider.title = title
 
@@ -431,6 +467,9 @@ local function GreyUnless(control, test)
 		elseif self.title and self.GetObjectType and self:GetObjectType() == "Slider" then
 			SetLabelFont(self.title, enabled and "GameFontHighlight" or "GameFontDisable")
 		end
+		if self.rowName then -- (an inline stack's row name)
+			SetLabelFont(self.rowName, enabled and "GameFontHighlight" or "GameFontDisable")
+		end
 	end
 end
 
@@ -556,6 +595,13 @@ local function Dropdown(parent, key, choices, width, onChange)
 					if strip.SetDesaturation then strip:SetDesaturation(grey and 1 or 0) end
 				end)
 			end
+			-- (choice.tip: its tooltip in the open menu.)
+			if choice.tip and radio and radio.SetTooltip then
+				radio:SetTooltip(function(tooltip)
+					tooltip:SetText(choice.text, 1, 1, 1)
+					tooltip:AddLine(choice.tip, nil, nil, nil, true)
+				end)
+			end
 			local db = ns.GetDB()
 			if choice.enabled and db and radio and radio.SetEnabled then
 				radio:SetEnabled(choice.enabled(db) and true or false)
@@ -578,13 +624,15 @@ local SCROLLBAR_WIDTH = 26
 local RESET_TO_NIL = { hoverGroups = true }
 -- More for a page's reset to do: [page content] = fn, after its settings are back.
 local resetHooks = {}
-local function ResetPage(content)
+-- only: just these settings of the page (a part's own Reset), key -> true.
+local function ResetPage(content, only)
 	local db = ns.GetDB()
 	local base = ns.ProfileBase() -- (the active profile's values, not just the defaults)
 	for key in pairs(pageKeys[content] or {}) do
 		local default = base[key]
 		local rows = pageRows[content] and pageRows[content][key]
-		if RESET_TO_NIL[key] then
+		if only and not only[key] then -- luacheck: ignore 542 (not this part's)
+		elseif RESET_TO_NIL[key] then
 			db[key] = nil
 		elseif type(default) == "table" then
 			-- A built-in profile's own list (copied: the profile's base stays as it
@@ -618,6 +666,16 @@ StaticPopupDialogs.CINEMATIC_RESET_PAGE = {
 	text = L["Put this page's settings back to the profile's own?"],
 	button1 = YES, button2 = NO,
 	OnAccept = function(_, content) ResetPage(content) end,
+	timeout = 0, whileDead = true, hideOnEscape = true,
+}
+-- A part of a page's own Reset: data = { content, keys = key -> true, after = fn }.
+StaticPopupDialogs.CINEMATIC_RESET_PART = {
+	text = L["Put these settings back to the profile's own?"],
+	button1 = YES, button2 = NO,
+	OnAccept = function(_, data)
+		ResetPage(data.content, data.keys)
+		if data.after then data.after() end
+	end,
 	timeout = 0, whileDead = true, hideOnEscape = true,
 }
 
@@ -1340,6 +1398,7 @@ do
 		}, pages = {
 			{ "Cameras", "Interface\\Icons\\INV_Misc_Spyglass_03", label = "General" },
 			{ "Camera Settings", "Interface\\Icons\\Trade_Engineering" }, -- (an icon per camera instead)
+			{ "Shoulder Cam", "Interface\\Icons\\INV_Shoulder_02", dev = true }, -- (ShoulderCam.lua)
 		} },
 		-- (label: the name on its icon, when the page is registered under another)
 		-- (the look and the sound: the visual effects' pages, then Audio)
@@ -1385,7 +1444,7 @@ do
 			{ "Vitals Vision", "Interface\\Icons\\Spell_Shadow_LifeDrain02", section = "Combat" },
 			{ "Quest Vision", "Interface\\Icons\\INV_Misc_Head_Dragon_01", section = "World" },
 			{ "Roll Vision", "Interface\\Icons\\INV_Misc_Dice_01", section = "World" },
-			{ "Wind Guide", "Interface\\Icons\\Spell_Nature_Cyclone" },
+			{ "Wind Guide", "Interface\\Icons\\Spell_Nature_Cyclone", dev = true },
 		} },
 		-- (the wheels are WheelsPage.lua's pages)
 		{ name = "Quality of life", colors = { Helpers = { 0.3, 0.7, 0.5 }, Wheels = { 0.65, 0.45, 0.9 } }, pages = {
@@ -1409,6 +1468,9 @@ do
 		} },
 	}
 	-- Pages still being worked on: "(WIP)" after the name on their icon's mouseover.
+	-- (dev = true on a page above: it's only in the dev copy (CinematicDev.toc), and
+	-- its icon has a red X over it and "(dev only)" on mouseover. Every dev-only
+	-- page gets it.)
 	local WIP_PAGES = { ["Wind Guide"] = true }
 	local TILE, TILE_GAP, EDGE = 36, 6, 12
 	local BAR = 30 -- (the search box and Reset page, above the icons)
@@ -1643,6 +1705,9 @@ do
 			GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
 			local shown = L[label or english]
 			GameTooltip:SetText(WIP_PAGES[english] and shown .. " " .. L["(WIP)"] or shown, 1, 0.82, 0)
+			if self.dev then
+				GameTooltip:AddLine("(dev only)", 1, 0.25, 0.25)
+			end
 			GameTooltip:Show()
 		end)
 		tile:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1669,6 +1734,17 @@ do
 						tile.order = order + i / 100
 						tile.section = tab.section or page.section
 						tile.onSelect, tile.resetContent = tab.onSelect, tab.resetContent
+						if page.dev and tile.CreateLine then
+							-- (A red X over the icon: dev copy only.)
+							tile.dev = true
+							for _, corners in ipairs({ { "TOPLEFT", "BOTTOMRIGHT" }, { "TOPRIGHT", "BOTTOMLEFT" } }) do
+								local line = tile:CreateLine(nil, "OVERLAY")
+								line:SetThickness(3)
+								line:SetColorTexture(1, 0.15, 0.15, 0.9)
+								line:SetStartPoint(corners[1], tile.icon, 0, 0)
+								line:SetEndPoint(corners[2], tile.icon, 0, 0)
+							end
+						end
 						if tab.setSelect then
 							tab.setSelect(function() Select(tile) end)
 						end
@@ -2116,46 +2192,38 @@ end
 
 -- Slow zoom controls for one profile (idleZoom* or taxiZoom*), stacked under
 -- `anchor` (a checkbox). Returns the last control, for anchoring below it.
-local function BuildZoomControls(parent, prefix, anchor)
+local function BuildZoomControls(parent, stack, prefix)
 	local function key(name) return prefix .. name end
 
-	local zoomRandom = Check(parent, key("Random"), L["Random zoom in and out"],
+	stack:Add(Check(parent, key("Random"), L["Random zoom in and out"],
 		L["After the first pull-back, keep drifting to new random distances (within the " ..
-		"limits below), pausing between each. Off: a single pull-back that then holds."])
-	zoomRandom:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+		"limits below), pausing between each. Off: a single pull-back that then holds."]), "check")
 
-	local zoomDistance = Slider(parent, key("Distance"), L["Zoom out up to"], 1, 40, 1, L["%d yards"])
-	zoomDistance:SetPoint("TOPLEFT", zoomRandom, "BOTTOMLEFT", 4, -26)
+	local zoomDistance = stack:Add(Slider(parent, key("Distance"), L["Zoom out up to"], 1, 40, 1, L["%d yards"]), "slider")
 	Tooltip(zoomDistance, L["How far past your own zoom the camera pulls back (the first move always " ..
 		"goes this far)."])
 
-	local zoomIn = Slider(parent, key("In"), L["Zoom in up to"], 0, 10, 1, L["%d yards"])
-	zoomIn:SetPoint("TOPLEFT", zoomDistance, "BOTTOMLEFT", 0, -34)
+	local zoomIn = stack:Add(Slider(parent, key("In"), L["Zoom in up to"], 0, 10, 1, L["%d yards"]), "slider")
 	Tooltip(zoomIn, L["Random zoom only. How much closer than your own zoom it may come."])
 
-	local zoomTime = Slider(parent, key("Time"), L["Each zoom takes"], 5, 60, 1, L["%d sec"])
-	zoomTime:SetPoint("TOPLEFT", zoomIn, "BOTTOMLEFT", 0, -34)
+	stack:Add(Slider(parent, key("Time"), L["Each zoom takes"], 5, 60, 1, L["%d sec"]), "slider")
 
-	local zoomEase = Slider(parent, key("Ease"), L["Zoom ease in/out"], 10, 50, 5, "%d%%", 100)
-	zoomEase:SetPoint("TOPLEFT", zoomTime, "BOTTOMLEFT", 0, -34)
+	local zoomEase = stack:Add(Slider(parent, key("Ease"), L["Zoom ease in/out"], 10, 50, 5, "%d%%", 100), "slider")
 	Tooltip(zoomEase, L["How much of each zoom is spent speeding up, and again slowing down. " ..
 		"50% is one smooth swell; lower gets moving sooner and glides in the middle."])
 
-	local zoomPause = Slider(parent, key("Pause"), L["Pause between zooms"], 0, 60, 1, L["%d sec"])
-	zoomPause:SetPoint("TOPLEFT", zoomEase, "BOTTOMLEFT", 0, -34)
+	local zoomPause = stack:Add(Slider(parent, key("Pause"), L["Pause between zooms"], 0, 60, 1, L["%d sec"]), "slider")
 	Tooltip(zoomPause, L["Random zoom only."])
 
-	local zoomPauseVary = Slider(parent, key("PauseVary"), L["Pause varies by up to"], 0, 30, 0.5, L["%.1f sec"])
-	zoomPauseVary:SetPoint("TOPLEFT", zoomPause, "BOTTOMLEFT", 0, -34)
+	local zoomPauseVary = stack:Add(Slider(parent, key("PauseVary"), L["Pause varies by up to"], 0, 30, 0.5,
+		L["%.1f sec"]), "slider")
 	Tooltip(zoomPauseVary, L["Random zoom only. Each pause is picked at random this much shorter or " ..
 		"longer than the pause above: 3 sec with a 10 sec pause waits anywhere from 7 to 13 sec. " ..
 		"0 keeps every pause the same."])
 
-	local zoomPastMax = Check(parent, key("PastMax"), L["Allow zooming past your maximum"],
+	stack:Add(Check(parent, key("PastMax"), L["Allow zooming past your maximum"],
 		L["Raises the game's max camera distance (to 2.6) while pulled back, so the zoom " ..
-		"isn't cut short. Your own maximum comes back once you've zoomed in again."])
-	zoomPastMax:SetPoint("TOPLEFT", zoomPauseVary, "BOTTOMLEFT", -4, -14)
-	return zoomPastMax
+		"isn't cut short. Your own maximum comes back once you've zoomed in again."]), "check")
 end
 
 -- The camera modes' switch, on the Cameras page: off, no camera mode
@@ -2170,82 +2238,63 @@ end
 -- idleOrbit* for standing still), each on its own sub-page.
 -- Rotation controls for a camera's fixed style: "sweep" (steady sweeps: the
 -- AFK camera) or "back" (swings behind you: flights, RP walk).
-local function BuildRotationControls(container, prefix, style)
+local function BuildRotationControls(container, stack, prefix, style)
 	local function key(name) return prefix .. name end
 
-	local last
 	if style == "sweep" then
-		local orbitRight = Check(container, key("Right"), L["Turn clockwise"],
-			L["Sweeps turn the other way round."])
-		orbitRight:SetPoint("TOPLEFT", container, "TOPLEFT", -2, 0)
-		local lastCheck = orbitRight
+		local orbitRight = stack:Add(Check(container, key("Right"), L["Turn clockwise"],
+			L["Sweeps turn the other way round."]), "check")
 
 		if prefix == "idleOrbit" then
-			local randomDir = Check(container, key("RandomDir"), L["Random direction"],
+			stack:Add(Check(container, key("RandomDir"), L["Random direction"],
 				L["Each time the camera starts, it picks clockwise or anticlockwise at random " ..
 				"(and keeps to it until it stops)."], function(value)
 					ns.GetDB()[key("RandomDir")] = value
 					Refresh()
-				end)
-			randomDir:SetPoint("TOPLEFT", orbitRight, "BOTTOMLEFT", 0, 2)
+				end), "check")
 			GreyUnless(orbitRight, function(db) return not db[key("RandomDir")] end)
-			lastCheck = randomDir
 		end
 
-		local orbitStep = Slider(container, key("Step"), L["Turn per sweep"], 10, 90, 5, "%d°")
-		orbitStep:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", 4, -26)
+		local orbitStep = stack:Add(Slider(container, key("Step"), L["Turn per sweep"], 10, 90, 5, "%d°"), "slider")
 		Tooltip(orbitStep, L["How far each sweep turns, always the same way, staying level."])
 
-		local orbitSpeed = Slider(container, key("Speed"), L["Turn speed"], 1, 45, 1, "%d°/sec")
-		orbitSpeed:SetPoint("TOPLEFT", orbitStep, "BOTTOMLEFT", 0, -34)
+		local orbitSpeed = stack:Add(Slider(container, key("Speed"), L["Turn speed"], 1, 45, 1, "%d°/sec"), "slider")
 		Tooltip(orbitSpeed, L["Top speed in the middle of a sweep. At 6°/sec with 50% ease, a 30° " ..
 			"sweep takes 10 seconds."])
-		last = orbitSpeed
 	else
-		local minChange = Slider(container, key("MinChange"), L["Minimum change"], 10, 120, 5, "%d°")
-		minChange:SetPoint("TOPLEFT", container, "TOPLEFT", 2, -20)
+		local minChange = stack:Add(Slider(container, key("MinChange"), L["Minimum change"], 10, 120, 5, "%d°"), "slider")
 		Tooltip(minChange, L["The new angle is never within this many degrees of the current " ..
 			"one, either way. Keep it below the swing for varied moves."])
 
-		local backArc = Slider(container, key("BackArc"),
+		local backArc = stack:Add(Slider(container, key("BackArc"),
 			prefix == "cozyOrbit" and L["Swing either side of the front"] or L["Swing either side of behind"],
-			0, 90, 5, "%d°")
-		backArc:SetPoint("TOPLEFT", minChange, "BOTTOMLEFT", 0, -34)
+			0, 90, 5, "%d°"), "slider")
 		Tooltip(backArc, L["How far the camera may swing to either side of directly behind your " ..
 			"character. 90° reaches side-on; smaller keeps it closer behind."])
 
-		local pitchUp = Slider(container, key("PitchUp"), L["Tilt up as far as"], 0, 45, 5, "%d°")
-		pitchUp:SetPoint("TOPLEFT", backArc, "BOTTOMLEFT", 0, -34)
+		local pitchUp = stack:Add(Slider(container, key("PitchUp"), L["Tilt up as far as"], 0, 45, 5, "%d°"), "slider")
 		Tooltip(pitchUp, L["Each move also tilts the camera to a random angle between the down " ..
 			"and up limits. 0 on both keeps it level."])
 
-		local pitchDown = Slider(container, key("PitchDown"), L["Tilt down as far as"], 0, 45, 5, "%d°")
-		pitchDown:SetPoint("TOPLEFT", pitchUp, "BOTTOMLEFT", 0, -34)
+		local pitchDown = stack:Add(Slider(container, key("PitchDown"), L["Tilt down as far as"], 0, 45, 5, "%d°"), "slider")
 		Tooltip(pitchDown, L["How far below level a move may tilt."])
-		local lastPitch = pitchDown
 
 		if prefix == "runOrbit" then
-			local pitchFloor = Slider(container, key("PitchFloor"), L["Lowest tilt"], 0, 45, 1, "%d°")
-			pitchFloor:SetPoint("TOPLEFT", pitchDown, "BOTTOMLEFT", 0, -34)
+			local pitchFloor = stack:Add(Slider(container, key("PitchFloor"), L["Lowest tilt"], 0, 45, 1, "%d°"), "slider")
 			Tooltip(pitchFloor, L["The camera never tilts more than this far below where it was " ..
 				"when auto-run started, even when it lowers while you steer."])
-			lastPitch = pitchFloor
 		end
 
-		local moveTime = Slider(container, key("MoveTime"), L["Each move takes"], 1, 20, 0.5, L["%.1f sec"])
-		moveTime:SetPoint("TOPLEFT", lastPitch, "BOTTOMLEFT", 0, -34)
+		local moveTime = stack:Add(Slider(container, key("MoveTime"), L["Each move takes"], 1, 20, 0.5, L["%.1f sec"]), "slider")
 		Tooltip(moveTime, L["How long each move takes, however far it goes."])
-		last = moveTime
 	end
 
-	local ease = Slider(container, key("Ease"), L["Ease in/out"], 10, 50, 5, "%d%%", 100)
-	ease:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -34)
+	local ease = stack:Add(Slider(container, key("Ease"), L["Ease in/out"], 10, 50, 5, "%d%%", 100), "slider")
 	Tooltip(ease, L["How much of each move is spent speeding up, and again slowing down. " ..
 		"50% is one smooth swell, gentlest at the ends. Lower values get up to speed " ..
 		"quicker and cruise in the middle."])
 
-	local orbitPause = Slider(container, key("Pause"), L["Pause between moves"], 0, 60, 0.5, L["%.1f sec"])
-	orbitPause:SetPoint("TOPLEFT", ease, "BOTTOMLEFT", 0, -34)
+	local orbitPause = stack:Add(Slider(container, key("Pause"), L["Pause between moves"], 0, 60, 0.5, L["%.1f sec"]), "slider")
 	if style == "sweep" then
 		Tooltip(orbitPause, L["How long the camera rests between sweeps. 0 keeps it turning " ..
 			"continuously at the turn speed, without slowing between sweeps."])
@@ -2253,16 +2302,13 @@ local function BuildRotationControls(container, prefix, style)
 		Tooltip(orbitPause, L["How long the camera rests between moves."])
 	end
 
-	local drift = Check(container, key("Drift"), L["Keep drifting during pauses"],
+	stack:Add(Check(container, key("Drift"), L["Keep drifting during pauses"],
 		style == "sweep"
 			and L["Instead of stopping between sweeps, the camera keeps creeping slowly the same way."]
 			or L["Instead of stopping between moves, the camera keeps creeping slowly back toward " ..
-				"the middle."])
-	drift:SetPoint("TOPLEFT", orbitPause, "BOTTOMLEFT", -4, -14)
+				"the middle."]), "check")
 
-	local driftSpeed = Slider(container, key("DriftSpeed"), L["Drift speed"], 0.5, 5, 0.5, "%.1f°/sec")
-	driftSpeed:SetPoint("TOPLEFT", drift, "BOTTOMLEFT", 4, -26)
-	return driftSpeed
+	stack:Add(Slider(container, key("DriftSpeed"), L["Drift speed"], 0.5, 5, 0.5, "%.1f°/sec"), "slider")
 end
 
 
@@ -2460,11 +2506,11 @@ end
 --     starting cinematic mode straight away, the
 --     mode's own starting options (opts.start), the wait after combat and the
 --     pause after you move the camera.
---   Left column: Rotation (and opts.rotationExtras), then the mode's own
---     sections (opts.extras: Height, Turning, Fly-bys, Landing).
---   Right column: Zoom (and opts.zoomExtras), Depth of field.
+--   Then, in one column, each slider on one line with its name: Rotation
+--     (and opts.rotationExtras), Zoom (and opts.zoomExtras), the mode's own
+--     sections (opts.extras: Height, Turning, Fly-bys, Landing), Depth of field.
 -- The opts functions take (content, stack) and add their controls to it.
--- The Death, Quest and Tele Cam sections follow the same layout by hand.
+-- The Death, Quest, Tele and Chat Cam sections follow the same layout by hand.
 local ZOOM_TIP = L["The camera slowly pulls back, then (with random zoom) drifts in and out. Moving " ..
 	"glides it back to your distance; zooming yourself keeps your new distance."]
 local INPUT_PAUSE_TIP = L["After you drag the camera, use camera keys or zoom, this camera waits " ..
@@ -2475,7 +2521,7 @@ local function CreateCameraModePanel(opts)
 
 	local subtitle = PageIntro(content, title, opts.description, top)
 
-	local stack = Stack(subtitle, "label")
+	local stack = Stack(subtitle, "label", true)
 	if opts.top then
 		opts.top(content, stack)
 	end
@@ -2488,37 +2534,31 @@ local function CreateCameraModePanel(opts)
 		0, 60, 0.5, L["%.1f sec"]), "slider")
 	Tooltip(inputPause, INPUT_PAUSE_TIP .. (opts.inputPauseTip and (" " .. opts.inputPauseTip) or ""))
 
-	-- Left column: rotation, then the mode's own sections
-	local rotationHeader = stack:Header(content, L["Rotation"])
-	local rotate = stack:Add(Check(content, opts.orbitPrefix, opts.rotateLabel, opts.rotateTip), "check")
-	local container = CreateFrame("Frame", nil, content)
-	container:SetPoint("TOPLEFT", rotate, "BOTTOMLEFT", 2, -14)
-	container:SetSize(300, 1)
-	stack:Continue(BuildRotationControls(container, opts.orbitPrefix, opts.style), "slider")
+	stack:Header(content, L["Rotation"])
+	stack:Add(Check(content, opts.orbitPrefix, opts.rotateLabel, opts.rotateTip), "check")
+	BuildRotationControls(content, stack, opts.orbitPrefix, opts.style)
 	if opts.rotationExtras then
 		opts.rotationExtras(content, stack)
 	end
+
+	stack:Header(content, L["Zoom"])
+	stack:Add(Check(content, opts.zoomPrefix, L["Slowly zoom"], opts.zoomTip or ZOOM_TIP), "check")
+	BuildZoomControls(content, stack, opts.zoomPrefix)
+	if opts.zoomExtras then
+		opts.zoomExtras(content, stack)
+	end
+
 	if opts.extras then
 		opts.extras(content, stack)
 	end
 
-	-- Right column: zoom, depth of field
-	local zoomHeader = Label(content, "GameFontNormal", L["Zoom"])
-	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
-	local right = Stack(zoomHeader)
-	local zoom = right:Add(Check(content, opts.zoomPrefix, L["Slowly zoom"], opts.zoomTip or ZOOM_TIP), "check")
-	right:Continue(BuildZoomControls(content, opts.zoomPrefix, zoom), "check")
-	if opts.zoomExtras then
-		opts.zoomExtras(content, right)
-	end
-
-	right:Header(content, L["Depth of field"])
-	local dof = right:Add(Slider(content, opts.dofKey, L["Edge haze"], 0, 100, 2.5, "%.1f%%", 100, function(value)
+	stack:Header(content, L["Depth of field"])
+	local dof = stack:Add(Slider(content, opts.dofKey, L["Edge haze"], 0, 100, 2.5, "%.1f%%", 100, function(value)
 		if ns.FocusPreview then ns.FocusPreview(value / 100) end
 	end), "slider")
 	Tooltip(dof, L["A soft haze around the edges of the screen in this camera mode, as if the " ..
 		"camera had focused on you. 0% leaves it off. Moving the slider shows it for a moment. " ..
-		"Needs \"Depth of field\" on the Visual Effects page."])
+		"Needs \"Camera haze\" on the Visual Effects page, which also turns it up or down."])
 	GreyUnless(dof, function(db) return db.visualEffects and db.depthOfField end)
 end
 
@@ -2815,14 +2855,13 @@ local function CreateDeathPanel()
 	-- (On or off, and its song, are the Die row's camera and Music on the Cameras page.)
 	local function IfOn() return ns.TriggerAnyRow("Death") end
 
-	local stack = Stack(subtitle, "label")
+	local stack = Stack(subtitle, "label", true)
 	stack:Header(content, L["Starting"])
 	local delay = stack:Add(Slider(content, "deathOrbitDelay", L["Start after"], 0, 10, 0.5, L["%.1f sec"]), "slider")
 	Tooltip(delay, L["How long after you die before the camera starts turning."])
 	GreyUnless(delay, IfOn)
 
-	-- Left column: rotation, height
-	local rotationHeader = stack:Header(content, L["Rotation"])
+	stack:Header(content, L["Rotation"])
 	local right = stack:Add(Check(content, "deathOrbitRight", L["Turn clockwise"]), "check")
 	GreyUnless(right, function(db) return IfOn(db) and not db.deathOrbitRandomDir end)
 	local randomDir = stack:Add(Check(content, "deathOrbitRandomDir", L["Random direction"],
@@ -2831,6 +2870,13 @@ local function CreateDeathPanel()
 	GreyUnless(randomDir, IfOn)
 	local speed = stack:Add(Slider(content, "deathOrbitSpeed", L["Turn speed"], 1, 20, 1, "%d°/sec"), "slider")
 	GreyUnless(speed, IfOn)
+
+	stack:Header(content, L["Zoom"])
+	local zoom = stack:Add(Slider(content, "deathZoom", L["Zoom out by"], 0, 15, 0.5, L["%.1f yards"]), "slider")
+	Tooltip(zoom, L["Meanwhile the camera pulls back this far, and returns to your own distance " ..
+		"afterwards. Zooming yourself leaves it where you put it."])
+	GreyUnless(zoom, IfOn)
+
 	stack:Header(content, L["Height"])
 	local level = stack:Add(Slider(content, "deathLevel", L["Raise the camera"], 0, 90, 5, "%d°"), "slider")
 	Tooltip(level, L["As it starts, the camera rises this much to look down on your body; it comes " ..
@@ -2838,48 +2884,39 @@ local function CreateDeathPanel()
 		"means \"as high as it goes\". 0 keeps your angle."])
 	GreyUnless(level, IfOn)
 
-	-- Right column: zoom, screen, music
-	local zoomHeader = Label(content, "GameFontNormal", L["Zoom"])
-	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
-	local rightStack = Stack(zoomHeader)
-	local zoom = rightStack:Add(Slider(content, "deathZoom", L["Zoom out by"], 0, 15, 0.5, L["%.1f yards"]), "slider")
-	Tooltip(zoom, L["Meanwhile the camera pulls back this far, and returns to your own distance " ..
-		"afterwards. Zooming yourself leaves it where you put it."])
-	GreyUnless(zoom, IfOn)
-
-	rightStack:Header(content, L["Screen"])
-	local screen = rightStack:Add(Check(content, "deathScreen", L["Darken the screen"],
+	stack:Header(content, L["Screen"])
+	local screen = stack:Add(Check(content, "deathScreen", L["Darken the screen"],
 		L["The world dims and goes cold and gray-blue, with a heavy vignette closing in from the " ..
 		"edges. It clears when you release or come back."]), "check")
 	screen:HookScript("OnClick", Refresh) -- grey out / enable the strength below
 	GreyUnless(screen, IfOn)
-	local screenStrength = rightStack:Add(Slider(content, "deathScreenStrength", L["Strength"], 10, 100, 5,
+	local screenStrength = stack:Add(Slider(content, "deathScreenStrength", L["Strength"], 10, 100, 5,
 		"%d%%", 100), "slider")
 	GreyUnless(screenStrength, function(db) return IfOn(db) and db.deathScreen end)
-	local creep = rightStack:Add(Slider(content, "deathVignetteTime", L["Edges creep in over"], 1, 30, 1,
+	local creep = stack:Add(Slider(content, "deathVignetteTime", L["Edges creep in over"], 1, 30, 1,
 		L["%d sec"]), "slider")
 	Tooltip(creep, L["How long the dark edges take to close in after you die, starting gently and " ..
 		"settling at the end."])
 	GreyUnless(creep, function(db) return IfOn(db) and db.deathScreen end)
-	local reach = rightStack:Add(Slider(content, "deathVignetteSize", L["Edges reach in"], 15, 50, 5,
+	local reach = stack:Add(Slider(content, "deathVignetteSize", L["Edges reach in"], 15, 50, 5,
 		"%d%%", 100), "slider")
 	Tooltip(reach, L["How far the dark edges reach in once they've closed in, as a share of the " ..
 		"screen from each side."])
 	GreyUnless(reach, function(db) return IfOn(db) and db.deathScreen end)
-	local corpseRun = rightStack:Add(Check(content, "deathCorpseRun", L["Edges lift as you near your body"],
+	local corpseRun = stack:Add(Check(content, "deathCorpseRun", L["Edges lift as you near your body"],
 		L["Released to a graveyard with no spirit healer's countdown, the dark edges stay as you walk " ..
 		"back, and lift the closer you get to your body, gone once you're there."]), "check")
 	GreyUnless(corpseRun, function(db) return IfOn(db) and db.deathScreen end)
-	local banner = rightStack:Add(Check(content, "deathBanner", L["Show \"YOU DIED\""],
+	local banner = stack:Add(Check(content, "deathBanner", L["Show \"YOU DIED\""],
 		L["Shortly after the death camera starts, \"YOU DIED\" fades in across the middle of the screen on a " ..
 		"dark band, then fades away after a few seconds."]), "check")
 	GreyUnless(banner, IfOn)
 
-	rightStack:Header(content, L["Music"])
+	stack:Header(content, L["Music"])
 	local songBox = ns.SkinEditBox(CreateFrame("EditBox", nil, content, "InputBoxTemplate"))
 	songBox:SetSize(260, 20)
 	songBox:SetAutoFocus(false)
-	rightStack:Add(songBox, "box")
+	stack:Add(songBox, "box")
 	RecordKey(content, "deathSongFiles")
 	local function SaveSong(self) ns.GetDB().deathSongFiles = self:GetText() end
 	songBox:SetScript("OnEnterPressed", function(self) SaveSong(self) self:ClearFocus() end)
@@ -2896,7 +2933,7 @@ local function CreateDeathPanel()
 	controls[#controls + 1] = songBox
 	Tooltip(songBox, L["Music file IDs, separated by commas; one is picked at random each time " ..
 		"you die (Wowhead lists the IDs on each sound's page). Try one with /cine songtest <ID>."])
-	rightStack:Note(content, L["Music file IDs, separated by commas. One is picked at random while the " ..
+	stack:Note(content, L["Music file IDs, separated by commas. One is picked at random while the " ..
 		"Die row's Music is ticked on the Cameras page."], 280)
 end
 
@@ -2911,8 +2948,8 @@ local function CreateChatCamPanel()
 	-- (On or off: its two rows' cameras, on the Cameras page.)
 	local function IfOn() return ns.TriggerAnyRow("Chat") or ns.TriggerAnyRow("ChatNearby") end
 
-	local stack = Stack(subtitle, "label")
-	local rotationHeader = stack:Header(content, L["Rotation"])
+	local stack = Stack(subtitle, "label", true)
+	stack:Header(content, L["Rotation"])
 	local speed = stack:Add(Slider(content, "chatCamSwingSpeed", L["Swing speed"], 5, 40, 1, L["%d°/sec"]), "slider")
 	Tooltip(speed, L["The fastest the camera swings toward a new speaker. Each swing speeds up and " ..
 		"slows down gently, as the flight camera's fly-bys do, so a short one never gets this fast " ..
@@ -2931,30 +2968,33 @@ local function CreateChatCamPanel()
 		"at most, until their chat bubble shows, then frames them. If they're nowhere to be seen, " ..
 		"it ends up back where it was."]), "check")
 	GreyUnless(search, IfOn)
+	local immersive = stack:Add(Check(content, "chatCamImmersive", L["Ultra immersive"],
+		L["The camera snaps straight to whoever's talking instead of swinging, the letterbox comes " ..
+		"in twice as tall for the conversation with subtitles in its bottom bar, and the " ..
+		"whole UI fades out: the minimap, frames, nameplates, names and the circle under your target."]), "check")
+	GreyUnless(immersive, IfOn)
+
+	stack:Header(content, L["Zoom"])
+	local distance = stack:Add(Slider(content, "chatCamDistance", L["Zoom in to about"], 1.5, 10, 0.5, L["%.1f yards"]), "slider")
+	Tooltip(distance, L["If you're further out than this. Closer already, it stays where it is."])
+	GreyUnless(distance, IfOn)
+	local zoomSpeed = stack:Add(Slider(content, "chatCamZoomSpeed", L["Zoom in speed"], 0.25, 10, 0.25, L["%.2f yards/sec"]), "slider")
+	Tooltip(zoomSpeed, L["The first swing waits for the zoom in to finish."])
+	GreyUnless(zoomSpeed, IfOn)
+	local zoomOutSpeed = stack:Add(Slider(content, "chatCamZoomOutSpeed", L["Zoom back out speed"], 0, 10, 0.25, L["%.2f yards/sec"]), "slider")
+	Tooltip(zoomOutSpeed, L["Once the conversation's over, the camera zooms back out to your own " ..
+		"distance at this speed (not if you zoomed yourself meanwhile). At 0 it stays in."])
+	GreyUnless(zoomOutSpeed, IfOn)
+	local zoomMax = stack:Add(Slider(content, "chatCamZoomMaxTime", L["Zoom takes at most"], 2, 30, 1, L["%d sec"]), "slider")
+	Tooltip(zoomMax, L["From far out, the zoom in or back out speeds up so it's done in this long. " ..
+		"A short zoom still goes at the speeds above."])
+	GreyUnless(zoomMax, IfOn)
+
 	stack:Header(content, L["Ending"])
 	local quiet = stack:Add(Slider(content, "chatCamQuiet", L["Over after no one talks for"], 3, 30, 1, L["%d sec"]), "slider")
 	Tooltip(quiet, L["With no one talking for this long, the camera turns back and zooms back out. " ..
 		"Moving ends it at once, leaving the camera where it is."])
 	GreyUnless(quiet, IfOn)
-
-	-- Right column: zoom
-	local zoomHeader = Label(content, "GameFontNormal", L["Zoom"])
-	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
-	local right = Stack(zoomHeader)
-	local distance = right:Add(Slider(content, "chatCamDistance", L["Zoom in to about"], 1.5, 10, 0.5, L["%.1f yards"]), "slider")
-	Tooltip(distance, L["If you're further out than this. Closer already, it stays where it is."])
-	GreyUnless(distance, IfOn)
-	local zoomSpeed = right:Add(Slider(content, "chatCamZoomSpeed", L["Zoom in speed"], 0.25, 10, 0.25, L["%.2f yards/sec"]), "slider")
-	Tooltip(zoomSpeed, L["The first swing waits for the zoom in to finish."])
-	GreyUnless(zoomSpeed, IfOn)
-	local zoomOutSpeed = right:Add(Slider(content, "chatCamZoomOutSpeed", L["Zoom back out speed"], 0, 10, 0.25, L["%.2f yards/sec"]), "slider")
-	Tooltip(zoomOutSpeed, L["Once the conversation's over, the camera zooms back out to your own " ..
-		"distance at this speed (not if you zoomed yourself meanwhile). At 0 it stays in."])
-	GreyUnless(zoomOutSpeed, IfOn)
-	local zoomMax = right:Add(Slider(content, "chatCamZoomMaxTime", L["Zoom takes at most"], 2, 30, 1, L["%d sec"]), "slider")
-	Tooltip(zoomMax, L["From far out, the zoom in or back out speeds up so it's done in this long. " ..
-		"A short zoom still goes at the speeds above."])
-	GreyUnless(zoomMax, IfOn)
 end
 
 -- Not a CreateCameraModePanel page either (QuestCam.lua, started by the quest
@@ -2975,7 +3015,7 @@ local function CreateQuestPanel()
 	-- (On or off, and the wait before starting: its two rows', on the Cameras page.)
 	local function IfOn() return ns.TriggerAnyRow("Quest") or ns.TriggerAnyRow("QuestGossip") end
 
-	local stack = Stack(subtitle, "label")
+	local stack = Stack(subtitle, "label", true)
 	stack:Header(content, L["Starting"])
 	local gossip = stack:Add(Check(content, "questCamAllGossip", L["Every NPC you talk to"],
 		L["Also for NPCs with nothing to say about quests (innkeepers, guards...), as the \"Talk " ..
@@ -2986,8 +3026,7 @@ local function CreateQuestPanel()
 		L["Talking to a quest giver from your mount, the camera stays as it is."]), "check")
 	GreyUnless(mounted, IfOn)
 
-	-- Left column: rotation, height, over the shoulder
-	local rotationHeader = stack:Header(content, L["Rotation"])
+	stack:Header(content, L["Rotation"])
 	local duration = stack:Add(Slider(content, "questCamTime", L["Swing behind you takes"], 1, 6, 0.25, L["%.2f sec"]), "slider")
 	Tooltip(duration, L["The turn to the side starts once the swing is done."])
 	GreyUnless(duration, IfOn)
@@ -3005,13 +3044,14 @@ local function CreateQuestPanel()
 		"what's around you, so it can't pick the open side.) \"Where you clicked them\": the side " ..
 		"of the screen you clicked the quest giver on, and the camera turns toward it; talking " ..
 		"to them with a key instead, the side is picked at random."]
-	stack:Add(Label(content, "GameFontHighlight", L["Side"]), "label")
-	local side = Dropdown(content, "questCamSide", QUEST_SIDES, 200)
+	local side = Dropdown(content, "questCamSide", QUEST_SIDES, 180)
 	if side then
+		side.inlineName = L["Side"]
 		stack:Add(side, "dropdown")
 		Tooltip(side, SIDE_TIP)
 		GreyUnless(side, IfOn)
 	else
+		stack:Add(Label(content, "GameFontHighlight", L["Side"]), "label")
 		for _, choice in ipairs(QUEST_SIDES) do
 			local check = stack:Add(Choice(content, "questCamSide", choice.value, choice.text, SIDE_TIP), "check")
 			GreyUnless(check, IfOn)
@@ -3021,6 +3061,24 @@ local function CreateQuestPanel()
 	Tooltip(drift, L["Once the camera has settled, it drifts slowly to and fro, side to side, " ..
 		"across this many degrees, so the shot isn't stock-still. 0 holds still."])
 	GreyUnless(drift, IfOn)
+
+	stack:Header(content, L["Zoom"])
+	local distance = stack:Add(Slider(content, "questCamDistance", L["Zoom in to about"], 1.5, 10, 0.5, L["%.1f yards"]), "slider")
+	Tooltip(distance, L["If you're further out than this. Closer already, it stays where it is."])
+	GreyUnless(distance, IfOn)
+	local zoomSpeed = stack:Add(Slider(content, "questCamZoomSpeed", L["Zoom in speed"], 0.25, 10, 0.25, L["%.2f yards/sec"]), "slider")
+	Tooltip(zoomSpeed, L["The turn to the side happens along the way, then the tilt down."])
+	GreyUnless(zoomSpeed, IfOn)
+	local zoomOutSpeed = stack:Add(Slider(content, "questCamZoomOutSpeed", L["Zoom back out speed"], 0, 10, 0.25, L["%.2f yards/sec"]), "slider")
+	Tooltip(zoomOutSpeed, L["Leaving the quest giver, the camera stays close until you walk more than " ..
+		"10 yards from where you started talking (talk to another quest giver and it counts from there), " ..
+		"then zooms back out to your own distance at this speed, in a few seconds at most. At 0 it stays in."])
+	GreyUnless(zoomOutSpeed, IfOn)
+	local zoomMax = stack:Add(Slider(content, "questCamZoomMaxTime", L["Zoom takes at most"], 2, 30, 1, L["%d sec"]), "slider")
+	Tooltip(zoomMax, L["From far out, the zoom in or back out speeds up so it's done in this long. " ..
+		"A short zoom still goes at the speeds above."])
+	GreyUnless(zoomMax, IfOn)
+
 	stack:Header(content, L["Height"])
 	local lower = stack:Add(Slider(content, "questCamLower", L["Lower the camera"], 0, 45, 5, "%d°"), "slider")
 	Tooltip(lower, L["How far the camera comes down toward eye level, from wherever you had it. " ..
@@ -3028,46 +3086,6 @@ local function CreateQuestPanel()
 		"It goes back up as the window closes (unless you moved the camera yourself meanwhile). " ..
 		"0 keeps your angle."])
 	GreyUnless(lower, IfOn)
-
-	stack:Header(content, L["Over the shoulder (experimental)"])
-	local overShoulder = stack:Add(Check(content, "questCamOverShoulder", L["Move over your shoulder"],
-		L["The camera also moves to your right, putting you on the left of the screen and the " ..
-		"quest giver on the right. This uses one of Blizzard's experimental camera settings: the " ..
-		"game shows its experimental camera warning when it's used (Accept keeps it working). " ..
-		"Your own setting comes back as the window closes."]), "check")
-	overShoulder:HookScript("OnClick", Refresh)
-	GreyUnless(overShoulder, IfOn)
-	local function IfShoulder(db) return IfOn(db) and db.questCamOverShoulder end
-	local shoulder = stack:Add(Slider(content, "questCamShoulder", L["Shoulder offset"], 0.25, 2, 0.25, L["%.2f yards"]), "slider")
-	Tooltip(shoulder, L["How far the camera moves to your right. The game ignores this while " ..
-		"its Keep Character Centered option (Accessibility) is on: see below."])
-	GreyUnless(shoulder, IfShoulder)
-	local uncenter = stack:Add(Check(content, "questCamUncenter", L["Turn off Keep Character Centered meanwhile"],
-		L["The game's Keep Character Centered option (Accessibility, on by default) stops the " ..
-		"camera moving over your shoulder. On: it's turned off while you talk to a quest giver, " ..
-		"and your setting comes back as the window closes. Off: with that option on, the " ..
-		"camera stays straight behind you."]), "check")
-	GreyUnless(uncenter, IfShoulder)
-
-	-- Right column: zoom
-	local zoomHeader = Label(content, "GameFontNormal", L["Zoom"])
-	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
-	local right = Stack(zoomHeader)
-	local distance = right:Add(Slider(content, "questCamDistance", L["Zoom in to about"], 1.5, 10, 0.5, L["%.1f yards"]), "slider")
-	Tooltip(distance, L["If you're further out than this. Closer already, it stays where it is."])
-	GreyUnless(distance, IfOn)
-	local zoomSpeed = right:Add(Slider(content, "questCamZoomSpeed", L["Zoom in speed"], 0.25, 10, 0.25, L["%.2f yards/sec"]), "slider")
-	Tooltip(zoomSpeed, L["The turn to the side happens along the way, then the tilt down."])
-	GreyUnless(zoomSpeed, IfOn)
-	local zoomOutSpeed = right:Add(Slider(content, "questCamZoomOutSpeed", L["Zoom back out speed"], 0, 10, 0.25, L["%.2f yards/sec"]), "slider")
-	Tooltip(zoomOutSpeed, L["Leaving the quest giver, the camera stays close until you walk more than " ..
-		"10 yards from where you started talking (talk to another quest giver and it counts from there), " ..
-		"then zooms back out to your own distance at this speed, in a few seconds at most. At 0 it stays in."])
-	GreyUnless(zoomOutSpeed, IfOn)
-	local zoomMax = right:Add(Slider(content, "questCamZoomMaxTime", L["Zoom takes at most"], 2, 30, 1, L["%d sec"]), "slider")
-	Tooltip(zoomMax, L["From far out, the zoom in or back out speeds up so it's done in this long. " ..
-		"A short zoom still goes at the speeds above."])
-	GreyUnless(zoomMax, IfOn)
 end
 
 local function CreateTelePanel()
@@ -3081,10 +3099,9 @@ local function CreateTelePanel()
 	-- (On or off: the Hearthstone and teleport rows' cameras, on the Cameras page.)
 	local function IfOn() return ns.TriggerAnyRow("Hearth") or ns.TriggerAnyRow("Teleport") end
 
-	local stack = Stack(subtitle, "label")
+	local stack = Stack(subtitle, "label", true)
 
-	-- Left column: rotation, and after the cast
-	local rotationHeader = stack:Header(content, L["Rotation"])
+	stack:Header(content, L["Rotation"])
 	local early = stack:Add(Slider(content, "teleArriveEarly", L["Round in front of you"], 0, 6, 0.5,
 		L["%.1f sec before you go"]), "slider")
 	Tooltip(early, L["The swing round to face you is timed to get there this long before the cast " ..
@@ -3102,6 +3119,20 @@ local function CreateTelePanel()
 	Tooltip(level, L["As it swings round, the camera also comes down toward the ground (negative: up)."])
 	GreyUnless(level, IfOn)
 
+	stack:Header(content, L["Zoom"])
+	local zoom = stack:Add(Check(content, "teleZoom", L["Zoom in over the cast"],
+		L["The camera starts zooming in as the cast starts, and is still coming in as you go."]), "check")
+	zoom:HookScript("OnClick", Refresh)
+	GreyUnless(zoom, IfOn)
+	local function IfZoom(db) return IfOn(db) and db.teleZoom end
+	local close = stack:Add(Slider(content, "teleZoomClose", L["Zoom in to about"], 1.5, 20, 0.5, L["%.1f yards"]), "slider")
+	Tooltip(close, L["Where the zoom ends as the cast does, if you're further out. Closer already, it " ..
+		"stays where it is. Arriving, the camera is back at your own distance."])
+	GreyUnless(close, IfZoom)
+	local zoomBack = stack:Add(Slider(content, "teleZoomBackTime", L["If you cancel, zoom back out in"],
+		0.5, 3, 0.25, L["%.2f sec"]), "slider")
+	Tooltip(zoomBack, L["Canceling the cast, the camera zooms back out to your own distance this quickly."])
+	GreyUnless(zoomBack, IfZoom)
 
 	stack:Header(content, L["Canceling and arriving"])
 	local back = stack:Add(Check(content, "teleReturn", L["Turn back if you cancel"],
@@ -3112,24 +3143,6 @@ local function CreateTelePanel()
 		L["Once you're there (after the loading screen, if there is one), the camera swings round " ..
 		"behind you."]), "check")
 	GreyUnless(behind, IfOn)
-
-	-- Right column: zoom
-	local zoomHeader = Label(content, "GameFontNormal", L["Zoom"])
-	zoomHeader:SetPoint("TOPLEFT", rotationHeader, "TOPLEFT", 320, 0)
-	local right = Stack(zoomHeader)
-	local zoom = right:Add(Check(content, "teleZoom", L["Zoom in over the cast"],
-		L["The camera starts zooming in as the cast starts, and is still coming in as you go."]), "check")
-	zoom:HookScript("OnClick", Refresh)
-	GreyUnless(zoom, IfOn)
-	local function IfZoom(db) return IfOn(db) and db.teleZoom end
-	local close = right:Add(Slider(content, "teleZoomClose", L["Zoom in to about"], 1.5, 20, 0.5, L["%.1f yards"]), "slider")
-	Tooltip(close, L["Where the zoom ends as the cast does, if you're further out. Closer already, it " ..
-		"stays where it is. Arriving, the camera is back at your own distance."])
-	GreyUnless(close, IfZoom)
-	local zoomBack = right:Add(Slider(content, "teleZoomBackTime", L["If you cancel, zoom back out in"],
-		0.5, 3, 0.25, L["%.2f sec"]), "slider")
-	Tooltip(zoomBack, L["Canceling the cast, the camera zooms back out to your own distance this quickly."])
-	GreyUnless(zoomBack, IfZoom)
 end
 
 -- The Camera Settings page, with a section for each camera.
@@ -3298,69 +3311,109 @@ local function CreateEffectsPanel()
 	end
 	local lastGridRow = ns.ShowTable(content, gridNote, effectRows, L["Visual Effects"])
 
-	-- Letterbox
-	local letterboxHeader = Header(content, L["Letterbox"], lastGridRow, -20)
-	letterboxHeader:SetPoint("TOPLEFT", lastGridRow, "BOTTOMLEFT", 0, -20)
-
-	-- (Switched on and off in the grid's Always column, as are the vignette
-	-- and weather; their size and look on the Style hub's Letterbox page.)
-	local letterboxNote = Label(content, "GameFontHighlightSmall",
-		L["Black bars at the top and bottom of the screen. Their size and look: the Style hub's Letterbox page."])
-	letterboxNote:SetWidth(460)
-	letterboxNote:SetPoint("TOPLEFT", letterboxHeader, "BOTTOMLEFT", 0, -8)
+	-- The vignette, inn glow and weather: each slider on one line with its
+	-- name, as on Graphics+, the sliders lined up past the longest name and
+	-- each one's value to its right. All the way left is Off. (The vignette
+	-- and weather are switched on and off in the grid's Always column.)
+	local inlineRows = {}
+	local function InlineSlider(anchor, gap, key, label, maxV, step, onChange)
+		local name = Label(content, "GameFontHighlight", label)
+		name:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -gap)
+		name.searchSkip = true
+		local slider = Slider(content, key, "", 0, maxV, step, function(value)
+			return value == 0 and L["Off"] or ("%d%%"):format(value)
+		end, 100, onChange)
+		slider:SetWidth(130)
+		slider.title:ClearAllPoints()
+		slider.title:SetPoint("LEFT", slider, "RIGHT", 10, 0)
+		slider.searchLabel = label
+		slider.searchEdges = { top = slider, bottom = slider, left = name, right = slider.title }
+		slider.rowName = name
+		inlineRows[#inlineRows + 1] = slider
+		return slider
+	end
+	-- (Greyed with its name.)
+	local function GreyRow(slider, test)
+		GreyUnless(slider, test)
+		local refresh = slider.Refresh
+		slider.Refresh = function(self)
+			refresh(self)
+			SetLabelFont(self.rowName, test(ns.GetDB()) and "GameFontHighlight" or "GameFontDisable")
+		end
+	end
 
 	-- Vignette
-	local vignetteHeader = Header(content, L["Vignette"], letterboxNote, -24)
-	vignetteHeader:SetPoint("TOPLEFT", letterboxNote, "BOTTOMLEFT", 0, -24)
-
-	local vignetteStrength = Slider(content, "vignetteStrength", L["Vignette strength"], 10, 100, 5, "%d%%", 100,
+	local vignetteStrength = InlineSlider(lastGridRow, 24, "vignetteStrength", L["Vignette strength"], 100, 5,
 		ns.RefreshTint)
-	vignetteStrength:SetPoint("TOPLEFT", vignetteHeader, "BOTTOMLEFT", 2, -26)
 	Tooltip(vignetteStrength, L["Soft dark edges that draw the eye to the middle. Works with any tint."])
-	GreyUnless(vignetteStrength, function(db) return db.vignette end)
+	GreyRow(vignetteStrength, function(db) return db.vignette end)
 
-	-- Inns
-	local innHeader = Header(content, L["Inns"], vignetteStrength, -24)
-	innHeader:SetPoint("TOPLEFT", vignetteStrength, "BOTTOMLEFT", -2, -24)
-
-	local innGlow = Check(content, "innGlow", L["Light up inns"],
-		L["Indoors in an inn, the outdoor tint (a gloomy marsh, a moonlit night) partly lifts and a " ..
+	-- Inns: Off is the inn glow switched off (its amount kept for next time).
+	local innGlowStrength = InlineSlider(vignetteStrength.rowName, 18, {
+		get = function()
+			local db = ns.GetDB()
+			return db.innGlow and db.innGlowAmount or 0
+		end,
+		set = function(value)
+			local db = ns.GetDB()
+			db.innGlow = value > 0
+			if value > 0 then db.innGlowAmount = value end
+		end,
+	}, L["Inn glow amount"], 100, 1, ns.RefreshTint)
+	RecordKey(content, "innGlow") -- (for Reset page)
+	RecordKey(content, "innGlowAmount")
+	Tooltip(innGlowStrength, L["Indoors in an inn, the outdoor tint (a gloomy marsh, a moonlit night) partly lifts and a " ..
 		"soft firelit glow fades in, colored by the zone: cooler in the snow, greener in a swamp. " ..
-		"Blends over a few seconds as you go through the door."],
-		function(value)
-			ns.GetDB().innGlow = value
-			Refresh() -- grey out / enable the strength slider
-			ns.RefreshTint()
-		end)
-	innGlow:SetPoint("TOPLEFT", innHeader, "BOTTOMLEFT", -2, -6)
-
-	local innGlowStrength = Slider(content, "innGlowAmount", L["Inn glow amount"], 0, 100, 1, "%d%%", 100,
-		ns.RefreshTint)
-	Tooltip(innGlowStrength, L["How much light the glow adds at its brightest, low on the screen."])
-	innGlowStrength:SetPoint("TOPLEFT", innGlow, "BOTTOMLEFT", 4, -26)
-	GreyUnless(innGlowStrength, function(db) return db.innGlow end)
+		"Blends over a few seconds as you go through the door."] .. " " ..
+		L["How much light the glow adds at its brightest, low on the screen."])
 
 	-- Weather
-	local weatherHeader = Header(content, L["Weather"], innGlowStrength, -24)
-	weatherHeader:SetPoint("TOPLEFT", innGlowStrength, "BOTTOMLEFT", -2, -24)
-
-	local weatherTintStrength = Slider(content, "weatherTintStrength", L["Weather strength"], 10, 100, 5, "%d%%", 100,
+	local weatherTintStrength = InlineSlider(innGlowStrength.rowName, 18, "weatherTintStrength", L["Weather strength"], 100, 5,
 		ns.RefreshTint)
-	weatherTintStrength:SetPoint("TOPLEFT", weatherHeader, "BOTTOMLEFT", 2, -26)
 	Tooltip(weatherTintStrength, L["Rain grays and cools the scene, snow turns it pale blue and a sandstorm " ..
 		"gives it a dusty orange haze, more strongly the heavier the weather. Works with any tint (None " ..
 		"included), lifts under a roof and blends in as a storm builds. Needs a game version that " ..
 		"reports the weather."])
-	GreyUnless(weatherTintStrength, function(db) return db.weatherTint end)
+	GreyRow(weatherTintStrength, function(db) return db.weatherTint end)
 
-	-- Depth of field
-	local dofHeader = Header(content, L["Depth of field"], weatherTintStrength, -24)
-	dofHeader:SetPoint("TOPLEFT", weatherTintStrength, "BOTTOMLEFT", -2, -24)
+	-- View distance in rain (Graphics.lua): only where the game says the
+	-- weather and has the view distance setting.
+	local lastRow = weatherTintStrength
+	if C_Weather and C_Weather.GetCurrentWeather and GetCVar("horizonStart") ~= nil then
+		lastRow = InlineSlider(weatherTintStrength.rowName, 18, "rainViewScale", L["Reduce View Distance in Rain"], 100, 5)
+		Tooltip(lastRow, L["In CineMode, as it rains, the view distance comes in from yours: the harder the rain, " ..
+			"the closer. At 100% a downpour brings it all the way in, as far as the Graphics menu's lowest View " ..
+			"distance; it never goes further out than yours. Yours is put back once the rain stops or you go " ..
+			"indoors."])
+	end
 
-	local depthOfField = Check(content, "depthOfField", L["Haze the screen edges in the camera modes"],
-		L["A soft haze around the edges of the screen, as if the camera had focused on you. " ..
-		"Each camera mode's page sets its own strength. /cine doftest shows it on demand."])
-	depthOfField:SetPoint("TOPLEFT", dofHeader, "BOTTOMLEFT", -2, -6)
+	-- Camera haze (depth of field): each camera mode's page sets its own
+	-- strength, this scales them all. Off is the haze switched off (the
+	-- scale kept for next time).
+	local cameraHaze = InlineSlider(lastRow.rowName, 18, {
+		get = function()
+			local db = ns.GetDB()
+			return db.depthOfField and (db.dofScale or 1) or 0
+		end,
+		set = function(value)
+			local db = ns.GetDB()
+			db.depthOfField = value > 0
+			if value > 0 then db.dofScale = value end
+		end,
+	}, L["Camera haze"], 200, 5)
+	RecordKey(content, "depthOfField") -- (for Reset page)
+	RecordKey(content, "dofScale")
+	Tooltip(cameraHaze, L["A soft haze around the edges of the screen in the camera modes, as if the camera " ..
+		"had focused on you. Each camera mode's page sets its own strength: this turns them all up or down. " ..
+		"/cine doftest shows it on demand."])
+
+	local nameWidth = 0
+	for _, slider in ipairs(inlineRows) do
+		nameWidth = math.max(nameWidth, slider.rowName:GetStringWidth())
+	end
+	for _, slider in ipairs(inlineRows) do
+		slider:SetPoint("LEFT", slider.rowName, "LEFT", nameWidth + 20, 0)
+	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -4382,8 +4435,8 @@ local function CreateCamerasPanel()
 		afk = { 0.13, 0.19, 0.29, 0.66, 0.77, 1 }, vista = { 0.05, 0.23, 0.21, 0.5, 0.88, 0.83 },
 		fish = { 0.05, 0.16, 0.27, 0.5, 0.75, 1 }, flight = { 0.09, 0.23, 0.29, 0.62, 0.88, 1 },
 		quest = { 0.29, 0.24, 0.03, 1, 0.88, 0.4 }, walk = { 0.09, 0.23, 0.09, 0.62, 0.89, 0.62 },
-		run = { 0.09, 0.23, 0.09, 0.62, 0.89, 0.62 }, [true] = { 0.23, 0.1, 0.1, 1, 0.62, 0.62 },
-		chat = { 0.18, 0.18, 0.18, 0.8, 0.8, 0.8 } }
+		run = { 0.09, 0.23, 0.09, 0.62, 0.89, 0.62 }, [true] = { 0, 0, 0, 0.85, 0.85, 0.85 },
+		chat = { 0.27, 0.09, 0.2, 1, 0.66, 0.85 } }
 	local WHEN_CHIP = { 0.08, 0.2, 0.35, 0.55, 0.8, 1 }
 	local NEVER_CHIP = { 0.35, 0.25, 0.05, 1, 0.8, 0.35 }
 	local PLAIN_CHIP = { 0.18, 0.18, 0.18, 0.8, 0.8, 0.8 }
@@ -4391,7 +4444,8 @@ local function CreateCamerasPanel()
 		bg = L["BGs & Arenas"], group = L["Grouped"] }
 	local PLACE_WORDS = { "world", "city", "instance", "bg" }
 	local WHEN_LAYOUT = { groups = { ns.GRID_COMBAT, ns.GRID_LOCATION }, roles = ROLES_MENU, edit = true }
-	local WHEN_HELP = { [ns.GRID_COMBAT] = L["Whether this row's camera waits for things to calm down after a fight."],
+	local WHEN_HELP = { [ns.GRID_COMBAT] = L["Whether this row's camera may start in a fight (unticked, one " ..
+		"running stops when a fight starts), and whether it waits for things to calm down after one."],
 		[ns.GRID_LOCATION] = L["Where this row's camera may start (Grouped: in a party or raid). Anywhere else the " ..
 		"next row of its trigger is tried, and with none the camera doesn't start (or stops if it's running). For " ..
 		"flights, Cities means taking off from one, and Open World taking off anywhere else."] }
@@ -4448,6 +4502,9 @@ local function CreateCamerasPanel()
 		end
 		if not copy and trigger.key == "Still" then
 			list[#list + 1] = { (L["%d sec"]):format(db.idleOrbitDelay or 0), PLAIN_CHIP }
+		end
+		if trigger.key ~= "Death" and not ns.CameraRowAlways(id) and ns.IsCombatShowOn(key) then
+			list[#list + 1] = { L["In combat"], WHEN_CHIP }
 		end
 		if ns.CameraRowCalm(id) then list[#list + 1] = { L["Calm Timer"], WHEN_CHIP } end
 		local rule = db.frameRules and db.frameRules[key]
@@ -4539,8 +4596,53 @@ local function CreateCamerasPanel()
 		return button
 	end
 
+	-- The rows as shown: the triggers by name, or (Sort: by camera) grouped by
+	-- their first row's camera, then by name; each trigger's rows together in
+	-- their order.
+	local CAM_ORDER = { tele = 1, flight = 2, quest = 3, chat = 4, cozy = 5, vista = 6, fish = 7, afk = 8, walk = 9,
+		run = 10, [true] = 11 }
+	local function ShownRows()
+		local byCamera = ns.GetDB().cameraRows.sort == "camera"
+		local groups, byTrigger = {}, {}
+		for _, id in ipairs(ns.CameraRowOrder()) do
+			local trigger = ns.CameraRowTrigger(id)
+			local group = byTrigger[trigger]
+			if not group then
+				-- (Its name without a leading slash: /dance among the d's.)
+				local name = (LABELS[trigger.key] or trigger.key):gsub("^%p+", ""):lower()
+				group = { name = name, cam = byCamera and CAM_ORDER[ns.CameraRowValue(id, "camera")] or 99 }
+				byTrigger[trigger], groups[#groups + 1] = group, group
+			end
+			group[#group + 1] = id
+		end
+		table.sort(groups, function(a, b)
+			if a.cam ~= b.cam then return a.cam < b.cam end
+			return a.name < b.name
+		end)
+		local sorted = {}
+		for _, group in ipairs(groups) do
+			for _, id in ipairs(group) do sorted[#sorted + 1] = id end
+		end
+		return sorted
+	end
+	local sort = ns.PanelButton(content)
+	sort:SetSize(130, 22)
+	sort:SetPoint("BOTTOMRIGHT", grid, "TOPRIGHT", 0, 4)
+	sort.searchSkip = true
+	Tooltip(sort, L["How the rows are listed: by trigger name, or grouped by camera. Either way a trigger's rows " ..
+		"stay together, in the order they're tried."])
+	sort:SetScript("OnClick", function()
+		local db = ns.GetDB().cameraRows
+		db.sort = db.sort ~= "camera" and "camera" or nil
+		Refresh()
+	end)
+	sort.Refresh = function(self)
+		self:SetText(ns.GetDB().cameraRows.sort == "camera" and L["Sort: by camera"] or L["Sort: by name"])
+	end
+	controls[#controls + 1] = sort
+
 	function grid:Refresh()
-		local list = ns.CameraRowOrder()
+		local list = ShownRows()
 		local at = {}
 		for i, id in ipairs(list) do
 			at[id] = i
@@ -4858,10 +4960,11 @@ local function CreateCamerasPanel()
 			At("Camera", instant, x)
 		end
 
-		-- When: as the Standard Frames page's rows, the places and the Calm
-		-- Timer wait (a trigger's own row: its camera's until set). Flights
-		-- never start in instances; the death camera can't wait (you die in a fight).
-		local omit = { combatShow = true, enemyShow = true, friendlyShow = true }
+		-- When: as the Standard Frames page's rows, In combat, the places and
+		-- the Calm Timer wait (a trigger's own row: its camera's until set).
+		-- Flights never start in instances; the death camera can't wait or be
+		-- kept out of fights (you die in one).
+		local omit = { enemyShow = true, friendlyShow = true, combatShow = key == "Death" or nil }
 		for where in pairs(ns.CAMERA_OFF_NEVER[ns.CameraValueMode(trigger.cameras[1])] or {}) do
 			omit[where == "BGs" and "bgShow" or "instanceShow"] = true
 		end
@@ -5163,65 +5266,49 @@ local function CreateCombatPanel()
 		lastCheck, lastIndent = petCam, INDENT
 	end
 
-	-- Each section a band that opens and closes with a click, its table under
-	-- it, as on the Unit Frames page: all open to start with, but the
-	-- raid-style party frames' (page = "rsparty") while its "Same as raid
-	-- frames" is ticked, when the raid frames' rows decide for them. Unticked,
-	-- it opens on rows of their own, starting from the raid frames' choices;
-	-- opened while ticked, they're greyed. (section.widgets: what its table
-	-- made; section.last: its last row's label, to place the next one below.)
+	-- Each section a tab of its own, in Heal Vision's folder look
+	-- (ns.FolderTabs, made once every section is): the picked one's table
+	-- shows on the panel under them, its full name at its top. The raid-style
+	-- party frames' (page = "rsparty") rows are greyed while its "Same as raid
+	-- frames" is ticked, when the raid frames' rows decide for them; unticked,
+	-- they're rows of their own, starting from the raid frames' choices.
+	-- (section.body: what its table made, hidden on other tabs: search still
+	-- finds it, and picks its tab; section.last: its last row's label, the
+	-- panel's bottom under it.) The tab last picked is kept across reloads
+	-- (SectionState, its id "Standard Frames/tab", open the section's key).
 	local sections = {}
-	local top = CreateFrame("Frame", nil, content)
-	top:SetSize(1, 1)
-	top:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", 2 - lastIndent, -16) -- (back to the column edge)
+	local picked = { id = "Standard Frames/tab", open = "units" }
+	-- (The panel's top left, under the tabs (placed once they're made, as high
+	-- as their rows); the sections' frames hang on it.)
+	local panelTop = CreateFrame("Frame", nil, content)
+	panelTop:SetSize(1, 1)
+	local panel, ShowTab
 	local function OwnPartyRows()
 		-- (The page is built before the settings load: the default then.)
 		local db = ns.GetDB()
 		return db ~= nil and db.raidStylePartySame == false
 	end
+	-- Shows the picked section, the panel down to its last row.
 	local function Layout()
-		local above
-		for _, section in ipairs(sections) do
-			section.frame:ClearAllPoints()
-			if above then
-				section.frame:SetPoint("TOPLEFT", above.open and above.last or above.frame, "BOTTOMLEFT", 0,
-					above.open and -16 or -6)
-			else
-				section.frame:SetPoint("TOPLEFT", top, "TOPLEFT", 0, 0)
-			end
-			SectionState.Restore(section)
-			for _, widget in ipairs(section.widgets) do
-				widget:SetShown(section.open)
-			end
-			section.nameRow:SetOpen(section.open)
-			above = section
+		SectionState.Restore(picked)
+		local shown
+		for i, section in ipairs(sections) do
+			if section.key == picked.open then shown = i end
 		end
+		shown = shown or 1
+		for i, section in ipairs(sections) do
+			section.frame:SetShown(i == shown)
+			section.body:SetShown(i == shown)
+		end
+		ShowTab(shown)
+		panel:SetPoint("BOTTOMRIGHT", sections[shown].last, "BOTTOMLEFT", sections[shown].width + 12, -12)
 		FitContentHeight(content)
 	end
-	-- Extra action bars: open only with a box ticked in its grid.
-	local function AnyTicked(rows)
-		for _, item in ipairs(rows) do
-			for _, column in ipairs(FRAME_COLUMNS) do
-				if column[2](item.key) then
-					return true
-				end
-			end
-		end
-		return false
-	end
-	-- (The raid-style party frames' section as its tick says, and the extra
-	-- action bars' as their ticks say, on show and reset.)
-	local function OpenPartySection()
-		for _, section in ipairs(sections) do
-			if section.page == "rsparty" then
-				section.open = SectionState.Saved(section.id, OwnPartyRows())
-			elseif section.page == "extrabars" then
-				section.open = SectionState.Saved(section.id, ns.GetDB() ~= nil and AnyTicked(section.rows))
-			end
-		end
+	local function Pick(section)
+		SectionState.Save(picked, section.key)
 		Layout()
 	end
-	resetHooks[content] = OpenPartySection
+	resetHooks[content] = Layout
 	-- Set apart: its rows start as the raid frames' (ticks, roles and rules),
 	-- unless they have choices of their own from before.
 	local ROLE_SETTINGS = { "tankHide", "healerHide", "damageHide" }
@@ -5256,8 +5343,10 @@ local function CreateCombatPanel()
 		return set
 	end
 
-	local SECTION_WIDTH = FRAME_LABEL_WIDTH + #FRAME_COLUMNS * FRAME_COLUMN_WIDTH + (ROLES_MENU and 46 or 0)
-	local function Section(page, heading)
+	local SECTION_WIDTH = ns.GRID_MENUS and FRAME_LABEL_WIDTH + ns.GridWidth({ roles = ROLES_MENU, edit = true })
+		or FRAME_LABEL_WIDTH + #FRAME_COLUMNS * FRAME_COLUMN_WIDTH + (ROLES_MENU and 46 or 0)
+	-- (tab: its tab's name, nil: heading.)
+	local function Section(page, heading, tab)
 		local sectionRows = {}
 		for _, item in ipairs(ns.COMBAT_SHOW) do
 			if item.page == page and ns.OptionAvailable(item) and not item.key:find("^addon:")
@@ -5268,37 +5357,44 @@ local function CreateCombatPanel()
 		if #sectionRows == 0 then
 			return
 		end
-		local section = { page = page, open = page ~= "rsparty" or OwnPartyRows(), widgets = {}, rows = sectionRows,
-			id = "Standard Frames/" .. (page or "other") }
-		if page == "extrabars" then
-			section.open = ns.GetDB() ~= nil and AnyTicked(sectionRows)
-		end
+		local section = { key = page or "other", tab = tab or heading, width = SECTION_WIDTH }
 		local frame = CreateFrame("Frame", nil, content)
-		frame:SetSize(SECTION_WIDTH, BAND_HEIGHT)
+		frame:SetSize(SECTION_WIDTH, 20)
+		frame:SetPoint("TOPLEFT", panelTop, "TOPLEFT", 12, -10)
+		frame.searchAlways = true
 		section.frame = frame
+		local title = Label(frame, "GameFontNormal", heading)
+		title:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -3)
+		section.body = CreateFrame("Frame", nil, content)
+		section.body:SetPoint("TOPLEFT", frame, "TOPLEFT")
+		section.body:SetSize(1, 1)
+		section.body.searchAlways = true
+		section.body.openSection = function() Pick(section) end
+		frame.openSection = section.body.openSection
 		local same
 		if page == "rsparty" then
 			same = Check(content, "raidStylePartySame", L["Same as raid frames"],
 				L["Ticked: party frames shown raid-style (the game's Use Raid-Style Party Frames, in Edit Mode) " ..
-				"fade as the Raid frames rows below say. Untick it to give them rows of their own."], function(value)
+				"fade as the Raid tab's rows say. Untick it to give them rows of their own."], function(value)
 				ns.GetDB().raidStylePartySame = value
 				if not value then
 					CopyRaidRows()
 				end
-				SectionState.Save(section, not value)
 				Refresh()
-				Layout()
 			end)
+			-- (At the right end of its name: the label on the right edge, the
+			-- box left of it, whatever its width. Hidden with its tab.)
+			same:SetParent(frame)
+			local text = same.Text or same.text
+			text:ClearAllPoints()
+			text:SetPoint("RIGHT", frame, "TOPRIGHT", -6, -10)
+			same:SetPoint("RIGHT", text, "LEFT", -2, 0)
 		end
-		section.nameRow = SectionBand(frame, heading, function()
-			SectionState.Save(section, not section.open)
-			Layout()
-		end, same)
 		local before = Widgets()
 		section.last = ShowTable(content, frame, sectionRows, "Standard Frames", heading)
 		for object in pairs(Widgets()) do
 			if not before[object] then
-				section.widgets[#section.widgets + 1] = object
+				object:SetParent(section.body)
 				-- (Greyed while the raid frames' rows decide for them.)
 				if same and object.Refresh and object.SetEnabled then
 					local refresh = object.Refresh
@@ -5314,21 +5410,29 @@ local function CreateCombatPanel()
 		sections[#sections + 1] = section
 	end
 	local SECTIONS = {
-		{ "units", L["Unit frames"] }, { "combat", L["Combat"] }, { "bars", L["Action bars"] },
-		{ "extrabars", L["Extra action bars"] }, { "interface", L["Interface"] }, { "minimap", L["Minimap"] }, { "party", L["Party frames (not raid-style)"] },
-		{ "rsparty", L["Party frames (raid-style)"] }, { "raid", L["Raid frames"] }, { "bg", L["Battlegrounds"] },
+		{ "units", L["Unit frames"] }, { "bars", L["Action bars"] }, { "combat", L["Combat"] },
+		{ "interface", L["Interface"] }, { "minimap", L["Minimap"] },
+		{ "party", L["Party frames (not raid-style)"], L["Party"] },
+		{ "raid", L["Raid frames"], L["Raid"] }, { "rsparty", L["Party frames (raid-style)"], L["Raid-style"] },
 		{ false, L["Other"] }, -- (any row not given a section)
 	}
 	for _, section in ipairs(SECTIONS) do
-		Section(section[1] or nil, section[2])
+		Section(section[1] or nil, section[2], section[3])
 	end
+	local list, _, base, height = {}
+	for i, section in ipairs(sections) do list[i] = { section.tab } end
+	panel, _, ShowTab, base, height = ns.FolderTabs(content, list, function(i) Pick(sections[i]) end, nil,
+		SECTION_WIDTH + 8)
+	panelTop:SetPoint("TOPLEFT", lastCheck, "BOTTOMLEFT", 2 - lastIndent, -16 - height) -- (back to the column edge)
+	panel:SetPoint("TOPLEFT", panelTop, "TOPLEFT")
+	-- (On panelTop, not the panel: the panel's bottom hangs on the rows under them.)
+	base:SetPoint("TOPLEFT", panelTop, "TOPLEFT")
 	Layout()
 
-	local pageShown = PageShown(Refresh, content)
-	canvas:SetScript("OnShow", function()
-		OpenPartySection()
-		pageShown()
-	end)
+	canvas:SetScript("OnShow", PageShown(function()
+		Refresh()
+		Layout() -- (as last left, once the settings have loaded)
+	end, content))
 	canvas:Hide()
 	RegisterSubpage(canvas, L["Standard Frames"])
 end
@@ -5350,7 +5454,7 @@ local function CreatePortraitsPanel()
 	local hasParts = ns.HasUnitFrameParts and ns.HasUnitFrameParts()
 	local subtitle = PageIntro(content, title, hasParts
 		and L["Which parts of the unit frames show, CineMode or not: your own frame and your pet's, and " ..
-		"the target, focus and target of target frames. Click a frame's name to open " ..
+		"the target, focus and target of target frames. Pick a frame's tab to see " ..
 		"its grid: the focus and target of target go as the target's grid says until you untick Same " ..
 		"as target. Untick parts to keep just the bars. The frame art is the portrait ring, the name " ..
 		"box and the bars' borders: the game draws them as one picture. Icons are the rest Zzz, the " ..
@@ -5427,35 +5531,40 @@ local function CreatePortraitsPanel()
 			"columns say."]
 		local liveRows = {}
 
-		local top = CreateFrame("Frame", nil, content)
-		top:SetSize(1, 1)
-		top:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 2, -10)
+		-- Each frame a tab of its own, in Heal Vision's folder look
+		-- (ns.FolderTabs, made once every section is): the picked one's
+		-- section shows on the panel under them, its name at its top. The tab
+		-- last picked is kept across reloads (SectionState, its id
+		-- "Unit Frames/tab", open the frame's unit).
+		local picked = { id = "Unit Frames/tab", open = "Player" }
+		-- (The panel's top left, under the tabs (placed once they're made, as
+		-- high as their rows); the sections' frames hang on it.)
+		local panelTop = CreateFrame("Frame", nil, content)
+		panelTop:SetSize(1, 1)
+		local panel, ShowTab
 
-		-- Stacks the sections, each its name row and, open, its rows.
+		-- Shows the picked section, the panel down to its last row.
 		local function Layout()
-			local above
-			for _, section in ipairs(SECTIONS) do
-				section.frame:ClearAllPoints()
-				if above then
-					section.frame:SetPoint("TOPLEFT", above, "BOTTOMLEFT", 0, -6)
-				else
-					section.frame:SetPoint("TOPLEFT", top, "TOPLEFT", 0, 0)
-				end
-				for _, widget in ipairs(section.widgets) do
-					widget:SetShown(section.open)
-				end
-				section.frame:SetHeight(BAND_HEIGHT + (section.open and section.height or 0))
-				section.nameRow:SetOpen(section.open)
-				above = section.frame
+			local shown
+			for i, section in ipairs(SECTIONS) do
+				if section.unit == picked.open then shown = i end
 			end
+			shown = shown or 1
+			for i, section in ipairs(SECTIONS) do
+				section.frame:SetShown(i == shown)
+				section.body:SetShown(i == shown)
+			end
+			ShowTab(shown)
+			panel:SetPoint("BOTTOMRIGHT", SECTIONS[shown].frame, "BOTTOMRIGHT", 12, -12)
 			FitContentHeight(content)
 		end
+		local function Pick(section)
+			SectionState.Save(picked, section.unit)
+			Layout()
+		end
 		function OpenSections()
-			-- (The page is built before the settings load: the defaults then.)
-			local db = ns.GetDB()
-			for _, section in ipairs(SECTIONS) do
-				section.open = SectionState.Saved(section.id, not section.same or db ~= nil and db[section.same] == false)
-			end
+			-- (The page is built before the settings load: the first tab then.)
+			SectionState.Restore(picked)
 			Layout()
 		end
 		resetHooks[content] = OpenSections
@@ -5485,35 +5594,45 @@ local function CreatePortraitsPanel()
 		end
 
 		for _, section in ipairs(SECTIONS) do
-			section.id = "Unit Frames/" .. section.unit
 			section.widgets, section.keys = {}, {}
+			SetSection(content, section.title)
 			local frame = CreateFrame("Frame", nil, content)
 			frame:SetWidth(LABEL_WIDTH + ns.GridWidth(LAYOUT))
+			frame:SetPoint("TOPLEFT", panelTop, "TOPLEFT", 12, -10)
+			frame.searchAlways = true
 			section.frame = frame
+			local heading = Label(frame, "GameFontNormal", section.title)
+			heading:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -3)
+			-- (Its rows, hidden on other tabs: search still finds them, and picks this one.)
+			section.body = CreateFrame("Frame", nil, content)
+			section.body:SetPoint("TOPLEFT", frame, "TOPLEFT")
+			section.body:SetSize(1, 1)
+			section.body.searchAlways = true
+			section.body.openSection = function() Pick(section) end
+			frame.openSection = section.body.openSection
 
-			-- The name row: click to open or close.
-			local check
+			-- Same as target, at the right end of its name.
 			local same = section.same
 			if same then
-				check = Check(content, same, L["Same as target"],
+				local check = Check(content, same, L["Same as target"],
 					L["Ticked: this frame shows the parts the Target grid says. Untick it to give the frame " ..
 					"choices of its own."], function(value)
 					ns.GetDB()[same] = value
 					if not value then
 						CopyTarget(section)
 					end
-					SectionState.Save(section, not value)
 					ns.ApplyUnitFrameParts()
 					Refresh()
-					Layout()
 				end)
+				check:SetParent(frame) -- (hidden with its tab)
+				-- (The label on the right edge, the box left of it, whatever its width.)
+				local text = check.Text or check.text
+				text:ClearAllPoints()
+				text:SetPoint("RIGHT", frame, "TOPRIGHT", -6, -10)
+				check:SetPoint("RIGHT", text, "LEFT", -2, 0)
 			end
-			section.nameRow = SectionBand(frame, section.title, function()
-				SectionState.Save(section, not section.open)
-				Layout()
-			end, check)
 
-			local gridTop = -BAND_HEIGHT - 6
+			local gridTop = -30
 			local headings = CreateFrame("Frame", nil, content)
 			headings:SetSize(1, 1)
 			headings:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, gridTop)
@@ -5560,9 +5679,18 @@ local function CreatePortraitsPanel()
 					liveRows[#liveRows + 1] = row
 				end
 			end
-			section.height = 6 + FRAME_HEADING_HEIGHT + 4 + r * ROW_HEIGHT + 4
+			frame:SetHeight(-gridTop + FRAME_HEADING_HEIGHT + 4 + r * ROW_HEIGHT)
+			for _, widget in ipairs(section.widgets) do widget:SetParent(section.body) end
 		end
 		ns.GridDots(content, liveRows)
+		local list, _, base, height = {}
+		for i, section in ipairs(SECTIONS) do list[i] = { section.title } end
+		panel, _, ShowTab, base, height = ns.FolderTabs(content, list, function(i) Pick(SECTIONS[i]) end, nil,
+			LABEL_WIDTH + ns.GridWidth(LAYOUT) + 8)
+		panelTop:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 2, -14 - height)
+		panel:SetPoint("TOPLEFT", panelTop, "TOPLEFT")
+		-- (On panelTop, not the panel: the panel's bottom hangs on the rows under them.)
+		base:SetPoint("TOPLEFT", panelTop, "TOPLEFT")
 		OpenSections()
 	end
 
@@ -5620,45 +5748,27 @@ local function CreateBubblesPanel()
 
 
 	-- Speech from behind you (Speech.lua): says and yells with no bubble on
-	-- screen, shown low on the screen. It works with the page off too, so
-	-- this section doesn't grey out with the page switch (pageSwitch = false).
+	-- screen, shown low on the screen. Only with the page on.
 	stack:Header(content, L["Behind you"])
 	stack:Help(content, L["Says and yells with no bubble on your screen (the speaker is behind you, or out of " ..
 		"view) can show low on the screen, looking like the chat bubbles, instead of bringing up chat. " ..
-		"This works with the page off too. It needs the Chat page's Show chat when a message arrives and " ..
-		"Hide speech you can see as a bubble. How the lines look: the Style hub's Chat bubbles page."])
-	local behindControls = {}
-	local function Behind(control)
-		behindControls[#behindControls + 1] = control
-		return control
-	end
-	local speechBehind = stack:Add(Behind(Check(content, "chatSpeechBehind", L["Show speech from behind you at the bottom"],
+		"It needs the Chat page's Show chat when a message arrives and " ..
+		"Hide speech you can see as a bubble. How the lines look, and where they show: the Style hub's Chat " ..
+		"bubbles page."])
+	local speechBehind = stack:Add(Check(content, "chatSpeechBehind", L["Show speech from behind you at the bottom"],
 		L["Says and yells with no bubble on your screen (the speaker is behind you, or out of view) show as " ..
 		"a line of text low on the screen, with the speaker's name, instead of bringing up chat. " ..
-		"It looks like the bubbles (the Style hub's Chat bubbles page)."])), "check")
+		"It looks like the bubbles (the Style hub's Chat bubbles page)."]), "check")
 	GreyUnless(speechBehind, function(db) return db.chatPeek and db.chatHideBubbled end)
-	local moveSpeech = Behind(ns.PanelButton(content))
-	moveSpeech:SetSize(70, 20)
-	moveSpeech:SetPoint("LEFT", speechBehind.Text or speechBehind.text, "RIGHT", 10, 0)
-	moveSpeech:SetText(L["Move"])
-	Tooltip(moveSpeech, L["Shows a box where speech from behind you appears: drag it where you want the lines."])
-	moveSpeech:SetScript("OnClick", function() ns.MoveSpeechBehind() end)
-	moveSpeech.Refresh = function() end
-	controls[#controls + 1] = moveSpeech
 	-- (Grey while it's off.)
 	local function IfSpeechBehind(db) return db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind end
-	GreyUnless(moveSpeech, IfSpeechBehind)
 	speechBehind:HookScript("OnClick", Refresh) -- grey out / enable the choices under it
 
-	local speechChatShown = stack:Add(Behind(Check(content, "speechBehindChatShown", L["Also while chat is showing"],
+	local speechChatShown = stack:Add(Check(content, "speechBehindChatShown", L["Also while chat is showing"],
 		L["Speech from behind you shows low on the screen even while the chat window is up (when you hover " ..
-		"it, type, or a message brought it up). Unticked, it shows only while chat is faded, and goes to chat otherwise."])),
+		"it, type, or a message brought it up). Unticked, it shows only while chat is faded, and goes to chat otherwise."]),
 		"check", 24)
 	GreyUnless(speechChatShown, IfSpeechBehind)
-
-	for _, control in ipairs(behindControls) do
-		control.pageSwitch = false -- (not greyed with the page off)
-	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -6025,6 +6135,139 @@ local function CreateGamepadPanel()
 	RegisterSubpage(canvas, "Gamepad")
 end
 
+-- Folder tabs (Heal Vision's and the Standard Frames, Unit Frames and
+-- Nameplate & Names pages'): the picked one taller, lit, a gold top, in the
+-- panel's colour with no line between, so they look one piece; the rest dark
+-- behind. The panel's top edge runs either side of the picked tab. list:
+-- { text, tip } each; onClick(i); width: each tab's (nil: to fit its text);
+-- maxWidth: past it they wrap onto rows, the picked one's row next to the
+-- panel (nil: one row). Gives the panel (the caller places and sizes it), the
+-- tabs (hidden ones are left out), Show(i) to light tab i and lay out those
+-- shown, the base (the caller puts it at the panel's
+-- top left: the bottom row's bottom left) and how high the tabs reach above it.
+ns.FOLDER_TAB_HEIGHT = 24
+function ns.FolderTabs(parent, list, onClick, width, maxWidth)
+	local TAB_H, TAB_GAP = ns.FOLDER_TAB_HEIGHT, 3
+	local PANEL_BG, TAB_BG = { 0.12, 0.12, 0.13, 0.9 }, { 0.04, 0.04, 0.05, 0.9 }
+	local EDGE, DIM_EDGE = { 0.42, 0.42, 0.42, 1 }, { 0.22, 0.22, 0.22, 1 }
+	local panel = CreateFrame("Frame", nil, parent)
+	panel:SetFrameLevel(parent:GetFrameLevel()) -- (under the settings on it)
+	local function Line(frame, color)
+		local line = frame:CreateTexture(nil, "BORDER")
+		line:SetColorTexture(unpack(color))
+		return line
+	end
+	local panelBg = panel:CreateTexture(nil, "BACKGROUND")
+	panelBg:SetAllPoints()
+	panelBg:SetColorTexture(unpack(PANEL_BG))
+	local leftEdge, rightEdge, bottomEdge = Line(panel, EDGE), Line(panel, EDGE), Line(panel, EDGE)
+	leftEdge:SetPoint("TOPLEFT")
+	leftEdge:SetPoint("BOTTOMLEFT")
+	leftEdge:SetWidth(1)
+	rightEdge:SetPoint("TOPRIGHT")
+	rightEdge:SetPoint("BOTTOMRIGHT")
+	rightEdge:SetWidth(1)
+	bottomEdge:SetPoint("BOTTOMLEFT")
+	bottomEdge:SetPoint("BOTTOMRIGHT")
+	bottomEdge:SetHeight(1)
+	local topLeft, topRight = Line(panel, EDGE), Line(panel, EDGE)
+	topLeft:SetHeight(1)
+	topRight:SetHeight(1)
+	local function PaintTab(tab, on)
+		tab:SetHeight(on and TAB_H + 4 or TAB_H)
+		tab.bg:SetColorTexture(unpack(on and PANEL_BG or TAB_BG))
+		for _, side in ipairs({ tab.left, tab.right, tab.top }) do
+			side:SetColorTexture(unpack(on and EDGE or DIM_EDGE))
+		end
+		if on then tab.top:SetColorTexture(1, 0.82, 0, 1) end
+		tab.top:SetHeight(on and 2 or 1)
+		local r, g, b = 1, 0.82, 0
+		if on then r, g, b = 1, 1, 1 end
+		tab.label:SetTextColor(r, g, b)
+		tab.label:SetVertexColor(r, g, b) -- (one on Forever)
+	end
+	local tabs = {}
+	for i, each in ipairs(list) do
+		local tab = CreateFrame("Button", nil, parent)
+		tab.label = tab:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		tab.label:SetPoint("CENTER", 0, 1)
+		tab:SetFontString(tab.label)
+		tab:SetText(each[1])
+		tab:SetSize(width or math.max(48, math.ceil(tab.label:GetStringWidth()) + 14), TAB_H)
+		tab.bg = tab:CreateTexture(nil, "BACKGROUND")
+		tab.bg:SetAllPoints()
+		tab.left, tab.right, tab.top = Line(tab, EDGE), Line(tab, EDGE), Line(tab, EDGE)
+		tab.left:SetPoint("TOPLEFT")
+		tab.left:SetPoint("BOTTOMLEFT")
+		tab.left:SetWidth(1)
+		tab.right:SetPoint("TOPRIGHT")
+		tab.right:SetPoint("BOTTOMRIGHT")
+		tab.right:SetWidth(1)
+		tab.top:SetPoint("TOPLEFT")
+		tab.top:SetPoint("TOPRIGHT")
+		local hover = tab:CreateTexture(nil, "HIGHLIGHT")
+		hover:SetAllPoints()
+		hover:SetColorTexture(1, 1, 1, 0.06)
+		if each[2] then Tooltip(tab, each[2]) end
+		tab:SetScript("OnClick", function() onClick(i) end)
+		tabs[i] = tab
+	end
+	-- The rows of the tabs shown (a caller can hide some), as many on each as
+	-- fit (tab.row: its row's number).
+	local rows
+	local function Rows()
+		local x = 0
+		rows = { {} }
+		for _, tab in ipairs(tabs) do
+			if tab:IsShown() then
+				local w = tab:GetWidth()
+				if maxWidth and x > 0 and x + w > maxWidth then
+					rows[#rows + 1] = {}
+					x = 0
+				end
+				local row = rows[#rows]
+				row[#row + 1] = tab
+				tab.row = #rows
+				x = x + w + TAB_GAP
+			end
+		end
+	end
+	local base = CreateFrame("Frame", nil, parent)
+	base:SetSize(1, 1)
+	local function Show(picked)
+		Rows()
+		-- (The picked one's row at the bottom, the rest above it in order.
+		-- Each row up clears the picked tab's extra height.)
+		local order = { tabs[picked].row }
+		for r = 1, #rows do
+			if r ~= tabs[picked].row then order[#order + 1] = r end
+		end
+		for up, r in ipairs(order) do
+			for n, tab in ipairs(rows[r]) do
+				tab:ClearAllPoints()
+				if n == 1 then
+					tab:SetPoint("BOTTOMLEFT", base, "TOPLEFT", 8, (up - 1) * (TAB_H + 4))
+				else
+					tab:SetPoint("BOTTOMLEFT", rows[r][n - 1], "BOTTOMRIGHT", TAB_GAP, 0)
+				end
+			end
+		end
+		for i, tab in ipairs(tabs) do
+			PaintTab(tab, i == picked)
+			if i == picked then
+				topLeft:ClearAllPoints()
+				topLeft:SetPoint("TOPLEFT", panel, "TOPLEFT")
+				topLeft:SetPoint("TOPRIGHT", tab, "BOTTOMLEFT", 1, 0)
+				topRight:ClearAllPoints()
+				topRight:SetPoint("TOPLEFT", tab, "BOTTOMRIGHT", -1, 0)
+				topRight:SetPoint("TOPRIGHT", panel, "TOPRIGHT")
+			end
+		end
+	end
+	Show(1)
+	return panel, tabs, Show, base, #rows * (TAB_H + 4)
+end
+
 -- Sub-page: which nameplates show (mobs, your faction, the other faction),
 -- which stay up in cinematic mode, and how far away they show.
 local function CreatePlatesPanel()
@@ -6108,30 +6351,44 @@ local function CreatePlatesPanel()
 	local TARGET_ENEMY_TIP = L["Show out of fights while you have a living enemy targeted."]
 	local TARGET_FRIEND_TIP = L["Show out of fights while you have anything else targeted: friends, NPCs, dead enemies."]
 
-	-- Each grid a band that opens and closes with a click, as on the Standard
-	-- Frames page (all open to start with). What a section adds between
-	-- BeginSection and EndSection goes in its body, hidden while it's closed
-	-- (search still finds it, and opens it). section.last: its last row's
-	-- label, to place the next section below.
+	-- Each grid a tab of its own, in Heal Vision's folder look (ns.FolderTabs,
+	-- made once every section is): the picked one's section shows on the
+	-- panel under them, its full name at its top. What a section adds between
+	-- BeginSection and EndSection goes in its body, hidden on other tabs
+	-- (search still finds it, and picks its tab). section.last: its last
+	-- row's label, the panel's bottom under it. The tab last picked is kept
+	-- across reloads (SectionState, its id "Nameplates/tab", open the key).
 	local sections = {}
+	local picked = { id = "Nameplates/tab", open = "Target" }
+	local SECTION_WIDTH = GRID_LABEL + ns.GridWidth(PLATE_LAYOUT)
+	-- (The panel's top left, under the tabs (placed once they're made, as high
+	-- as their rows); the sections' frames hang on it.)
+	local panelTop = CreateFrame("Frame", nil, content)
+	panelTop:SetSize(1, 1)
+	-- (Under the picked section's last row, at its left: the panel's bottom.)
+	local foot = CreateFrame("Frame", nil, content)
+	foot:SetSize(1, 1)
+	local panel, ShowTab
 	local function LayoutSections()
-		local above
-		for _, section in ipairs(sections) do
-			section.frame:ClearAllPoints()
-			local last = above and above.open and above.last
-			if last then
-				section.frame:SetPoint("TOPLEFT", last, "BOTTOMLEFT", -(last.indentX or 0), -16)
-			elseif above then
-				section.frame:SetPoint("TOPLEFT", above.frame, "BOTTOMLEFT", 0, -6)
-			else
-				section.frame:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 2, -14)
-			end
-			SectionState.Restore(section)
-			section.body:SetShown(section.open)
-			section.nameRow:SetOpen(section.open)
-			above = section
+		SectionState.Restore(picked)
+		local shown
+		for i, section in ipairs(sections) do
+			if section.key == picked.open then shown = i end
 		end
+		shown = shown or 1
+		for i, section in ipairs(sections) do
+			section.frame:SetShown(i == shown)
+			section.body:SetShown(i == shown)
+		end
+		ShowTab(shown)
+		local last = sections[shown].last
+		foot:ClearAllPoints()
+		foot:SetPoint("TOPLEFT", last, "BOTTOMLEFT", -(last.indentX or 0), 0)
 		FitContentHeight(content)
+	end
+	local function Pick(section)
+		SectionState.Save(picked, section.key)
+		LayoutSections()
 	end
 	-- What's on the page, to tell what a section adds.
 	local function Widgets()
@@ -6140,23 +6397,22 @@ local function CreatePlatesPanel()
 		for _, object in ipairs({ content:GetRegions() }) do set[object] = true end
 		return set
 	end
-	local SECTION_WIDTH = GRID_LABEL + ns.GridWidth(PLATE_LAYOUT)
-	local function Section(heading, key)
-		local section = { open = true, id = "Nameplates/" .. key }
+	-- (tab: its tab's name, nil: heading.)
+	local function Section(heading, key, tab)
+		SetSection(content, heading)
+		local section = { key = key, tab = tab or heading }
 		section.frame = CreateFrame("Frame", nil, content)
-		section.frame:SetSize(SECTION_WIDTH, BAND_HEIGHT)
-		section.nameRow = SectionBand(section.frame, heading, function()
-			SectionState.Save(section, not section.open)
-			LayoutSections()
-		end)
+		section.frame:SetSize(SECTION_WIDTH, 20)
+		section.frame:SetPoint("TOPLEFT", panelTop, "TOPLEFT", 12, -10)
+		section.frame.searchAlways = true
+		section.title = Label(section.frame, "GameFontNormal", heading)
+		section.title:SetPoint("TOPLEFT", section.frame, "TOPLEFT", 0, -3)
 		section.body = CreateFrame("Frame", nil, content)
 		section.body:SetPoint("TOPLEFT", section.frame, "BOTTOMLEFT")
 		section.body:SetSize(1, 1)
 		section.body.searchAlways = true
-		section.body.openSection = function()
-			SectionState.Save(section, true)
-			LayoutSections()
-		end
+		section.body.openSection = function() Pick(section) end
+		section.frame.openSection = section.body.openSection
 		sections[#sections + 1] = section
 		return section
 	end
@@ -6173,12 +6429,13 @@ local function CreatePlatesPanel()
 		section.before = nil
 	end
 
-	local friendlySection = Section(L["Friendly Nameplates"], "Friendly")
+	local friendlySection = Section(L["Friendly Nameplates"], "Friendly", L["Friendly"])
 	-- The grid can't keep plates up out of fights while the game's own
-	-- "Always Show Nameplates" is off: say so beside it (checked as the page shows).
+	-- "Always Show Nameplates" is off: say so beside the page's switch, seen
+	-- on every tab (checked as the page shows).
 	local showAllWarning = Label(content, "GameFontRedSmall",
 		L["Blizzard's Always Show Nameplates is off, so nameplates only show in combat."])
-	showAllWarning:SetPoint("LEFT", friendlySection.nameRow.title, "RIGHT", 10, 0)
+	showAllWarning:SetPoint("LEFT", handleCheck.Text or handleCheck.text or handleCheck, "RIGHT", 16, 0)
 	showAllWarning.Refresh = function(self)
 		self:SetShown(GetCVar("nameplateShowAll") == "0")
 	end
@@ -6325,8 +6582,8 @@ local function CreatePlatesPanel()
 	-- Friendly plates in dungeons and raids: the game won't let addons fade
 	-- them there, so each kind is just on or off (see Effects). The grids
 	-- have no Instances boxes for them (INSTANCE_LOCKED, AddPlateRow).
-	local instanceSection = Section(L["Friendly Plates in Dungeons and Raids"], "Instances")
-	local instanceAnchor = PageIntro(content, instanceSection.nameRow.title,
+	local instanceSection = Section(L["Friendly Plates in Dungeons and Raids"], "Instances", L["Dungeons & Raids"])
+	local instanceAnchor = PageIntro(instanceSection.frame, instanceSection.title,
 		L["In dungeons and raids the game won't let addons fade friendly nameplates, so each kind below is " ..
 		"either all on or all off there, in CineMode. The grids' friendly rows (your target's included) have no " ..
 		"Instances box: these take its place.\n\nWith a friendly target: on while you have one of that kind " ..
@@ -6362,7 +6619,8 @@ local function CreatePlatesPanel()
 	EndSection(instanceSection, lastInstanceRow)
 
 	-- Enemy and neutral units, laid out the same way.
-	local enemySection = Section(L["Enemy Nameplates"], "Enemy")
+	local enemySection = Section(L["Enemy Nameplates"], "Enemy", L["Enemy"])
+	table.insert(sections, 1, table.remove(sections)) -- (its tab before Friendly's)
 	BeginSection(enemySection)
 	local enemyTop = TableTop(enemySection.frame, PLATE_LAYOUT)
 	for r, kind in ipairs(ENEMY_KINDS) do
@@ -6403,8 +6661,8 @@ local function CreatePlatesPanel()
 	-- of their own, Cinematic Plate Parts, below the game's.)
 	local iconTip = L[" Off unless ticked. In CineMode, on the nameplates that are up; outside it, only with Always ticked."]
 	local r
-	local function PartsSection(heading, key, ours)
-		local section = Section(heading, key)
+	local function PartsSection(heading, key, tab, ours)
+		local section = Section(heading, key, tab)
 		BeginSection(section)
 		local top = TableTop(section.frame, PLATE_LAYOUT)
 		r = 0
@@ -6420,16 +6678,15 @@ local function CreatePlatesPanel()
 		return top
 	end
 	local partsTop = PartsSection(L["Plate Parts"], "Parts")
-	local ourPartsTop = PartsSection(L["Cinematic Plate Parts"], "CinematicParts", true)
+	local ourPartsTop = PartsSection(L["Cinematic Plate Parts"], "CinematicParts", L["Cinematic Parts"], true)
 
 	-- Names, laid out the same way. Outside cinematic mode the game's own
 	-- name options decide.
 	local namesSection = Section(L["Names"], "Names")
-	local namesHeader = namesSection.nameRow.title
+	local namesHeader = namesSection.title
 	-- (A warning beside it: on faded plates the names are ours. See PlateParts.)
-	local namesNote = CreateFrame("Button", nil, content)
+	local namesNote = CreateFrame("Button", nil, namesSection.frame)
 	namesNote:SetSize(16, 16)
-	namesNote:SetFrameLevel(namesSection.nameRow:GetFrameLevel() + 2) -- (above its band, for its tooltip)
 	namesNote:SetPoint("LEFT", namesHeader, "RIGHT", 6, 0)
 	local namesNoteIcon = namesNote:CreateTexture(nil, "ARTWORK")
 	namesNoteIcon:SetAllPoints()
@@ -6544,10 +6801,18 @@ local function CreatePlatesPanel()
 		ns.GridDots(content, top.rows or {})
 	end
 
-	-- Laid out top to bottom: the master switch, then the sections (your
-	-- target's plate and name, friendly nameplates, friendly plates in
-	-- dungeons and raids, enemy nameplates, their parts, then names and raid
-	-- markers).
+	-- The tabs, in order: your target's plate and name, enemy nameplates,
+	-- friendly nameplates, friendly plates in dungeons and raids, their parts,
+	-- then names and raid markers.
+	local list, _, base, height = {}
+	for i, section in ipairs(sections) do list[i] = { section.tab } end
+	panel, _, ShowTab, base, height = ns.FolderTabs(content, list, function(i) Pick(sections[i]) end, nil,
+		SECTION_WIDTH + 8)
+	panelTop:SetPoint("TOPLEFT", handleCheck, "BOTTOMLEFT", 2, -14 - height)
+	panel:SetPoint("TOPLEFT", panelTop, "TOPLEFT")
+	panel:SetPoint("BOTTOMRIGHT", foot, "TOPLEFT", SECTION_WIDTH + 12, -12)
+	-- (On panelTop, not the panel: the panel's bottom hangs on the rows under them.)
+	base:SetPoint("TOPLEFT", panelTop, "TOPLEFT")
 	LayoutSections()
 
 	canvas:SetScript("OnShow", PageShown(function()
@@ -6575,14 +6840,6 @@ local function CreateNameStylePanel()
 		if ns.RefreshPlateNameStyle then ns.RefreshPlateNameStyle() end
 		if preview then preview:Refresh() end
 	end
-	local function StyleCheck(key, label, tip)
-		local check = Check(content, key, label, tip, function(value)
-			ns.GetDB()[key] = value
-			Changed()
-			Refresh() -- grey out / enable what hangs off it
-		end)
-		return check
-	end
 	local function On(db) return db.plateNameStyle end
 
 	-- (Its switch: names as this page says, or as the plates draw them.)
@@ -6600,22 +6857,11 @@ local function CreateNameStylePanel()
 		{ text = L["Friendly NPC"], color = { 0, 1, 0 } },
 		{ player = true },
 	}
-	local PREVIEW_W, PREVIEW_H = 520, 84
+	local PREVIEW_W, PREVIEW_H = 480, 84
 	preview = CreateFrame("Frame", nil, content)
 	preview:SetSize(PREVIEW_W, PREVIEW_H)
-	stack:Add(ns.StyleSceneButton(content, Tooltip, function(control) controls[#controls + 1] = control end),
-		"label")
 	stack:Add(preview, "label")
 	ns.StyleScene(preview, 0.55, 0.8) -- (the Style pages' scene, darker under the names: StylePages.lua)
-	local edges = {}
-	for i = 1, 4 do
-		edges[i] = preview:CreateTexture(nil, "BORDER")
-		edges[i]:SetColorTexture(0.35, 0.35, 0.35, 1)
-	end
-	edges[1]:SetPoint("TOPLEFT") edges[1]:SetPoint("TOPRIGHT") edges[1]:SetHeight(1)
-	edges[2]:SetPoint("BOTTOMLEFT") edges[2]:SetPoint("BOTTOMRIGHT") edges[2]:SetHeight(1)
-	edges[3]:SetPoint("TOPLEFT") edges[3]:SetPoint("BOTTOMLEFT") edges[3]:SetWidth(1)
-	edges[4]:SetPoint("TOPRIGHT") edges[4]:SetPoint("BOTTOMRIGHT") edges[4]:SetWidth(1)
 	local caption = Label(preview, "GameFontDisableSmall", L["Preview"])
 	caption:SetPoint("TOPLEFT", 6, -5)
 	caption.searchSkip = true
@@ -6681,6 +6927,10 @@ local function CreateNameStylePanel()
 	end
 	controls[#controls + 1] = preview
 
+	-- (The Style pages' rows, StylePages.lua: each greyed by this page's own
+	-- switch, as General's doesn't reach these names.)
+	local rows = ns.StyleRows(ns.lowHealthKit, content, stack, Changed, "plateNameStyle")
+
 	-- Presets: a few looks to start from.
 	local PRESETS = {
 		{ L["Like the game's names"], L["Colored, no outline or shadow (the defaults)."], {} },
@@ -6693,108 +6943,95 @@ local function CreateNameStylePanel()
 		"plateNameAlpha", "plateNameY", "plateNameFixedSize", "plateNameShadow", "plateNameShadowX",
 		"plateNameShadowY", "plateNameShadowAlpha", "plateNameCloseSize", "plateNameCloseY", "plateNameFarSize",
 		"plateNameFarY" }
-	local presetRow = CreateFrame("Frame", nil, content)
-	presetRow:SetSize(PREVIEW_W, 24)
-	stack:Add(presetRow, "label")
-	local lastButton
-	for _, preset in ipairs(PRESETS) do
-		local button = ns.PanelButton(presetRow)
-		button:SetText(preset[1])
-		button:SetSize(math.max(110, button:GetFontString():GetStringWidth() + 24), 22)
-		if lastButton then
-			button:SetPoint("LEFT", lastButton, "RIGHT", 8, 0)
-		else
-			button:SetPoint("LEFT", presetRow, "LEFT", 0, 0)
-		end
-		Tooltip(button, preset[2])
-		button:SetScript("OnClick", function()
+	-- (The Style pages' Preset: row, greyed by this page's switch alone;
+	-- Custom while none matches.)
+	local function PresetValue(preset, key)
+		local value = preset[3][key]
+		if value == nil then value = ns.DEFAULTS[key] end
+		return value
+	end
+	local presetField = {
+		get = function()
+			local db = ns.GetDB()
+			if not (db and db.plateNameStyle) then return "custom" end
+			for i, preset in ipairs(PRESETS) do
+				local match = true
+				for _, key in ipairs(PRESET_KEYS) do
+					if db[key] ~= PresetValue(preset, key) then match = false break end
+				end
+				if match then return i end
+			end
+			return "custom"
+		end,
+		set = function(i)
+			local preset = PRESETS[i]
+			if not preset then return end
 			local db = ns.GetDB()
 			db.plateNameStyle = true
-			for _, key in ipairs(PRESET_KEYS) do
-				local value = preset[3][key]
-				if value == nil then value = ns.DEFAULTS[key] end
-				db[key] = value
-			end
-			Changed()
-			Refresh()
-		end)
-		button.Refresh = function() end
-		GreyUnless(button, On)
-		controls[#controls + 1] = button
-		lastButton = button
-	end
-
-	local function StyleSlider(key, label, minV, maxV, step, fmt, scale, tip)
-		local slider = stack:Add(Slider(content, key, label, minV, maxV, step, fmt, scale, Changed), "slider")
-		if tip then Tooltip(slider, tip) end
-		GreyUnless(slider, On)
-		return slider
-	end
+			for _, key in ipairs(PRESET_KEYS) do db[key] = PresetValue(preset, key) end
+		end,
+	}
+	rows.Dropdown(L["Preset:"], presetField, function()
+		local list = {}
+		for i, preset in ipairs(PRESETS) do list[i] = { value = i, text = preset[1], tip = preset[2] } end
+		list[#list + 1] = { value = "custom", text = L["Custom"], tip = L["Your own settings, not a preset's."],
+			enabled = function() return false end }
+		return list
+	end, L["A whole look in one pick. Changing a setting after it shows Custom."], On)
 
 	stack:Header(content, L["Color"])
-	local colour = stack:Add(StyleCheck("plateNameColour", L["Color by how the unit sees you"],
+	rows.Check("plateNameColour", L["Color by how the unit sees you"],
 		L["Red for hostile units, yellow for neutral ones and green for friendly ones, as over their heads. " ..
-		"Unticked: the plate's own color, white or gray."]), "check")
-	GreyUnless(colour, On)
-	local friendsLabel = stack:Add(Label(content, "GameFontHighlight", L["Friendly players:"]), "label", 28)
-	local FRIENDS = {
+		"Unticked: the plate's own color, white or gray."], On)
+	rows.Choices(L["Friendly players:"], "plateNameFriends", {
 		{ "blue", L["Blue"], L["Blue, as the game's names over their heads (green while they're PvP flagged, as there too)."] },
 		{ "class", L["Class colors"], L["Their class's color, as the plates draw them."] },
 		{ "white", L["White"], nil },
-	}
-	local lastChoice
-	for _, info in ipairs(FRIENDS) do
-		local choice = Choice(content, "plateNameFriends", info[1], info[2], info[3])
-		choice:HookScript("OnClick", Changed)
-		if lastChoice then
-			choice:SetPoint("LEFT", lastChoice.Text or lastChoice.text, "RIGHT", 16, 0)
-		else
-			choice:SetPoint("LEFT", friendsLabel, "RIGHT", 10, 0)
-		end
-		GreyUnless(choice, function(db) return db.plateNameStyle and db.plateNameColour end)
-		lastChoice = choice
-	end
+	}, function(db) return db.plateNameStyle and db.plateNameColour end)
 
 	stack:Header(content, L["Text"])
-	local OUTLINE_NAMES = { [0] = L["None"], L["Thin"], L["Thick"] }
-	StyleSlider("plateNameOutline", L["Outline"], 0, 2, 1,
-		function(value) return OUTLINE_NAMES[value] or "" end, 1,
-		L["A black border around the letters. The game's names over heads have none."])
-	StyleSlider("plateNameAlpha", L["Opacity"], 20, 100, 5, "%d%%", 100,
-		L["How see-through the names are, on top of their fades."])
-	if ns.isRetail then
-		local fixed = stack:Add(StyleCheck("plateNameFixedSize", L["Same size at any distance"],
-			L["One size at any distance. Unticked, a name grows and shrinks with its plate as its unit comes " ..
-			"nearer or goes."]), "check")
-		GreyUnless(fixed, On)
-	end
+	rows.Choices(L["Outline:"], "plateNameOutline", {
+		{ 0, L["None"], L["No border around the letters, like the game's names over heads."] },
+		{ 1, L["Thin"], L["A thin black border around the letters."] },
+		{ 2, L["Thick"], L["A thick black border around the letters."] },
+	}, On)
 
 	-- Size and height by distance. Retail's plates scale themselves: one of
 	-- each. WoW Forever's don't, so names are sized and placed by how far they
 	-- are from the camera (PlateParts' Look): set at two points, close and far,
 	-- and following perspective between and beyond them. The camera's distance
-	-- now shows under them, to set each with the camera there.
+	-- now shows under them, to set each with the camera there. (Sizes and
+	-- the like as small boxes on a line, as the other Style pages'.)
 	if ns.isRetail then
-		stack:Header(content, L["Size and height"])
-		StyleSlider("plateNameSize", L["Size"], 50, 200, 5, "%d%%", 100,
-			L["How big the names are, next to the plates' own."])
-		StyleSlider("plateNameY", L["Height"], -30, 30, 1, "%d", 1,
-			L["Moves the names up (or down, below 0) from where the plates put them."])
+		local sizes = rows.Boxes()
+		sizes:Box(L["Size"], "plateNameSize", 50, 200, 5, "%d", 100,
+			L["How big the names are, next to the plates' own."], On, "%")
+		sizes:Box(L["Height"], "plateNameY", -30, 30, 1, "%d", 1,
+			L["Moves the names up (or down, below 0) from where the plates put them."], On)
+		sizes:Box(L["Opacity"], "plateNameAlpha", 20, 100, 5, "%d", 100,
+			L["How see-through the names are, on top of their fades."], On, "%")
+		rows.Check("plateNameFixedSize", L["Same size at any distance"],
+			L["One size at any distance. Unticked, a name grows and shrinks with its plate as its unit comes " ..
+			"nearer or goes."], On)
 	else
+		rows.Boxes():Box(L["Opacity"], "plateNameAlpha", 20, 100, 5, "%d", 100,
+			L["How see-through the names are, on top of their fades."], On, "%")
 		stack:Header(content, L["Close (a unit about 10 yards from the camera)"])
-		StyleSlider("plateNameCloseSize", L["Size"], 50, 300, 5, "%d%%", 100,
+		local close = rows.Boxes()
+		close:Box(L["Size"], "plateNameCloseSize", 50, 300, 5, "%d", 100,
 			L["How big a name is with its unit about 10 yards from the camera, next to the plates' own. " ..
-			"Nearer, bigger still; further, smaller, as the game's names over heads."])
-		StyleSlider("plateNameCloseY", L["Height"], -40, 60, 1, "%d", 1,
+			"Nearer, bigger still; further, smaller, as the game's names over heads."], On, "%")
+		close:Box(L["Height"], "plateNameCloseY", -40, 60, 1, "%d", 1,
 			L["Moves a name up (or down, below 0) from where the plates put it, with its unit about 10 yards " ..
-			"from the camera."])
+			"from the camera."], On)
 		stack:Header(content, L["Far (about 50 yards from the camera)"])
-		StyleSlider("plateNameFarSize", L["Size"], 20, 100, 5, "%d%%", 100,
+		local far = rows.Boxes()
+		far:Box(L["Size"], "plateNameFarSize", 20, 100, 5, "%d", 100,
 			L["How big a name is with its unit about 50 yards from the camera: about the size of the game's " ..
-			"names where those take over, at the edge of nameplate range."])
-		StyleSlider("plateNameFarY", L["Height"], -60, 10, 1, "%d", 1,
+			"names where those take over, at the edge of nameplate range."], On, "%")
+		far:Box(L["Height"], "plateNameFarY", -60, 10, 1, "%d", 1,
 			L["Moves a name up (or down, below 0) with its unit about 50 yards from the camera, as the " ..
-			"game's names over heads sit closer to the head further off."])
+			"game's names over heads sit closer to the head further off."], On)
 		-- (A unit's own distance from you comes in bands: under 11, 28 and 41 yards.)
 		local cameraNote = stack:Note(content, "", 460)
 		cameraNote.searchSkip = true
@@ -6926,8 +7163,6 @@ do
 		local previewed = "others"
 		preview = CreateFrame("Frame", nil, content)
 		preview:SetSize(560, 160)
-		stack:Add(ns.StyleSceneButton(content, Tooltip, function(control) controls[#controls + 1] = control end),
-		"label")
 		stack:Add(preview, "label")
 		ns.StyleScene(preview, 0.55, 0.8) -- (the Style pages' scene, darker under the plate: StylePages.lua)
 		local caption = Label(preview, "GameFontNormal", "")
@@ -9717,9 +9952,9 @@ local function CreateCooldownPanel()
 		"fights the game may not say how long is left, so then it goes by when you last cast it. The " ..
 		"settings beside each group's name set every spell in it at once."]:format(ns.READY_EARLY * 100) .. " " ..
 		L["Tracked buffs and bars: Always, In combat, Out of combat or Hidden (the game keeps your buffs " ..
-		"secret in fights, so they go by that alone). Click a group's name to fold it away."] .. " " ..
-		L["With Smart Set's round tick on, until you set a bar's mode, its spells with no cooldown go by what " ..
-		"they cost, as Smart Set picks; with Default's, by their group's setting."])
+		"secret in fights, so they go by that alone). Each group has a tab of its own."] .. " " ..
+		L["With Smart Set ticked, until you set a bar's mode, its spells with no cooldown go by what they " ..
+		"cost; unticked, by their group's setting."])
 	RecordKey(content, "cooldownReadyOnly") -- (for the page's Reset)
 	RecordKey(content, "cooldownReadyEarly")
 	RecordKey(content, "cooldownEarlyOn")
@@ -9732,17 +9967,28 @@ local function CreateCooldownPanel()
 	RecordKey(content, "cooldownSmartDefaults")
 	-- Columns: the spell, when it shows, and (When ready only) how early it's back.
 	local MODE_X, POWER_X, EARLY_X, ROW_HEIGHT = 200, 360, 440, 26
-	local GROUP_HEIGHT, GROUP_GAP, GROUP_WIDTH = 36, 12, 560
+	local GROUP_HEIGHT, GROUP_WIDTH = 36, 560
+	-- Each group a tab of its own, in Heal Vision's folder look (ns.FolderTabs,
+	-- made below), only those with spells now: the picked one's spells on the
+	-- panel under them, the column headings at its top. The tab last picked
+	-- is kept across reloads (SectionState, its id "Cooldown Manager/tab",
+	-- open the group).
+	local GROUP_ORDER = { "essential", "utility", "buffs", "bars", "other", "otherbuffs" }
+	local picked = { id = "Cooldown Manager/tab", open = "essential" }
+	-- (The panel's top left, under the tabs: placed once they're made.)
+	local panelTop = CreateFrame("Frame", nil, content)
+	panelTop:SetSize(1, 1)
+	local panel, groupTabs, ShowTab
 	local spellHeading = Label(content, "GameFontNormalSmall", L["Spell"])
-	spellHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -42)
+	spellHeading:SetPoint("TOPLEFT", panelTop, "TOPLEFT", 12, -10)
 	local modeHeading = Label(content, "GameFontNormalSmall", L["Icon shows"])
-	modeHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", MODE_X, -42)
+	modeHeading:SetPoint("TOPLEFT", panelTop, "TOPLEFT", 12 + MODE_X, -10)
 	local powerHeading = Label(content, "GameFontNormalSmall", L["Resources"])
-	powerHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", POWER_X - 4, -42)
+	powerHeading:SetPoint("TOPLEFT", panelTop, "TOPLEFT", 12 + POWER_X - 4, -10)
 	local earlyHeading = Label(content, "GameFontNormalSmall", L["Show Early"])
-	earlyHeading:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", EARLY_X, -42)
+	earlyHeading:SetPoint("TOPLEFT", panelTop, "TOPLEFT", 12 + EARLY_X, -10)
 	local noSpells = Label(content, "GameFontDisable", L["Nothing in the Cooldown Manager right now."])
-	noSpells:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, -8)
+	noSpells:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -42)
 
 	-- A heading over each bar's spells, as the Cooldown Manager's settings group them.
 	local GROUP_NAMES = {
@@ -9750,10 +9996,13 @@ local function CreateCooldownPanel()
 		buffs = L["Tracked Buffs"], bars = L["Tracked Bars"],
 		other = L["Not in the Cooldown Manager now"], otherbuffs = L["Buffs not in the Cooldown Manager now"],
 	}
+	-- (Their tabs' names: the full name heads the panel.)
+	local TAB_NAMES = {
+		essential = L["Essential"], utility = L["Utility"], buffs = L["Buffs"], bars = L["Bars"],
+		other = L["Other"], otherbuffs = L["Other buffs"],
+	}
 	-- The groups of tracked buffs and bars, with modes of their own (ns.CooldownBuffMode).
 	local BUFF_GROUP = { buffs = true, bars = true, otherbuffs = true }
-	-- Groups folded away (by clicking their name), while you play.
-	local closed = {}
 	-- A spell's mode: "always", "ready", "recharge" or "proc" (set on its own:
 	-- db.cooldownAlwaysShow, ReadyOnly, RechargeOnly, ProcOnly; else its group's).
 	local MODES = {
@@ -10041,7 +10290,6 @@ local function CreateCooldownPanel()
 		row.power:Hide()
 		if row.line then row.line:Hide() end
 		if row.center then row.center:Hide() end
-		if row.fold then row.fold:Hide() end
 	end
 
 	-- A group's heading row: its name in gold, its defaults beside it, and a
@@ -10054,21 +10302,6 @@ local function CreateCooldownPanel()
 			row.line = content:CreateTexture(nil, "ARTWORK")
 			row.line:SetColorTexture(1, 0.82, 0, 0.4)
 			row.line:SetSize(GROUP_WIDTH, 1)
-			-- Its name folds it away or opens it again, as in the game's settings.
-			row.fold = CreateFrame("Button", nil, content)
-			row.fold:SetSize(MODE_X - 10, 20)
-			row.fold.icon = row.fold:CreateTexture(nil, "ARTWORK")
-			row.fold.icon:SetSize(14, 14)
-			row.fold.icon:SetPoint("LEFT", 0, 0)
-			row.fold:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight", "ADD")
-			row.fold:GetHighlightTexture():SetAllPoints(row.fold.icon)
-			row.fold:SetScript("OnClick", function()
-				closed[group] = not closed[group] or nil
-				ListSpells()
-				Refresh()
-				FitContentHeight(content)
-			end)
-			Tooltip(row.fold, L["Click to show or hide its spells."])
 			if group ~= "other" and not BUFF_GROUP[group] then
 				row.center = Check(content, nil, L["Close the gaps (centered)"],
 					L["The icons this bar shows sit together in their order, centered on the bar, instead of " ..
@@ -10113,43 +10346,46 @@ local function CreateCooldownPanel()
 		wipe(buffGroupOf)
 		wipe(groupSpells)
 		for _, row in pairs(groupRows) do HideRow(row) end
-		local y, lastGroup = -2, nil
-		local used = { [rows] = 0, [buffRows] = 0 }
 		for _, spell in ipairs(list) do
 			local id, group = spell.id, spell.group
-			local isBuff = BUFF_GROUP[group]
-			if isBuff then buffGroupOf[id] = group else groupOf[id] = group end
+			if BUFF_GROUP[group] then buffGroupOf[id] = group else groupOf[id] = group end
 			groupSpells[group] = groupSpells[group] or {}
 			table.insert(groupSpells[group], id)
-			if group ~= lastGroup then
-				if lastGroup then y = y - GROUP_GAP end
-				lastGroup = group
-				local row = GroupRow(group)
-				PlaceRow(row, group, GROUP_NAMES[group], y - 4, 18)
-				row.fold:ClearAllPoints()
-				row.fold:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, y - 4)
-				row.fold.icon:SetTexture(closed[group] and "Interface\\Buttons\\UI-PlusButton-Up"
-					or "Interface\\Buttons\\UI-MinusButton-Up")
-				row.fold:Show()
-				row.line:ClearAllPoints()
-				row.line:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, y - 30)
-				row.line:Show()
-				y = y - GROUP_HEIGHT
-				if row.center and not closed[group] then
-					row.center:ClearAllPoints()
-					row.center:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", -4, y + 2)
-					row.center:Show()
-					y = y - ROW_HEIGHT
-				end
+		end
+		-- The tabs of the groups with spells; the picked one's, or the first.
+		SectionState.Restore(picked)
+		local shown
+		for i, group in ipairs(GROUP_ORDER) do
+			local has = groupSpells[group] ~= nil
+			groupTabs[i]:SetShown(has)
+			if has and (not shown or group == picked.open) then shown = i end
+		end
+		local group = shown and GROUP_ORDER[shown]
+		local y = -2
+		local used = { [rows] = 0, [buffRows] = 0 }
+		if group then
+			ShowTab(shown)
+			local row = GroupRow(group)
+			PlaceRow(row, group, GROUP_NAMES[group], y - 4)
+			row.line:ClearAllPoints()
+			row.line:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", 0, y - 30)
+			row.line:Show()
+			y = y - GROUP_HEIGHT
+			if row.center then
+				row.center:ClearAllPoints()
+				row.center:SetPoint("TOPLEFT", spellHeading, "BOTTOMLEFT", -4, y + 2)
+				row.center:Show()
+				y = y - ROW_HEIGHT
 			end
-			if not closed[group] then
+			local isBuff = BUFF_GROUP[group]
+			for _, id in ipairs(groupSpells[group]) do
 				local pool = isBuff and buffRows or rows
 				used[pool] = used[pool] + 1
-				local row = pool[used[pool]] or NewRow(isBuff and BUFF or SPELL, "GameFontHighlight")
-				pool[used[pool]] = row
+				local spellRow = pool[used[pool]] or NewRow(isBuff and BUFF or SPELL, "GameFontHighlight")
+				pool[used[pool]] = spellRow
 				local okName, name = pcall(GetName, id)
 				local okIcon, icon = pcall(GetIcon, id)
-				PlaceRow(row, id, ("|T%s:16|t %s"):format(okIcon and icon or 134400,
+				PlaceRow(spellRow, id, ("|T%s:16|t %s"):format(okIcon and icon or 134400,
 					okName and name or L["Spell %d"]:format(id)), y)
 				y = y - ROW_HEIGHT
 			end
@@ -10159,96 +10395,65 @@ local function CreateCooldownPanel()
 				HideRow(pool[i])
 			end
 		end
-		noSpells:SetShown(#list == 0)
-		spellHeading:SetShown(#list > 0)
-		modeHeading:SetShown(#list > 0)
-		earlyHeading:SetShown(#list > 0)
-		powerHeading:SetShown(#list > 0)
+		-- (The panel down past the last row: its headings' 10 and theirs, the rows, 12 under.)
+		panel:SetHeight(10 + spellHeading:GetStringHeight() - y + 12)
+		panel:SetShown(group ~= nil)
+		noSpells:SetShown(group == nil)
+		spellHeading:SetShown(group ~= nil)
+		modeHeading:SetShown(group ~= nil)
+		earlyHeading:SetShown(group ~= nil)
+		powerHeading:SetShown(group ~= nil)
 	end
+	-- The tabs (their full names their tips).
+	local tabList = {}
+	for i, group in ipairs(GROUP_ORDER) do tabList[i] = { TAB_NAMES[group], GROUP_NAMES[group] } end
+	local base, height
+	panel, groupTabs, ShowTab, base, height = ns.FolderTabs(content, tabList, function(i)
+		SectionState.Save(picked, GROUP_ORDER[i])
+		ListSpells()
+		Refresh()
+		FitContentHeight(content)
+	end, nil, GROUP_WIDTH + 8)
+	-- (Under Smart Set.)
+	panelTop:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -38 - height)
+	panel:SetPoint("TOPLEFT", panelTop, "TOPLEFT")
+	panel:SetWidth(EARLY_X + 200) -- (room for Show Early's "sec (empty: 15%)" beside its box)
+	base:SetPoint("TOPLEFT", panelTop, "TOPLEFT")
 
-	-- Smart Set: each spell with no cooldown in the Essential and Utility bars
-	-- set on its own by what it costs (ns.SmartCooldownMode): When Ready with
-	-- Resources for a resource you build up (Maelstrom), When it procs for the
-	-- rest. Spells with a cooldown are left as they are. (Those picks are
-	-- also the default until a group's mode is set.) Reset: those bars'
-	-- spells back to their defaults.
-	local function EachBarSpell(visit)
-		ListSpells()
-		for _, spell in ipairs(ns.CooldownManagerSpells()) do
-			if ns.COOLDOWN_SMART_GROUPS[spell.group] then visit(spell.id) end
-		end
-	end
-	-- The round tick in front of each: which the spells you haven't set go by
-	-- (db.cooldownSmartDefaults), one at a time. Each button ticks its own.
-	local function ChooseSmart(on)
-		ns.GetDB().cooldownSmartDefaults = on
-		ListSpells()
-		Refresh()
-	end
-	local function DefaultsTick(smart, tip)
-		local ok, tick = pcall(CreateFrame, "CheckButton", nil, content, "UIRadioButtonTemplate")
-		if ok and tick then ns.SkinCheck(tick, true) end
-		if not ok or not tick then
-			tick = ns.SkinCheck(CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate"))
-			tick:SetSize(22, 22)
-		end
-		Tooltip(tick, tip)
-		tick:SetScript("OnClick", function() ChooseSmart(smart) end)
-		tick.Refresh = function(self)
-			self:SetChecked((ns.db.cooldownSmartDefaults and true or false) == smart)
-		end
-		controls[#controls + 1] = tick
-		return tick
-	end
-	local smartTick = DefaultsTick(true, L["Ticked: the spells with no cooldown you haven't set yourself go by " ..
-		"Smart Set's pick, until you set their group's mode."])
-	smartTick:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -8)
-	local smartSet = ns.PanelButton(content)
-	smartSet:SetSize(110, 22)
-	smartSet:SetPoint("LEFT", smartTick, "RIGHT", 4, 0)
-	smartSet:SetText(L["Smart Set"])
-	Tooltip(smartSet, L["Sets each spell with no cooldown in the Essential and Utility bars by what it costs: " ..
-		"When Ready with Resources if it spends a resource you build up (like Maelstrom), else When it procs " ..
-		"(like Lightning Bolt). Spells with a cooldown are left as they are."])
-	smartSet:SetScript("OnClick", function()
-		local db, procs, power = ns.GetDB(), 0, 0
-		db.cooldownSmartDefaults = true
-		EachBarSpell(function(id)
-			local pick = ns.SmartCooldownMode(id)
-			if pick == "power" then
-				SetSpellMode(id, "ready")
-				db.cooldownNeedsPower[id] = true
-				power = power + 1
-			elseif pick == "proc" then
-				SetSpellMode(id, "proc")
-				procs = procs + 1
-			end
+	-- Smart Set (db.cooldownSmartDefaults): until you set a bar's mode, its
+	-- spells with no cooldown that you haven't set yourself go by what they
+	-- cost (ns.SmartCooldownMode): When Ready with Resources for a resource you
+	-- build up (Maelstrom), When it procs for the rest. Off: by their group's
+	-- setting.
+	local smartSet = Check(content, "cooldownSmartDefaults", L["Smart Set"],
+		L["Ticked: the spells with no cooldown you haven't set yourself go by what they cost, until you set " ..
+		"their group's mode: When Ready with Resources if they spend a resource you build up (like Maelstrom), " ..
+		"else When it procs (like Lightning Bolt). Spells with a cooldown or charges go by their group's " ..
+		"setting. Unticked: every spell you haven't set yourself goes by its group's setting."],
+		function(value)
+			KeyPut("cooldownSmartDefaults", value)
+			ListSpells()
+			Refresh()
 		end)
-		ns.Print(L["Smart Set: %d spells set to When it procs, %d to When Ready with Resources."]:format(procs, power))
-		ListSpells()
-		Refresh()
+	smartSet:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", -2, -6)
+	-- Reset: just the spell icons' settings (the page's Reset does the rest too).
+	local SPELL_ICON_KEYS = { cooldownReadyOnly = true, cooldownReadyEarly = true, cooldownEarlyOn = true,
+		cooldownRechargeOnly = true, cooldownNeedsPower = true, cooldownGroupDefaults = true,
+		cooldownProcOnly = true, cooldownAlwaysShow = true, cooldownBuffMode = true, cooldownSmartDefaults = true }
+	local iconsReset = ns.PanelButton(content)
+	iconsReset:SetSize(60, 20)
+	iconsReset:SetPoint("LEFT", smartSet.Text or smartSet.text or smartSet, "RIGHT", 16, 0)
+	iconsReset:SetText(L["Reset"])
+	iconsReset.searchSkip = true
+	Tooltip(iconsReset, L["Put every spell's, buff's and group's icon setting, and Smart Set, back to the " ..
+		"active profile's own."])
+	iconsReset:SetScript("OnClick", function()
+		StaticPopup_Show("CINEMATIC_RESET_PART", nil, nil, { content = content, keys = SPELL_ICON_KEYS,
+			after = function()
+				ListSpells()
+				Refresh()
+			end })
 	end)
-	smartSet.Refresh = function() end
-	controls[#controls + 1] = smartSet
-	local defaultTick = DefaultsTick(false, L["Ticked: every spell you haven't set yourself goes by its group's setting."])
-	defaultTick:SetPoint("LEFT", smartSet, "RIGHT", 12, 0)
-	local smartReset = ns.PanelButton(content)
-	smartReset:SetSize(110, 22)
-	smartReset:SetPoint("LEFT", defaultTick, "RIGHT", 4, 0)
-	smartReset:SetText(L["Default"])
-	Tooltip(smartReset, L["Puts every spell in the Essential and Utility bars back to its group's setting."])
-	smartReset:SetScript("OnClick", function()
-		local db = ns.GetDB()
-		db.cooldownSmartDefaults = false
-		EachBarSpell(function(id)
-			SetSpellMode(id, nil)
-			db.cooldownNeedsPower[id], db.cooldownEarlyOn[id], db.cooldownReadyEarly[id] = nil, nil, nil
-		end)
-		ListSpells()
-		Refresh()
-	end)
-	smartReset.Refresh = function() end
-	controls[#controls + 1] = smartReset
 
 	local shown = PageShown(Refresh, content)
 	canvas:SetScript("OnShow", function()
@@ -10766,12 +10971,27 @@ local function CreateVisionPanel()
 		local ROLE_NAMES = { TANK = L["Tank"], HEALER = L["Healer"], DAMAGER = L["Damage"] }
 		local TABS = { false, "TANK", "HEALER", "DAMAGER" }
 		local ROLE_ICONS = { TANK = "0:19:22:41", HEALER = "20:39:1:20", DAMAGER = "20:39:22:41" }
-		local tabs, ownCheck, tabNote = {}, nil, nil
+		local ownCheck, tabNote
+		-- Folder tabs (ns.FolderTabs), a role's each after Default's.
+		local TAB_H = ns.FOLDER_TAB_HEIGHT
+		local list = {}
+		for i, role in ipairs(TABS) do
+			list[i] = { role and ROLE_NAMES[role] or L["Default"], role and L["The settings below as they are " ..
+				"while you're this role (your specialization's, or the one picked in the group finder)."]
+				or L["The settings below for every role that uses the default settings."] }
+		end
+		local panel, tabs, ShowTab, base = ns.FolderTabs(content, list, function(i)
+			editing = TABS[i] or nil
+			Refresh() -- (the tabs too: ownCheck's Refresh)
+		end, 90)
+		panel:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -14 - TAB_H - 4)
+		-- (On the row, not the panel: the panel's bottom hangs on the rows under them.)
+		base:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -14 - TAB_H - 4)
 		local function ShowTabs()
 			local db = ns.GetDB()
 			if not db then return end
-			for _, tab in ipairs(tabs) do
-				if tab.role == editing then tab:LockHighlight() else tab:UnlockHighlight() end
+			for i, role in ipairs(TABS) do
+				if (role or nil) == editing then ShowTab(i) end
 			end
 			ownCheck:SetShown(editing ~= nil)
 			local role = ns.PlayerRole()
@@ -10779,27 +10999,8 @@ local function CreateVisionPanel()
 				"|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:16:16:0:0:64:64:" .. ROLE_ICONS[role] .. "|t"
 				or L["None"]))
 		end
-		for i, role in ipairs(TABS) do
-			local tab = ns.PanelButton(content)
-			tab:SetSize(90, 22)
-			tab:SetText(role and ROLE_NAMES[role] or L["Default"])
-			tab.role = role or nil
-			if i == 1 then
-				tab:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -14)
-			else
-				tab:SetPoint("LEFT", tabs[i - 1], "RIGHT", 4, 0)
-			end
-			Tooltip(tab, role and L["The settings below as they are while you're this role (your " ..
-				"specialization's, or the one picked in the group finder)."]
-				or L["The settings below for every role that uses the default settings."])
-			tab:SetScript("OnClick", function()
-				editing = tab.role
-				Refresh() -- (the tabs too: ownCheck's Refresh)
-			end)
-			tabs[i] = tab
-		end
 		tabNote = Label(content, "GameFontHighlight")
-		tabNote:SetPoint("LEFT", tabs[#tabs], "RIGHT", 10, 0)
+		tabNote:SetPoint("LEFT", tabs[#tabs], "BOTTOMRIGHT", 10, TAB_H / 2)
 		tabNote.searchSkip = true
 		for _, role in ipairs(ns.HEAL_VISION_ROLES) do RecordKey(content, "healVisionOwn_" .. role) end
 		-- Use default settings: unticked, the role goes by its own values (each kept while ticked).
@@ -10813,12 +11014,12 @@ local function CreateVisionPanel()
 			self:SetChecked(editing and not ns.GetDB()["healVisionOwn_" .. editing] or false)
 			ShowTabs()
 		end
-		ownCheck:SetPoint("TOPLEFT", tabs[1], "BOTTOMLEFT", -2, -6)
+		ownCheck:SetPoint("TOPLEFT", tabs[1], "BOTTOMLEFT", -2, -10)
 		GreyUnless(ownCheck, IfAny)
 		-- (Holds the place under the tabs, the check shown or not.)
 		local tabsEnd = CreateFrame("Frame", nil, content)
 		tabsEnd:SetSize(1, 26)
-		tabsEnd:SetPoint("TOPLEFT", tabs[1], "BOTTOMLEFT", 0, -6)
+		tabsEnd:SetPoint("TOPLEFT", tabs[1], "BOTTOMLEFT", 0, -10)
 
 		local previous = tabsEnd
 		local function Option(key, label, tip, enabled)
@@ -10941,6 +11142,7 @@ local function CreateVisionPanel()
 			"in it with you. In battlegrounds, where WoW Forever won't say how far anyone is, members out of " ..
 			"range of your heals (about 40 yards) fade to this instead of the game's own dimming, on top of the " ..
 			"rest of the page. 100% leaves them be; 0% hides them completely."])
+		panel:SetPoint("BOTTOMRIGHT", lastRow, "BOTTOMRIGHT", 12, -12)
 	end
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
@@ -11766,21 +11968,32 @@ end
 
 ns.RefreshOptions = function() Refresh() end
 
+-- Settings asked for in a fight that couldn't open: opened once it ends.
+local openAfterFight = CreateFrame("Frame")
+openAfterFight:SetScript("OnEvent", function(self)
+	self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+	ns.OpenOptions(self.page)
+end)
+
 -- Opens the settings, at a sub-page by name if given (else the main page).
 -- In combat Settings.OpenToCategory is blocked for addons ("Interface action
--- failed because of an AddOn": its ShowUIPanel is), but showing the window
--- itself isn't, so it's shown and the page picked directly.
+-- failed because of an AddOn": its ShowUIPanel is). Where the window itself
+-- isn't protected it's shown and the page picked directly; where it is
+-- (retail, in a fight), it opens when the fight ends.
 function ns.OpenOptions(page)
 	-- (a UI Manager page: that page, then UI Manager open at it)
 	page = page and HubTab(page) or page
 	-- (some pages are registered by their name as shown)
 	if page and not subpages[page] and subpages[L[page]] then page = L[page] end
 	if InCombatLockdown() then
-		if category and SettingsPanel and SettingsPanel.SelectCategory then
-			SettingsPanel:Show()
-			SettingsPanel:SelectCategory(subpages[page] or category)
-		else
-			ns.Print(L["settings can't be opened in combat"])
+		local panel = category and SettingsPanel
+		if panel and panel.SelectCategory and not panel:IsProtected() then
+			panel:Show()
+			panel:SelectCategory(subpages[page] or category)
+		elseif not (panel and panel:IsShown()) then
+			openAfterFight.page = page
+			openAfterFight:RegisterEvent("PLAYER_REGEN_ENABLED")
+			ns.Print(L["settings can't be opened in combat; they'll open when the fight ends"])
 		end
 		return
 	end
@@ -13040,7 +13253,7 @@ ns.OnLanguage(function()
 	ns.TranslateFields(FRAME_COLUMNS, 1, 5)
 	ns.TranslateFields(THIRD_PARTY_COLUMNS, 1) -- (the rest are FRAME_COLUMNS' own)
 	ns.TranslateFields(KEYBINDS, "label", "tip")
-	for _, popup in ipairs({ "CINEMATIC_RESET_PAGE", "CINEMATIC_PROFILE_RENAME",
+	for _, popup in ipairs({ "CINEMATIC_RESET_PAGE", "CINEMATIC_RESET_PART", "CINEMATIC_PROFILE_RENAME",
 		"CINEMATIC_PROFILE_NOTE", "CINEMATIC_PROFILE_DELETE", "CINEMATIC_PROFILE_RESET",
 		"CINEMATIC_ADDON_RESET" }) do
 		StaticPopupDialogs[popup].text = L[StaticPopupDialogs[popup].text]
@@ -13153,6 +13366,9 @@ ns.OnLanguage(function()
 	CreateCamerasPanel()
 	-- Each camera's own settings, in a section apiece.
 	CreateCameraSettingsPanel()
+	if ns.CreateShoulderCamPanel then -- (ShoulderCam.lua)
+		ns.CreateShoulderCamPanel(ns.lowHealthKit)
+	end
 	if ns.CreateWheelsPanels then -- (WheelsPage.lua; its hub listed after Camera)
 		ns.CreateWheelsPanels(ns.lowHealthKit)
 	end

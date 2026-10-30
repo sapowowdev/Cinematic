@@ -2112,3 +2112,258 @@ do
 		end)
 	end
 end
+
+-- Boss title cards (/cine debug boss [watch]) ---------------------------------
+-- For a boss title card shown on target or nearby, not only on the pull: how a
+-- boss can be told apart from trash before the fight. Prints where you are,
+-- the Encounter Journal's bosses here (each one's creatures and whether it's
+-- killed this lockout), then your target and each elite or boss-like enemy
+-- plate: name, NPC ID, rank, level, UnitIsBossMob, distance and the Journal
+-- boss its name matches, plain or secret. watch: prints the encounter, combat,
+-- target and plate events as they come, with the seconds since it started, to
+-- see their order on a pull, and the boss card's own choices: shown, held and
+-- why (again to stop).
+do
+	local MAX_PLATES = 8
+	local watcher, watchStart
+
+	local function Answer(func, ...)
+		if not func then return "no API", nil end
+		local ok, value = pcall(func, ...)
+		if not ok then return "error", nil end
+		if issecretvalue and issecretvalue(value) then return "secret", value end
+		return tostring(value), value
+	end
+
+	local function Same(value) return value end
+
+	-- The Journal's bosses where you are: { lower-case creature or encounter
+	-- name -> "boss N of M: encounter" }, and lines describing them.
+	local function JournalBosses()
+		local names, lines = {}, {}
+		if not (EJ_GetInstanceForMap and EJ_SelectInstance and EJ_GetEncounterInfoByIndex) then
+			lines[1] = "journal: no Encounter Journal API on this client"
+			return names, lines
+		end
+		local mapID = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+		local okInstance, journalInstance = pcall(EJ_GetInstanceForMap, mapID or 0)
+		if not okInstance or not journalInstance or journalInstance == 0 then
+			lines[1] = ("journal: no Journal instance for map %s"):format(tostring(mapID))
+			return names, lines
+		end
+		-- (The Journal's own choice put back after, in case its window is open.)
+		local before = EJ_GetCurrentInstance and EJ_GetCurrentInstance()
+		pcall(EJ_SelectInstance, journalInstance)
+		local _, _, difficulty, _, _, _, _, instanceID = GetInstanceInfo()
+		local isComplete = C_RaidLocks and C_RaidLocks.IsEncounterComplete
+		local count = 0
+		while count < 40 and EJ_GetEncounterInfoByIndex(count + 1, journalInstance) do count = count + 1 end
+		lines[1] = ("journal: instance %s (map %s), %d bosses"):format(tostring(journalInstance), tostring(mapID), count)
+		for index = 1, count do
+			local name, _, journalEncounter, _, _, _, dungeonEncounter = EJ_GetEncounterInfoByIndex(index, journalInstance)
+			local label = ("boss %d of %d: %s"):format(index, count, tostring(name))
+			local creatures = {}
+			for creature = 1, 9 do
+				local okCreature, _, creatureName = pcall(EJ_GetCreatureInfo, creature, journalEncounter)
+				if not okCreature or type(creatureName) ~= "string" then break end
+				creatures[#creatures + 1] = creatureName
+				names[creatureName:lower()] = label
+			end
+			if type(name) == "string" then names[name:lower()] = names[name:lower()] or label end
+			local killed = isComplete and (Answer(isComplete, instanceID, dungeonEncounter, difficulty)) or "no API"
+			lines[#lines + 1] = ("  %d. %s (encounter %s), killed %s, creatures: %s"):format(index, tostring(name),
+				tostring(dungeonEncounter), killed, #creatures > 0 and table.concat(creatures, ", ") or "none listed")
+		end
+		if before and before ~= 0 and before ~= journalInstance then pcall(EJ_SelectInstance, before) end
+		return names, lines
+	end
+
+	-- One unit's answers on a line, and whether it could be a boss.
+	local function Describe(unit, journal)
+		local nameText, name = Answer(UnitName, unit)
+		local guidText, guid = Answer(UnitGUID, unit)
+		local npc = guidText
+		if type(guid) == "string" and not (issecretvalue and issecretvalue(guid)) then
+			local kind, _, _, _, _, id = strsplit("-", guid)
+			npc = (kind == "Creature" or kind == "Vehicle") and tostring(id) or kind
+		end
+		local rankText = Answer(UnitClassification, unit)
+		local levelText, level = Answer(UnitLevel, unit)
+		local bossText = Answer(UnitIsBossMob, unit)
+		-- (Over your level: bosses may sit a level or two above the trash.)
+		local mine = UnitLevel("player")
+		local gap = type(level) == "number" and not (issecretvalue and issecretvalue(level)) and level > 0
+			and ("%+d"):format(level - mine) or "?"
+		local match = type(name) == "string" and not (issecretvalue and issecretvalue(name)) and journal[name:lower()]
+		local line = ("%s: %s, npc %s, rank %s, level %s (%s, effective %s), bossmob %s, questboss %s, type %s, dead %s, attackable %s, near11 %s, near28 %s, journal %s")
+			:format(unit, nameText, npc, rankText, levelText, gap, (Answer(UnitEffectiveLevel, unit)), bossText,
+				(Answer(_G.UnitIsQuestBoss, unit)), (Answer(UnitCreatureType, unit)), (Answer(UnitIsDeadOrGhost, unit)),
+				(Answer(UnitCanAttack, "player", unit)), (Answer(CheckInteractDistance, unit, 2)),
+				(Answer(CheckInteractDistance, unit, 4)), match or "no match")
+		local likely = match or bossText == "true" or rankText == "worldboss" or rankText == "elite"
+			or rankText == "rareelite" or level == -1
+		return line, likely and true or false, npc
+	end
+
+	local function Snapshot()
+		local name, kind, difficulty, difficultyName, _, _, _, instanceID = GetInstanceInfo()
+		local encounter = _G.IsEncounterInProgress
+		local okFacts, facts = pcall(ns.RuleFactsNow)
+		print(("boss: %s, %s (%s, instance %s), %s (difficulty %s), in combat %s, encounter on %s, boss1 %s, rule word boss %s")
+			:format(ns.isRetail and "retail" or "classic", tostring(name), tostring(kind), tostring(instanceID),
+				tostring(difficultyName), tostring(difficulty), tostring(InCombatLockdown()),
+				encounter and (Answer(encounter)) or "no API", (Answer(UnitName, "boss1")),
+				okFacts and tostring(facts.boss) or "error"))
+		local journal, lines = JournalBosses()
+		for _, line in ipairs(lines) do print("  " .. line) end
+		if UnitExists("target") then
+			print("  " .. (Describe("target", journal)))
+			-- (A secret name can't be matched, but can a card still show it?)
+			local _, targetName = Answer(UnitName, "target")
+			if issecretvalue and issecretvalue(targetName) then
+				local probe = UIParent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+				probe:Hide()
+				local okText = pcall(probe.SetText, probe, targetName)
+				local widthText = Answer(probe.GetStringWidth, probe)
+				print(("  secret name on a text: %s, its width %s"):format(okText and "shows" or "error", widthText))
+				probe:SetText("")
+			end
+		else
+			print("  target: none (target a boss, then trash, to compare)")
+		end
+		local plates = C_NamePlate and C_NamePlate.GetNamePlates and C_NamePlate.GetNamePlates() or {}
+		local shown, others = 0, 0
+		for _, plate in ipairs(plates) do
+			local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+			if unit then
+				local line, likely = Describe(unit, journal)
+				-- (The rest to the log: a printed one is logged by the print.)
+				if likely and shown < MAX_PLATES then
+					shown = shown + 1
+					print("  " .. line)
+				else
+					others = others + 1
+					ns.Log("boss", line)
+				end
+			end
+		end
+		print(("  plates: %d elite or boss-like shown, %d others (every plate's line is in /cine log)"):format(shown, others))
+	end
+
+	local function Watch()
+		if watcher and watcher.on then
+			watcher.on = false
+			watcher:UnregisterAllEvents()
+			ns.BossCardLog = nil
+			ns.Print("boss watch: stopped")
+			return
+		end
+		watcher = watcher or CreateFrame("Frame")
+		watcher.on, watchStart = true, GetTime()
+		-- (The card's own choices, from CombatVision.lua: shown, held and why.)
+		ns.BossCardLog = function(text)
+			local line = ("+%.2fs card: %s"):format(GetTime() - watchStart, text)
+			ns.Print("boss watch: " .. line)
+			ns.Log("boss", line)
+		end
+		local journal = JournalBosses()
+		local seen = {}
+		for _, event in ipairs({ "ENCOUNTER_START", "ENCOUNTER_END", "BOSS_KILL", "PLAYER_REGEN_DISABLED",
+			"PLAYER_REGEN_ENABLED", "INSTANCE_ENCOUNTER_ENGAGE_UNIT", "PLAYER_TARGET_CHANGED", "NAME_PLATE_UNIT_ADDED" }) do
+			pcall(watcher.RegisterEvent, watcher, event)
+		end
+		watcher:SetScript("OnEvent", function(_, event, ...)
+			local line
+			if event == "PLAYER_TARGET_CHANGED" or event == "NAME_PLATE_UNIT_ADDED" then
+				local unit = event == "PLAYER_TARGET_CHANGED" and "target" or ...
+				if not unit or not UnitExists(unit) then return end
+				local text, likely, npc = Describe(unit, journal)
+				-- (Only boss-like units, each once per event, so trash doesn't flood the chat.)
+				if not likely or seen[event .. npc] then return end
+				seen[event .. npc] = true
+				line = event .. " " .. text
+			else
+				local args = {}
+				for index = 1, select("#", ...) do args[index] = (Answer(Same, (select(index, ...)))) end
+				line = event .. " " .. table.concat(args, ", ")
+				if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then line = line .. " boss1 " .. (Answer(UnitName, "boss1")) end
+			end
+			line = ("+%.2fs %s"):format(GetTime() - watchStart, line)
+			ns.Print("boss watch: " .. line)
+			ns.Log("boss", line)
+		end)
+		ns.Print("boss watch: printing encounter, combat, target and boss-like plate events, and why a boss card showed or not (again to stop)")
+	end
+
+	function ns.BossDebug(arg)
+		if arg == "watch" then Watch() else Snapshot() end
+	end
+end
+
+-- /cine debug viewdist: can the view distance change (for rain) here, in or
+-- out of a fight? Once to pull it in, again to put it back. Yours is kept in
+-- savedCVars, so a /reload mid-test puts it back too.
+do
+	local VIEW_CVARS = { "horizonStart", "farclip" }
+	local TEST_VALUES = { horizonStart = "800", farclip = "1000" }
+	local testing = false
+
+	local function State()
+		local parts = {}
+		for _, cvar in ipairs(VIEW_CVARS) do
+			parts[#parts + 1] = ("%s %s"):format(cvar, tostring(GetCVar(cvar)))
+		end
+		return table.concat(parts, ", ")
+	end
+
+	local function Write(cvar, value)
+		local ok, result = pcall(SetCVar, cvar, value)
+		local now = GetCVar(cvar)
+		local took = tonumber(now) ~= nil and tonumber(now) == tonumber(value)
+		local line = ("%s -> %s: %s (reads %s, SetCVar %s)"):format(cvar, value,
+			not ok and "error" or took and "took" or "didn't take", tostring(now),
+			tostring(result))
+		ns.Print("viewdist: " .. line)
+		ns.Log("viewdist", line)
+	end
+
+	function ns.ViewDistTest()
+		local w = ns.GetWeatherDebug and ns.GetWeatherDebug() or {}
+		ns.Print(("viewdist: %s, %s, weather %s (%s) intensity %s, indoors %s"):format(
+			ns.isRetail and "retail" or "classic", InCombatLockdown() and "in combat" or "out of combat",
+			tostring(w.kind), w.kindName or "?", tostring(w.intensity), tostring(w.indoors)))
+		ns.Print("viewdist: now " .. State())
+		if ns.RainViewDebug then
+			local level, want = ns.RainViewDebug()
+			ns.Print(("viewdist: rain view distance %d%% (in %d%%, going to %d%%), %s"):format(
+				(ns.db.rainViewScale or 0) * 100 + 0.5, level * 100 + 0.5, want * 100 + 0.5,
+				ns.lastCinematic and "in CineMode" or "not in CineMode"))
+		end
+		if not testing then
+			testing = true
+			for _, cvar in ipairs(VIEW_CVARS) do
+				if GetCVar(cvar) ~= nil then
+					ns.SaveCVar(cvar)
+					Write(cvar, TEST_VALUES[cvar])
+				else
+					ns.Print("viewdist: this client has no " .. cvar)
+				end
+			end
+			-- (The game might put one back a moment later.)
+			C_Timer.After(1, function()
+				ns.Print(("viewdist: a second later %s, %s"):format(State(),
+					InCombatLockdown() and "in combat" or "out of combat"))
+			end)
+			ns.Print("viewdist: again to put yours back")
+		else
+			testing = false
+			for _, cvar in ipairs(VIEW_CVARS) do
+				local saved = ns.db.savedCVars[cvar]
+				if saved ~= nil then
+					Write(cvar, saved)
+					ns.db.savedCVars[cvar] = nil
+				end
+			end
+		end
+	end
+end

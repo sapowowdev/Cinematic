@@ -373,6 +373,10 @@ function ns.CustomizePanel(parent, width, onChange, skinned)
 			local vision = option.choice and option.choice.vision
 			if vision then
 				option.active = option:IsShown() and ns.VisionOn(vision)
+			elseif option.choice.custom then
+				-- (Custom, last: shown and gold only when no choice matches)
+				option.active = not any
+				option:SetShown(option.active)
 			else
 				-- (the first that matches: two parts can set a slot the same way)
 				option.active = not any and option:IsShown() and ns.SlotPartMatches(shown.slot, option.choice.part)
@@ -460,7 +464,7 @@ function ns.CustomizePanel(parent, width, onChange, skinned)
 				Changed()
 				return
 			end
-			if self.active then return end -- (already so: no profile of your own for nothing)
+			if self.active or self.choice.custom then return end -- (already so: no profile of your own for nothing)
 			if not ns.db.enabled then ns.SetEnabled(true) end
 			ns.ApplyPart(shown.slot, self.choice.part, OWN_PROFILE)
 			UpdateChoices()
@@ -486,6 +490,12 @@ function ns.CustomizePanel(parent, width, onChange, skinned)
 				choices[#choices + 1] = { vision = vision, label = L[vision.label], icon = vision.icon,
 					line = VISION_LINES[vision.key] }
 			end
+		elseif #choices > 0 then
+			-- (and Custom, for settings none of them has)
+			local own = {}
+			for j, choice in ipairs(choices) do own[j] = choice end
+			own[#own + 1] = { custom = true, label = L["Custom"], line = L["Your own mix of this part's settings"] }
+			choices = own
 		end
 		soon:SetShown(#choices == 0)
 		-- (rows closer together when there are more than five, to fit the panel)

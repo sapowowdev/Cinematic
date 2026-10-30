@@ -457,12 +457,11 @@ function ns.CreateTooltipStylePanel(kit)
 	local stack = kit.Stack(switch, "check")
 	local rows = ns.StyleRows(kit, content, stack, Changed, "tooltipStyle")
 
-	stack:Add(ns.StyleSceneButton(content, kit.Tooltip, kit.AddControl), "label")
 	preview = ns.MakeTooltipPreview(content, 480)
 	stack:Add(preview, "label")
 	kit.AddControl(preview)
 
-	rows.Presets({
+	rows.PresetMenu({
 		{ L["Like the game's"], L["The game's tooltips, as it draws them (the defaults)."], {} },
 		{ L["Flat"], L["Dark and flat with a thin edge, names in class and reaction colors, in Arial Narrow."],
 			{ tooltipBack = "dark", tooltipAlpha = 0.88, tooltipEdge = "thin", tooltipFont = "arial",
@@ -473,7 +472,7 @@ function ns.CreateTooltipStylePanel(kit)
 		{ L["Cinematic"], L["See-through and borderless, the health bar thin along the top."],
 			{ tooltipBack = "dark", tooltipAlpha = 0.65, tooltipEdge = "none", tooltipOutline = 1,
 				tooltipNames = "class", tooltipBar = "top", tooltipBarTexture = "smooth", tooltipBarHeight = 3 } },
-	}, PRESET_KEYS, 480)
+	}, PRESET_KEYS)
 
 	-- Each section: its choices first, then its sliders.
 	stack:Header(content, L["Panel"])

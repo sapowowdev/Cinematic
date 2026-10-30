@@ -58,6 +58,7 @@ Bubbles.lua
 Speech.lua
 SpeakerWatch.lua
 ChatCam.lua
+ChatCamSubtitles.lua
 Campfire.lua
 HunterAmmo.lua
 DragEquip.lua

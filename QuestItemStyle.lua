@@ -17,46 +17,26 @@ local PRESET_KEYS = { "questItemSize", "questItemShape", "questItemFrame", "ques
 local SAMPLE_ICON = "Interface\\Icons\\INV_Misc_Bag_07"
 local SAMPLE_COOLDOWN = 8 -- seconds the cooling sample counts down, over and over
 
-function ns.CreateQuestItemStylePanel(kit)
-	local canvas, content = kit.CreateScrollPage()
-	local title = kit.Label(content, "GameFontNormalLarge", L["Quest item button"])
-	title:SetPoint("TOPLEFT", 16, -16)
-	local intro = kit.PageIntro(content, title,
-		L["How the big button for the nearest quest's item looks. Turning it on: the Vision hub's Quest Vision " ..
-		"page. Where it sits: the extra ability button's place in Edit Mode. Changes show at once (its size " ..
-		"after a fight, if you're in one)."])
-
-	local preview -- (below: drawn again as each setting changes)
-	local function Changed()
-		ns.RefreshQuestItemStyle()
-		if preview then preview:Refresh() end
-	end
-
-	local switch = kit.PageSwitch(content, "questItemStyle", L["Enable page"],
-		L["On: the button looks as this page says. Off: like the game's extra ability button (the preview " ..
-		"shows that too). Each setting keeps its value for when you turn this back on."], intro, Changed)
-	local stack = kit.Stack(switch, "check")
-	local rows = ns.StyleRows(kit, content, stack, Changed, "questItemStyle")
-
-	-- The preview: the button ready, and cooling down (again and again), over
-	-- the Style pages' scene, with your item's icon if a quest has one.
-	local PREVIEW_W, PREVIEW_H = 480, 170
-	preview = CreateFrame("Frame", nil, content)
-	preview:SetSize(PREVIEW_W, PREVIEW_H)
-	stack:Add(ns.StyleSceneButton(content, kit.Tooltip, kit.AddControl), "label")
-	stack:Add(preview, "label")
+-- The preview: the button ready, and cooling down (again and again), over
+-- the Style pages' scene, with your item's icon if a quest has one (this
+-- page's, and the General page's screen).
+function ns.MakeQuestItemPreview(parent, width)
+	local preview = CreateFrame("Frame", nil, parent)
+	preview:SetSize(width, 170)
 	ns.StyleScene(preview, 0.6) -- (StylePages.lua)
-	local caption = kit.Label(preview, "GameFontDisableSmall", L["Preview"])
+	local caption = preview:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	caption:SetText(L["Preview"])
 	caption:SetPoint("TOPLEFT", 6, -5)
 	caption.searchSkip = true
 	local samples = {}
 	for i, label in ipairs({ L["Ready"], L["Cooling down"] }) do
 		local frame = CreateFrame("Frame", nil, preview)
-		frame:SetPoint("CENTER", preview, "LEFT", PREVIEW_W * (i == 1 and 0.32 or 0.68), 8)
+		frame:SetPoint("CENTER", preview, "LEFT", width * (i == 1 and 0.32 or 0.68), 8)
 		frame.parts = ns.MakeQuestItemParts(frame)
 		frame.parts.count:SetText("3")
-		local name = kit.Label(preview, "GameFontHighlightSmall", label)
-		name:SetPoint("BOTTOM", preview, "BOTTOMLEFT", PREVIEW_W * (i == 1 and 0.32 or 0.68), 10)
+		local name = preview:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		name:SetText(label)
+		name:SetPoint("BOTTOM", preview, "BOTTOMLEFT", width * (i == 1 and 0.32 or 0.68), 10)
 		name.searchSkip = true
 		samples[i] = frame
 	end
@@ -93,10 +73,36 @@ function ns.CreateQuestItemStylePanel(kit)
 			ns.QuestItemCooldown(cooling.parts, GetTime(), SAMPLE_COOLDOWN)
 		end
 	end)
+	return preview
+end
+
+function ns.CreateQuestItemStylePanel(kit)
+	local canvas, content = kit.CreateScrollPage()
+	local title = kit.Label(content, "GameFontNormalLarge", L["Quest item button"])
+	title:SetPoint("TOPLEFT", 16, -16)
+	local intro = kit.PageIntro(content, title,
+		L["How the big button for the nearest quest's item looks. Turning it on: the Vision hub's Quest Vision " ..
+		"page. Where it sits: the extra ability button's place in Edit Mode. Changes show at once (its size " ..
+		"after a fight, if you're in one)."])
+
+	local preview -- (below: drawn again as each setting changes)
+	local function Changed()
+		ns.RefreshQuestItemStyle()
+		if preview then preview:Refresh() end
+	end
+
+	local switch = kit.PageSwitch(content, "questItemStyle", L["Enable page"],
+		L["On: the button looks as this page says. Off: like the game's extra ability button (the preview " ..
+		"shows that too). Each setting keeps its value for when you turn this back on."], intro, Changed)
+	local stack = kit.Stack(switch, "check")
+	local rows = ns.StyleRows(kit, content, stack, Changed, "questItemStyle")
+
+	preview = ns.MakeQuestItemPreview(content, 480)
+	stack:Add(preview, "label")
 	kit.AddControl(preview)
 
 	-- Presets: a few looks to start from.
-	rows.Presets({
+	rows.PresetMenu({
 		{ L["Like the game's"], L["Framed like the game's extra ability button (the defaults)."], {} },
 		{ L["Flat"], L["A thin black edge, the icon zoomed in to cut its border, an edge glow when ready, " ..
 			"Arial Narrow."], { questItemFrame = "thin", questItemZoom = true, questItemFont = "arial",
@@ -106,7 +112,7 @@ function ns.CreateQuestItemStylePanel(kit)
 		{ L["Cinematic"], L["Smaller, no frame, a quiet edge glow and a dark cooldown fill, no key."],
 			{ questItemSize = 42, questItemFrame = "none", questItemZoom = true, questItemGlow = "edge",
 			questItemCooldown = "fill", questItemKey = false } },
-	}, PRESET_KEYS, PREVIEW_W)
+	}, PRESET_KEYS)
 
 	stack:Header(content, L["Button"])
 	rows.Slider("questItemSize", L["Size"], 32, 80, 2, "%d", 1, L["The button's width and height."])

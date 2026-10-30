@@ -37,26 +37,19 @@ function ns.CreateRollStylePanel(kit)
 	local stack = kit.Stack(switch, "check")
 	local rows = ns.StyleRows(kit, content, stack, Changed, "rollStyle")
 
-	-- The real window, with made-up drops (the Roll Vision page's test).
-	local test = ns.PanelButton(content)
-	test:SetSize(150, 22)
-	test:SetText(L["Show a test roll"])
-	stack:Add(test, "label")
-	kit.Tooltip(test, L["Brings up the window with three made-up drops, your group picking and rolling on " ..
-		"them over a few seconds. Change things here while it's up to see them."])
-	test:SetScript("OnClick", function() ns.TestRollWindow() end)
-	test.Refresh = function(self) self:SetEnabled(ns.GetDB().rollWindow and true or false) end
-	test.pageSwitch = false -- (works with the page off too: to see the look it goes back to)
-	kit.AddControl(test)
-
-	-- (under the test button: a won drop and one being picked on)
+	-- (a won drop and one being picked on)
 	preview = ns.MakeRollPreview(content, 480)
-	-- (Scene beside it: StylePages.lua)
-	ns.StyleSceneButton(content, kit.Tooltip, kit.AddControl):SetPoint("LEFT", test, "RIGHT", 8, 0)
 	stack:Add(preview, "label")
 	kit.AddControl(preview)
 
-	rows.Presets({
+	-- The real window, with made-up drops (the Roll Vision page's test). (Works
+	-- with the page off too: to see the look it goes back to.)
+	local test = ns.StylePreviewTest(preview, kit, L["Brings up the window with three made-up drops, your " ..
+		"group picking and rolling on them over a few seconds. Change things here while it's up to see them."],
+		function() ns.TestRollWindow() end)
+	test.Refresh = function(self) self:SetEnabled(ns.GetDB().rollWindow and true or false) end
+
+	rows.PresetMenu({
 		{ L["Cinematic's"], L["As Roll Vision has always looked (the defaults)."], {} },
 		{ L["Compact"], L["Tighter rows and smaller text, for raids."],
 			{ rollDensity = "compact", rollTextSize = 0.9, rollFont = "arial", rollOutline = 1 } },
@@ -64,7 +57,7 @@ function ns.CreateRollStylePanel(kit)
 			{ rollPanel = "none", rollOutline = 1, rollWinner = "crown", rollPicks = "words" } },
 		{ L["Gilded"], L["Flat cards, gold timers and the winner's row in gold."],
 			{ rollPanel = "flat", rollBarColor = "gold", rollBarTexture = "smooth" } },
-	}, PRESET_KEYS, 480)
+	}, PRESET_KEYS)
 
 	stack:Header(content, L["Cards"])
 	rows.Choices(L["Cards on:"], "rollPanel", {

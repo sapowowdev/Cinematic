@@ -368,6 +368,7 @@ local function SettingsChanged()
 	if ns.ApplyBubbles then ns.ApplyBubbles() end
 	if ns.ApplyUnitFrameParts then ns.ApplyUnitFrameParts() end
 	if ns.SwitchProfileLayout then ns.SwitchProfileLayout() end
+	if ns.ApplyShoulderCam then ns.ApplyShoulderCam() end
 	ApplyProfileSwitches()
 	if ns.RefreshOptions then ns.RefreshOptions() end
 end

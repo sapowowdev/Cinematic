@@ -246,15 +246,15 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
         <output id="vv-out" for="vv-hp">100%</output>
         <button type="button" class="wbtn" id="vv-hit">Big hit</button>
       </div>
-      <p class="win-foot">With the starting values, the edges creep in below 75% health and are all the way in at 15%.</p>
+      <p class="win-foot">With the starting values, the edges creep in below 75% health and are all the way in at 25%.</p>
     </div>
 
     <div class="opts">
-      <div class="opt"><span class="l">Test</span><span class="d"><b>Test</b> shows the edges whatever your health, as the Test section says. The <b>Style</b> button by the title opens its look on the Style hub (below).</span></div>
-      <div class="opt"><span class="l">What shows</span><span class="d"><b>Screen edges</b>, plus your <b>Player frame</b> and, on game versions that have one, the <b>Personal resource display</b>, each fading in as your health drops while CineMode has them hidden.</span></div>
-      <div class="opt"><span class="l">When it shows</span><span class="d"><b>Starts below</b> and <b>All the way in at</b>, and a weaker <b>Strength out of combat</b> for eating and drinking back up. <b>Only in CineMode</b> keeps it to while the UI is faded.</span></div>
-      <div class="opt"><span class="l">Big hits</span><span class="d">What counts as a big hit for the flash: 8% of your health at once, or smaller hits adding up to 20%.</span></div>
-      <div class="opt"><span class="l">Style hub: Vitals Vision</span><span class="d">The look has its own page in the Style hub, with a live preview of the edges closing in (<b>Low health</b>, <b>Big hit</b>, <b>Heal</b> and <b>Test</b> buttons), and a <b>Strength</b> from 0 to 100% that scales the whole look: at 50% it's as set, lower is lighter, higher is stronger.</span></div>
+      <div class="opt"><span class="l">Style</span><span class="d">The <b>Style</b> button by the title opens its look on the Style hub (below).</span></div>
+      <div class="opt"><span class="l">Health bars</span><span class="d">Your <b>Player frame</b> and, on game versions that have one, the <b>Personal resource display</b>, each fading in as your health drops while CineMode has them hidden. Each has its own <b>Starts</b> and <b>Full</b> on its row.</span></div>
+      <div class="opt"><span class="l">Screen edges</span><span class="d">The edges closing in, with their own <b>Starts</b> and <b>Full</b>, and a weaker <b>Strength out of combat</b> for eating and drinking back up. Its <b>Show in</b> row picks where and when: <b>Always</b>, or only in fights, with a target, or in certain places.</span></div>
+      <div class="opt"><span class="l">Damage Taken Alert</span><span class="d">What counts as a big hit for the flash: 20% of your health at once, or smaller hits adding up to 30%.</span></div>
+      <div class="opt"><span class="l">Style hub: Vitals Vision</span><span class="d">The look has its own page in the Style hub, with a live preview of the edges closing in (its <b>Test</b> button, top right, runs your health down in hits there and on the screen), and a <b>Strength</b> from 0 to 100% that scales the whole look: at 50% it's as set, lower is lighter, higher is stronger.</span></div>
       <div class="opt"><span class="l">Theme</span><span class="d"><b>Auto</b> picks your class and spec's (on game versions without specs, the talent tree you've put the most into), or pick any. Each class has a theme for each spec.</span></div>
       <div class="opt"><span class="l">Shadow</span><span class="d">How far in and how dark the edges come, black or tinted, and the color grade that drains the world as they close in.</span></div>
       <div class="opt"><span class="l">Art</span><span class="d">Two layers: <b>Our art</b>, Cinematic's painted edge, and <b>Blizzard art</b>, one of the game's own screen effects (fire, frost, lightning, ripples) cut to an edge and laid over ours. Each has its own opacity; set one to 0 to leave it out. Each theme has a Blizzard effect picked to go with it, or choose the pattern, its edge and whether it keeps its own colors or takes the theme's. Classic has only a few of the game's effects.</span></div>
@@ -331,14 +331,14 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
   document.getElementById("hv-heal").addEventListener("click", function () { party.forEach(function (m) { m.hp = 1; }); drawParty(); });
   drawParty();
 
-  // Vitals Vision: edges in between 75% and 15%, a heartbeat quickening from 60 to 140 a minute.
+  // Vitals Vision: edges in between 75% and 25%, a heartbeat quickening from 60 to 140 a minute.
   var hpIn = document.getElementById("vv-hp"), out = document.getElementById("vv-out");
   var edge = document.getElementById("vv-edge"), flash = document.getElementById("vv-flash");
   var reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
   var strength = 0, beatStart = performance.now();
   function setHp(v) {
     hpIn.value = v; out.textContent = v + "%";
-    strength = Math.max(0, Math.min(1, (0.75 - v / 100) / (0.75 - 0.15)));
+    strength = Math.max(0, Math.min(1, (0.75 - v / 100) / (0.75 - 0.25)));
   }
   function frame(now) {
     var bpm = 60 + 80 * strength, period = 60000 / bpm;

@@ -210,3 +210,77 @@ watcher:SetScript("OnEvent", ns.Profiled("Graphics+ event", function(_, event, n
 		Recheck(name)
 	end
 end))
+
+-- View distance in rain (rainViewScale, on the Visual Effects page): in
+-- CineMode, as it rains, the view distance comes in from yours towards the
+-- Graphics menu's least (View distance 1), by the rain's intensity times the
+-- slider: at 100% a downpour pulls it right in. It's only ever lowered from
+-- yours, never raised past it, and a change you make meanwhile (the Graphics
+-- menu, Graphics+) is yours from then on. Yours is kept in savedCVars while
+-- it's in (Graphics+ steps aside meanwhile) and put back once the rain
+-- stops, under a roof, out of CineMode, or at the next login. One of the
+-- game's settings held for our own feature, as the off-screen nameplates are.
+do
+	local VIEW_FLOOR = { horizonStart = 400, farclip = 400 } -- (the Graphics menu's least)
+	local TICK = 1        -- seconds between looks
+	local BLEND_TIME = 10 -- seconds to come all the way in, or back out
+	local level, writtenLevel = 0, 0 -- how far in it is (0-1), and as last written
+	local written = {} -- [cvar] = what we wrote, to tell your changes from ours
+
+	local function Wanted()
+		local db = ns.db
+		local scale = db and db.rainViewScale or 0
+		if scale <= 0 or not (db.enabled and db.visualEffects and ns.lastCinematic and ns.RainIntensity) then
+			return 0
+		end
+		return math.min(1, scale * ns.RainIntensity())
+	end
+
+	local function WriteView(to)
+		for cvar, floor in pairs(VIEW_FLOOR) do
+			if Exists(cvar) then
+				if to > 0 then
+					ns.SaveCVar(cvar)
+					local own = tonumber(ns.db.savedCVars[cvar]) or floor
+					local value = tostring(math.floor(own - (own - math.min(own, floor)) * to + 0.5))
+					if not Same(GetCVar(cvar), value) then
+						Write(cvar, value)
+					end
+					written[cvar] = GetCVar(cvar)
+				elseif ns.db.savedCVars[cvar] ~= nil then
+					ns.RestoreCVar(cvar) -- (Graphics+ then looks again)
+					written[cvar] = nil
+				end
+			end
+		end
+		ns.Log("graphics", ("rain view distance %d%% in: %s"):format(to * 100 + 0.5, table.concat({
+			tostring(GetCVar("horizonStart")), tostring(GetCVar("farclip")) }, ", ")))
+		writtenLevel = to
+	end
+
+	local function Tick()
+		if not (ns.db and ns.db.savedCVars) then return end
+		-- Changed while it's in, and not by us: that's yours now.
+		for cvar, value in pairs(written) do
+			local now = GetCVar(cvar)
+			if not Same(now, value) then
+				ns.Log("graphics", ("%s changed to %s in the rain: yours now"):format(cvar, tostring(now)))
+				ns.db.savedCVars[cvar] = now
+				written[cvar] = nil
+				writtenLevel = -1 -- (written again from your new one)
+			end
+		end
+		local want = Wanted()
+		local step = TICK / BLEND_TIME
+		level = want > level and math.min(want, level + step) or math.max(want, level - step)
+		if level ~= writtenLevel then
+			WriteView(level)
+		end
+	end
+	C_Timer.NewTicker(TICK, Tick)
+
+	-- For /cine debug viewdist: how far in it is, and how far it's going.
+	function ns.RainViewDebug()
+		return level, Wanted()
+	end
+end

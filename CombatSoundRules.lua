@@ -216,13 +216,11 @@ end
 
 function ns.CombatSoundRulesSection(kit, content, stack)
 	stack:Header(content, L["Sounds"])
-	local note = stack:Add(kit.Label(content, "GameFontHighlightSmall",
+	stack:Help(content,
 		L["Rules for the sounds, read top to bottom as a fight starts or ends: the first that fits plays one " ..
 		"of its sounds at random. A rule's condition uses the rules' words (Boss fight, Raids, In CineMode...); " ..
 		"none: any fight. Each sound's slider sets it next to the others, the cue volume sets them all. They " ..
-		"play on the Ambience channel, its volume set for them and put back after."]), "label")
-	note:SetWidth(RULE_W)
-	note:SetJustifyH("LEFT")
+		"play on the Ambience channel, its volume set for them and put back after."])
 	local cueVolume = stack:Add(kit.Slider(content, "combatCueVolume", L["Cue volume"], 0, 100, 5, "%d%%", 100),
 		"slider")
 	kit.Tooltip(cueVolume, L["How loud the sounds are, next to your sound effects' volume."])

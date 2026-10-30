@@ -1,16 +1,11 @@
 -- Quest cam: talking to a quest giver, the camera eases in close, swings
 -- round behind you, comes round to one side and down toward eye level,
--- looking past you at them at an angle (a dialogue shot). Optionally it also
--- moves over your right shoulder. It all goes back as the window closes.
+-- looking past you at them at an angle (a dialogue shot). It all goes back
+-- as the window closes.
 --
 -- Interacting turns you to face the NPC, so "behind you" is looking at them.
 -- The swing borrows camera follow (ns.CenterCamera), which is reliable for
--- the small offsets left by that turn. The shoulder is the game's
--- test_cameraOverShoulder offset, which it eases over to on its own; the
--- game ignores it while Keep Character Centered (Accessibility) is on, so
--- it's only used with that off (or questCamUncenter turning it off meanwhile).
--- It's one of Blizzard's experimental camera settings (setting it brings up
--- their warning), so it's off unless you turn it on (questCamOverShoulder).
+-- the small offsets left by that turn.
 --
 -- Once the swing's over, the turn to the side (questCamAngle) runs alongside
 -- the rest of the zoom, then the tilt down (questCamLower) follows, after a
@@ -106,8 +101,6 @@ local INPUT_GRACE = 1 -- seconds: camera input this soon is the click that opene
 local CLICK_WINDOW = 2 -- seconds: a click on the world this soon before the window opened is what opened it
 local LOG_MAX = 4000  -- frames kept by /cine debug questlog
 
-local SHOULDER_CVARS = { values = { test_cameraOverShoulder = "1" } }
-local CENTERED_CVARS = { values = { CameraKeepCharacterCentered = "0" } }
 local FOLLOW_CVARS = { values = { cameraSmoothStyle = "0" } }
 
 local cam = { active = false, steps = {} }
@@ -150,10 +143,6 @@ local function GossipHasQuestOptions()
 		end
 	end
 	return false
-end
-
-local function ShoulderAllowed()
-	return ns.db.questCamUncenter or GetCVar("CameraKeepCharacterCentered") ~= "1"
 end
 
 -- Speed (0-1) at t along a move of T seconds: half-cosine ramps of ease*T at
@@ -390,11 +379,29 @@ local function Zooming()
 	return zoomer.moving
 end
 
+-- The log (dev copy or verbose log, no /cine debug questlog needed): each zoom's start,
+-- hurry and stop, with the commands it sent, and the camera carrying on past
+-- where it stopped (the game still heading for what those commands asked).
+local ZOOM_WATCH_TIME = 4    -- seconds the camera's watched after a zoom stops
+local ZOOM_WATCH_MOVED = 1   -- yards it has to move on by to be logged
+local function ZoomLog(text)
+	if ns.Verbose() then -- (the dev copy, or the verbose log)
+		ns.Log("zoom", text)
+	end
+end
+
 -- Done: the speed setting rises back to yours over ZOOM_RELEASE_TIME (all at
 -- once, any last bit of the game's own zoom left to go happened in a frame:
 -- a hop). restoreNow: at once (you're zooming yourself).
 local ZOOM_RELEASE_TIME = 1.5
-local function StopZoom(restoreNow)
+local function StopZoom(restoreNow, why)
+	if zoomer.moving then
+		local zoom = GetCameraZoom()
+		ZoomLog(("stopped (%s) at %.1f yards, on the way %.1f -> %.1f (%.1f of %.1f sec): %d commands asking %+.1f yards, camera moved %+.1f; speed %s"):format(
+			why or "?", zoom, zoomer.from, zoomer.goal, zoomer.t, zoomer.T, zoomer.sends or 0, zoomer.asked or 0,
+			zoom - zoomer.from, restoreNow and "back at once" or "easing back"))
+		zoomer.watch = { from = zoom, at = GetTime(), last = zoom, far = zoom, still = 0 }
+	end
 	if restoreNow then
 		zoomer.moving, zoomer.sent, zoomer.release = false, nil, nil
 		RestoreSpeed(ZOOM_CVAR)
@@ -474,16 +481,24 @@ local function ZoomPath(t)
 	return zoomer.from + (zoomer.goal - zoomer.from) * EaseProgress(t, zoomer.T, MOVE_EASE)
 end
 
--- Zooms to `distance` yards over T seconds.
-local function ZoomTo(distance, T)
+-- Zooms to `distance` yards over T seconds (`why` for the log; `by`: whose
+-- zoom it is, nil for the quest cam's own).
+local function ZoomTo(distance, T, why, by)
 	local now = GetCameraZoom()
+	if zoomer.moving then
+		ZoomLog(("replaced by a new zoom at %.1f yards (was heading %.1f -> %.1f, %d commands asking %+.1f yards)"):format(
+			now, zoomer.from, zoomer.goal, zoomer.sends or 0, zoomer.asked or 0))
+	end
 	zoomer.moving = false
 	if math.abs(distance - now) < ZOOM_DONE then
 		return
 	end
-	zoomer.release, cam.zoomBy = nil, nil
+	zoomer.release, cam.zoomBy = nil, by
 	ns.HoldSpeed(WHO, ZOOM_CVAR)
 	Note(("zoom to %.2f"):format(distance))
+	ZoomLog(("%s %.1f -> %.1f yards over %.1f sec (%s; max factor %s)"):format(by or "quest cam", now, distance,
+		math.max(MOVE_MIN_TIME, T), why or "?", tostring(GetCVar("cameraDistanceMaxZoomFactor"))))
+	zoomer.sends, zoomer.asked, zoomer.watch = 0, 0, nil
 	zoomer.from, zoomer.goal, zoomer.t, zoomer.T = now, distance, 0, math.max(MOVE_MIN_TIME, T)
 	zoomer.cruise = math.abs(distance - now) / (zoomer.T * (1 - MOVE_EASE))
 	zoomer.last, zoomer.sentAt, zoomer.stillSince, zoomer.sent = now, 0, nil, nil
@@ -497,6 +512,7 @@ end
 local function HurryZoom(T)
 	if zoomer.moving and zoomer.t < zoomer.T then
 		zoomer.rateGoal = math.max(zoomer.rateGoal, (zoomer.T - zoomer.t) / T)
+		ZoomLog(("hurried: the rest in %.1f sec (%.1fx)"):format(T, zoomer.rateGoal))
 	end
 end
 
@@ -513,13 +529,40 @@ local function EaseZoomStop(T)
 	local speed = t < zoomer.T and zoomer.cruise * EaseShape(t, zoomer.T, MOVE_EASE) * zoomer.rate or 0
 	local zoom = GetCameraZoom()
 	local sign = zoomer.goal > zoomer.from and 1 or -1
+	ZoomLog(("easing to a stop over %.1f sec at %.1f yards (was heading %.1f -> %.1f)"):format(
+		T, zoom, zoomer.from, zoomer.goal))
 	zoomer.from, zoomer.goal, zoomer.t, zoomer.T = zoom, zoom + sign * speed * T / 2, 0, T
 	zoomer.cruise, zoomer.easeOut, zoomer.rate, zoomer.rateGoal = speed, true, 1, 1
 	return zoomer.goal
 end
 
+-- After a zoom stops: whether the camera carries on moving (logged once
+-- it's settled or ZOOM_WATCH_TIME is up, if it went ZOOM_WATCH_MOVED or more).
+local function WatchZoom(elapsed)
+	local watch = zoomer.watch
+	if not watch then
+		return
+	end
+	local now, zoom = GetTime(), GetCameraZoom()
+	watch.still = math.abs(zoom - watch.last) < ZOOM_STILL and watch.still + elapsed or 0
+	watch.last = zoom
+	if math.abs(zoom - watch.from) > math.abs(watch.far - watch.from) then
+		watch.far = zoom
+	end
+	if (watch.still >= ZOOM_SETTLED and now - watch.at > ZOOM_SETTLED) or now - watch.at >= ZOOM_WATCH_TIME then
+		zoomer.watch = nil
+		if math.abs(watch.far - watch.from) >= ZOOM_WATCH_MOVED then
+			ZoomLog(("the camera carried on after the zoom stopped: %.1f -> %.1f yards (furthest %.1f) in %.1f sec%s; zoom speed now %s"):format(
+				watch.from, zoom, watch.far, now - watch.at,
+				ns.PlayerZoomedSince(watch.at) and ", you zoomed meanwhile" or ", not your zoom",
+				tostring(GetCVar(ZOOM_CVAR))))
+		end
+	end
+end
+
 local function StepZoom(elapsed)
 	if not zoomer.moving then
+		WatchZoom(elapsed)
 		return
 	end
 	local now, zoom = GetTime(), GetCameraZoom()
@@ -536,7 +579,7 @@ local function StepZoom(elapsed)
 	if t >= T and math.abs(zoomer.goal - zoom) < ZOOM_DONE and still then
 		zoomer.stillSince = zoomer.stillSince or now
 		if now - zoomer.stillSince >= ZOOM_SETTLED then
-			StopZoom()
+			StopZoom(false, "there")
 			ns.RestoreZoomLimit() -- (inside it now)
 			return
 		end
@@ -544,7 +587,7 @@ local function StepZoom(elapsed)
 		zoomer.stillSince = nil
 	end
 	if t >= T + ZOOM_GIVE_UP then
-		StopZoom()
+		StopZoom(false, "gave up: couldn't get there")
 		ns.RestoreZoomLimit()
 		return
 	end
@@ -561,6 +604,7 @@ local function StepZoom(elapsed)
 		if math.abs(miss) > ZOOM_DONE then
 			zoomer.sentAt = now
 			Send(miss < 0 and "CameraZoomIn" or "CameraZoomOut", math.abs(miss) * ZOOM_GAIN)
+			zoomer.sends, zoomer.asked = (zoomer.sends or 0) + 1, (zoomer.asked or 0) + miss * ZOOM_GAIN
 		end
 	end
 end
@@ -617,7 +661,7 @@ local function StepSequence(now)
 		end
 		table.remove(cam.steps, 1)
 		if step[1] == "zoom" then
-			ZoomTo(step[2], step[3])
+			ZoomTo(step[2], step[3], "a step")
 		else
 			ns.ApplyCVarSet(FOLLOW_CVARS, true)
 			if step[6] then
@@ -642,7 +686,7 @@ local function HandOver(what)
 		m.amount = 0
 	end
 	if not (zoomer.leaving and zoomer.moving and ns.lastCameraInputWhat ~= "zoom") then
-		StopZoom(true) -- (your own zooming goes at your speed)
+		StopZoom(true, "you took the camera: " .. tostring(what)) -- (your own zooming goes at your speed)
 		ns.RestoreZoomLimit()
 	end
 	cam.steps, cam.handedOver = {}, true
@@ -716,14 +760,14 @@ local function Start()
 	elseif cam.zoom and GetCameraZoom and GetCameraZoom() > db.questCamDistance + ZOOM_MARGIN then
 		cam.zoomedTo = db.questCamDistance
 		ZoomTo(db.questCamDistance, math.min(db.questCamZoomMaxTime or math.huge,
-			(GetCameraZoom() - db.questCamDistance) / db.questCamZoomSpeed))
+			(GetCameraZoom() - db.questCamDistance) / db.questCamZoomSpeed), "zoom in to talk")
 		swing = db.questCamTime
 	else
 		ns.RestoreZoomLimit() -- (close already: inside it)
 		if back then
 			-- (Still ours: it goes back out after this one too.)
 			if zoomer.leaving then
-				StopZoom()
+				StopZoom(false, "talking again, close already")
 			end
 			cam.zoomedTo = GetCameraZoom()
 		end
@@ -771,19 +815,10 @@ local function Start()
 	if db.questCamLower > 0 then
 		table.insert(cam.steps, { "pitch", db.questCamLower, TILT_TIME, false, TILT_EASE })
 	end
-	if db.questCamOverShoulder and db.questCamShoulder > 0 and ShoulderAllowed() then
-		SHOULDER_CVARS.values.test_cameraOverShoulder = ("%.2f"):format(db.questCamShoulder)
-		if db.questCamUncenter then
-			ns.ApplyCVarSet(CENTERED_CVARS, true)
-		end
-		ns.ApplyCVarSet(SHOULDER_CVARS, true)
-	end
 end
 
 local function Stop()
 	cam.active, cam.closingAt = false, nil
-	ns.ApplyCVarSet(SHOULDER_CVARS, false)
-	ns.ApplyCVarSet(CENTERED_CVARS, false)
 	-- The zoom out and the turn back behind you together, then the tilt up.
 	cam.steps, cam.stepsAt = {}, 0
 	zoomer.leaving = false
@@ -922,7 +957,7 @@ local function OnMovie(started)
 		StopMove(m)
 		m.amount = 0
 	end
-	StopZoom(true)
+	StopZoom(true, "cutscene")
 	ns.RestoreZoomLimit()
 	zoomer.pending, zoomer.leaving = nil, false
 	cam.active, cam.steps, cam.zoom, cam.zoomedTo = false, {}, nil, nil
@@ -930,8 +965,6 @@ local function OnMovie(started)
 		cam.cancelled = true
 	end
 	ns.ApplyCVarSet(FOLLOW_CVARS, false)
-	ns.ApplyCVarSet(SHOULDER_CVARS, false)
-	ns.ApplyCVarSet(CENTERED_CVARS, false)
 	Note("movie: stopped")
 end
 
@@ -1002,10 +1035,8 @@ local function OnEvent(_, event)
 			StopMove(m)
 			ns.ReleaseSpeed(WHO, m.cvar)
 		end
-		StopZoom(true)
+		StopZoom(true, "logout")
 		ns.ApplyCVarSet(FOLLOW_CVARS, false)
-		ns.ApplyCVarSet(SHOULDER_CVARS, false)
-		ns.ApplyCVarSet(CENTERED_CVARS, false)
 	elseif event == "PLAYER_REGEN_DISABLED" then
 		if cam.since then
 			cam.closingAt = 0 -- a fight: ends now
@@ -1015,7 +1046,7 @@ local function OnEvent(_, event)
 		-- for the fight: the zoom back out is slow.)
 		if zoomer.moving or zoomer.release then
 			Note("fight: zoom stopped")
-			StopZoom(true)
+			StopZoom(true, "fight")
 			ns.RestoreZoomLimit()
 		end
 	elseif cam.since and GetTime() - steppedAt > LEAVE_WINDOW then
@@ -1102,7 +1133,7 @@ local function OnUpdate(_, elapsed)
 	-- wheel goes at your speed (also while the speed's still easing back).
 	if (zoomer.moving or zoomer.release) and ns.PlayerZoomedSince(zoomer.startedAt) then
 		Note("you zoomed: zoom stopped")
-		StopZoom(true)
+		StopZoom(true, "you zoomed")
 		ns.RestoreZoomLimit()
 	end
 	-- The zoom back out, held: it goes once you've walked off from where you
@@ -1133,7 +1164,9 @@ local function OnUpdate(_, elapsed)
 		elseif far then
 			zoomer.pending = nil
 			ZoomTo(pending.to, math.min(ns.db.questCamZoomMaxTime or math.huge,
-				math.abs(pending.to - GetCameraZoom()) / (pending.speed or ns.db.questCamZoomOutSpeed)))
+				math.abs(pending.to - GetCameraZoom()) / (pending.speed or ns.db.questCamZoomOutSpeed)),
+				onTaxi and "held zoom back out: flight" or pending.now and "held zoom back out: now"
+				or "held zoom back out: you walked off")
 			zoomer.leaving, zoomer.leavingSpeed = true, pending.speed
 			HurryZoom(ZOOM_HURRY)
 		end
@@ -1310,10 +1343,9 @@ end
 
 -- The Chat Cam (ChatCam.lua) borrows the eased zoom:
 -- it's stepped here (OnUpdate) whoever started it, and stops if you zoom.
-function ns.QuestCamZoomTo(distance, T)
+function ns.QuestCamZoomTo(distance, T, why)
 	ns.TakeOverZoom()
-	ZoomTo(distance, T)
-	cam.zoomBy = "chatcam"
+	ZoomTo(distance, T, why, "chatcam")
 end
 -- Whose zoom is going ("chatcam" while it's borrowed; nil: the quest cam's),
 -- and whether it's still going or easing your speed setting back.
@@ -1329,8 +1361,8 @@ end
 function ns.QuestCamEaseZoomStop(T)
 	return EaseZoomStop(T)
 end
-function ns.QuestCamStopZoom(ease)
-	StopZoom(not ease)
+function ns.QuestCamStopZoom(ease, why)
+	StopZoom(not ease, why or "chat cam")
 	ns.RestoreZoomLimit()
 end
 -- The Chat Cam let go as you moved: its zoom back out to `distance`, held
@@ -1338,15 +1370,15 @@ end
 function ns.QuestCamHoldZoomOut(distance, speed)
 	local x, y = PlayerPosition()
 	zoomer.pending = { to = distance, x = x, y = y, since = GetTime(), walked = 0, speed = speed }
+	ZoomLog(("chat cam's zoom back out to %.1f yards held till you walk off (at %.1f now)"):format(
+		distance, GetCameraZoom()))
 end
 
--- For /cine debug: whether the quest cam is on now, its moves and the shoulder state.
+-- For /cine debug: whether the quest cam is on now and its moves.
 function ns.GetQuestCamDebug()
 	return {
 		active = cam.active, talking = cam.since ~= nil, zoom = cam.zoom, zoomedTo = cam.zoomedTo,
 		turned = movers.yaw.amount, lowered = movers.pitch.amount, handedOver = cam.handedOver,
-		shoulder = GetCVar("test_cameraOverShoulder"), centered = GetCVar("CameraKeepCharacterCentered"),
-		shoulderOn = SHOULDER_CVARS.active or false,
 	}
 end
 

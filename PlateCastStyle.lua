@@ -1,11 +1,18 @@
--- The Style hub's Cast bars page: how the cast bars on nameplates look. The
--- game's own bars are restyled where they are (each change put back on as the
--- game sets its own again, on each cast): their fill and its colors by what's
--- cast (a cast, a channel, one that can't be interrupted, one that was), a
--- dark ground behind, a border, the spell's icon, shield and spark, and the
--- spell's name in a font of your own, with the seconds left at the end.
--- Whether they show (in CineMode): the Nameplates page's Plate Parts grid.
--- A preview at the top, drawn by the same code as the real ones.
+-- The Style hub's Cast bars page: how the cast bars look, on nameplates,
+-- yours (and your pet's), your target's and focus's, and the bosses' and
+-- arena enemies'. The game's own bars are restyled where they are (each
+-- change put back on as the game sets its own again, on each cast): their
+-- fill and its colors by what's cast (a cast, a channel, one that can't be
+-- interrupted, one that was), a dark ground behind, a border, the spell's
+-- icon, shield and spark, and the spell's name in a font of your own, with
+-- the seconds left at the end. A Default tab, and a tab for each kind of bar
+-- that follows Default until its "Use default settings" is unticked (as the
+-- Unit frames page's tabs do): then it has its own copy of each setting
+-- (<key>_<BAR>). The bars past the nameplates' keep the game's look until
+-- their tab's "Restyle these bars" is ticked (plateCastOn_<BAR>), and keep
+-- the game's size (yours is sized in Edit Mode). Whether the nameplates'
+-- show (in CineMode): the Nameplates page's Plate Parts grid. A preview at
+-- the top, drawn by the same code as the real ones.
 
 local _, ns = ...
 local L = ns.L
@@ -53,10 +60,6 @@ local OUTLINE_LEVEL = { none = 0, thin = 1, thick = 2 }
 -- The game's art on the bar our border and ground stand in for (not every
 -- client has each), and the parts with a tickbox of their own.
 local BORDER_ART = { "Border", "TextBorder" }
-
-function ns.PlateCastLook()
-	return ns.StyleLook("plateCastStyle")
-end
 
 local function Known(value)
 	return not (issecretvalue and issecretvalue(value))
@@ -151,6 +154,88 @@ local function Rgb(look, kind)
 	return look[keys[1]], look[keys[2]], look[keys[3]]
 end
 
+-- Each kind of bar (its id, as the settings name it, and its tab's name).
+local BARS = {
+	{ "PLATE", "Nameplates" },
+	{ "PLAYER", "You" },
+	{ "TARGET", "Target & focus" },
+	{ "BOSS", "Boss & arena" },
+}
+-- The settings each has a copy of (Default's are the plain keys), starting
+-- as Default's; the shared ones (General's) shared under each's name too.
+local BAR_KEYS = { "plateCastBorderSize", "plateCastBorderR", "plateCastBorderG", "plateCastBorderB" }
+for _, key in ipairs(PRESET_KEYS) do BAR_KEYS[#BAR_KEYS + 1] = key end
+for _, keys in pairs(COLOR_KEYS) do
+	for _, key in ipairs(keys) do BAR_KEYS[#BAR_KEYS + 1] = key end
+end
+local OWN_KEY = {}
+for _, key in ipairs(BAR_KEYS) do OWN_KEY[key] = true end
+for _, info in ipairs(BARS) do
+	local id = info[1]
+	DEFAULTS["plateCastOwn_" .. id] = false
+	if id ~= "PLATE" then DEFAULTS["plateCastOn_" .. id] = false end
+	for _, key in ipairs(BAR_KEYS) do
+		DEFAULTS[key .. "_" .. id] = DEFAULTS[key]
+		local entry = ns.SHARED_STYLE[key]
+		if entry then
+			ns.SHARED_STYLE[key .. "_" .. id] = entry.follows
+				and { kind = entry.kind, follows = entry.follows .. "_" .. id } or entry
+		end
+	end
+end
+
+-- Whether a kind of bar is restyled: the page on, and for any but the
+-- nameplates', its tab's Restyle these bars ticked. (db: the settings to
+-- ask, for the options' tests.)
+local function Active(id, db)
+	db = db or ns.db
+	return ns.StyleOn("plateCastStyle", db) and (id == "PLATE" or (db and db["plateCastOn_" .. id])) and true
+		or false
+end
+
+-- A kind of bar's look (id nil: the Default tab's): its own settings while
+-- its "Use default settings" is unticked, else Default's; each through the
+-- Style pages' look (General's, and the game's with the page or General off).
+local views = {}
+local function View(id)
+	local view = views[id or "DEFAULT"]
+	if not view then
+		view = setmetatable({}, { __index = function(_, key)
+			local look = ns.StyleLook("plateCastStyle")
+			local db = ns.db
+			if id and OWN_KEY[key] and db and ns.StyleOn("plateCastStyle") and db["plateCastOwn_" .. id] then
+				return look[key .. "_" .. id]
+			end
+			return look[key]
+		end })
+		views[id or "DEFAULT"] = view
+	end
+	return view
+end
+
+-- The look a kind of bar gets now: the game's while it isn't restyled.
+local function Look(id)
+	if id and not Active(id) then
+		return ns.StyleLook("plateCastStyle", true)
+	end
+	return View(id)
+end
+
+function ns.PlateCastLook()
+	return Look("PLATE")
+end
+
+-- A part of the game's bar: by its key, or (the classic clients' older
+-- bars) by its name, <bar's name><part>.
+local function Part(bar, field)
+	local part = bar[field]
+	if part == nil and bar.GetName then
+		local name = bar:GetName()
+		part = type(name) == "string" and _G[name .. field] or nil
+	end
+	return part
+end
+
 -- Our pieces on a bar, made the first time it needs them.
 local function Ground(bar, state)
 	if not state.ground then
@@ -202,7 +287,7 @@ end
 local function Timer(bar, state)
 	if not state.timer then
 		local timer = bar:CreateFontString(nil, "OVERLAY")
-		local text = bar.Text
+		local text = Part(bar, "Text")
 		-- (the game's font, not ours if the name has it already)
 		local own = state.fonts and state.fonts.text
 		local object = own and own.object or (Usable(text) and text.GetFontObject and text:GetFontObject())
@@ -530,7 +615,7 @@ end
 -- size taken from its anchor). Its own size is the game's again whenever it
 -- clearly isn't ours (read-backs snap to pixels).
 local function SizeIcon(bar, state, height)
-	local icon = bar.Icon
+	local icon = Part(bar, "Icon")
 	if not (Usable(icon) and icon.SetSize) then
 		return
 	end
@@ -557,14 +642,22 @@ local function SizeIcon(bar, state, height)
 	end
 end
 
-local function Size(bar, state, look)
+-- (sized: the bar's own size too, the nameplates' alone; the rest keep the
+-- game's, yours set in Edit Mode.)
+local UNSIZED = { plateCastWidth = 1, plateCastHeight = 1 }
+local function Size(bar, state, look, sized)
 	SizeIcon(bar, state, look.plateCastIconSize or 1)
-	SizeBar(bar, state, look)
+	if sized then
+		SizeBar(bar, state, look)
+	elseif state.sized or state.barHeight then
+		SizeBar(bar, state, UNSIZED) -- (a preview's sample, its tab changed: its own size back)
+	end
 end
 
 -- Puts the look on a bar (the game's where a setting says the game's). The
--- preview's bars too (sample: no game fill to put back).
-local function Apply(bar, look, sample)
+-- preview's bars too (sample: no game fill to put back). sized: a
+-- nameplate's (or a sample of one), sized by the page.
+local function Apply(bar, look, sample, sized)
 	local state = State(bar)
 	local ours = FILLS[look.plateCastFill]
 	if ours then
@@ -590,10 +683,11 @@ local function Apply(bar, look, sample)
 		ground:SetAlpha(look.plateCastBack)
 		ground:SetShown(ours ~= nil and look.plateCastBack > 0)
 	end
-	ShowPart(state, bar.Background, not ours)
+	ShowPart(state, Part(bar, "Background"), not ours)
 	local border, size, br, bg, bb = ns.StyleBorder(look, "plateCastBorder")
+	-- (The box the spell's name sits in goes with the name.)
 	for _, field in ipairs(BORDER_ART) do
-		ShowPart(state, bar[field], border == "game")
+		ShowPart(state, Part(bar, field), border == "game" and (field ~= "TextBorder" or look.plateCastText))
 	end
 	if border == "line" then
 		local edge = Edge(bar, state)
@@ -602,15 +696,16 @@ local function Apply(bar, look, sample)
 	elseif state.edge then
 		state.edge:Hide()
 	end
-	ShowPart(state, bar.Spark, look.plateCastSpark)
-	ShowPart(state, bar.Icon, look.plateCastIcon)
-	ShowPart(state, bar.BorderShield, look.plateCastShield)
+	ShowPart(state, Part(bar, "Spark"), look.plateCastSpark)
+	ShowPart(state, Part(bar, "Icon"), look.plateCastIcon)
+	ShowPart(state, Part(bar, "BorderShield"), look.plateCastShield)
 	ShowPart(state, bar.ImportantCastIndicator, look.plateCastImportant)
 	ShowPart(state, bar.CastTargetIndicator, look.plateCastTarget)
 	ShowPart(state, bar.CastTargetNameText, look.plateCastTarget)
-	ShowPart(state, bar.Text, look.plateCastText)
-	if Usable(bar.Text) and bar.Text.GetFont then
-		SetFont(state, bar.Text, look, "text")
+	local text = Part(bar, "Text")
+	ShowPart(state, text, look.plateCastText)
+	if Usable(text) and text.GetFont then
+		SetFont(state, text, look, "text")
 	end
 	if look.plateCastTimer then
 		local timer = Timer(bar, state)
@@ -619,30 +714,37 @@ local function Apply(bar, look, sample)
 	elseif state.timer then
 		state.timer:Hide()
 	end
-	Size(bar, state, look)
-	state.on = look ~= DEFAULTS
+	Size(bar, state, look, sized)
+	state.on = true
 end
 ns.StylePlateCastBar = Apply
 
 -- The real bars: each hooked once, so whatever the game sets on it as a
--- cast starts, changes or ends, the look goes back on.
+-- cast starts, changes or ends, the look goes back on. A bar no longer
+-- restyled gets the game's look back once, then is left be.
+local hooked = setmetatable({}, { __mode = "k" })
+local barIds = setmetatable({}, { __mode = "k" }) -- [bar] = its kind's id
+
 local function Restyle(bar)
+	local id = barIds[bar] or "PLATE"
 	local state = states[bar]
-	local look = ns.PlateCastLook()
-	if look == DEFAULTS and not (state and state.on) then
+	local active = Active(id)
+	if not active and not (state and state.on) then
 		return
 	end
-	Apply(bar, look)
+	Apply(bar, Look(id), nil, id == "PLATE")
+	if not active then
+		states[bar].on = false
+	end
 end
 
-local hooked = setmetatable({}, { __mode = "k" })
 local onEvent = ns.Profiled("Plate cast bar style", Restyle)
 local onUpdate = ns.Profiled("Plate cast bar style update", function(bar)
 	local state = states[bar]
 	if not (state and state.on) then
 		return
 	end
-	local look = ns.PlateCastLook()
+	local look = Look(barIds[bar] or "PLATE")
 	-- (What's cast can change mid-cast: an interrupt, a shield coming up.)
 	if state.filled then
 		local kind = CastKind(bar)
@@ -655,11 +757,12 @@ local onUpdate = ns.Profiled("Plate cast bar style update", function(bar)
 	end
 end)
 
-local function Hook(bar)
+local function Hook(bar, id)
 	if hooked[bar] then
 		return
 	end
 	hooked[bar] = true
+	barIds[bar] = id
 	bar:HookScript("OnEvent", onEvent)
 	bar:HookScript("OnShow", onEvent)
 	bar:HookScript("OnUpdate", onUpdate)
@@ -685,7 +788,7 @@ local function Hook(bar)
 			state.ownColor = { r, g, b, a or 1 }
 		end
 		if state.on and state.filled then
-			Paint(self, state, ns.PlateCastLook())
+			Paint(self, state, Look(barIds[self] or "PLATE"))
 		end
 	end)
 end
@@ -712,16 +815,74 @@ local function StylePlate(plate)
 	if not bar then
 		return
 	end
-	if ns.PlateCastLook() ~= DEFAULTS then
-		Hook(bar)
+	if Active("PLATE") then
+		Hook(bar, "PLATE")
 	end
 	if hooked[bar] then
 		Restyle(bar)
 	end
 end
 
--- Every plate's bar again (a change on the page).
+-- The game's other cast bars, by kind: yours (retail's, Classic's, the
+-- pet's for vehicles and mind control, WoW Forever's gamepad one), the
+-- target's and focus's (spellbar on every client; by its name too), and the
+-- bosses' and arena enemies' (retail's arena frames, the classic clients'
+-- by name). Untested: the arena ones.
+local GAME_BARS = {
+	PLAYER = function(add)
+		for _, name in ipairs({ "PlayerCastingBarFrame", "OverlayPlayerCastingBarFrame", "CastingBarFrame",
+			"PetCastingBarFrame", "GamepadPlayerCastingBarFrame" }) do
+			add(_G[name])
+		end
+	end,
+	TARGET = function(add)
+		for _, name in ipairs({ "TargetFrame", "FocusFrame" }) do
+			add(_G[name] and _G[name].spellbar)
+			add(_G[name .. "SpellBar"])
+		end
+	end,
+	BOSS = function(add)
+		for i = 1, 8 do
+			local boss = _G["Boss" .. i .. "TargetFrame"]
+			add(boss and boss.spellbar)
+			add(_G["Boss" .. i .. "TargetFrameSpellBar"])
+			add(_G["ArenaEnemyFrame" .. i .. "CastingBar"])
+			add(_G["ArenaEnemyMatchFrame" .. i .. "CastingBar"])
+		end
+		local arena = _G.CompactArenaFrame
+		if type(arena) == "table" and type(arena.memberUnitFrames) == "table" then
+			for _, member in ipairs(arena.memberUnitFrames) do
+				add(type(member) == "table" and member.CastingBarFrame)
+			end
+		end
+	end,
+}
+
+-- One kind's bars: hooked once it's restyled, each dressed again.
+local function StyleGame(id)
+	local seen = {}
+	pcall(GAME_BARS[id], function(bar)
+		if not (Usable(bar) and bar.SetStatusBarTexture and bar.HookScript) or seen[bar] then
+			return
+		end
+		seen[bar] = true
+		if Active(id) then
+			Hook(bar, id)
+		end
+		if hooked[bar] then
+			Restyle(bar)
+		end
+	end)
+end
+
+-- Every bar again (a change on the page).
 function ns.RefreshPlateCastStyle()
+	if not ns.db then
+		return
+	end
+	for id in pairs(GAME_BARS) do
+		StyleGame(id)
+	end
 	if not (C_NamePlate and C_NamePlate.GetNamePlates) then
 		return
 	end
@@ -730,11 +891,31 @@ function ns.RefreshPlateCastStyle()
 	end
 end
 
+-- (The bosses' and arena's frames come as they're needed: looked for again
+-- then.)
 local watcher = CreateFrame("Frame")
-watcher:RegisterEvent("NAME_PLATE_UNIT_ADDED")
-watcher:SetScript("OnEvent", function(_, _, unit)
-	if ns.db and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
-		StylePlate(C_NamePlate.GetNamePlateForUnit(unit))
+for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "PLAYER_ENTERING_WORLD", "ADDON_LOADED",
+	"INSTANCE_ENCOUNTER_ENGAGE_UNIT", "ARENA_OPPONENT_UPDATE" }) do
+	pcall(watcher.RegisterEvent, watcher, event)
+end
+watcher:SetScript("OnEvent", function(_, event, unit)
+	if not ns.db then
+		return
+	end
+	if event == "NAME_PLATE_UNIT_ADDED" then
+		if C_NamePlate and C_NamePlate.GetNamePlateForUnit then
+			StylePlate(C_NamePlate.GetNamePlateForUnit(unit))
+		end
+	elseif event == "PLAYER_ENTERING_WORLD" then
+		for id in pairs(GAME_BARS) do
+			StyleGame(id)
+		end
+	elseif event == "ADDON_LOADED" then
+		if unit == "Blizzard_ArenaUI" or unit == "Blizzard_CompactRaidFrames" then
+			StyleGame("BOSS")
+		end
+	else
+		StyleGame("BOSS")
 	end
 end)
 
@@ -806,7 +987,7 @@ function ns.DescribePlateCastBar(unitFrame)
 		Say(bar.barType), Say(bar.casting), Say(bar.channeling), Say(bar.notInterruptible), Say(bar.unit),
 		Say(bar.value), Say(bar.maxValue), kind, secret ~= nil and " (can't-interrupt secret)" or "",
 		okAtlas and Say(atlas) or "?", okTexture and Say(texture) or "?",
-		tostring(ns.PlateCastLook() ~= DEFAULTS), tostring(hooked[bar] == true), tostring(state and state.on),
+		tostring(Active("PLATE")), tostring(hooked[bar] == true), tostring(state and state.on),
 		tostring(state and state.ownFill), SizeReport(bar, state), table.concat(fields, ", "))
 end
 
@@ -884,32 +1065,67 @@ local function MakeSample(parent, info)
 	return bar
 end
 
+local TAB_NAMES = {}
+for _, info in ipairs(BARS) do TAB_NAMES[info[1]] = info[2] end
+
 function ns.CreatePlateCastStylePanel(kit)
 	local canvas, content = kit.CreateScrollPage()
 	local title = kit.Label(content, "GameFontNormalLarge", L["Cast bars"])
 	title:SetPoint("TOPLEFT", 16, -16)
 	local intro = kit.PageIntro(content, title,
-		L["How the cast bars on nameplates look. Whether they show in CineMode: the Nameplates page's Plate " ..
-		"Parts grid. Changes show at once, here and on plates casting now."])
+		L["How the cast bars look: on nameplates, yours, your target's and focus's, and the bosses' and arena " ..
+		"enemies'. The Default tab's settings are every bar's until its own tab has Use default settings " ..
+		"unticked. All but the nameplates' keep the game's look until their tab's Restyle these bars is " ..
+		"ticked. Whether the nameplates' show in CineMode: the Nameplates page's Plate Parts grid. Changes " ..
+		"show at once, here and on bars casting now."])
+
+	-- The tab being edited (nil: Default), and each setting as the field it
+	-- edits: the bar's own copy while it has one, else Default's (shown greyed).
+	local editing
+	local function UsesDefault(db) return editing and not db["plateCastOwn_" .. editing] end
+	local function Restyled(db) return not editing or Active(editing, db) end
+	local fields = {}
+	local function Field(key)
+		if not fields[key] then
+			fields[key] = {
+				get = function()
+					local db = ns.GetDB()
+					if not db then return nil end
+					return db[(editing and db["plateCastOwn_" .. editing]) and key .. "_" .. editing or key]
+				end,
+				set = function(value)
+					ns.GetDB()[editing and key .. "_" .. editing or key] = value
+				end,
+			}
+		end
+		return fields[key]
+	end
 
 	local preview -- (below: drawn again as each setting changes)
+	local tabs, ownCheck, restyleCheck, sizes
 	local function Changed()
 		ns.RefreshPlateCastStyle()
 		if preview then preview:Refresh() end
 	end
 
 	local switch = kit.PageSwitch(content, "plateCastStyle", L["Enable page"],
-		L["On: the cast bars on nameplates look as this page says. Off: the game's own (the preview shows " ..
-		"that too). Each setting keeps its value for when you turn this back on."], intro, Changed)
+		L["On: the cast bars look as this page says. Off: the game's own (the preview shows that too). Each " ..
+		"setting keeps its value for when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")
-	local rows = ns.StyleRows(kit, content, stack, Changed, "plateCastStyle")
+	local rows = ns.StyleRows(kit, content, stack, Changed, "plateCastStyle", Field)
+	local function Editable(db) return rows.On(db) and Restyled(db) and not UsesDefault(db) end
+
+	local function Pick(id)
+		editing = id
+		kit.Refresh()
+		Changed()
+	end
 
 	-- The preview: a cast, a channel and one that can't be interrupted, filling
 	-- again and again, over the Style pages' scene.
 	local PREVIEW_W, PREVIEW_H = 480, 150
 	preview = CreateFrame("Frame", nil, content)
 	preview:SetSize(PREVIEW_W, PREVIEW_H)
-	stack:Add(ns.StyleSceneButton(content, kit.Tooltip, kit.AddControl), "label")
 	stack:Add(preview, "label")
 	ns.StyleScene(preview, 0.6, 0.8) -- (StylePages.lua)
 	local caption = kit.Label(preview, "GameFontDisableSmall", L["Preview"])
@@ -945,8 +1161,9 @@ function ns.CreatePlateCastStylePanel(kit)
 		bar.offset = (i - 1) * 0.3
 		samples[i] = bar
 	end
+	-- (The tab being edited's look: the game's for a kind not restyled.)
 	function preview:Refresh()
-		local look = ns.PlateCastLook()
+		local look = Look(editing)
 		for i, bar in ipairs(samples) do
 			-- (The game's look for a sample: its classic fill and colors.)
 			if not FILLS[look.plateCastFill] then
@@ -962,12 +1179,12 @@ function ns.CreatePlateCastStylePanel(kit)
 					bar:SetStatusBarColor(unpack(GAME_COLORS[kind]))
 				end
 			end
-			Apply(bar, look, true)
+			Apply(bar, look, true, not editing or editing == "PLATE")
 		end
 	end
 	local started = GetTime()
 	preview:SetScript("OnUpdate", function()
-		local look = ns.PlateCastLook()
+		local look = Look(editing)
 		for _, bar in ipairs(samples) do
 			local done = ((GetTime() - started) / SAMPLE_TIME + bar.offset) % 1
 			local value = bar.channeling and (1 - done) or done
@@ -982,7 +1199,8 @@ function ns.CreatePlateCastStylePanel(kit)
 	end)
 	kit.AddControl(preview)
 
-	rows.Presets({
+	-- (Default's: the presets set the Default tab's settings.)
+	rows.PresetMenu({
 		{ L["Like the game's"], L["The game's own cast bars (the defaults)."], {} },
 		{ L["Flat"], L["A flat fill in your colors on a dark ground, a thin black edge, Arial Narrow, the " ..
 			"seconds left."], { plateCastHeight = 1.5, plateCastFill = "flat", plateCastBorder = "thin",
@@ -993,30 +1211,118 @@ function ns.CreatePlateCastStylePanel(kit)
 		{ L["Cinematic"], L["A quiet flat bar: no icon, spark or border, a soft ground, small outlined text."],
 			{ plateCastFill = "flat", plateCastBorder = "none", plateCastBack = 0.35, plateCastIcon = false,
 			plateCastSpark = false, plateCastTextSize = 0.9, plateCastOutline = "thin" } },
-	}, PRESET_KEYS, PREVIEW_W)
+	}, PRESET_KEYS)
+
+	-- The tabs, in Heal Vision's folder look (ns.FolderTabs): Default, then
+	-- each kind of bar, the settings on the panel under them. On a kind's,
+	-- Use default settings, and (all but the nameplates') Restyle these bars
+	-- beside it; on Default's, a note in their place.
+	local TAB_H = ns.FOLDER_TAB_HEIGHT
+	local ids, list = { false }, {}
+	for _, info in ipairs(BARS) do ids[#ids + 1] = info[1] end
+	for i, id in ipairs(ids) do
+		list[i] = { id and L[TAB_NAMES[id]] or L["Default"],
+			id and L["These cast bars' settings: Default's until you untick Use default settings."]
+			or L["The settings every kind of cast bar has while its tab uses the default settings."] }
+	end
+	-- (Room for the tabs; the panel's top left under it.)
+	local tabsRoom = CreateFrame("Frame", nil, content)
+	tabsRoom:SetSize(PREVIEW_W, TAB_H + 4)
+	stack:Add(tabsRoom, "label")
+	local panel, ShowTab, base
+	panel, tabs, ShowTab, base = ns.FolderTabs(content, list, function(i) Pick(ids[i] or nil) end)
+	panel:SetPoint("TOPLEFT", tabsRoom, "BOTTOMLEFT", -10, 0)
+	-- (Tabs sit 8 right of base: the first one 2 left of tabsRoom, as before.)
+	base:SetPoint("TOPLEFT", tabsRoom, "BOTTOMLEFT", -10, 0)
+	local defaultNote
+	local function TabsLook()
+		local db = ns.GetDB()
+		for i, tab in ipairs(tabs) do
+			local id = ids[i] or nil
+			local own = id and db and db["plateCastOwn_" .. id]
+			tab:SetText((id and L[TAB_NAMES[id]] or L["Default"]) .. (own and " |cffffd100*|r" or ""))
+			tab:SetWidth(math.max(56, math.ceil(tab.label:GetStringWidth()) + 16))
+			if id == editing then ShowTab(i) end
+		end
+		ownCheck:SetShown(editing ~= nil)
+		restyleCheck:SetShown(editing ~= nil and editing ~= "PLATE")
+		defaultNote:SetShown(editing == nil)
+		-- (The bar's size: the nameplates' alone.)
+		sizes:SetShown(not editing or editing == "PLATE")
+	end
+	-- (Every setting the page has, Default's and each kind's, for its Reset.)
+	for _, key in ipairs(BAR_KEYS) do kit.RecordKey(content, key) end
+	for _, info in ipairs(BARS) do
+		local id = info[1]
+		kit.RecordKey(content, "plateCastOwn_" .. id)
+		if id ~= "PLATE" then kit.RecordKey(content, "plateCastOn_" .. id) end
+		for _, key in ipairs(BAR_KEYS) do kit.RecordKey(content, key .. "_" .. id) end
+	end
+	ownCheck = kit.Check(content, false, L["Use default settings"],
+		L["Ticked: these cast bars look as the Default tab says. Unticked: as the settings below say (they " ..
+		"start as Default's, and are kept while it's ticked)."], function(value)
+			local db = ns.GetDB()
+			-- (A first untick: the kind starts from Default's settings.)
+			if not value and not db["plateCastStarted_" .. editing] then
+				for _, key in ipairs(BAR_KEYS) do db[key .. "_" .. editing] = db[key] end
+				db["plateCastStarted_" .. editing] = true
+			end
+			db["plateCastOwn_" .. editing] = not value
+			Changed()
+			kit.Refresh()
+		end)
+	ownCheck.Refresh = function(self)
+		local db = ns.GetDB()
+		self:SetChecked(editing and db and not db["plateCastOwn_" .. editing] or false)
+		TabsLook()
+	end
+	ownCheck.pageSwitch = false
+	stack:Add(ownCheck, "check")
+	kit.GreyUnless(ownCheck, function(db) return rows.On(db) and Restyled(db) end)
+	kit.AddControl(ownCheck)
+	restyleCheck = kit.Check(content, false, L["Restyle these bars"],
+		L["Ticked: these cast bars take this page's look (the Default tab's, or this tab's own). Unticked: " ..
+		"they keep the game's own. Their size stays the game's (yours is sized in Edit Mode)."], function(value)
+			ns.GetDB()["plateCastOn_" .. editing] = value
+			Changed()
+			kit.Refresh()
+		end)
+	restyleCheck.Refresh = function(self)
+		local db = ns.GetDB()
+		self:SetChecked(editing and editing ~= "PLATE" and db and db["plateCastOn_" .. editing] or false)
+	end
+	restyleCheck.pageSwitch = false
+	restyleCheck:SetPoint("LEFT", ownCheck.Text or ownCheck.text or ownCheck, "RIGHT", 24, 0)
+	kit.GreyUnless(restyleCheck, rows.On)
+	kit.AddControl(restyleCheck)
+	defaultNote = kit.Label(content, "GameFontHighlightSmall",
+		L["Every kind of cast bar looks as this tab says until its own tab has Use default settings unticked."])
+	defaultNote:SetPoint("LEFT", ownCheck, "LEFT", 4, 0)
+	defaultNote.searchSkip = true
 
 	-- (Sizes and the like as small boxes on a line, colors on one line, each
 	-- part's check with its size beside it.)
 	stack:Header(content, L["Bar"])
-	local sizes = rows.Boxes()
+	sizes = rows.Boxes()
 	-- (Retail's plates won't say where the bar is: its width there goes with
 	-- the health bar's, the Nameplate Style page's Width.)
 	if not ns.isRetail then
-		sizes:Box(L["W"], "plateCastWidth", 50, 150, 5, "%d", 100,
-			L["Its width, next to the game's, about its middle."], nil, "%")
+		sizes:Box(L["W"], Field("plateCastWidth"), 50, 150, 5, "%d", 100,
+			L["Its width, next to the game's, about its middle (nameplates only)."], Editable, "%")
 	end
-	sizes:Box(L["H"], "plateCastHeight", 50, 300, 10, "%d", 100,
-		L["Its height, next to the game's. The health bar and name ride up on it."], nil, "%")
+	sizes:Box(L["H"], Field("plateCastHeight"), 50, 300, 10, "%d", 100,
+		L["Its height, next to the game's (nameplates only). The health bar and name ride up on it."],
+		Editable, "%")
 	local function Filled(db)
-		local fill = db.plateCastFill
+		local fill = rows.Get("plateCastFill")
 		if ns.IsGeneralStyle(fill) then fill = ns.GeneralStyleValue("plateCastFill") end
-		return rows.On(db) and FILLS[fill] ~= nil
+		return Editable(db) and FILLS[fill] ~= nil
 	end
-	sizes:Box(L["Dark ground"], "plateCastBack", 0, 100, 5, "%d", 100,
+	rows.Boxes():Box(L["Dark ground"], Field("plateCastBack"), 0, 100, 5, "%d", 100,
 		L["How dark it is behind the fill (with a fill of your own; the game's keeps its own)."], Filled, "%")
 	rows.Texture(L["Fill:"], "plateCastFill", L["The game's: its own fill, in its own colors. Below the " ..
-		"game's own few: any other addon shares (through LibSharedMedia)."], nil, { 1, 0.7, 0 })
-	rows.Colors(L["Colors:"], {
+		"game's own few: any other addon shares (through LibSharedMedia)."], Editable, { 1, 0.7, 0 })
+	local lastColor = rows.Colors(L["Colors:"], {
 		{ L["Casting"], COLOR_KEYS.cast, L["Pick the color of a cast."] },
 		{ L["Channeling"], COLOR_KEYS.channel, L["Pick the color of a channel."] },
 		{ L["Can't be interrupted"], COLOR_KEYS.locked,
@@ -1025,36 +1331,42 @@ function ns.CreatePlateCastStylePanel(kit)
 			L["Pick the color of a cast that was interrupted (when the game says: not in every fight)."] },
 	}, Filled)
 	rows.Border(L["Border:"], "plateCastBorder", { game = true }, L["The cast bar's border: the game's, or " ..
-		"one of ours (Custom: its thickness and color under it)."])
-	rows.Check("plateCastSpark", L["The spark at the fill's end"])
+		"one of ours (Custom: its thickness and color under it)."], Editable)
+	rows.Check("plateCastSpark", L["The spark at the fill's end"], nil, Editable)
 
 	stack:Header(content, L["Icon"])
-	local icon = rows.Check("plateCastIcon", L["The spell's icon"])
-	rows.Boxes(icon):Box(L["Size"], "plateCastIconSize", 50, 300, 10, "%d", 100,
-		L["The icon's size, next to the game's. The health bar and name ride up on it."], nil, "%")
+	local icon = rows.Check("plateCastIcon", L["The spell's icon"], nil, Editable)
+	rows.Boxes(icon):Box(L["Size"], Field("plateCastIconSize"), 50, 300, 10, "%d", 100,
+		L["The icon's size, next to the game's. On nameplates, the health bar and name ride up on it."],
+		Editable, "%")
 	rows.Check("plateCastShield", L["The shield on casts that can't be interrupted"],
-		L["The game's shield over the icon while the cast can't be interrupted."])
+		L["The game's shield over the icon while the cast can't be interrupted."], Editable)
 	-- (Seen on retail's plates and game 11509's alike.)
 	rows.Check("plateCastImportant", L["The mark on important casts"],
-		L["The game's mark on casts it counts as important, ones worth interrupting or getting out of."])
+		L["The game's mark on casts it counts as important, ones worth interrupting or getting out of."],
+		Editable)
 	rows.Check("plateCastTarget", L["Who it's cast at"],
-		L["The game's mark and name for who the spell is cast at."])
+		L["The game's mark and name for who the spell is cast at."], Editable)
 
 	stack:Header(content, L["Text"])
-	local text = rows.Check("plateCastText", L["The spell's name"])
-	rows.Boxes(text):Box(L["Size"], "plateCastTextSize", 50, 300, 10, "%d", 100,
-		L["Its size, next to the game's."], nil, "%")
-	rows.Font("plateCastFont", nil)
+	local text = rows.Check("plateCastText", L["The spell's name"], nil, Editable)
+	rows.Boxes(text):Box(L["Size"], Field("plateCastTextSize"), 50, 300, 10, "%d", 100,
+		L["Its size, next to the game's."], Editable, "%")
+	rows.Font("plateCastFont", nil, Editable)
 	rows.Choices(L["Outline:"], "plateCastOutline", {
 		{ "general", L["General"], L["As the Style hub's General page says."] },
 		{ "game", L["The game's"] },
 		{ "none", L["None"] },
 		{ "thin", L["Thin"] },
 		{ "thick", L["Thick"] },
-	})
-	rows.Check("plateCastTimer", L["Seconds left at its right end"],
+	}, Editable)
+	local timer = rows.Check("plateCastTimer", L["Seconds left at its right end"],
 		L["The seconds left on the cast, at the bar's right end (in the same font). Hidden while the game " ..
-		"keeps them secret, in some fights."])
+		"keeps them secret, in some fights."], Editable)
+	-- (The panel's bottom under the last row, its right past the widest, the
+	-- colors' row: its length goes with the language.)
+	panel:SetPoint("BOTTOM", timer, "BOTTOM", 0, -12)
+	panel:SetPoint("RIGHT", lastColor, "RIGHT", 14, 0)
 
 	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))
 	canvas:Hide()
@@ -1079,7 +1391,7 @@ function ns.MakePlateCastSample(parent)
 				self:SetStatusBarColor(unpack(GAME_COLORS.cast))
 			end
 		end
-		Apply(self, look, true)
+		Apply(self, look, true, true)
 	end
 	local started = GetTime()
 	bar:HookScript("OnUpdate", function(self)

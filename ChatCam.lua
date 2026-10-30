@@ -127,6 +127,12 @@ local MAX_ACCEL = 9    -- degrees/sec per second at most (the fly-by's: the sway
 local function Ease(ease)
 	return ns.db.chatCamSteady and 0 or ease
 end
+-- Ultra immersive's snap: a swing at SNAP_SPEED (no faster than your own turn
+-- speed setting, which is a move's top: see SPEED_MIN_SETTING), from rest to
+-- rest with no easing and no creep start first.
+local SNAP_SPEED = 180
+local SNAP_ACCEL = 100000
+local SNAP_MIN_TIME = 0.05
 local BACK_MIN_TIME = 3 -- seconds the turn back takes, at least
 local DRIFT_TIME = 7   -- seconds a leg of the drift across its whole width takes (as the quest cam's)
 local DRIFT_EASE = 0.3
@@ -179,7 +185,7 @@ local WHO = "chatcam" -- (its hold on your turn speed: ns.HoldSpeed, Core.lua)
 local FOLLOW_CVARS = { values = { cameraSmoothStyle = "0" } } -- (camera follow would pull the view back)
 
 -- amount: degrees turned, counted (positive: toward the right of the screen).
--- kind: "swing", "drift", "track" or "back". stopping: easing to a stop early.
+-- kind: "swing", "snap", "drift", "track" or "back". stopping: easing to a stop early.
 -- want: a track's speed wanted (degrees/sec; it has no end of its own).
 -- sent: the speed sent (degrees/sec), right: which way. share: the move's
 -- share of your speed setting, setting: the speed setting sent, speed: the
@@ -211,6 +217,11 @@ ns.DEFAULTS.chatCamFrame = 6         -- degrees off the middle a speaker's left 
 ns.DEFAULTS.chatCamDrift = 0         -- degrees it drifts to and fro on a speaker (0: holds still)
 ns.DEFAULTS.chatCamQuiet = 20       -- seconds with no one talking before it's over
 ns.DEFAULTS.chatCamSearch = true    -- a speaker off screen: the camera looks round for them (see SEARCH_SPEED)
+-- Ultra immersive: each swing snaps to the speaker (SNAP_SPEED, no easing,
+-- no swing budget), the letterbox comes in twice as tall for the conversation
+-- (Effects.lua) with subtitles in its bottom bar (ChatCamSubtitles.lua; the
+-- bubbles still show), and the UI fades out (Frames.lua, Effects.lua).
+ns.DEFAULTS.chatCamImmersive = false
 -- A row on the Cameras page's grid (Turn off in, Calm Timer) and a box in
 -- the Minimap page's "Hide in camera modes", as key "chatcam" (the Chat page's
 -- own settings start with "chat"). Added here, so after Core.lua made the
@@ -224,6 +235,9 @@ ns.DEFAULTS.chatcamCalmWait = true
 ns.DEFAULTS.chatcamHideMinimap = false
 local function On()
 	return ns.db.enabled and (ns.db.chatCamera == "chat" or ns.db.chatNearbyCamera == "chat")
+end
+local function Immersive()
+	return ns.db.chatCamImmersive and true or false
 end
 
 local function Secret(value)
@@ -354,6 +368,8 @@ end
 local function TopSpeed(kind)
 	if kind == "search" then
 		return SEARCH_SPEED, SEARCH_ACCEL
+	elseif kind == "snap" then
+		return math.min(SNAP_SPEED, ns.YourSpeed(CVAR)), SNAP_ACCEL
 	end
 	return ns.db.chatCamSwingSpeed, MAX_ACCEL
 end
@@ -406,6 +422,10 @@ local function MoveTo(target, T, ease, kind, from)
 		SendSetting(math.max(SPEED_MIN_SETTING, from / turn.share))
 		Send(Command(turn.right) .. "Start", turn.share)
 		turn.sent, turn.primedUntil = turn.setting * turn.share, 0
+	elseif kind == "snap" then
+		-- (A snap: straight off at its speed, no creep first.)
+		SendSetting(math.max(SPEED_MIN_SETTING, turn.cruise / turn.share))
+		turn.primedUntil = 0
 	else
 		-- (The setting at its lowest a moment before the move starts, creeping.)
 		Prime()
@@ -1190,7 +1210,7 @@ local function Aim(now, drifting)
 	end
 	convo.swings = swings
 	local budget
-	local left = math.max(0, TURN_BUDGET - spent)
+	local left = Immersive() and math.huge or math.max(0, TURN_BUDGET - spent) -- (snaps: no budget)
 	if math.abs(step) > left then
 		if off ~= 0 and left < math.min(math.abs(step), SIDE_TURN) then
 			-- (Well off the framing, and little budget left: waits for it, rather
@@ -1207,7 +1227,7 @@ local function Aim(now, drifting)
 		step = left * (step > 0 and 1 or -1)
 		target = turn.amount + step
 	end
-	local carry = drifting and turn.sent and math.abs(step) >= MIN_TURN and (step > 0) == turn.right
+	local carry = not Immersive() and drifting and turn.sent and math.abs(step) >= MIN_TURN and (step > 0) == turn.right
 	if drifting and not carry then
 		EaseToStop() -- (the other way, or not worth a swing: a stop first, then a fresh look)
 		return
@@ -1222,7 +1242,9 @@ local function Aim(now, drifting)
 		return
 	end
 	swings[#swings + 1] = { at = now, amount = math.abs(step) }
-	local T = SwingTime(math.abs(step), Ease(SWING_EASE), SWING_MIN_TIME)
+	local snap = Immersive()
+	local T = snap and math.max(SNAP_MIN_TIME, math.abs(step) / TopSpeed("snap"))
+		or SwingTime(math.abs(step), Ease(SWING_EASE), SWING_MIN_TIME)
 	Say(("swinging to %s%s: %+.1f deg off the middle (bubble x %+.2f y %+.2f, %s), gain %.2f, %+.1f to %+.1f over %.1fs%s"):format(
 		speaker.correcting and "(again) " or "", speaker.name, angle, sx, sy, reading,
 		convo.gain, step, target, T,
@@ -1233,7 +1255,11 @@ local function Aim(now, drifting)
 	if carry then
 		Note(turn.kind .. " turned into the swing")
 	end
-	MoveTo(target, T, Ease(SWING_EASE), "swing", carry and (turn.speed or turn.sent) or nil)
+	if snap then
+		MoveTo(target, T, 0, "snap")
+	else
+		MoveTo(target, T, Ease(SWING_EASE), "swing", carry and (turn.speed or turn.sent) or nil)
+	end
 	-- (Looked at again once it's done: how far it really moved them.)
 	convo.check = { speaker = speaker, angle = angle, step = step, good = good, zooming = zooming }
 end
@@ -1473,7 +1499,7 @@ local function SetTargetName(name)
 end
 
 -- A line spoken: the conversation starts, or goes on.
-local function Heard(text, name)
+local function Heard(text, name, event)
 	local now = GetTime()
 	if not convo then
 		convo = { nextAimAt = 0, startedAt = now, gain = GAIN_START, base = 0 }
@@ -1506,6 +1532,9 @@ local function Heard(text, name)
 	convo.lastLineAt = now
 	convo.speaker = { name = name, text = text, at = now }
 	watcher:SetScript("OnUpdate", OnUpdate)
+	if Immersive() and ns.ShowSubtitle then
+		ns.ShowSubtitle(event or "CHAT_MSG_MONSTER_SAY", name, text)
+	end
 end
 
 -- Lines from an NPC you're talking to (its gossip or quest window open, or
@@ -1583,7 +1612,7 @@ watcher:SetScript("OnEvent", function(_, event, text, name, ...)
 	local why = NotTaken(text, event, name)
 	DebugLine(event, text, name, (select(10, ...)), why)
 	if not why then
-		Heard(text, name)
+		Heard(text, name, event)
 	end
 end)
 
@@ -1669,6 +1698,12 @@ end)
 -- minimap by it: ns.activeCam, Camera.lua).
 function ns.ChatCamActive()
 	return convo ~= nil
+end
+
+-- Whether Ultra immersive has the screen now: a conversation going, with it
+-- on (the letterbox twice as tall, subtitles in it, the UI hidden).
+function ns.ChatCamImmersive()
+	return convo ~= nil and Immersive() and not ns.IsSuspended()
 end
 
 -- Who's talking in the conversation now (for the camera mode log), or nil.

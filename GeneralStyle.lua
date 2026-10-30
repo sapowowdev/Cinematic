@@ -1,7 +1,7 @@
 -- The Style hub's General page: a switch for every Style page at once (off:
 -- each shows the game's look), the settings the pages share (bar texture,
 -- font, outline: StylePages.lua's ns.StyleLook), a preview of several pages'
--- parts at once, and which pages follow it or have a setting of their own.
+-- parts in turn, and which pages follow it or have a setting of their own.
 
 local _, ns = ...
 local L = ns.L
@@ -115,57 +115,115 @@ function ns.MakeGeneralPlatePreview(parent, width)
 	return holder
 end
 
--- The preview: some pages' own previews, half size, two to a row, each
--- under its name, all held to one size (what's past it clipped).
+-- The preview: one big screen showing the pages' own previews in turn, in
+-- this order, a new one every few seconds fading in over the last; arrows
+-- step back and forth (and start the wait again). Each is held to one size
+-- (what's past it clipped).
 local CELLS = {
+	{ "Unit frames", "MakeUnitStylePreview" },
+	{ "Raid frames", "MakeRaidStylePreview" },
+	{ "Nameplate", "MakeGeneralPlatePreview" },
 	{ "Personal resources", "MakePersonalPreview" },
 	{ "Tooltips", "MakeTooltipPreview" },
 	{ "Chat bubbles", "MakeBubblePreview" },
-	{ "Nameplate", "MakeGeneralPlatePreview" },
+	{ "Quest talk", "MakeQuestTalkPreview" },
+	{ "Roll Vision", "MakeRollPreview" },
+	{ "Quest item button", "MakeQuestItemPreview" },
+	{ "Combat Vision", "MakeCombatPreview", sized = true }, -- (sized: given the screen's height)
 }
-local CELL_SCALE, CELL_W, CELL_H = 0.5, 480, 240
+local CELL_H, ROTATE_SECONDS, FADE_SECONDS = 250, 6, 0.6
 
 local function MakePreview(parent, width)
 	local holder = CreateFrame("Frame", nil, parent)
+	holder:SetSize(width, 24 + CELL_H)
+	local name = holder:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	name:SetPoint("TOPLEFT", 0, -5)
+	name.searchSkip = true
+	local count = holder:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	count:SetPoint("LEFT", name, "RIGHT", 6, 0)
+	count.searchSkip = true
 	local cells = {}
-	local column = width / 2
-	for i, info in ipairs(CELLS) do
+	for _, info in ipairs(CELLS) do
 		local make = ns[info[2]]
 		if make then
-			local cell = make(holder, CELL_W)
-			cell:SetScale(CELL_SCALE)
-			cell:SetScript("OnShow", nil) -- (drawn by holder:Refresh, then held to its size)
-			local name = holder:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-			name:SetText(L[info[1]])
-			name.searchSkip = true
-			cells[#cells + 1] = { frame = cell, name = name, index = i }
+			local cell = make(holder, width, info.sized and CELL_H or nil)
+			cell:SetScript("OnShow", nil) -- (drawn by holder:Refresh)
+			cell:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -24)
+			if cell.SetClipsChildren then cell:SetClipsChildren(true) end
+			-- (Held to the screen's size after each drawing, its own too: Roll
+			-- Vision's sizes itself to its cards as they tick.)
+			local own = cell.Refresh
+			function cell:Refresh(...)
+				if own then own(self, ...) end
+				if math.abs(self:GetHeight() - CELL_H) > 0.5 then
+					self:SetHeight(CELL_H)
+					ns.RecutStyleScene(self)
+				end
+			end
+			cell:Hide()
+			cells[#cells + 1] = { frame = cell, name = L[info[1]] }
 		end
 	end
-	local ROW = 14 + CELL_H * CELL_SCALE + 8
-	local function Layout()
-		for i, cell in ipairs(cells) do
-			local left = (i - 1) % 2 == 0
-			local y = math.floor((i - 1) / 2) * ROW
-			local x = left and 0 or column + 4
-			cell.name:ClearAllPoints()
-			cell.name:SetPoint("TOPLEFT", holder, "TOPLEFT", x, -y)
-			cell.frame:ClearAllPoints()
-			cell.frame:SetPoint("TOPLEFT", holder, "TOPLEFT", x / CELL_SCALE, -(y + 14) / CELL_SCALE)
+	local current, waited, fading = 1, 0, nil -- (fading: the one going, under the one coming in)
+	local function ShowOnly(index)
+		for i, other in ipairs(cells) do
+			other.frame:SetShown(i == index or (fading and i == fading.index))
 		end
-		holder:SetSize(width, math.ceil(#cells / 2) * ROW - 8)
 	end
 	function holder:Refresh()
-		for _, cell in ipairs(cells) do
-			if cell.frame.Refresh then cell.frame:Refresh() end
-			-- (Its own size after drawing, and its scene cut to it.)
-			cell.frame:SetHeight(CELL_H)
-			if cell.frame.SetClipsChildren then cell.frame:SetClipsChildren(true) end
-			ns.RecutStyleScene(cell.frame)
-		end
-		Layout()
+		local cell = cells[current]
+		if not cell then return end
+		ShowOnly(current)
+		name:SetText(cell.name)
+		count:SetText(("%d / %d"):format(current, #cells))
+		cell.frame:Refresh()
 	end
-	holder:SetScript("OnShow", holder.Refresh)
-	Layout()
+	local function EndFade()
+		if not fading then return end
+		cells[fading.index].frame:Hide()
+		fading = nil
+		local cell = cells[current]
+		if cell then cell.frame:SetAlpha(1) end
+	end
+	local function Step(by)
+		if #cells < 2 then return end
+		EndFade()
+		local was = current
+		current = (current - 1 + by) % #cells + 1
+		waited = 0
+		-- (The new one over the old, from clear.)
+		local base = holder:GetFrameLevel()
+		cells[was].frame:SetFrameLevel(base + 1)
+		cells[current].frame:SetFrameLevel(base + 10)
+		cells[current].frame:SetAlpha(0)
+		fading = { index = was, time = 0 }
+		holder:Refresh()
+	end
+	-- (The arrows, top right above the screen.)
+	for _, side in ipairs({ { 24, "Prev", -1 }, { 0, "Next", 1 } }) do
+		local arrow = CreateFrame("Button", nil, holder)
+		arrow:SetSize(24, 24)
+		arrow:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -side[1], 0)
+		local art = "Interface\\Buttons\\UI-SpellbookIcon-" .. side[2] .. "Page-"
+		arrow:SetNormalTexture(art .. "Up")
+		arrow:SetPushedTexture(art .. "Down")
+		arrow:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+		arrow:SetScript("OnClick", function() Step(side[3]) end)
+	end
+	holder:SetScript("OnShow", function(self) EndFade(); waited = 0; self:Refresh() end)
+	holder:SetScript("OnUpdate", function(_, elapsed)
+		if fading then
+			fading.time = fading.time + elapsed
+			local cell = cells[current]
+			if fading.time >= FADE_SECONDS then
+				EndFade()
+			elseif cell then
+				cell.frame:SetAlpha(fading.time / FADE_SECONDS)
+			end
+		end
+		waited = waited + elapsed
+		if waited >= ROTATE_SECONDS then Step(1) end
+	end)
 	return holder
 end
 
@@ -206,12 +264,11 @@ function ns.CreateGeneralStylePanel(kit)
 	local stack = kit.Stack(switch, "check")
 	local rows = ns.StyleRows(kit, content, stack, Changed, "styleGeneral")
 
-	stack:Add(ns.StyleSceneButton(content, kit.Tooltip, kit.AddControl), "label")
 	preview = MakePreview(content, 480)
 	stack:Add(preview, "label")
 	kit.AddControl(preview)
 
-	rows.Presets({
+	rows.PresetMenu({
 		{ L["Like the game's"], L["Each page as its own defaults have it (the game's look)."], {} },
 		{ L["Clean"], L["Flat bars and Arial Narrow, thinly outlined."],
 			{ styleTexture = "flat", styleFont = "arial", styleOutline = 1 } },
@@ -219,7 +276,7 @@ function ns.CreateGeneralStylePanel(kit)
 			{ styleTexture = "soft", styleFont = "friz", styleOutline = 1 } },
 		{ L["Glass"], L["Glass bars, the game's fonts."], { styleTexture = "glass" } },
 	}, { "styleTexture", "styleFont", "styleOutline", "styleBorder", "styleBorderSize", "styleBorderR", "styleBorderG",
-		"styleBorderB" }, 480)
+		"styleBorderB" })
 
 	stack:Header(content, L["Shared look"])
 	rows.Texture(L["Bar texture:"], "styleTexture", L["Every page's bars that follow General. The game's: " ..

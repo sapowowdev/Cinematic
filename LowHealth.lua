@@ -13,10 +13,10 @@ local L = ns.L
 local DEFAULTS = ns.DEFAULTS
 DEFAULTS.lowHealth = false         -- Vitals Vision at all (its page's switch)
 DEFAULTS.lowHealthEdges = true     -- the screen's edges closing in (the health bars are below)
-DEFAULTS.lowHealthOnlyCine = false -- ...only while CineMode is on
+DEFAULTS.lowHealthAlways = true    -- ...everywhere: its Show in row's Always (the rest: ROW_KEY's ticks and rule)
 DEFAULTS.lowHealthTheme = "auto"   -- a theme's key (LowHealthThemes.lua), or by class and talents
 DEFAULTS.lowHealthStart = 0.75     -- health (0-1) they start creeping in below
-DEFAULTS.lowHealthFull = 0.15      -- ...and are all the way in at
+DEFAULTS.lowHealthFull = 0.25      -- ...and are all the way in at
 DEFAULTS.lowHealthReach = 0.3      -- share of the screen each edge's shadow covers at full
 DEFAULTS.lowHealthDark = 0.85      -- the shadow's darkness at full
 DEFAULTS.lowHealthRed = 0.6        -- 0 black (like the death screen) to 1 the theme's colour
@@ -43,13 +43,17 @@ DEFAULTS.lowHealthFollow = 0.1     -- seconds to close all the way in after a dr
 DEFAULTS.lowHealthLiftSpeed = 0.4  -- the most it lifts a second after healing (share of all the way);
                                    -- it eases up to that speed and slows as it settles
 DEFAULTS.lowHealthFlash = true     -- a flash at the edges on a big hit
-DEFAULTS.lowHealthFlashHit = 0.08  -- share of your health lost at once that counts
-DEFAULTS.lowHealthFlashAdded = 0.2 -- ...or lost in smaller hits adding up (since the last, in a fight)
+DEFAULTS.lowHealthFlashHit = 0.2   -- share of your health lost at once that counts
+DEFAULTS.lowHealthFlashAdded = 0.3 -- ...or lost in smaller hits adding up (since the last, in a fight)
 DEFAULTS.lowHealthCalm = 0.6       -- strength out of combat (eating up, say)
--- Health bars: faded out in CineMode, they fade in between Starts below
--- (hidden above) and All the way in at (fully up below), Frames.lua.
+-- Health bars: faded out in CineMode, they fade in between their own Starts
+-- (hidden above) and Full (fully up below), Frames.lua.
 DEFAULTS.lowHealthPortrait = false -- your player frame (portrait)
+DEFAULTS.lowHealthPortraitStart = 0.95
+DEFAULTS.lowHealthPortraitFull = 0.25
 DEFAULTS.lowHealthPrd = false      -- ...and the personal resource display
+DEFAULTS.lowHealthPrdStart = 0.95
+DEFAULTS.lowHealthPrdFull = 0.25
 -- The page's test: health falling from one share to another over some seconds.
 DEFAULTS.lowHealthTestFrom = 1
 DEFAULTS.lowHealthTestTo = 0.1
@@ -57,6 +61,7 @@ DEFAULTS.lowHealthTestTime = 8
 DEFAULTS.lowHealthTestHits = true  -- falls in hits (flashing) rather than smoothly
 
 local db
+local ROW_KEY = "vision:lowHealth"
 local EDGE_START = 0.05      -- share of the screen the shadow covers as it starts in
 -- (The art is the outer tenth or so of its texture, so a little over a
 -- screen already puts it past the edges: much more and it only shows at full.)
@@ -115,7 +120,7 @@ local liftSpeed = 0 -- (lifting now: a share of all the way a second)
 local lastHealth -- (share, for spotting big hits)
 local test -- the page's test running: { from, to, time, start, hits }
 local glimpse -- (the welcome window's quick look shown: true till the edges settle, after its test too)
-local secretCurve -- (health that's secret: its alpha from the game, by this curve)
+local secretCurves = {} -- (health that's secret: its alpha from the game, by these curves; by setting prefix)
 -- (Health secret, so Update can't see hits: the hit event's, since the last
 -- frame. Lost: a share of your health.)
 local woundLost, woundHit = 0, false
@@ -250,32 +255,41 @@ local function HealthShare()
 	return max > 0 and health / max or 1
 end
 
--- How far in the edges want to be (0-1) at a health share.
-local function LevelAt(share)
-	local start, full = db.lowHealthStart, math.min(db.lowHealthFull, db.lowHealthStart - 0.01)
+-- How far in the edges want to be (0-1) at a health share. prefix: whose
+-- Starts and Full ("lowHealth", the edges', when nil; or
+-- a health bar's, "lowHealthPortrait" or "lowHealthPrd").
+local function Thresholds(prefix)
+	prefix = prefix or "lowHealth"
+	local start = db[prefix .. "Start"]
+	return start, math.min(db[prefix .. "Full"], start - 0.01)
+end
+
+local function LevelAt(share, prefix)
+	local start, full = Thresholds(prefix)
 	return math.max(0, math.min(1, (start - share) / (start - full)))
 end
 
 -- Secret health (in combat on some clients): the game sets the overlay's
 -- alpha from your health through this curve, and the edges stay at full
 -- reach (no creep: only the fade). nil where there's no curve API.
-local function SecretCurve()
-	if secretCurve ~= nil then return secretCurve end
-	secretCurve = false
+local function SecretCurve(prefix)
+	prefix = prefix or "lowHealth"
+	if secretCurves[prefix] ~= nil then return secretCurves[prefix] end
+	secretCurves[prefix] = false
 	if not (C_CurveUtil and C_CurveUtil.CreateCurve and Enum.LuaCurveType and UnitHealthPercent) then
 		return false
 	end
 	local ok, curve = pcall(C_CurveUtil.CreateCurve)
 	if ok and curve then
 		curve:SetType(Enum.LuaCurveType.Linear)
-		local start, full = db.lowHealthStart, math.min(db.lowHealthFull, db.lowHealthStart - 0.01)
+		local start, full = Thresholds(prefix)
 		curve:AddPoint(0, 1)
 		curve:AddPoint(full, 1)
 		curve:AddPoint(start, 0)
 		curve:AddPoint(1, 0)
-		secretCurve = curve
+		secretCurves[prefix] = curve
 	end
-	return secretCurve
+	return secretCurves[prefix]
 end
 
 -- Auto: your class's theme for the talent tree with the most points (the
@@ -782,13 +796,24 @@ end
 
 -- What's wanted now: the share of health to go by (nil: secret), and whether
 -- the edges are wanted at all.
+-- Whether its Show in row has it on here and now (read four times a second:
+-- the rules aren't cheap).
+local rowShows, rowReadAt = true, -1
+local function RowShows(now)
+	if db.lowHealthAlways then
+		return true
+	end
+	if now - rowReadAt >= 0.25 then
+		rowReadAt = now
+		local ok, shows = pcall(ns.RowOnNow, ROW_KEY, false, true)
+		rowShows = ok and shows and true or false
+	end
+	return rowShows
+end
+
 local function Wanted(now)
 	if test then
 		local t = now - test.start
-		if t > test.time + (test.hold or TEST_HOLD) and test.loop then
-			-- (Looping, the Style page's: from the top again, till it's pressed again.)
-			test.start, t = now, 0
-		end
 		if t > test.time + (test.hold or TEST_HOLD) then
 			local quiet = test.quiet
 			test = nil
@@ -802,7 +827,7 @@ local function Wanted(now)
 			return test.from + (test.to - test.from) * progress, db.lowHealthEdges, true
 		end
 	end
-	if not db.lowHealth or not db.lowHealthEdges or (db.lowHealthOnlyCine and not ns.lastCinematic) then
+	if not db.lowHealth or not db.lowHealthEdges or not RowShows(now) then
 		return 1, false
 	end
 	if ns.Flag(UnitIsDeadOrGhost("player")) then
@@ -811,7 +836,7 @@ local function Wanted(now)
 	return HealthShare(), true
 end
 
-local belowStart = false -- health known to be under Starts below (not when secret)
+local belowStart = false -- health known to be under Starts (not when secret)
 
 local function Update(_, elapsed)
 	local now = GetTime()
@@ -898,7 +923,7 @@ local function Wake()
 	if driver then driver:Show() end
 end
 ns.RefreshLowHealth = function()
-	secretCurve = nil -- (its points follow the start and full settings)
+	wipe(secretCurves) -- (their points follow the start and full settings)
 	if screen then screen.shown = nil end -- (set up again: the look may have changed)
 	Wake()
 end
@@ -913,22 +938,6 @@ function ns.TestLowHealth()
 	glimpse = nil
 	lastHealth = test.from
 	Wake()
-end
-
--- The Style page's test on the screen: the page's test over and over, till
--- this is called again. Says whether it's on now.
-function ns.LoopLowHealthTest()
-	if test and test.loop then
-		test = nil
-		Wake()
-		return false
-	end
-	ns.TestLowHealth()
-	test.loop = true
-	return true
-end
-function ns.LowHealthTestLooping()
-	return test ~= nil and test.loop == true
 end
 
 -- A quick look (the welcome window's Cinema level): the page's test, shorter,
@@ -1243,26 +1252,28 @@ events:SetScript("OnEvent", function(_, event, _, action, _, amount)
 end)
 
 -- Is it showing now? (The minimap button's Vision Helper.) Only once your
--- health is under Starts below: secret health can't tell, so it stays dark.
+-- health is under Starts: secret health can't tell, so it stays dark.
 function ns.VitalsVisionActive()
 	return db ~= nil and db.lowHealth and db.lowHealthEdges and belowStart and level > 0
 end
 
 -- Your health bar faded out in CineMode (Frames.lua asks, each tick): which
--- is "portrait" or "prd". How far up (0-1) by your health: none above Starts
--- below, fading in to fully up at All the way in at. nil: not ticked (or
+-- is "portrait" or "prd". How far up (0-1) by your health: none above its
+-- Starts, fading in to fully up at its Full. nil: not ticked (or
 -- dead). "secret": the game won't say, so ns.SetVitalsSecretAlpha sets it.
 -- plate: Forever's personal resource bars (your own nameplate), which can't
 -- take a secret alpha: fully up then.
+local BAR_PREFIX = { portrait = "lowHealthPortrait", prd = "lowHealthPrd" }
 function ns.VitalsFrameAlpha(which, plate)
-	if not (db and db[which == "prd" and "lowHealthPrd" or "lowHealthPortrait"]) then return nil end
+	local prefix = BAR_PREFIX[which]
+	if not (db and db[prefix]) then return nil end
 	local share = testShare
 	if not share then
 		if not db.lowHealth or ns.Flag(UnitIsDeadOrGhost("player")) then return nil end
 		share = HealthShare()
 	end
-	if share then return LevelAt(share) end
-	if plate or not SecretCurve() then return 1 end
+	if share then return LevelAt(share, prefix) end
+	if plate or not SecretCurve(prefix) then return 1 end
 	return "secret"
 end
 
@@ -1594,8 +1605,9 @@ function ns.TextureReel(arg)
 	ns.Print("  /cine debug texreel pause, or off")
 end
 
-function ns.SetVitalsSecretAlpha(frame)
-	local curve = SecretCurve()
+-- (which: as ns.VitalsFrameAlpha's.)
+function ns.SetVitalsSecretAlpha(frame, which)
+	local curve = SecretCurve(BAR_PREFIX[which])
 	if curve then
 		pcall(function() frame:SetAlpha(UnitHealthPercent("player", true, curve)) end)
 	end
@@ -1622,41 +1634,11 @@ function ns.CreateVitalsStylePanel(kit)
 	local stack = kit.Stack(switch, "check")
 	local rows = ns.StyleRows(kit, content, stack, Changed, "lowHealthStyle")
 	local On = rows.On
-	local function Button(parent, text, width, tip, onClick)
-		local button = ns.PanelButton(parent)
-		button:SetSize(width, 22)
-		button:SetText(text)
-		if tip then kit.Tooltip(button, tip) end
-		button:SetScript("OnClick", onClick)
-		button.Refresh = function() end
-		button.pageSwitch = false -- (works with the page off)
-		kit.AddControl(button)
-		return button
-	end
 
 	-- The preview: the screen's shape, the scene behind, the edges drawn on
-	-- it as on the screen, at the health its buttons set (or the test's).
+	-- it as on the screen, at low health (or the test's).
 	local PREVIEW_W = 480
 	local sim = { health = 0.2, last = 0.2, adding = 0, lift = 0 }
-	local buttons = CreateFrame("Frame", nil, content)
-	buttons:SetSize(PREVIEW_W, 24)
-	stack:Add(buttons, "label")
-	local last
-	for _, info in ipairs({
-		{ L["Low health"], L["Your health at 20% in the preview."], function() sim.test, sim.health = nil, 0.2 end },
-		{ L["Big hit"], L["A hit taking 15% of your health in the preview."],
-			function() sim.test, sim.health = nil, math.max(0, sim.health - 0.15) end },
-		{ L["Heal"], L["Full health in the preview: the edges lift."], function() sim.test, sim.health = nil, 1 end },
-		{ L["Test"], L["The test in the preview: from full health to 10% in hits, then back."],
-			function() sim.test = GetTime() end },
-	}) do
-		local button = Button(buttons, info[1], 90, info[2], info[3])
-		if last then button:SetPoint("LEFT", last, "RIGHT", 6, 0) else button:SetPoint("LEFT") end
-		last = button
-	end
-	-- (Scene beside them: StylePages.lua)
-	ns.StyleSceneButton(content, kit.Tooltip, kit.AddControl):SetPoint("LEFT", last, "RIGHT", 6, 0)
-
 	preview = CreateFrame("Frame", nil, content)
 	preview:SetSize(PREVIEW_W, 270)
 	if preview.SetClipsChildren then preview:SetClipsChildren(true) end
@@ -1667,7 +1649,7 @@ function ns.CreateVitalsStylePanel(kit)
 	caption:SetPoint("TOPLEFT", 6, -5)
 	caption.searchSkip = true
 	local healthText = kit.Label(preview, "GameFontHighlightSmall", "")
-	healthText:SetPoint("TOPRIGHT", -6, -5)
+	healthText:SetPoint("TOPRIGHT", -82, -9) -- (left of the Test button)
 	healthText.searchSkip = true
 	preview.drawer = NewDrawer(stage)
 	function preview:Refresh()
@@ -1724,23 +1706,13 @@ function ns.CreateVitalsStylePanel(kit)
 	stack:Add(preview, "label")
 	kit.AddControl(preview)
 
-	local tests = CreateFrame("Frame", nil, content)
-	tests:SetSize(PREVIEW_W, 24)
-	stack:Add(tests, "label")
-	-- (On: the test over and over on the screen, till it's pressed again.)
-	local loop = Button(tests, "", 200, L["Your health falls as the Vitals Vision page's Test says, on the " ..
-		"screen, again and again till you press this again. Close the settings to see it all."], function()
-			ns.LoopLowHealthTest()
-			kit.Refresh()
+	-- Test: the preview's from full health to 10% in hits, and the Vitals
+	-- Vision page's on the screen.
+	ns.StylePreviewTest(preview, kit, L["Your health falls in hits in the preview, and on the screen as the " ..
+		"Vitals Vision page's Test says. Close the settings to see it all."], function()
+			sim.test = GetTime()
+			ns.TestLowHealth()
 		end)
-	loop:SetPoint("LEFT")
-	loop.Refresh = function(self)
-		local on = ns.LowHealthTestLooping()
-		self:SetText(L["Test on the screen"] .. ": " .. (on and L["On"] or L["Off"]))
-		ns.StyleToggle(self, on)
-	end
-	loop:Refresh()
-
 
 	-- A row picking from a list: its name, then a dropdown, or (no dropdowns
 	-- on this client) a button stepping through it.
@@ -2035,49 +2007,61 @@ function ns.CreateVitalsVisionPanel(kit)
 		end
 		return line
 	end
-	local function Button(parent, text, width, tip, onClick)
-		local button = ns.PanelButton(parent)
-		button:SetSize(width, 22)
-		button:SetText(text)
-		if tip then kit.Tooltip(button, tip) end
-		button:SetScript("OnClick", onClick)
-		return button
-	end
+
 	local function Edges(d) return d.lowHealthEdges end
-	local TEST_TIP = L["Your health falls, stays there a moment, then goes back to yours, in the theme picked. " ..
-		"It works with the page off too. Close the settings to see it all."]
+	-- Where and when the edges close in: a Show in row as Combat Vision's.
+	local header = stack:Header(content, L["Show in"])
+	local lastRow = ns.ShowTable(content, header, {
+		opts = { anyFight = true },
+		{ key = ROW_KEY, label = L["Vitals Vision"], alwaysKey = "lowHealthAlways",
+			alwaysOn = function() return ns.GetDB().lowHealthAlways end,
+			setAlways = function(value) ns.GetDB().lowHealthAlways = value Changed() end,
+			alwaysTip = L["Shows wherever you are. (The other columns then have nothing to add.)"],
+			apply = Changed },
+	}, L["Vitals Vision"])
+	stack:Continue(lastRow, "label")
 
-	-- A quick test (not a page control: it works with the page off). The look:
-	-- the Style hub's Vitals Vision page (the Style button by the title).
-	local quickRow = CreateFrame("Frame", nil, content)
-	quickRow:SetSize(300, 26)
-	stack:Add(quickRow, "label", 2)
-	Button(quickRow, L["Test"], 80, TEST_TIP, ns.TestLowHealth):SetPoint("LEFT")
-	stack:Continue(quickRow, "label")
-	Tick("lowHealthOnlyCine", L["Only in CineMode"], L["Ticked, only while the UI is faded."], Edges)
+	-- A tick with its two health boxes on its row, lined up under each other
+	-- (their keys: prefix, the tick's key if nil, then each box's suffix;
+	-- a box steps by its step, 5% if nil).
+	local function TickRow(key, label, tip, boxes, prefix)
+		local check = Tick(key, label, tip)
+		local line = kit.BoxLine(content)
+		line:SetPoint("LEFT", check, "LEFT", 240, 0)
+		local function Ticked(d) return d[key] end
+		for _, box in ipairs(boxes) do
+			local suffix, name, minV, maxV, boxTip, step = unpack(box)
+			kit.GreyUnless(line:Box(name, (prefix or key) .. suffix, minV, maxV, step or 5, "%d%%", 100, boxTip,
+				Changed), Ticked)
+		end
+	end
 
-	-- What shows your health: the screen's edges, and health bars kept faded
-	-- in CineMode, fading in as your health drops.
-	stack:Header(content, L["What shows"])
-	Tick("lowHealthEdges", L["Screen edges"],
-		L["The screen's edges close in as your health drops, with your theme's art (all the " ..
-		"sections below)."])
+	-- Health bars kept faded in CineMode, fading in as your health drops,
+	-- each by its own health.
+	stack:Header(content, L["Health bars"])
 	local BARS_TIP = "\n\n" .. L["In CineMode, a health bar faded out comes back as your health drops: hidden " ..
-		"above Starts below, fading in to fully up at All the way in at."]
-	Tick("lowHealthPortrait", L["Player frame"],
-		L["Your player frame (portrait and health bar) fades in as your health drops."] .. BARS_TIP)
+		"above its Starts, fading in to fully up at its Full."]
+	local BAR_BOXES = {
+		{ "Start", L["Starts"], 10, 100, L["Your health this bar starts fading in below."], 1 },
+		{ "Full", L["Full"], 0, 90, L["Your health this bar is fully up at (under Starts)."], 1 },
+	}
+	TickRow("lowHealthPortrait", L["Player frame"],
+		L["Your player frame (portrait and health bar) fades in as your health drops."] .. BARS_TIP, BAR_BOXES)
 	-- (Only on clients with a personal resource display.)
 	if _G.CinematicPersonalPower then
-		Tick("lowHealthPrd", L["Personal resource display"],
+		TickRow("lowHealthPrd", L["Personal resource display"],
 			L["Your personal resource display (the health bar under your character) fades in as your health drops."]
-			.. BARS_TIP)
+			.. BARS_TIP, BAR_BOXES)
 	end
 
-	stack:Header(content, L["When it shows"])
-	Boxes({ "lowHealthStart", L["Starts below"], 10, 100, 5, "%d%%", 100,
-			L["Your health the edges start creeping in below."] },
-		{ "lowHealthFull", L["All the way in at"], 0, 90, 5, "%d%%", 100,
-			L["Your health the edges are all the way in at (under Starts below)."] })
+	-- The screen's edges closing in.
+	stack:Header(content, L["Screen edges"])
+	TickRow("lowHealthEdges", L["Screen edges"],
+		L["The screen's edges close in as your health drops, with your theme's art (all the " ..
+		"sections below)."], {
+			{ "Start", L["Starts"], 10, 100, L["Your health the edges start creeping in below."] },
+			{ "Full", L["Full"], 0, 90, L["Your health the edges are all the way in at (under Starts)."] },
+		}, "lowHealth")
 	Boxes({ "lowHealthCalm", L["Strength out of combat"], 0, 100, 5, "%d%%", 100,
 		L["How strong the edges are out of a fight (eating and drinking back up, say), next to in one. Some " ..
 		"clients keep your health secret in fights; there the edges only fade in and out with it."], Edges })
@@ -2090,7 +2074,7 @@ function ns.CreateVitalsVisionPanel(kit)
 			L["The fastest the edges lift when you're healed, as a share of all the way each second (40%: a " ..
 			"full heal takes at least 2.5 seconds). They speed up to it and slow as they settle."], Edges })
 
-	stack:Header(content, L["Big hits"])
+	stack:Header(content, L["Damage Taken Alert"])
 	Boxes({ "lowHealthFlashHit", L["A big hit takes"], 2, 40, 1, "%d%%", 100,
 			L["The share of your health a hit has to take at once to count as big."], Edges },
 		{ "lowHealthFlashAdded", L["Or hits adding up to"], 5, 60, 1, "%d%%", 100,

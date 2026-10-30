@@ -35,8 +35,8 @@ function ns.CreateLetterboxStylePanel(kit)
 	local rows = ns.StyleRows(kit, content, stack, Changed, "letterboxStyle")
 
 	-- The preview: a little screen with a lake at dusk, the bars over it as
-	-- the real ones are drawn, the screen's own shape. Bars in / Bars out
-	-- brings them in and out as at a fight's end and start.
+	-- the real ones are drawn, the screen's own shape. Its Test takes them out
+	-- and back in.
 	local PREVIEW_W = 480
 	preview = CreateFrame("Frame", nil, content)
 	preview:SetSize(PREVIEW_W, 270)
@@ -55,6 +55,7 @@ function ns.CreateLetterboxStylePanel(kit)
 	caption:SetParent(over)
 
 	local progress, target = 1, 1
+	local comeBack -- (the test's: back in once out)
 	local function Draw()
 		-- (The screen's shape, which can change with the resolution.)
 		local width, height = UIParent:GetWidth(), UIParent:GetHeight()
@@ -72,28 +73,18 @@ function ns.CreateLetterboxStylePanel(kit)
 		if progress ~= target then
 			progress = ns.Approach(progress, target, elapsed, ns.LetterboxTime(ns.LetterboxLook(), target > progress))
 			Draw()
+		elseif comeBack and progress == 0 then
+			comeBack, target = nil, 1
 		end
 	end)
 	kit.AddControl(preview)
 
-	local inOut = ns.PanelButton(content)
-	inOut:SetSize(110, 22)
-	-- (above the preview)
-	stack:Add(inOut, "label")
 	stack:Add(preview, "label")
-	inOut:SetText(L["Bars"])
-	-- (gold while the bars are in)
-	local function InOutText() ns.StyleToggle(inOut, target == 1) end
-	InOutText()
-	-- (Scene beside it: StylePages.lua)
-	ns.StyleSceneButton(content, kit.Tooltip, kit.AddControl):SetPoint("LEFT", inOut, "RIGHT", 8, 0)
-	kit.Tooltip(inOut, L["Brings the bars in or out, as at a fight's end and start."])
-	inOut:SetScript("OnClick", function()
-		target = 1 - target
-		InOutText()
-	end)
-	inOut.Refresh = InOutText
-	kit.AddControl(inOut)
+	-- Test: the bars out, then back in once they're gone, as at a fight's start and end.
+	ns.StylePreviewTest(over, kit, L["Takes the bars out and brings them back in, as at a fight's start and end."],
+		function()
+			target, comeBack = 0, true
+		end)
 
 	-- Presets: a few looks to start from.
 	local PRESETS = {
@@ -106,7 +97,7 @@ function ns.CreateLetterboxStylePanel(kit)
 		{ L["Gilded"], L["Thin bars with a thin gold line along their edge."],
 			{ letterboxSize = 0.06, letterboxLine = "gold" } },
 	}
-	rows.Presets(PRESETS, PRESET_KEYS, PREVIEW_W)
+	rows.PresetMenu(PRESETS, PRESET_KEYS)
 
 	stack:Header(content, L["Size"])
 	rows.Choices(L["Set by:"], "letterboxSizeBy", {

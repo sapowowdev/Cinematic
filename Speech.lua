@@ -35,6 +35,11 @@ local function Font()
 	return _G.ChatBubbleFont or _G.GameFontHighlightLarge
 end
 
+-- How long a line stays up, by its length (Chat Cam's subtitles too).
+function ns.SpeechLife(text)
+	return math.min(MOST_TIME, BASE_TIME + #text * PER_LETTER)
+end
+
 -- The look the chat bubbles have now (the Style hub's Chat bubbles page,
 -- Bubbles.lua): in a bubble or not, outline thickness (1-3, nil none), size,
 -- and the look itself.
@@ -61,20 +66,36 @@ local function Bubble(parent)
 	return ns.MakeGameBubble(parent)
 end
 
--- The tail under the bubble pointing down, or on top turned to point up.
-local function TailAt(bubble, top)
+-- The tail under the bubble pointing down, or on top turned to point up; along
+-- the bubble by speechBehindTailPos (0 its left end, 0.5 the middle, 1 its
+-- right end), and mirrored (curling the other way) if speechBehindTailFlip.
+-- wide: the bubble's width.
+local TAIL_INSET = 14 -- from the bubble's side, with the tail at its left or right end
+local function TailAt(bubble, top, wide)
+	local db = Styled()
+	local along = math.max(0, math.min(1, tonumber(db.speechBehindTailPos) or 0.8))
 	local tail = bubble.tail
+	local half = (tail:GetWidth() or 0) / 2
+	local x = TAIL_INSET + half + along * math.max(0, wide - 2 * (TAIL_INSET + half))
 	tail:ClearAllPoints()
 	if top then
-		tail:SetPoint("BOTTOM", bubble, "TOP", 0, -bubble.tailInto)
+		tail:SetPoint("BOTTOM", bubble, "TOPLEFT", x, -bubble.tailInto)
 	else
-		tail:SetPoint("TOP", bubble, "BOTTOM", 0, bubble.tailInto)
+		tail:SetPoint("TOP", bubble, "BOTTOMLEFT", x, bubble.tailInto)
 	end
-	if tail.SetRotation then
-		tail:SetRotation(top and math.pi or 0)
-	elseif not tail:GetAtlas() then
-		tail:SetTexCoord(0, 1, top and 1 or 0, top and 0 or 1)
+	-- (Turned and mirrored by swapping its texture's four corners, as they were
+	-- before it was ever turned: an atlas's can be stored turned in its file.
+	-- Upside down = each corner with the one across; mirrored = left with right.)
+	if not tail.corners then
+		local c = { tail:GetTexCoord() } -- upper left, lower left, upper right, lower right: x, y each
+		if #c < 8 then return end
+		tail.corners = { { c[1], c[2] }, { c[3], c[4] }, { c[5], c[6] }, { c[7], c[8] } }
 	end
+	local c = tail.corners
+	local ul, ll, ur, lr = c[1], c[2], c[3], c[4]
+	if top then ul, ll, ur, lr = lr, ur, ll, ul end
+	if db.speechBehindTailFlip then ul, ll, ur, lr = ur, lr, ul, ll end
+	tail:SetTexCoord(ul[1], ul[2], ll[1], ll[2], ur[1], ur[2], lr[1], lr[2])
 end
 
 local OUTLINE_FLAGS = { "OUTLINE", "THICKOUTLINE", "THICKOUTLINE" }
@@ -149,7 +170,7 @@ local function SetLook(line, words)
 	line.point = point
 	for _, frame in ipairs({ line.bubble or false, line.skin or false }) do
 		if frame then
-			TailAt(frame, tailTop)
+			TailAt(frame, tailTop, text:GetWidth() + PAD_X * 2)
 			frame:ClearAllPoints()
 			frame:SetPoint("TOPLEFT", text, "TOPLEFT", -PAD_X, PAD_Y)
 			frame:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", PAD_X, -PAD_Y)
@@ -318,7 +339,7 @@ local function Holder()
 	return holder
 end
 
--- The Chat bubbles page's Move button: a box standing in for the lines, dragged to
+-- The Style hub's Chat bubbles page's Move button: a box standing in for the lines, dragged to
 -- where they should show (saved as it's let go). A left click sets it there
 -- and closes it, a line showing there to see; right-click puts it back.
 local mover
@@ -393,6 +414,13 @@ end
 
 -- event: CHAT_MSG_SAY, _YELL, _MONSTER_SAY or _MONSTER_YELL; guid: the
 -- speaker's, if the chat message gave it.
+-- The Style hub's Chat bubbles page's Test button: a line from you, as one
+-- from behind you would show.
+function ns.TestSpeechBehind()
+	ns.ShowSpeechBehind("CHAT_MSG_SAY", UnitName("player"), ns.L["Speech from behind you shows here."],
+		UnitGUID("player"))
+end
+
 function ns.ShowSpeechBehind(event, author, text, guid)
 	local now = GetTime()
 	local key = event .. text
@@ -403,8 +431,8 @@ function ns.ShowSpeechBehind(event, author, text, guid)
 	for seen, when in pairs(recent) do
 		if now - when >= SAME_LINE then recent[seen] = nil end
 	end
-	if TalkingHeadSays(text) then
-		return
+	if TalkingHeadSays(text) or (ns.ChatCamImmersive and ns.ChatCamImmersive()) then
+		return -- (or shown as a subtitle: Chat Cam's Ultra immersive)
 	end
 
 	local chatType = event:gsub("^CHAT_MSG_", "")
@@ -428,7 +456,7 @@ function ns.ShowSpeechBehind(event, author, text, guid)
 	Holder()
 	local line = NewLine()
 	local rise, _, most = Behind()
-	line.born, line.life, line.fading = now, math.min(MOST_TIME, BASE_TIME + #text * PER_LETTER), nil
+	line.born, line.life, line.fading = now, ns.SpeechLife(text), nil
 	line.most, line.said, line.bubbled = most, text, nil
 	-- (Rising: it starts below the screen's bottom edge and slides up into place.)
 	line.y = rise and -(spotBottom + RISE_FROM) or 0

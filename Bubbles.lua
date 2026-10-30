@@ -366,7 +366,47 @@ local function Place(inside, state, by)
 	state.by = by
 end
 
+-- Retail's inside hangs off its text (String), which the game places itself
+-- each frame: the text is moved down instead, the inside with it. (Moving the
+-- inside left the words up under the bar, the box below them.) The game's
+-- own place is told from ours by it not being where we last put it.
+local function LiftText(inside, text, state)
+	local on = ns.db and ns.db.handleBubbles
+	local point, relative, relativePoint, x, y = text:GetPoint(1)
+	if not (point and Readable(x) and Readable(y)) or text:GetNumPoints() ~= 1 then
+		return
+	end
+	local ours = state.textX == x and state.textY == y
+	if not ours then
+		state.baseY, state.by = y, 0 -- (the game's place this frame)
+	end
+	local by = 0
+	if on then
+		local top, scale = inside:GetTop(), inside:GetEffectiveScale()
+		if not (Readable(top) and Readable(scale)) or scale <= 0 then
+			return
+		end
+		local over = (top + state.by) - TopLine() / scale
+		by = over > 0 and over or 0
+	end
+	if math.abs(by - state.by) > 0.5 or (by == 0 and state.by ~= 0) then
+		text:ClearAllPoints()
+		text:SetPoint(point, relative, relativePoint, x, state.baseY - by)
+		state.by, state.textX, state.textY = by, x, state.baseY - by
+	end
+end
+
 local function Lift(inside)
+	local text = inside.String
+	if text and text.GetPoint and select(2, inside:GetPoint(1)) == text then
+		local state = lifted[inside]
+		if not state then
+			state = { by = 0 }
+			lifted[inside] = state
+		end
+		LiftText(inside, text, state)
+		return
+	end
 	local state = lifted[inside]
 	if not state then
 		state = { by = 0 }

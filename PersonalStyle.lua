@@ -429,12 +429,11 @@ function ns.CreatePersonalStylePanel(kit)
 	local stack = kit.Stack(switch, "check")
 	local rows = ns.StyleRows(kit, content, stack, Changed, "prdStyle")
 
-	stack:Add(ns.StyleSceneButton(content, kit.Tooltip, kit.AddControl), "label")
 	preview = ns.MakePersonalPreview(content, 480)
 	stack:Add(preview, "label")
 	kit.AddControl(preview)
 
-	rows.Presets({
+	rows.PresetMenu({
 		{ L["Like the game's"], L["The game's bars, as it draws them (the defaults)."], {} },
 		{ L["Flat"], L["Flat bars, health in your class color, with a thin black edge."],
 			{ prdTexture = "flat", prdBorder = "thin", prdBack = 0.6, prdHealthColor = "class", prdPowerHeight = 0.8,
@@ -445,7 +444,7 @@ function ns.CreatePersonalStylePanel(kit)
 		{ L["Cinematic"], L["Soft, thin bars with a fine edge, health in your class color."],
 			{ prdTexture = "smooth", prdBorder = "thin", prdBack = 0.4, prdHealthColor = "class",
 				prdHealthHeight = 0.7, prdPowerHeight = 0.6, prdManaHeight = 0.6 } },
-	}, PRESET_KEYS, 480)
+	}, PRESET_KEYS)
 
 	-- The bars' look: their fill, their border (the game's, a line of ours
 	-- or none: its thickness and color), the dark behind ours.

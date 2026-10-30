@@ -49,6 +49,7 @@ Bubbles.lua
 Speech.lua
 SpeakerWatch.lua
 ChatCam.lua
+ChatCamSubtitles.lua
 Campfire.lua
 HunterAmmo.lua
 DragEquip.lua
@@ -71,6 +72,7 @@ PlateParts.lua
 PlateGuild.lua
 Camera.lua
 QuestCam.lua
+ShoulderCam.lua
 CameraRows.lua
 QuestTalk.lua
 CameraTests.lua

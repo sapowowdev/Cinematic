@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-30", page = "Combat Vision", title = "Boss cards",
+		text = "A boss's name as a title card, as its fight starts or as you first target it or come near: on " ..
+		"the screen, in a letterbox bar or low on the left like a film, with its dungeon and which boss it is. " ..
+		"Its look has its own tab on Combat Vision's Style page." },
 	{ date = "2026-10-29", page = "Cameras", title = "Chat Cam",
 		text = "As NPCs talk, the camera zooms in and turns to whoever's speaking, then turns back and zooms " ..
 		"out once they're done. On in the Cinema profile; turn it on for NPCs you talk to or those chatting " ..

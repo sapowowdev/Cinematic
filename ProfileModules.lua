@@ -85,7 +85,7 @@ local BAR_ROWS = { cooldowns = true, cooldownsutility = true, cooldownsbuffs = t
 	["addon:bt4Bars"] = true, ["addon:euiBars"] = true, ["addon:euiCooldowns"] = true,
 	["addon:euiEssentials"] = true, ["addon:euiDataBars"] = true }
 local function IsBarRow(item)
-	return item.page == "bars" or item.page == "extrabars" or BAR_ROWS[item.key] == true
+	return item.page == "bars" or BAR_ROWS[item.key] == true
 end
 -- Every row of the columns, the bars' (bars true) or the rest, given value.
 local function EveryRow(bars, value)
@@ -213,8 +213,7 @@ ns.PROFILE_MODULES = {
 			set("enemyShow", All(MICRO_ROWS, false))
 		end },
 	{ key = "cdm", name = "Cooldown Manager in fights",
-		scope = { "Cooldown Manager", "Standard Frames/Combat", "Standard Frames/Action bars",
-			"Standard Frames/Extra action bars" },
+		scope = { "Cooldown Manager", "Standard Frames/Combat", "Standard Frames/Action bars" },
 		tip = "The Cooldown Manager in place of action bars 1 to 8 in fights and with an enemy targeted (the " ..
 		"pet, stance and totem bars still come up). After a fight it stays up until its cooldowns are ready, " ..
 		"within the Calm Timer. Turns the game's Cooldown Manager on if it's off.",
@@ -231,12 +230,12 @@ ns.PROFILE_MODULES = {
 		end },
 
 	{ key = "bars-always", name = "Action bars always up",
-		scope = { "Standard Frames/Action bars", "Standard Frames/Extra action bars" },
+		scope = { "Standard Frames/Action bars" },
 		tip = "Action bars 1 to 8, and the pet, stance, totem and extra action bars, shown all through CineMode.",
 		apply = function(set)
 			local rows = {}
 			for _, item in ipairs(ns.COMBAT_SHOW) do
-				if item.page == "bars" or item.page == "extrabars" then rows[item.key] = true end
+				if item.page == "bars" then rows[item.key] = true end
 			end
 			set("cineShow", rows)
 		end },
@@ -266,14 +265,16 @@ ns.PROFILE_MODULES = {
 		end },
 	{ key = "pure-cdm", name = "Pure: Cooldown Manager only",
 		scope = { "Cooldown Manager", "Standard Frames/Combat", "Standard Frames/Action bars",
-			"Standard Frames/Extra action bars", "Standard Frames/Interface", "Advanced Frames/Supported addons",
+			"Standard Frames/Interface", "Advanced Frames/Supported addons",
 			"Gamepad/top" },
 		tip = "No action bars, micro menu, bags or XP bar in fights, with an enemy targeted or in instances; " ..
-		"the Cooldown Manager in fights, and up after a fight until its cooldowns are ready, within the Calm Timer.",
+		"the Cooldown Manager in fights, and up whenever a cooldown is recharging, out of fights too.",
 		apply = function(set)
 			set("cooldownManagerOn", true)
 			set("cooldownWhileRecharging", true)
+			set("cooldownAfterCombat", false)
 			set("cooldownUtilityWhileRecharging", true)
+			set("cooldownUtilityAfterCombat", false)
 			local fights = All({ "mainbar", "art", "bottomleft", "bottomright", "pet", "stance", "totems", "micro",
 				"bags", "xp" }, false)
 			local combat = {}
@@ -286,7 +287,7 @@ ns.PROFILE_MODULES = {
 	{ key = "pure-plates", name = "Pure: nameplates", scope = { "Nameplates", "Nameplate Style" },
 		tip = "Enemies' nameplates (and their minions') in fights, not kept up otherwise; in PvP and " ..
 		"battlegrounds, none; in instances, friendly players' and NPCs' hidden; no group members' or friendly " ..
-		"targets'; an arrow over your target's plate all through CineMode, and its name in the arrow's color " ..
+		"targets'; an arrow over your target's plate all through CineMode " ..
 		"(the marks themselves: ultra-plates).",
 		apply = function(set)
 			for _, key in ipairs({ "plateAlwaysGroupMembers", "plateAlwaysGroupMinions", "plateGroupFriends",
@@ -304,14 +305,12 @@ ns.PROFILE_MODULES = {
 			for _, prefix in ipairs({ "plateCinematic", "plateCombat", "plateInPvP", "plateInBGs", "plateInInstances" }) do
 				set(prefix .. "PartTargetArrow", true)
 			end
-			-- And your target's name in its color, often all there is of it to see.
-			set("targetColorName", true)
 			set("plateInstanceFriends", "hide")
 			set("plateInstanceFriendlyNPCs", "hide")
 		end },
 	{ key = "ultra-plates", name = "Ultra responsive nameplates", scope = { "Nameplate Style" },
 		tip = "In fights the plates say what matters at a glance: the further a unit, the fainter its plate " ..
-		"(past 40, 28 and within 11 yards), normal NPCs faint while an elite's within 40 yards, an enemy after " ..
+		"(past 40, 28 and within 11 yards), normal NPCs faint and narrower while an elite's within 40 yards, an enemy after " ..
 		"someone else tinted orange, and marks on your target and the unit under the mouse. No aggro mark, and " ..
 		"plates change quicker.",
 		apply = function(set)
@@ -337,6 +336,7 @@ ns.PROFILE_MODULES = {
 			set("allPast40MarkColor", "custom")
 			-- Normal NPCs faint while an elite's within 40 yards, in fights.
 			set("npcMarkAlpha", 0.5)
+			set("npcMarkPlateWidth", 0.7) -- and their bars narrower
 			set("npcWhen", false)
 			set("npcWhenCombat", true)
 			set("frameRules", { npcWhen = "combat and elite40" })
@@ -441,11 +441,13 @@ ns.PROFILE_MODULES = {
 			set("musicCamWalk", true)
 			set("musicCamRun", true)
 		end },
-	{ key = "pure-cameras", name = "Pure: cameras", scope = { "Cameras/Triggers", "Camera Settings/Chat Cam" },
+	{ key = "pure-cameras", name = "Pure: cameras", scope = { "Cameras/Triggers", "Camera Settings/Chat Cam",
+		"General/top" },
 		tip = "Standing still starts the AFK camera and every event's camera can start music; the cameras " ..
 		"don't wait for things to calm down after a fight, auto-run carries on in cities and instances (as RP " ..
 		"walk always does), and the death camera runs in instances too. NPCs talking bring the chat camera, " ..
-		"those chatting nearby straight away, and it doesn't look round for speakers off screen.",
+		"those chatting nearby straight away, and it doesn't look round for speakers off screen. The zoom " ..
+		"resets on login and /reload.",
 		apply = function(set)
 			-- (Chat Cam: off to start with, on here.)
 			if ns.DEFAULTS.chatCamSearch ~= nil then
@@ -462,14 +464,14 @@ ns.PROFILE_MODULES = {
 			set("runOffInCities", false)
 			set("runOffInInstances", false)
 			set("deathOffInInstances", false)
+			set("loginZoom", true) -- (Quality of life > General)
 		end },
 
 	-- The look
 	{ key = "no-letterbox", name = "No letterbox", scope = { "Effects/Show in" },
 		tip = "No letterbox: the other effects show over the normal UI.",
 		apply = function(set) set("letterbox", false) end },
-	{ key = "effects-in-cameras", name = "Effects only in cameras", scope = { "Effects/Show in",
-		"Effects/Depth of field" },
+	{ key = "effects-in-cameras", name = "Effects only in cameras", scope = { "Effects/Show in" },
 		tip = "The letterbox, tint, vignette and weather only while a camera mode runs; no soft edges.",
 		apply = function(set)
 			for _, effect in ipairs(ns.EFFECT_GRID) do
@@ -480,6 +482,9 @@ ns.PROFILE_MODULES = {
 	{ key = "letterbox-in-fights", name = "Letterbox stays in fights", scope = { "Effects/Show in" },
 		tip = "Fights don't bring the letterbox down.",
 		apply = function(set) set("letterboxOffInCombat", false) end },
+	{ key = "rain-view-distance", name = "Reduce View Distance in Rain", scope = { "Effects/Show in" },
+		tip = "In CineMode, rain pulls the view distance in from yours, all the way in a downpour.",
+		apply = function(set) set("rainViewScale", 1) end },
 	{ key = "no-time-message", name = "No time of day message", scope = { "Tint/Time of day" },
 		tip = "No time of day title under the zone name.",
 		apply = function(set) set("timeOfDayMessage", false) end },
@@ -508,10 +513,12 @@ ns.PROFILE_MODULES = {
 			set("chatPeekChannelList", { General = true, Trade = true, LocalDefense = false, Services = false,
 				TradeLocal = false })
 		end },
-	{ key = "pure-chat", name = "Pure: chat", scope = { "Chat/Other", "Chat bubbles/Behind you" },
-		tip = "Chat doesn't peek for General or LocalDefense, and speech from behind you shows low on the screen.",
+	{ key = "pure-chat", name = "Pure: chat", scope = { "Chat/Other", "Chat bubbles/top", "Chat bubbles/Behind you" },
+		tip = "Chat doesn't peek for General or LocalDefense, and speech from behind you shows low on the screen " ..
+		"(the Chat bubbles page on, which it needs).",
 		apply = function(set)
 			set("chatPeekChannelList", { General = false, LocalDefense = false })
+			set("handleBubbles", true)
 			set("chatSpeechBehind", true)
 		end },
 }

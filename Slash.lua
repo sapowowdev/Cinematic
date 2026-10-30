@@ -95,7 +95,10 @@ local function PrintDebugHelp()
 	print("  /cine debug tent [seen|cozy [left|right]|clear] - whether a Camp Tent's been moused over near here (seen fakes one on that side of the screen, cozy also starts the cozy camera)")
 	print("  /cine debug fishing - the last red error message, and whether it paused right-click casting")
 	print("  /cine debug weapon - what the game says about your weapon, and the cozy weapon trigger")
-	print("  /cine debug quest - the quest cam: on or off, its zoom and the over-the-shoulder offset")
+	print("  /cine debug quest - the quest cam: on or off, its turn and its zoom")
+	if ns.GetShoulderCamDebug then -- (dev copy: ShoulderCam.lua)
+		print("  /cine debug shoulder - the Shoulder Cam: on or off, the game's shoulder offset and Keep Character Centered")
+	end
 	print("  /cine debug questlog - save every frame of the next quest cams (for tracking down snaps)")
 	print("  /cine debug zoom - the slow zoom's state")
 	print("  /cine debug turn - turn handling while walking (8 seconds)")
@@ -108,6 +111,7 @@ local function PrintDebugHelp()
 	print("  /cine debug range - what the game says about how far your target and units with name-only plates are")
 	print("  /cine debug platedebuffs - whether auras are secret now, and your debuffs on your target as the game reads them")
 	print("  /cine debug platefight [spell] [seconds] - enemy plates' range and rank, plain or secret; shrinks non-elites and fades far ones for 5 seconds or the seconds given, e.g. 30 (go in and out of a fight)")
+	print("  /cine debug boss [watch] - how bosses differ from trash before a pull: the Journal's bosses here, your target and elite plates (rank, level, NPC ID, Journal match); watch prints encounter, combat, target and plate events in order, and why a boss card showed or not (again to stop)")
 	print("  /cine debug names - log players' plate names as they show and hide (again to stop, /reload to save)")
 	print("  /cine debug marks - the Target Indicator's marks on the plates now, and why each sits where it does")
 	print("  /cine debug readycheck - the raid frames' ready check icons and whether they fade (Ready check row)")
@@ -140,6 +144,7 @@ local function PrintDebugHelp()
 	print("  /cine debug cvars <words> - log every CVar whose name has any of the words in it, with its value and default")
 	print("  /cine debug settings <words> - list every option in the game's Settings panel named like the words, with the variable behind it and its value")
 	print("  /cine debug weather - the weather the game reports and the weather tint")
+	print("  /cine debug viewdist - pulls the view distance in (again: puts it back), says if the game took it")
 	print("  /cine debug corpse - how far your body is (as a ghost) and the corpse run's vignette")
 	print("  /cine debug flight - the flight route, its known time and when the camera settles")
 	print("  /cine debug orbit - the camera rotation's state")
@@ -794,9 +799,12 @@ local function HandleSlash(msg)
 			or "off"))
 	elseif cmd == "debug" and arg == "quest" then
 		local q = ns.GetQuestCamDebug()
-		ns.Print(("quest cam: %s, event camera %s; turned %.1f°, lowered %.1f°%s; your distance %s, zoomed to %s; shoulder %s (ours %s), Keep Character Centered %s"):format(
-			q.active and "on" or (q.talking and "waiting") or "off", tostring(ns.db.eventQuestCamera), q.turned, q.lowered, q.handedOver and " (handed over to you)" or "", tostring(q.zoom), tostring(q.zoomedTo),
-			tostring(q.shoulder), tostring(q.shoulderOn), tostring(q.centered)))
+		ns.Print(("quest cam: %s, event camera %s; turned %.1f°, lowered %.1f°%s; your distance %s, zoomed to %s"):format(
+			q.active and "on" or (q.talking and "waiting") or "off", tostring(ns.db.eventQuestCamera), q.turned, q.lowered, q.handedOver and " (handed over to you)" or "", tostring(q.zoom), tostring(q.zoomedTo)))
+	elseif cmd == "debug" and arg == "shoulder" and ns.GetShoulderCamDebug then
+		local d = ns.GetShoulderCamDebug()
+		ns.Print(("Shoulder Cam: setting %s, applied %s; test_cameraOverShoulder %s, Keep Character Centered %s; in combat %s"):format(
+			tostring(d.setting), tostring(d.applied), tostring(d.shoulder), tostring(d.centered), tostring(InCombatLockdown())))
 	elseif cmd == "debug" and arg == "help" then
 		PrintDebugHelp()
 	elseif cmd == "debug" and arg == "zoom" then
@@ -875,6 +883,8 @@ local function HandleSlash(msg)
 		end
 		ns.Print(("weather tint: %s, aiming for %s, showing %s"):format(
 			ns.GetDB().weatherTint and "on" or "off", rgb(w.target), rgb(w.shown)))
+	elseif cmd == "debug" and arg == "viewdist" then
+		ns.ViewDistTest()
 	elseif cmd == "debug" and arg == "unitframes" then
 		ns.LogUnitFrames()
 	elseif cmd == "debug" and arg == "plates" then
@@ -887,6 +897,8 @@ local function HandleSlash(msg)
 		ns.PrintPlateDebuffsDebug()
 	elseif cmd == "debug" and arg:find("^platefight") then
 		ns.PlateFightDebug(arg:match("^platefight%s+(.+)"))
+	elseif cmd == "debug" and arg:find("^boss") then
+		ns.BossDebug(arg:match("^boss%s+(%S+)"))
 	elseif cmd == "debug" and arg == "readycheck" then
 		ns.ReportRaidReadyCheck()
 	elseif cmd == "debug" and arg:find("^marker") then

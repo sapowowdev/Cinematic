@@ -402,19 +402,39 @@ end
 
 -- The preview: the five frames as small mock-ups, each dressed by its own
 -- look (a frame clicked opens its tab: onPick(id)).
+-- (Faces: the first icon this client has; the last of each list is in every client.)
+local THRALL = { "Interface\\Icons\\Achievement_Leader_Thrall", "Interface\\Icons\\INV_Misc_Head_Orc_01" }
 local SAMPLES = {
-	PLAYER = { name = "Vedeth", x = 14, y = -30, w = 150, class = "WARRIOR", health = 0.86, power = { 1, 0, 0 }, amount = 0.4 },
-	TARGET = { name = "Turnip Punching Bag", x = 270, y = -30, w = 150, reaction = 2, health = 0.62,
-		power = { 1, 1, 0 }, amount = 1, flip = true },
-	FOCUS = { name = "Maketh", x = 300, y = -112, w = 110, class = "MAGE", health = 0.95, power = { 0, 0.55, 1 },
-		amount = 0.7, flip = true },
+	PLAYER = { name = "Thrall", x = 14, y = -30, w = 150, class = "SHAMAN", health = 0.86, power = { 0, 0.55, 1 },
+		amount = 0.4, faces = THRALL },
+	TARGET = { name = "The Lich King", x = 270, y = -30, w = 150, reaction = 2, health = 0.62,
+		power = { 0, 0.55, 1 }, amount = 1, flip = true,
+		faces = { "Interface\\Icons\\Achievement_Boss_LichKing", "Interface\\Icons\\INV_Misc_Head_Undead_01" } },
+	FOCUS = { name = "Jaina", x = 300, y = -112, w = 110, class = "MAGE", health = 0.95, power = { 0, 0.55, 1 },
+		amount = 0.7, flip = true,
+		faces = { "Interface\\Icons\\Achievement_Character_Jaina_Proudmoore", "Interface\\Icons\\Achievement_Leader_Jaina_Proudmoore",
+			"Interface\\Icons\\INV_Misc_Head_Human_02" } },
 	PET = { name = "Wolf", x = 30, y = -118, w = 80, reaction = 5, health = 1, power = { 1, 1, 0 }, amount = 0.5,
-		small = true },
-	PARTY = { name = "Lumen", x = 150, y = -146, w = 90, class = "PALADIN", health = 0.7, power = { 0, 0.55, 1 },
-		amount = 0.8, small = true },
-	TOT = { name = "Vedeth", x = 400, y = -64, w = 70, class = "WARRIOR", health = 0.86, power = { 1, 0, 0 },
-		amount = 0.4, small = true },
+		small = true, faces = { "Interface\\Icons\\Ability_Hunter_Pet_Wolf" } },
+	PARTY = { name = "Varian", x = 150, y = -146, w = 90, class = "WARRIOR", health = 0.7, power = { 1, 0, 0 },
+		amount = 0.8, small = true,
+		faces = { "Interface\\Icons\\Achievement_Leader_King_Varian_Wrynn", "Interface\\Icons\\INV_Misc_Head_Human_01" } },
+	TOT = { name = "Thrall", x = 400, y = -64, w = 70, class = "SHAMAN", health = 0.86, power = { 0, 0.55, 1 },
+		amount = 0.4, small = true, faces = THRALL },
 }
+local function SampleFace(sample)
+	if not sample.face then
+		local faces = sample.faces
+		sample.face = faces[#faces]
+		local FileID = _G.GetFileIDFromPath
+		if FileID then
+			for _, path in ipairs(faces) do
+				if FileID(path) then sample.face = path break end
+			end
+		end
+	end
+	return sample.face
+end
 local GAME_FILL = "Interface\\TargetingFrame\\UI-StatusBar"
 
 local function SampleColor(sample)
@@ -445,6 +465,23 @@ function ns.MakeUnitStylePreview(parent, width, onPick)
 		unit.portrait = unit:CreateTexture(nil, "ARTWORK")
 		unit.portrait:SetSize(size, size)
 		unit.portrait:SetPoint(sample.flip and "RIGHT" or "LEFT", unit, sample.flip and "RIGHT" or "LEFT", 0, 0)
+		-- (The face: an icon cut round like the game's portraits.)
+		unit.face = unit:CreateTexture(nil, "ARTWORK")
+		unit.face:SetAllPoints(unit.portrait)
+		unit.face:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		if unit.CreateMaskTexture then
+			local mask = unit:CreateMaskTexture()
+			mask:SetAllPoints(unit.portrait)
+			mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIONAL",
+				"CLAMPTOBLACKADDITIONAL")
+			unit.face:AddMaskTexture(mask)
+		end
+		-- (Its ring: a disc a little bigger behind it, as the class icons have.)
+		unit.ring = unit:CreateTexture(nil, "BORDER")
+		unit.ring:SetPoint("TOPLEFT", unit.portrait, -2, 2)
+		unit.ring:SetPoint("BOTTOMRIGHT", unit.portrait, 2, -2)
+		unit.ring:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
+		unit.ring:SetVertexColor(0.8, 0.65, 0.25)
 		unit.name = unit:CreateFontString(nil, "OVERLAY", sample.small and "GameFontNormalSmall" or "GameFontNormal")
 		unit.health = CreateFrame("StatusBar", nil, unit)
 		unit.health:SetSize(sample.w, sample.small and 6 or 10)
@@ -521,12 +558,14 @@ function ns.MakeUnitStylePreview(parent, width, onPick)
 			-- (The portrait: a class icon for a player with Class icon picked.)
 			local coords = view.ufPortrait == "class" and sample.class and _G.CLASS_ICON_TCOORDS
 				and _G.CLASS_ICON_TCOORDS[sample.class]
+			unit.portrait:SetShown(coords and true or false)
+			unit.face:SetShown(not coords)
+			unit.ring:SetShown(not coords)
 			if coords then
 				unit.portrait:SetTexture(CLASS_ICONS)
 				unit.portrait:SetTexCoord(unpack(coords))
 			else
-				unit.portrait:SetTexture("Interface\\CharacterFrame\\TempPortrait")
-				unit.portrait:SetTexCoord(0, 1, 0, 1)
+				unit.face:SetTexture(SampleFace(sample))
 			end
 		end
 	end
@@ -599,14 +638,13 @@ function ns.CreateUnitStylePanel(kit)
 		Changed()
 	end
 
-	stack:Add(ns.StyleSceneButton(content, kit.Tooltip, kit.AddControl), "label")
 	preview = ns.MakeUnitStylePreview(content, 480, Pick)
 	stack:Add(preview, "label")
 	kit.AddControl(preview)
 	local refreshPreview = preview.Refresh
 	preview.Refresh = function(self) refreshPreview(self, editing) end
 
-	rows.Presets({
+	rows.PresetMenu({
 		{ L["Like the game's"], L["The game's frames, as it draws them (the defaults)."], {} },
 		{ L["Flat"], L["Flat bars with a thin black edge, health and names in class and reaction colors, " ..
 			"Arial Narrow."], { ufTexture = "flat", ufBorder = "thin", ufBack = 0.65, ufHealthColor = "class",
@@ -617,7 +655,7 @@ function ns.CreateUnitStylePanel(kit)
 		{ L["Cinematic"], L["Soft bars with a fine edge, class icons for players."],
 			{ ufTexture = "soft", ufBorder = "thin", ufBack = 0.45, ufHealthColor = "class", ufPortrait = "class",
 				ufOutline = 1 } },
-	}, PRESET_KEYS, 480)
+	}, PRESET_KEYS)
 
 	-- The tabs: Default, then each frame; on a frame's, Use default settings.
 	local tabsRow = CreateFrame("Frame", nil, content)

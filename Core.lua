@@ -31,6 +31,9 @@ end
 SetBindingNames()
 ns.OnLanguage(SetBindingNames)
 
+-- The debuffs Heroism, Bloodlust and the like leave: Sated, Exhaustion,
+-- Temporal Displacement, Insanity, Fatigued (hunter pets), Exhaustion (Evoker).
+ns.LUST_DEBUFFS = { 57724, 57723, 80354, 95809, 264689, 390435 }
 local DEFAULTS = {
 	enabled = true,
 	fadeUI = true,            -- CineMode fades the UI (off: just the visual effects, over the normal UI)
@@ -93,6 +96,7 @@ local DEFAULTS = {
 	innGlowAmount = 0.02,  -- light the inn glow adds at its brightest (0.1 = 10%)
 	weatherTint = true,    -- rain, snow and sandstorms grey or colour the scene (clients with C_Weather)
 	weatherTintStrength = 1,
+	rainViewScale = 0,     -- in rain, the view distance comes in from yours (Graphics.lua); Cinema: 1
 	tintClock = "game",    -- time-of-day tint follows "game" (realm) time or "local" (computer) time
 	timeTintStrength = 1,  -- how strongly the time-of-day colour applies (both time presets)
 	tintPreviewHour = -2,  -- options-page preview of the time-of-day tint at this hour (-1 = now, -2 = not picked)
@@ -164,8 +168,9 @@ local DEFAULTS = {
 	buffPeekLongMinutes = 30,      -- ...this many minutes (their full time, not what's left)
 	buffPeekTime = 3,           -- seconds they stay up for a buff
 	debuffPeekTime = 3,         -- ...and for a debuff
-	buffPeekIgnore = "2479, Plainsrunning, 8326, 20584", -- buffs or debuffs that never bring them up
-	                                                    -- (spell IDs or names; 8326/20584: Ghost)
+	-- Buffs or debuffs that never bring them up (spell IDs or names; 8326/20584:
+	-- Ghost; the rest ns.LUST_DEBUFFS).
+	buffPeekIgnore = "2479, Plainsrunning, 8326, 20584, 57724, 57723, 80354, 95809, 264689, 390435",
 	buffHoverPadX = 40,         -- how far beside the buff icons hovering reveals them (UI units)
 	buffHoverPadY = 40,         -- ...and above and below
 	mouseover = true,      -- hovering a faded element reveals it
@@ -234,11 +239,13 @@ local DEFAULTS = {
 	speechBehindClassColor = true, -- ...players' names in their class colour
 	speechBehindChatShown = false, -- ...also while the chat window is up
 	speechBehindWidth = 480, -- ...wrapping past this wide, into even rows
-	speechBehindAlign = "auto", -- ...lined up "LEFT", "CENTER", "RIGHT", or by where it's moved to
+	speechBehindAlign = "CENTER", -- ...lined up "LEFT", "CENTER", "RIGHT", or by where it's moved to
 	speechBehindRise = true, -- ...rising up from below the screen (Chat bubbles page)
 	speechBehindScale = 0.9, -- ...smaller than a bubble overhead
 	speechBehindAlpha = 0.8, -- ...and fainter
 	speechBehindTailTop = true, -- ...its bubble's tail on top, pointing up
+	speechBehindTailFlip = true, -- ...mirrored, curling the other way
+	speechBehindTailPos = 0.8, -- ...along the bubble: 0 its left end, 0.5 the middle, 1 its right end
 	-- (Where those lines show: speechBehindLeft/Bottom, the Move box's corner;
 	-- none: beside the chat window.)
 	chatPeekBackground = true, -- a message shows the chat window's background with it
@@ -340,11 +347,10 @@ local DEFAULTS = {
 	questCamTurnTime = 4,     -- ...seconds that turn takes (once the zoom's done)
 	questCamDrift = 4,        -- ...degrees it then drifts slowly to and fro, side to side (0: holds still)
 	questCamLower = 0,        -- ...degrees the camera comes down, toward eye level (0: keep your angle)
-	questCamOverShoulder = false, -- ...and move over your shoulder (a Blizzard experimental camera setting: off by default)
-	questCamShoulder = 1,     -- ...yards the camera moves right, over your shoulder
-	questCamUncenter = false, -- ...turn the game's Keep Character Centered off meanwhile (it blocks the shoulder)
 	questCamAllGossip = false, -- ...for every NPC you talk to, not just quest givers
 	questCamNotMounted = true, -- ...but not while you're mounted
+	-- Shoulder Cam (ShoulderCam.lua): the camera sits over your right shoulder (a Blizzard experimental setting)
+	shoulderCam = false,
 	indoorLimits = true,      -- indoors, keep the camera modes from pushing into walls:
 	indoorZoomOut = 1,        -- ...zoom out at most this many yards past your own distance
 	indoorSwing = 10,         -- ...swing at most this far either side of behind
@@ -646,11 +652,11 @@ DEFAULTS.targetArrowShow = true
 DEFAULTS.targetArrowStyle = "arrow"
 -- Each row's Also color: the unit's name, health bar and border in its
 -- mark's color, while the row shows (<kind>ColorName, ColorBar, ColorBorder).
--- Your target's and your focus's names and bars to start with.
+-- Your target's bar and your focus's name and bar to start with.
 for _, kind in ipairs({ "target", "aggro", "focus", "mouseover", "others", "aggroother", "aggrononank",
 	"aggrohealer", "npc", "elite", "npcs", "players", "minions", "all" }) do
 	local colored = kind == "target" or kind == "focus"
-	DEFAULTS[kind .. "ColorName"] = colored
+	DEFAULTS[kind .. "ColorName"] = kind == "focus"
 	DEFAULTS[kind .. "ColorBar"] = colored
 	DEFAULTS[kind .. "ColorBorder"] = false
 end
@@ -1602,6 +1608,7 @@ DEFAULTS.taxiZoomPauseVary = 3
 -- modes. One switch for all (on the Visual Effects page), then a strength
 -- per mode (0 is off there).
 DEFAULTS.depthOfField = true
+DEFAULTS.dofScale = 1 -- (Camera haze: times each mode's own strength)
 DEFAULTS.dofIdle = 0.025
 DEFAULTS.dofCozy = 0.025
 DEFAULTS.dofVista = 0.025
@@ -4403,14 +4410,6 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.targetArrowV1 = true
 		end
-		-- And colors your target's name with it (often all there is of it to
-		-- see): likewise, once.
-		if not ns.db.targetColorV1 then
-			if (ns.db.liveProfile or ns.db.profile) == "Pure Cinema" then
-				ns.db.targetColorName = true
-			end
-			ns.db.targetColorV1 = true
-		end
 		-- Your target's Also color went to its aggro row too, while it was
 		-- after you: that row has its own now, as your target's to start. Once.
 		if not ns.db.aggroColorV1 then
@@ -4441,6 +4440,28 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 				end
 			end
 			ns.db.buffPeekDefaultsV1 = true
+		end
+		-- The debuffs Heroism, Bloodlust and the like leave (Sated, Exhaustion,
+		-- Temporal Displacement, Insanity, Fatigued, the Evoker's Exhaustion)
+		-- added to the ignore list, where it's set, unless there already (by
+		-- ID or name). Once.
+		if not ns.db.buffPeekLustV1 then
+			local list = ns.db.buffPeekIgnore
+			if type(list) == "string" then
+				local have = {}
+				for entry in list:gmatch("[^,]+") do
+					have[entry:match("^%s*(.-)%s*$"):lower()] = true
+				end
+				for _, id in ipairs(ns.LUST_DEBUFFS) do
+					local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id)
+						or GetSpellInfo and GetSpellInfo(id)
+					if not have[tostring(id)] and not (name and have[name:lower()]) then
+						list = (list:match("^%s*$") and "" or list .. ", ") .. id
+					end
+				end
+				ns.db.buffPeekIgnore = list
+			end
+			ns.db.buffPeekLustV1 = true
 		end
 		-- Heal Vision (Vision page) as its defaults in every profile: its grid
 		-- unticked, the options as the defaults say. Once. (Saved profiles drop
@@ -5532,6 +5553,10 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			if saved.combatIconShowIn == nil and saved.combatIcon ~= nil then
 				saved.combatIconShowIn, saved.combatIconShowOut = saved.combatIcon, saved.combatIcon
 			end
+			-- How long it stays: one for each (the old 0.5 default: the new).
+			if saved.combatHoldIn == nil and tonumber(saved.combatHold) and saved.combatHold ~= 0.5 then
+				saved.combatHoldIn, saved.combatHoldOut = saved.combatHold, saved.combatHold
+			end
 		end
 		PulseSplit(ns.db)
 		for _, saved in pairs(ns.db.profiles or {}) do
@@ -5616,6 +5641,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			"tintWhen", -- (now tintMoving, tintStill, tintFlight)
 			"combatPulse", "combatPulseStrength", -- (now combatPulseIn, combatPulseOut)
 			"combatIcon", -- (now combatIconShowIn, combatIconShowOut)
+			"combatHold", -- (now combatHoldIn, combatHoldOut)
 			"combatWordsIn", "combatWordsOut", -- (empty words now)
 			"combatWiden", -- (now combatBarScale)
 			"plateTargetEnemyFadeIn", "plateTargetEnemyFadeOut", "plateTargetFriendlyFadeIn",
@@ -5805,6 +5831,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			ns.LoginZoom()
 		end
 	elseif event == "PLAYER_LOGOUT" then
+		ns.LogoutZoom()
 		ns.SaveProfile()
 		ns.MusicTrace(("LOGOUT volume %s music %s"):format(GetCVar("Sound_MusicVolume"), GetCVar("Sound_EnableMusic")))
 		-- Put the player's music/name/nameplate settings back before they're saved.

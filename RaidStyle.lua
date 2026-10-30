@@ -336,14 +336,13 @@ function ns.CreateRaidStylePanel(kit)
 		Changed()
 	end
 
-	stack:Add(ns.StyleSceneButton(content, kit.Tooltip, kit.AddControl), "label")
 	preview = ns.MakeRaidStylePreview(content, 480, Pick)
 	stack:Add(preview, "label")
 	kit.AddControl(preview)
 	local refreshPreview = preview.Refresh
 	preview.Refresh = function(self) refreshPreview(self, editing) end
 
-	rows.Presets({
+	rows.PresetMenu({
 		{ L["Like the game's"], L["The game's raid frames, as it draws them (the defaults)."], {} },
 		{ L["Flat"], L["Flat bars with a thin black edge, class-colored names, Arial Narrow."],
 			{ rfTexture = "flat", rfBorder = "thin", rfNameColor = "class", rfFont = "arial", rfOutline = 1 } },
@@ -351,7 +350,7 @@ function ns.CreateRaidStylePanel(kit)
 			{ rfTexture = "flat", rfBorder = "none", rfGround = 0.4, rfNameSize = 0.9, rfOutline = 1 } },
 		{ L["Cinematic"], L["Soft bars with a fine edge, names outlined."],
 			{ rfTexture = "soft", rfBorder = "thin", rfOutline = 1 } },
-	}, PRESET_KEYS, 480)
+	}, PRESET_KEYS)
 
 	-- The tabs: Default, then each group; on a group's, Use default settings.
 	local tabsRow = CreateFrame("Frame", nil, content)

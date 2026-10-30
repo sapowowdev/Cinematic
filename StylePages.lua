@@ -37,6 +37,7 @@ local shared = {
 	rollFont = { kind = "font", own = "game" },
 	questItemFont = { kind = "font", own = "game" },
 	combatFont = { kind = "font", own = "game" },
+	combatBossFont = { kind = "font", own = "game" },
 	plateCastFont = { kind = "font", own = "game" },
 	bubblesOutline = { kind = "outline", own = 0 },
 	tooltipOutline = { kind = "outline", own = 0 },
@@ -44,6 +45,7 @@ local shared = {
 	rollOutline = { kind = "outline", own = 0 },
 	questItemOutline = { kind = "outline", own = 1 },
 	combatOutline = { kind = "outline", own = 1 },
+	combatBossOutline = { kind = "outline", own = 1 },
 	plateCastOutline = { kind = "outline", own = "game", map = function(value) return CAST_OUTLINES[value] end },
 }
 -- Borders: each page's border (its own default "own"), and its Custom's
@@ -86,8 +88,9 @@ end
 
 -- A page's look, read as its code reads the settings: its own while it's
 -- on, else its defaults; a shared setting on General as General says.
+-- (off: its defaults whatever the switch says, for a part the page leaves be.)
 local looks = {}
-function ns.StyleLook(switchKey)
+function ns.StyleLook(switchKey, off)
 	local pair = looks[switchKey]
 	if not pair then
 		local function Proxy(on)
@@ -113,7 +116,7 @@ function ns.StyleLook(switchKey)
 		pair = { on = Proxy(true), off = Proxy(false) }
 		looks[switchKey] = pair
 	end
-	return ns.StyleOn(switchKey) and pair.on or pair.off
+	return (not off and ns.StyleOn(switchKey)) and pair.on or pair.off
 end
 
 -- A page's border as look says (key: its border setting): "game", "none",
@@ -186,9 +189,6 @@ end
 -- The previews' backdrop: a lake at dusk, 2:1 (Media/make_letterbox_scene.py).
 local SCENE = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Textures\\LetterboxScene"
 
--- The previews show it, or a plain dark ground (the tickbox above each: one
--- setting for them all).
-ns.DEFAULTS.styleScene = true
 local scenes = setmetatable({}, { __mode = "k" }) -- (frame -> { focus, shade })
 
 -- The scene behind frame (made once, then cut again: call it as frame's size
@@ -209,12 +209,6 @@ function ns.StyleScene(frame, focus, shade)
 		scene = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
 		scene:SetAllPoints()
 		frame.styleScene = scene
-	end
-	if ns.db and ns.db.styleScene == false then
-		scene:SetColorTexture(0.11, 0.14, 0.18, 0.95)
-		scene:SetVertexColor(1, 1, 1, 1)
-		scene:SetTexCoord(0, 1, 0, 1)
-		return scene
 	end
 	scene:SetTexture(SCENE)
 	shade = shade or 1
@@ -251,29 +245,20 @@ function ns.StyleLink(content, title, page, tip, Tooltip)
 	return button
 end
 
--- The Scene button above a preview: the scene behind every preview, or a
--- plain ground (one setting for them all). Tooltip, AddControl: the page's
--- (Options.lua's, as the kit has them). Works with the page's switch off too.
--- Place it as the page places controls.
-function ns.StyleSceneButton(content, Tooltip, AddControl)
-	local button = ns.PanelButton(content)
-	button:SetSize(110, 22)
-	button:SetText(ns.L["Scene"])
-	Tooltip(button, ns.L["A lake at dusk behind the previews on the Style pages, to see the look over the " ..
-		"world. Off: a plain dark ground."])
-	local function Apply()
-		ns.StyleToggle(button, ns.GetDB().styleScene ~= false)
-		for frame, how in pairs(scenes) do ns.StyleScene(frame, how[1], how[2]) end
-	end
-	button:SetScript("OnClick", function()
-		local db = ns.GetDB()
-		db.styleScene = db.styleScene == false
-		Apply()
-	end)
-	-- (and as its page shows: the pages are made before the settings may be loaded)
-	button.Refresh = Apply
+-- A page's one Test button, in its preview's top right corner (over what the
+-- preview draws). tip: its tooltip. kit: the page's (Tooltip, AddControl).
+-- Works with the page's switch off too; give it a Refresh to grey it.
+function ns.StylePreviewTest(preview, kit, tip, onClick)
+	local button = ns.PanelButton(preview)
+	button:SetSize(70, 20)
+	button:SetText(ns.L["Test"])
+	button:SetPoint("TOPRIGHT", -6, -6)
+	button:SetFrameLevel(preview:GetFrameLevel() + 20)
+	kit.Tooltip(button, tip)
+	button:SetScript("OnClick", onClick)
+	button.Refresh = function() end
 	button.pageSwitch = false
-	AddControl(button)
+	kit.AddControl(button)
 	return button
 end
 
@@ -554,7 +539,11 @@ function ns.StyleRows(kit, content, stack, changed, switchKey, fieldOf)
 	local rows = {}
 	local function On(db) return ns.StyleOn(switchKey, db) end
 	rows.On = On
-	local K = fieldOf or function(key) return key end
+	-- (A field already, like the Preset: row's, goes through as it is.)
+	local K = function(key)
+		if fieldOf and type(key) ~= "table" then return fieldOf(key) end
+		return key
+	end
 	local function Get(key) return ns.StyleKeyGet(K(key)) end
 	local function Put(key, value) ns.StyleKeyPut(K(key), value) end
 	rows.Get, rows.Put = Get, Put
@@ -644,7 +633,7 @@ function ns.StyleRows(kit, content, stack, changed, switchKey, fieldOf)
 		name:SetJustifyV("MIDDLE")
 		font:SetPoint("LEFT", name, "RIGHT", 10, 0)
 		kit.GreyUnless(font, test or On)
-		kit.Tooltip(font, tip)
+		if tip then kit.Tooltip(font, tip) end
 		return font
 	end
 
@@ -820,10 +809,8 @@ function ns.StyleRows(kit, content, stack, changed, switchKey, fieldOf)
 		return check
 	end
 
-	-- A row of preset buttons, width wide: { name, tip, settings } each; a
-	-- pick turns the page on and sets keys as its settings say, the rest as
-	-- their defaults. The one the settings match now is lit, its name gold
-	-- (the rest white).
+	-- Presets: { name, tip, settings } each; a pick turns the page on and sets
+	-- keys as its settings say, the rest as their defaults.
 	local function Matches(preset, keys)
 		local db = ns.GetDB()
 		if not (db and db[switchKey]) then return false end
@@ -834,22 +821,19 @@ function ns.StyleRows(kit, content, stack, changed, switchKey, fieldOf)
 		end
 		return true
 	end
-	function rows.Presets(presets, keys, width)
-		local row = CreateFrame("Frame", nil, content)
-		row:SetSize(width, 24)
-		stack:Add(row, "label")
-		local last
-		for _, preset in ipairs(presets) do
-			local button = ns.PanelButton(row)
-			button:SetText(preset[1])
-			button:SetSize(math.max(110, button:GetFontString():GetStringWidth() + 24), 22)
-			if last then
-				button:SetPoint("LEFT", last, "RIGHT", 8, 0)
-			else
-				button:SetPoint("LEFT", row, "LEFT", 0, 0)
-			end
-			kit.Tooltip(button, preset[2])
-			button:SetScript("OnClick", function()
+	-- The presets as a dropdown (Preset:), each with its tip; Custom shows
+	-- (not to pick) while the settings match none.
+	function rows.PresetMenu(presets, keys)
+		local field = {
+			get = function()
+				for i, preset in ipairs(presets) do
+					if Matches(preset, keys) then return i end
+				end
+				return "custom"
+			end,
+			set = function(i)
+				local preset = presets[i]
+				if not preset then return end
 				local db = ns.GetDB()
 				db[switchKey] = true
 				for _, key in ipairs(keys) do
@@ -857,19 +841,15 @@ function ns.StyleRows(kit, content, stack, changed, switchKey, fieldOf)
 					if value == nil then value = ns.DEFAULTS[key] end
 					db[key] = value
 				end
-				changed()
-				kit.Refresh()
-			end)
-			button.Refresh = function(self)
-				local on = Matches(preset, keys)
-				self:SetNormalFontObject(on and "GameFontNormal" or "GameFontHighlight")
-				if on then self:LockHighlight() else self:UnlockHighlight() end
-			end
-			kit.GreyUnless(button, On)
-			kit.AddControl(button)
-			last = button
-		end
-		return row
+			end,
+		}
+		return DropdownRow(ns.L["Preset:"], field, function()
+			local list = {}
+			for i, preset in ipairs(presets) do list[i] = { value = i, text = preset[1], tip = preset[2] } end
+			list[#list + 1] = { value = "custom", text = ns.L["Custom"],
+				tip = ns.L["Your own settings, not a preset's."], enabled = function() return false end }
+			return list
+		end, ns.L["A whole look in one pick. Changing a setting after it shows Custom."])
 	end
 
 	return rows

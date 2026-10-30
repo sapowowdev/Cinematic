@@ -4423,18 +4423,27 @@ end
 
 -- Reset zoom (Quality of life): after a login or /reload (Core.lua calls it),
 -- glide to a set camera distance rather than wherever it was left.
+function ns.ZoomToSet(when)
+	if not (ns.Setting("loginZoom") and GetCameraZoom) then
+		return
+	end
+	local diff = ns.db.loginZoomDistance - GetCameraZoom()
+	ns.Log("zoom", ("%s zoom: %.1f -> %.1f yards"):format(when, GetCameraZoom(), ns.db.loginZoomDistance))
+	if diff > 0.1 then
+		CameraZoomOut(diff)
+	elseif diff < -0.1 then
+		CameraZoomIn(-diff)
+	end
+end
+
 function ns.LoginZoom()
-	-- (a moment in: the camera's distance can still be settling as the world shows)
-	C_Timer.After(1, function()
-		if not (ns.Setting("loginZoom") and GetCameraZoom) then
-			return
-		end
-		local diff = ns.db.loginZoomDistance - GetCameraZoom()
-		ns.Log("zoom", ("login zoom: %.1f -> %.1f yards"):format(GetCameraZoom(), ns.db.loginZoomDistance))
-		if diff > 0.1 then
-			CameraZoomOut(diff)
-		elseif diff < -0.1 then
-			CameraZoomIn(-diff)
-		end
-	end)
+	-- (a moment in: the camera's distance can still be settling as the world shows;
+	-- after a /reload the zoom usually ran under the loading screen and this does nothing)
+	C_Timer.After(1, function() ns.ZoomToSet("login") end)
+end
+
+-- On the way out (PLAYER_LOGOUT, also sent by a /reload): start the zoom now, so it
+-- glides while the reload's loading screen is up rather than once you're back.
+function ns.LogoutZoom()
+	ns.ZoomToSet("logout")
 end

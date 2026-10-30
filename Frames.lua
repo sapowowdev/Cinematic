@@ -1657,10 +1657,10 @@ ns.COMBAT_SHOW = {
 		page = "raid", groups = { "raiddebuffs" }, part = true },
 	{ key = "raidmanager", label = L["Raid Frame Manager"], default = false, addon = "Blizzard_CompactRaidFrames",
 		page = "raid", frames = { "CompactRaidFrameManager" } },
-	-- The battlegrounds' flag carriers: its Battlegrounds section (page = "bg").
+	-- The battlegrounds' flag carriers, in the Interface section.
 	-- Always shown to start with (CINE_SHOW_DEFAULT), as before it had a row.
 	{ key = "flags", label = L["Flag carriers"], default = false, addon = "Blizzard_Deprecated_ArenaUI",
-		page = "bg", frames = { "ArenaEnemyFramesContainer" } },
+		page = "interface", frames = { "ArenaEnemyFramesContainer" } },
 	-- morePage: the options page with more settings for it, which can keep it up besides.
 	{ key = "minimap", label = L["Minimap"], default = true, groups = { "minimap" }, morePage = "Minimap" },
 	-- The bar behind the zone's name (not the name): follows the minimap's
@@ -1800,7 +1800,7 @@ local ROW_SECTIONS = {
 	cooldownsutility = "combat", cooldownsbuffs = "combat", cooldownsbars = "combat", encounter = "combat",
 	mainbar = "bars", art = "bars", bottomleft = "bars", bottomright = "bars",
 	pet = "bars", stance = "bars", totems = "bars", extra = "bars",
-	right1 = "extrabars", right2 = "extrabars", bar6 = "extrabars", bar7 = "extrabars", bar8 = "extrabars",
+	right1 = "bars", right2 = "bars", bar6 = "bars", bar7 = "bars", bar8 = "bars",
 	minimap = "minimap", minimapheader = "minimap", minimaptracking = "minimap", minimapcalendar = "minimap",
 	minimapzone = "minimap", minimapclock = "minimap", minimapdial = "minimap",
 	quests = "interface", waypoint = "interface", belowminimap = "interface", topcenter = "interface", micro = "interface", bags = "interface", xp = "interface",
@@ -4576,6 +4576,52 @@ local function ItemSpell(item)
 	end
 end
 
+-- An icon's Cooldown Manager info (spellID, overrideSpellID, charges...), if it says.
+function ns.IconCooldownInfo(icon)
+	if type(icon.GetCooldownInfo) == "function" then
+		local ok, info = pcall(icon.GetCooldownInfo, icon)
+		if ok and type(info) == "table" then return info end
+	end
+	local cooldownID = icon.cooldownID
+	if type(cooldownID) == "number" and not Secret(cooldownID)
+		and C_CooldownViewer and C_CooldownViewer.GetCooldownViewerCooldownInfo then
+		local ok, info = pcall(C_CooldownViewer.GetCooldownViewerCooldownInfo, cooldownID)
+		if ok and type(info) == "table" then return info end
+	end
+end
+
+-- The spell a spell turned into came from (Tempest: Lightning Bolt), else
+-- itself, as the Cooldown Manager's icons say (their spellID under what they
+-- show now). Not the game's FindBaseSpellByID: that says Lava Burst's is
+-- Primal Strike. The page's settings are kept under it, so a spell keeps its
+-- mode while it's turned into another.
+do
+	local baseOf = {} -- spell shown -> the icon's own spell
+	ns.cooldownChargeSpells = {} -- spell ID -> true: the Cooldown Manager says it has charges
+	-- (Each icon's info read once per spell it shows: a new table each time.)
+	local noted = setmetatable({}, { __mode = "k" }) -- icon -> the spell it was read for
+	function ns.ForgetCooldownNotes()
+		wipe(noted)
+		wipe(ns.cooldownChargeSpells)
+	end
+	function ns.NoteCooldownIcon(icon, id)
+		if noted[icon] == id then return end
+		noted[icon] = id
+		ns.NoteCooldownBase(icon, id)
+		ns.NoteCooldownCharges(icon, id)
+	end
+	function ns.NoteCooldownBase(icon, id)
+		local info = ns.IconCooldownInfo(icon)
+		local base = info and info.spellID
+		if type(base) == "number" and not Secret(base) and base > 0 and base ~= id then
+			baseOf[id] = base
+		end
+	end
+	function ns.BaseSpell(id)
+		return baseOf[id] or id
+	end
+end
+
 -- A spell's cooldown: start and duration in seconds, or nil if the game won't say.
 local function SpellCooldown(id)
 	local ok, start, duration
@@ -4718,12 +4764,19 @@ do
 
 	local IsOverlayed = (C_SpellActivationOverlay and C_SpellActivationOverlay.IsSpellOverlayed)
 		or _G.IsSpellOverlayed
-	function ns.SpellGlowing(id, icon)
+	-- (Its glow may come under what it's turned into or its base: Tempest's Lightning Bolt.)
+	local function Glows(id)
 		if glowing[id] then return true end
 		if IsOverlayed then
 			local ok, on = pcall(IsOverlayed, id)
 			if ok and not Secret(on) and on then return true end
 		end
+		return false
+	end
+	function ns.SpellGlowing(id, icon)
+		if Glows(id) then return true end
+		local base = ns.BaseSpell(id)
+		if base ~= id and Glows(base) then return true end
 		local alert = icon and icon.SpellActivationAlert
 		if type(alert) == "table" and alert.IsShown then
 			local ok, shown = pcall(alert.IsShown, alert)
@@ -4779,9 +4832,14 @@ end
 
 -- A spell's mode ("always", "ready", "recharge", "proc"), whether it's its
 -- own (else its group's), and for "ready" its Resources, Show Early on, and
--- seconds (nil: the default share).
+-- seconds (nil: the default share). Set under what it's turned into (from
+-- before settings went by the base) or its base.
 function ns.CooldownSpellMode(id, group)
 	local db = ns.db
+	if not (db.cooldownReadyOnly[id] or db.cooldownRechargeOnly[id] or db.cooldownProcOnly[id]
+		or db.cooldownAlwaysShow[id]) then
+		id = ns.BaseSpell(id)
+	end
 	if db.cooldownReadyOnly[id] then
 		return "ready", true, db.cooldownNeedsPower[id], db.cooldownEarlyOn[id], db.cooldownReadyEarly[id]
 	elseif db.cooldownRechargeOnly[id] then
@@ -4810,7 +4868,7 @@ end
 -- by spell ID), else its group's. Each goes by whether you're in a fight
 -- only: the game keeps your buffs secret in fights.
 function ns.CooldownBuffMode(id, group)
-	local own = ns.db.cooldownBuffMode[id]
+	local own = ns.db.cooldownBuffMode[id] or ns.db.cooldownBuffMode[ns.BaseSpell(id)]
 	if own then return own, true end
 	return (ns.CooldownGroupSettings(group or "buffs")), false
 end
@@ -4887,7 +4945,7 @@ end
 -- best as. "power" (When Ready with Resources) when it costs a resource you
 -- build up, like Maelstrom; "proc" when it costs nothing or only one that's
 -- always there (mana, rage, energy, focus: an instant Lightning Bolt). nil
--- for a spell with a cooldown or charges (more than one), or when the game won't say.
+-- for a spell with a cooldown or charges (even one that recharges), or when the game won't say.
 -- It's also what those spells are by default (ns.CooldownSpellMode), until
 -- you set their group's mode.
 do
@@ -4899,17 +4957,23 @@ do
 
 	-- (Its pick, and whether the game said for sure: a secret answer isn't kept.)
 	local function Pick(id)
+		-- (The Cooldown Manager says it has charges: Lava Burst at full charges
+		-- shows no recharge.)
+		if ns.cooldownChargeSpells[id] then return nil, true end
 		local ok, base = pcall(GetSpellBaseCooldown or error, id)
 		if not ok or Secret(base) then return nil, false end
 		if type(base) ~= "number" or base > 0 then return nil, true end
 		if C_Spell and C_Spell.GetSpellCharges then
 			local okCharges, charges = pcall(C_Spell.GetSpellCharges, id)
 			if not okCharges or Secret(charges) then return nil, false end
-			-- (One charge and no base cooldown is no cooldown: Elemental Blast says 1/1.)
+			-- (A spell with charges has its cooldown there, not in its base
+			-- cooldown: Lava Burst. One charge and no recharge is no cooldown:
+			-- Elemental Blast says 1/1.)
 			if type(charges) == "table" then
-				local most = charges.maxCharges
-				if Secret(most) then return nil, false end
+				local most, recharge = charges.maxCharges, charges.cooldownDuration
+				if Secret(most, recharge) then return nil, false end
 				if type(most) ~= "number" or most > 1 then return nil, true end
+				if type(recharge) == "number" and recharge > 0 then return nil, true end
 			end
 		end
 		local GetCosts = (C_Spell and C_Spell.GetSpellPowerCost) or _G.GetSpellPowerCost
@@ -4934,13 +4998,51 @@ do
 		"PLAYER_SPECIALIZATION_CHANGED" }) do
 		pcall(watcher.RegisterEvent, watcher, event)
 	end
-	watcher:SetScript("OnEvent", function() wipe(picks) end)
+	watcher:SetScript("OnEvent", function()
+		wipe(picks)
+		ns.ForgetCooldownNotes()
+	end)
 
 	function ns.SmartCooldownMode(id)
 		if picks[id] ~= nil then return picks[id] or nil end
 		local pick, sure = Pick(id)
 		if sure then picks[id] = pick or false end
 		return pick
+	end
+
+	-- Notes an icon's spell has charges, if the Cooldown Manager says (its
+	-- cooldown info's charges); its pick is made again.
+	function ns.NoteCooldownCharges(icon, id)
+		if ns.cooldownChargeSpells[id] then return end
+		local info = ns.IconCooldownInfo(icon)
+		local charges = info and info.charges
+		if Secret(charges) or charges ~= true then return end
+		ns.cooldownChargeSpells[id] = true
+		ns.cooldownChargeSpells[ns.BaseSpell(id)] = true
+		for _, field in ipairs({ "spellID", "overrideSpellID" }) do
+			local other = info[field]
+			if type(other) == "number" and not Secret(other) then ns.cooldownChargeSpells[other] = true end
+		end
+		wipe(picks)
+	end
+
+	-- Smart Set's reasons for a spell, for /cine debug cooldowns.
+	function ns.ReportSmartPick(id)
+		local function Show(value)
+			if Secret(value) then return "secret" end
+			return tostring(value)
+		end
+		local ok, base = pcall(GetSpellBaseCooldown or error, id)
+		local charges = "none"
+		if C_Spell and C_Spell.GetSpellCharges then
+			local okCharges, info = pcall(C_Spell.GetSpellCharges, id)
+			if okCharges and type(info) == "table" then
+				charges = ("%s/%s recharge %s"):format(Show(info.currentCharges), Show(info.maxCharges),
+					Show(info.cooldownDuration))
+			end
+		end
+		print(("    smart set: %s (base cooldown %s, charges %s, manager says charges %s)"):format(
+			tostring(Pick(id)), ok and Show(base) or "?", charges, tostring(ns.cooldownChargeSpells[id] or false)))
 	end
 end
 
@@ -4970,6 +5072,7 @@ local function EachCooldownIcon(visit, all)
 					end
 					id = id or iconSpell[part]
 					if id then
+						ns.NoteCooldownIcon(part, id)
 						visit(part, id, name)
 					end
 				end
@@ -4995,6 +5098,7 @@ do
 	function ns.CooldownManagerSpells()
 		local found, listed = {}, {}
 		EachCooldownIcon(function(icon, id, bar)
+			id = ns.BaseSpell(id) -- (its settings go under it: ns.CooldownSpellMode)
 			local group = ns.COOLDOWN_BAR_GROUPS[bar] or ns.COOLDOWN_BUFF_GROUPS[bar]
 			listed[group] = listed[group] or {}
 			if not listed[group][id] then
@@ -5854,6 +5958,10 @@ function ns.ReportCooldowns()
 					or "unreadable"))
 				local mode, own, power, earlyOn, seconds
 				if id then
+					ns.NoteCooldownIcon(part, id)
+					local base = ns.BaseSpell(id)
+					if base ~= id then print(("    turned into from %d (its settings go under it)"):format(base)) end
+					ns.ReportSmartPick(base)
 					mode, own, power, earlyOn, seconds = ns.CooldownSpellMode(id, ns.COOLDOWN_BAR_GROUPS[entry.name])
 				end
 				local from = own and "" or " (its group's)"
@@ -6854,6 +6962,9 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- would normally keep it up (the release button is a popup: it stays).
 	-- Hovering still shows it.
 	local deathFade = cinematic and ns.IsDeathCinematic and ns.IsDeathCinematic()
+	-- Chat Cam's Ultra immersive: through a conversation the whole UI goes,
+	-- CineMode or not, hovering and all (typing still shows the input box).
+	local immersive = ns.ChatCamImmersive and ns.ChatCamImmersive() or false
 
 	-- Hide in camera modes (Minimap page): the camera running now fades the
 	-- minimap and its header, whatever would keep them up. Hovering still shows them.
@@ -6913,14 +7024,17 @@ function ns.UpdateFrames(cinematic, elapsed)
 		if deathFade and not hovered[row] and not typingShown then
 			target = 0
 		end
+		if immersive and not typingShown then
+			target = 0
+		end
 		-- (Vitals Vision's health bars: up as far as your health says, LowHealth.lua.)
 		entry.vitalsSecret = nil
-		if target == 0 and cinematic and not deathFade and PORTRAIT_FRAMES[entry.name]
+		if target == 0 and cinematic and not deathFade and not immersive and PORTRAIT_FRAMES[entry.name]
 			and entry.name ~= "CinematicPersonalPower" and entry.name ~= "CinematicPersonalMana" then
-			local vitals = ns.VitalsFrameAlpha(PORTRAIT_FRAMES[entry.name] == "prdWhenNotFull" and "prd" or "portrait",
-				entry.frame == personalPower.healthStandIn)
+			local which = PORTRAIT_FRAMES[entry.name] == "prdWhenNotFull" and "prd" or "portrait"
+			local vitals = ns.VitalsFrameAlpha(which, entry.frame == personalPower.healthStandIn)
 			if vitals == "secret" then
-				entry.vitalsSecret = true
+				entry.vitalsSecret = which
 			elseif vitals then
 				target = vitals
 			end
@@ -6956,7 +7070,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		-- profile's preview: just its group up, ns.PreviewProfile.)
 		if ns.layoutFadeUntil then
 			target = 0
-		elseif ns.previewRows then
+		elseif ns.previewRows and not immersive then
 			target = ns.previewRows[row] and 1 or 0
 		end
 		if entry.frame == Minimap then
@@ -6996,7 +7110,7 @@ function ns.UpdateFrames(cinematic, elapsed)
 		end
 		-- (Secret health: the game sets a faded-out health bar's alpha from it.)
 		if entry.vitalsSecret and target == 0 and entry.alpha == 0 and not ns.layoutFadeUntil and not ns.previewRows then
-			ns.SetVitalsSecretAlpha(entry.frame)
+			ns.SetVitalsSecretAlpha(entry.frame, entry.vitalsSecret)
 		end
 		if NEVER_NESTED[entry.name] and entry.group == "chat" then
 			chatButtonsAlpha = math.max(chatButtonsAlpha or 0, entry.alpha)

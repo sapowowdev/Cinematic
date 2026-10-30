@@ -4,8 +4,8 @@
 -- On your mana under your character (the personal resource display's power
 -- bar while mana is your power, else our own mana bar under it while that's
 -- in use: PersonalMana.lua), and on your player frame's (its mana bar, else
--- the game's mana bar under it). Each off to start with: the UI Manager's
--- Personal Resources page turns them on (manaCostDisplay, manaCostPortrait).
+-- the game's mana bar under it). Each on to start with: the UI Manager's
+-- Personal Resources page turns them off (manaCostDisplay, manaCostPortrait).
 -- The game's own cost on the player frame (retail's) is faded while ours
 -- is on there.
 -- Mana and its max can be secret in fights: the stretch is a status bar of
@@ -15,8 +15,8 @@
 local _, ns = ...
 
 local DEFAULTS = ns.DEFAULTS
-DEFAULTS.manaCostDisplay = false    -- a cast's mana cost on your mana under your character
-DEFAULTS.manaCostPortrait = false   -- ...and on your player frame's
+DEFAULTS.manaCostDisplay = true     -- a cast's mana cost on your mana under your character
+DEFAULTS.manaCostPortrait = true    -- ...and on your player frame's
 
 local display = _G.PersonalResourceDisplayFrame
 local MANA = Enum and Enum.PowerType and Enum.PowerType.Mana or 0

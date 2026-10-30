@@ -303,16 +303,18 @@ end
 function ns.UpdateCVars(cinematic, fightStarting)
 	lastCinematic = cinematic
 	local inCombat = fightStarting or InCombatLockdown() or ns.Flag(UnitAffectingCombat("player"))
+	-- (Chat Cam's Ultra immersive: names and the target circle go too.)
+	local immersive = ns.ChatCamImmersive and ns.ChatCamImmersive() or false
 	for _, set in ipairs(CVAR_SETS) do
 		-- (Nameplates page's master switch off: names are left to the game.)
-		local want = cinematic and ns.db.handlePlates and not NameKeptHere(set.key, inCombat)
+		local want = (cinematic and ns.db.handlePlates and not NameKeptHere(set.key, inCombat)) or immersive
 		ns.ApplyCVarSet(set, want or false)
 	end
 	-- (Kept through the Calm Timer after a fight, like the plates.)
 	local fighting = inCombat or (ns.FightLingering and ns.FightLingering())
 	ns.ApplyCVarSet(COMBAT_TEXT_CVARS, (cinematic and ns.db.hideCombatText and not fighting) or false)
 	ns.ApplyCVarSet(TARGET_CIRCLE_CVARS, (cinematic and ns.PageOn("handleFrames")
-		and not ns.RowOnNow("targetcircle", nil, true)) or false)
+		and not ns.RowOnNow("targetcircle", nil, true)) or immersive)
 	-- The red error text ("Target not in line of sight"): its own In combat
 	-- and Out of combat boxes, CineMode or not (the addon off: always shown).
 	if UIErrorsFrame then
@@ -2325,6 +2327,9 @@ end
 -- The plate's alpha with its name kept (see nameLevel), and how much of that
 -- the rest of the plate gets (body), the name (name) and a quest mark on its
 -- own (mark: Quest Vision's ! only), for PlateParts.
+-- Chat Cam's Ultra immersive: 1 with every plate faded out for a conversation.
+local immersiveLevel = 0
+
 local function PlateAlphas(unit, plate)
 	local body = PlateAlpha(unit, plate)
 	local name = 0
@@ -2355,11 +2360,12 @@ local function PlateAlphas(unit, plate)
 		end
 	end
 	local alpha = math.max(body, name, mark)
-	if alpha <= 0 then
+	if alpha <= 0 or immersiveLevel >= 1 then
 		return 0, 1, 0, 0
 	end
-	-- (The Style hub's Nameplates page: its row's Opacity, over the whole plate.)
-	local opacity = ns.PlateStyleOpacity and ns.PlateStyleOpacity(plate) or 1
+	-- (The Style hub's Nameplates page: its row's Opacity, over the whole plate;
+	-- Chat Cam's Ultra immersive fading every plate out.)
+	local opacity = (ns.PlateStyleOpacity and ns.PlateStyleOpacity(plate) or 1) * (1 - immersiveLevel)
 	return alpha * opacity, body / alpha, name / alpha, mark / alpha
 end
 
@@ -3187,6 +3193,12 @@ function ns.UpdatePlates(cinematic, elapsed)
 
 	local target = hide and 0 or 1
 	local changed = UpdateTargetFade(elapsed)
+	local immersiveTarget = ns.ChatCamImmersive and ns.ChatCamImmersive() and 1 or 0
+	if immersiveLevel ~= immersiveTarget then
+		immersiveLevel = ns.Approach(immersiveLevel, immersiveTarget, elapsed,
+			immersiveTarget > immersiveLevel and ns.FadeOutTime() or ns.FadeInTime())
+		changed = true
+	end
 	changed = duels.Update(elapsed) or changed
 	changed = ns.plates.level ~= target or changed
 	if changed then
@@ -4036,15 +4048,29 @@ local function LiftFramerate(height)
 	framerate.moving = false
 end
 
+-- Chat Cam's Ultra immersive (ChatCam.lua): through a conversation the bars
+-- come in (CineMode or not) and grow to twice their height, room for its
+-- subtitles; back to as they were after.
+local immersiveProgress = 0
+
 function ns.UpdateLetterbox(cinematic, elapsed)
-	local target = (cinematic and ns.db.letterbox) and 1 or 0
-	if letterboxProgress == target and not ns.letterboxDirty then
+	local immersive = ns.ChatCamImmersive and ns.ChatCamImmersive() or false
+	local target = ((cinematic and ns.db.letterbox) or immersive) and 1 or 0
+	local grow = immersive and 1 or 0
+	if letterboxProgress == target and immersiveProgress == grow and not ns.letterboxDirty then
 		return
 	end
 	ns.letterboxDirty = false
 	local look = ns.LetterboxLook()
 	letterboxProgress = ns.Approach(letterboxProgress, target, elapsed,
 		ns.LetterboxTime(look, target > letterboxProgress))
+	immersiveProgress = ns.Approach(immersiveProgress, grow, elapsed, ns.LetterboxTime(look, grow > immersiveProgress))
+	if immersiveProgress > 0 then
+		local g = immersiveProgress * immersiveProgress * (3 - 2 * immersiveProgress)
+		local screenH = UIParent:GetHeight()
+		local share = screenH > 0 and ns.LetterboxHeight(look, UIParent:GetWidth(), screenH) / screenH or 0
+		look = setmetatable({ letterboxSizeBy = "height", letterboxSize = share * (1 + g) }, { __index = look })
+	end
 
 	-- Smoothstep so the bars ease in and out.
 	local t = letterboxProgress * letterboxProgress * (3 - 2 * letterboxProgress)

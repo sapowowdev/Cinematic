@@ -231,9 +231,20 @@ local function Fits(key, always, flight)
 	end
 	return ns.RowOnNow(key, always, true)
 end
+-- In a fight a row fits only with In combat ticked (or Always, or by its
+-- rule); the death camera's aside: you die in one.
+local function FightFits(key, always)
+	if always or ns.RuleTest(key) ~= nil or not ns.Flag(UnitAffectingCombat("player")) then return true end
+	return ns.IsCombatShowOn(key) and true or false
+end
 local function RowFits(id)
 	local trigger = ns.CameraRowTrigger(id)
 	local leader = ns.CameraRowFollow(id)
+	if trigger.key ~= "Death" then
+		local key, always = ROW_KEY[id], ns.CameraRowAlways(id)
+		if leader and not OwnWhen(id) then key, always = "cam:" .. leader, ns.db["camAlways" .. leader] and true or false end
+		if not FightFits(key, always) then return false end
+	end
 	local flight = trigger.key == "Flight"
 	if leader and not OwnWhen(id) then
 		return Fits("cam:" .. leader, ns.db["camAlways" .. leader] and true or false, flight)

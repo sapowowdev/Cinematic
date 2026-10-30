@@ -35,19 +35,18 @@ function ns.CreateQuestTalkStylePanel(kit)
 	local stack = kit.Stack(switch, "check")
 	local rows = ns.StyleRows(kit, content, stack, Changed, "questTalk")
 
-	stack:Add(ns.StyleSceneButton(content, kit.Tooltip, kit.AddControl), "label")
 	preview = ns.MakeQuestTalkPreview(content, 480)
 	stack:Add(preview, "label")
 	kit.AddControl(preview)
 
-	rows.Presets({
+	rows.PresetMenu({
 		{ L["Cinematic's"], L["Parchment, as quest talk has always looked (the defaults)."], {} },
 		{ L["Bubble"], L["The game's own chat bubble."], { questTalkStyle = "bubble" } },
 		{ L["Dark"], L["Light words on dark, see-through panels, in Arial Narrow."],
 			{ questTalkStyle = "dark", questTalkAlpha = 0.8, questTalkFont = "arial" } },
 		{ L["Subtitles"], L["No panels: outlined words, like a film's subtitles."],
 			{ questTalkStyle = "none", questTalkOutline = 1, questTalkTextSize = 1.1 } },
-	}, PRESET_KEYS, 480)
+	}, PRESET_KEYS)
 
 	stack:Header(content, L["Panels"])
 	rows.Choices(L["Panels:"], "questTalkStyle", {

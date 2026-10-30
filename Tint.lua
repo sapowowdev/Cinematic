@@ -1141,6 +1141,17 @@ local function CurrentWeather()
 	return kind, math.max(0, math.min(1, intensity))
 end
 
+-- Rain's intensity here (0-1): 0 in other weather, under a roof or when the
+-- client doesn't say. (For the view distance in rain: Graphics.lua.)
+function ns.RainIntensity()
+	local ok, indoors = pcall(IsIndoors)
+	if ok and indoors then
+		return 0
+	end
+	local kind, intensity = CurrentWeather()
+	return kind == (WEATHER_TYPE.Rain or 1) and intensity or 0
+end
+
 -- The weather colour to show here: no change with the option off, indoors,
 -- or in clear or unknown weather.
 local function WeatherTargetColor()
