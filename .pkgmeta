@@ -13,7 +13,5 @@ ignore:
   - WindGuide.lua
   - WindGuideStyles.lua
   - Textures/WindGuide
-  # (the Profiler page: dev copy only)
-  - ProfilerPage.lua
   # (Vitals Vision's old sprites: only make_wind_guide.py reads them now)
   - Textures/LowHealth/Effects.tga

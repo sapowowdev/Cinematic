@@ -4994,6 +4994,37 @@ function IconTimeLeft(icon, id, now)
 end
 end
 
+-- A spell's costs, as the game lists them, or nil. (In fights the "usable"
+-- check below is secret, so these are asked for every icon ten times a
+-- second, a new table of tables each time: kept for a second, or until your
+-- spells, form or talents change.)
+do
+	local keptCosts, keptAt = {}, {}
+	local forgetter = CreateFrame("Frame")
+	for _, event in ipairs({ "SPELLS_CHANGED", "UPDATE_SHAPESHIFT_FORM", "PLAYER_TALENT_UPDATE",
+		"PLAYER_ENTERING_WORLD" }) do
+		pcall(forgetter.RegisterEvent, forgetter, event)
+	end
+	forgetter:SetScript("OnEvent", function()
+		wipe(keptCosts)
+		wipe(keptAt)
+	end)
+	function ns.SpellCosts(id)
+		local now = GetTime()
+		if keptAt[id] and now - keptAt[id] < 1 then
+			return keptCosts[id] or nil
+		end
+		local GetCosts = (C_Spell and C_Spell.GetSpellPowerCost) or _G.GetSpellPowerCost
+		local ok, costs = false, nil
+		if GetCosts then
+			ok, costs = pcall(GetCosts, id)
+		end
+		costs = ok and type(costs) == "table" and costs or nil
+		keptCosts[id], keptAt[id] = costs or false, now
+		return costs
+	end
+end
+
 -- Whether you have the resources to cast a spell (mana, Maelstrom...): the
 -- game's "usable" check first, else its costs against your power. True when
 -- the game won't say.
@@ -5005,10 +5036,8 @@ function ns.SpellHasPower(id)
 			return not noPower
 		end
 	end
-	local GetCosts = (C_Spell and C_Spell.GetSpellPowerCost) or _G.GetSpellPowerCost
-	if not GetCosts then return true end
-	local ok, costs = pcall(GetCosts, id)
-	if not ok or type(costs) ~= "table" then return true end
+	local costs = ns.SpellCosts(id)
+	if not costs then return true end
 	for _, cost in ipairs(costs) do
 		-- (type() only on what may be secret: testing one errors.)
 		local need, kind = cost.minCost, cost.type

@@ -122,5 +122,6 @@ Options.lua
 Changelog.lua
 ChangelogCommits.lua
 WhatsNew.lua
+ProfilerPage.lua
 MinimapButton.lua
 Reload.lua

@@ -660,6 +660,11 @@ watcher:SetScript("OnEvent", function(_, event, _, _, _, spellID)
 		ItemCast(spellID)
 		return
 	end
+	-- (Read afresh after any of these, whichever frame hears it first: QuestMobs.lua.)
+	-- (Not for a cooldown or key change: the list doesn't hang on them.)
+	if ns.ForgetQuestLogItems and event ~= "BAG_UPDATE_COOLDOWN" and event ~= "UPDATE_BINDINGS" then
+		ns.ForgetQuestLogItems()
+	end
 	if event == "PLAYER_LOGIN" then
 		OnLogin()
 	elseif event == "QUEST_LOG_UPDATE" then

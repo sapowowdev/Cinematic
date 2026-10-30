@@ -332,7 +332,7 @@ function ns.StopProfile()
 	if ns.PeekChat then ns.PeekChat(DEFAULT_CHAT_FRAME, 15) end
 	if run.quiet then
 		-- (Started from the Profiler page: the results are there.)
-		ns.Print(("cpu profile done (%.3f ms a frame measured): the Profiler page has it"):format(
+		ns.Print(ns.L["CPU recording done (%.3f ms a frame measured): it's on the Profiler page."]:format(
 			ns.lastProfile.total))
 		run = nil
 		return true

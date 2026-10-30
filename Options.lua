@@ -1536,7 +1536,7 @@ do
 			{ "All changes", "Interface\\Icons\\INV_Misc_Book_11", section = "Updates" },
 			{ "Socials", "Interface\\Icons\\INV_Letter_15", section = "People" },
 			{ "Thanks", "Interface\\Icons\\INV_ValentinesCard02", section = "People" },
-			{ "Profiler", "Interface\\Icons\\INV_Misc_PocketWatch_02", dev = true }, -- (ProfilerPage.lua)
+			{ "Profiler", "Interface\\Icons\\INV_Misc_PocketWatch_02" }, -- (ProfilerPage.lua)
 		} },
 	}
 	-- Pages still being worked on: "(WIP)" after the name on their icon's mouseover.
@@ -3200,6 +3200,10 @@ local function CreateQuestPanel()
 	local mounted = stack:Add(Check(content, "questCamNotMounted", L["Not while mounted"],
 		L["Talking to a quest giver from your mount, the camera stays as it is."]), "check")
 	GreyUnless(mounted, IfOn)
+	local daily = stack:Add(Check(content, "questCamNotDaily", L["Not for dailies"],
+		L["When all a quest giver has to offer or take in is daily or weekly quests, the camera " ..
+		"stays as it is."]), "check")
+	GreyUnless(daily, IfOn)
 
 	stack:Header(content, L["Rotation"])
 	local duration = stack:Add(Slider(content, "questCamTime", L["Swing behind you takes"], 1, 6, 0.25, L["%.2f sec"]), "slider")
@@ -13493,7 +13497,7 @@ ns.OnLanguage(function()
 		ns.CreateWhatsNewPanels({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
 			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
 	end
-	if ns.CreateProfilerPanel then -- (ProfilerPage.lua: the dev copy only, CinematicDev.toc)
+	if ns.CreateProfilerPanel then -- (ProfilerPage.lua: Community's last page)
 		ns.CreateProfilerPanel(ns.lowHealthKit)
 	end
 	-- The dev build's own pages, at the very end (ModuleEditor.lua, Layouts.lua).

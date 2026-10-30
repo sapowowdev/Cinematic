@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-30", page = "Profiler", title = "Profiler",
+		text = "See how much of your computer's time Cinematic takes, as a graph of the last five minutes, and " ..
+		"record a while of play to see which parts cost the most. If Cinematic feels slow, Copy report and " ..
+		"send it to us." },
 	{ date = "2026-10-30", page = "Vitals Style", title = "Your own Vitals themes",
 		text = "Change any Vitals Vision theme's art, colors, sparks and heartbeat, or make themes of your own " ..
 		"from one, and rename or delete them. Reset theme puts one of ours back as it comes." },

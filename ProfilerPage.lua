@@ -1,10 +1,12 @@
--- The Profiler page (dev copy only, CinematicDev.toc): what the addon costs.
+-- The Profiler page (Community hub, off to start with): what the addon costs.
 -- On top, a graph of the game's own figure for this addon (its share of each
 -- frame's time, sampled once a second, the last five minutes, kept over a reload),
 -- each bar colored by what was going on then, with averages for each. Below,
 -- a recording with Profiler.lua's timers (/cine debug cpu): it starts once the
--- settings close, and its sections show here as bars, biggest first.
+-- settings close, and its sections show here as bars, biggest first. Copy
+-- report gives it all as English text, for players to send us.
 local _, ns = ...
+local L = ns.L
 
 ns.DEFAULTS.profilerPage = false -- its page's switch: off, nothing's sampled or saved
 
@@ -15,9 +17,10 @@ end
 local HISTORY = 300 -- samples kept, one a second
 local GRAPH_HEIGHT = 110
 local CHILD_ROWS = 4 -- parts listed under each recorded section
-local DEEP_CHILD_ROWS = 12 -- ...in a deep one
+local DEEP_CHILD_ROWS = 12 -- ...in a detailed (deep) one
 
--- What was going on at a sample, most telling first.
+-- What was going on at a sample, most telling first. (English names: the
+-- saved digest and the report keep them; the page shows them translated.)
 local STATE_NORMAL, STATE_CINE, STATE_FIGHT, STATE_SETTINGS = 1, 2, 3, 4
 local STATES = {
 	[STATE_NORMAL] = { "normal UI", 0.5, 0.6, 0.75 },
@@ -145,6 +148,33 @@ local function Digest()
 	return lines
 end
 
+-- Everything as text to send us (Copy report): what it ran on, the graph's
+-- digest and the last recording, in English for us to read.
+local function ShareText()
+	local version, build = GetBuildInfo()
+	local lines = {
+		("Cinematic %s profiler report, %s"):format(ns.Version(), date("%Y-%m-%d %H:%M")),
+		("client: %s, game %s (%s), %s"):format(tostring(ns.CLIENT), tostring(version), tostring(build),
+			tostring(GetLocale())),
+		"",
+		"[the graph: the game's figure, one sample a second]",
+	}
+	if count > 0 then
+		for _, line in ipairs(Digest()) do
+			lines[#lines + 1] = line
+		end
+	else
+		lines[#lines + 1] = "no samples"
+	end
+	lines[#lines + 1] = ""
+	lines[#lines + 1] = "[the last recording]"
+	local last = ns.lastProfile
+	for _, line in ipairs(last and last.lines or { "none" }) do
+		lines[#lines + 1] = line
+	end
+	return table.concat(lines, "\n")
+end
+
 local function Save()
 	if not (CinematicDB and PageOn()) then
 		return -- (off: what was saved last stays)
@@ -194,7 +224,7 @@ C_Timer.NewTicker(1, Sample)
 -- through CineMode.
 local DONE_SHOWN = 20 -- seconds the "done" line stays
 local timer = CreateFrame("Frame", nil, UIParent)
-timer:SetSize(360, 50)
+timer:SetSize(380, 50)
 timer:SetPoint("TOP", 0, -110)
 timer:SetFrameStrata("HIGH")
 timer:Hide()
@@ -213,17 +243,17 @@ timer:SetScript("OnUpdate", function(self)
 		local second = math.ceil(left)
 		if second ~= shownSecond then -- (new text once a second, not every frame)
 			shownSecond = second
-			timerText:SetText(("Recording CPU%s  %d:%02d"):format(deep and " (deep)" or "",
+			timerText:SetText((deep and L["Detailed CPU recording  %d:%02d"] or L["Recording CPU  %d:%02d"]):format(
 				math.floor(second / 60), second % 60))
-			timerNote:SetText("Play as usual  ·  /cine debug cpu stop ends it")
+			timerNote:SetText(L["Play as usual. Stop on the Profiler page ends it."])
 		end
 		return
 	end
 	local now = GetTime()
 	if not doneAt then
 		doneAt, shownSecond = now, nil
-		timerText:SetText("|cff40ff40CPU recording done|r")
-		timerNote:SetText("/reload, then ask to check it (or open the Profiler page)")
+		timerText:SetText("|cff40ff40" .. L["CPU recording done"] .. "|r")
+		timerNote:SetText(L["Open the Profiler page to see it, or Copy report there to share it."])
 	elseif now - doneAt > DONE_SHOWN then
 		self:Hide()
 	end
@@ -234,7 +264,7 @@ function ns.ShowProfileTimer()
 end
 
 -- The recording waiting for the settings to close: its length, and whether
--- it's a deep one (every ns function timed).
+-- it's a detailed one (every ns function timed: deep).
 local armedSeconds, armedDeep
 local armer = CreateFrame("Frame")
 armer:Hide()
@@ -246,20 +276,21 @@ armer:SetScript("OnUpdate", function(self)
 	local seconds, deep = armedSeconds, armedDeep
 	armedSeconds, armedDeep = nil, nil
 	if ns.StartProfile(seconds, true, deep) then
-		ns.Print(("%s for %d seconds: play as usual (/cine debug cpu stop ends it early)"):format(
-			deep and "deep cpu profile" or "cpu profile", seconds))
+		ns.Print((deep and L["Detailed CPU recording for %d seconds: play as usual."]
+			or L["CPU recording for %d seconds: play as usual."]):format(seconds))
 	end
 end)
 
 function ns.CreateProfilerPanel(kit)
 	local canvas, content = kit.CreateScrollPage(true)
-	local title = kit.Label(content, "GameFontNormalLarge", "Profiler")
+	local title = kit.Label(content, "GameFontNormalLarge", L["Profiler"])
 	title:SetPoint("TOPLEFT", 16, -16)
 	local intro = kit.PageIntro(content, title,
-		"What Cinematic costs. The graph is the game's own figure for this addon: its share of each frame's " ..
-		"time, sampled every second (the last five minutes, kept over a reload or logout), each bar colored by what " ..
-		"was going on. A recording times the addon's busy parts (as /cine debug cpu does): it starts when " ..
-		"you close the settings, and its results show here.")
+		L["How much of your computer's time Cinematic takes. The graph is the game's own figure for this addon: " ..
+		"its share of each frame's time, sampled every second (the last five minutes, kept over a reload), each " ..
+		"bar colored by what was going on. A recording times the addon's busy parts: it starts when you close " ..
+		"the settings, and its results show here. If Cinematic seems slow for you, record a while of your usual " ..
+		"play (a fight too), then Copy report and send it to us: it helps us find what to speed up."])
 
 	local function Text(parent, font, anchor, x, y)
 		local fs = parent:CreateFontString(nil, "ARTWORK", font or "GameFontHighlightSmall")
@@ -278,11 +309,11 @@ function ns.CreateProfilerPanel(kit)
 
 	-- The graph.
 	local Refresh -- (below)
-	local switch = kit.PageSwitch(content, "profilerPage", "Enable page",
-		"On: the graph samples the game's figure every second and keeps it over a reload, and you can " ..
-		"record. Off (to start with): nothing is sampled or saved, and the last saved figures stay. " ..
-		"(/cine debug cpu works either way.)", intro, function() Refresh() end)
-	local graphHeader = kit.Header(content, "Game's figure, the last five minutes", switch, -14)
+	local switch = kit.PageSwitch(content, "profilerPage", L["Enable page"],
+		L["On: the graph samples the game's figure every second and keeps it over a reload, and you can " ..
+		"record. Off (to start with): nothing is sampled or saved, and it costs nothing."], intro,
+		function() Refresh() end)
+	local graphHeader = kit.Header(content, L["The game's figure, the last five minutes"], switch, -14)
 	local graph = CreateFrame("Frame", nil, content)
 	graph:SetPoint("TOPLEFT", graphHeader, "BOTTOMLEFT", 0, -8)
 	graph:SetPoint("RIGHT", content, "RIGHT", -60, 0)
@@ -315,9 +346,9 @@ function ns.CreateProfilerPanel(kit)
 		local state = STATES[i]
 		-- (a square of its color: the font has no square character)
 		legendParts[i] = ("|TInterface\\Buttons\\WHITE8X8:10:10:0:0:8:8:0:8:0:8:%d:%d:%d|t %s"):format(
-			state[2] * 255, state[3] * 255, state[4] * 255, state[1])
+			state[2] * 255, state[3] * 255, state[4] * 255, L[state[1]])
 	end
-	legend:SetText(table.concat(legendParts, "   ") .. "   |cffffd100--|r average")
+	legend:SetText(table.concat(legendParts, "   ") .. "   |cffffd100--|r " .. L["average"])
 	local nowText = Text(content, "GameFontHighlight", legend, 0, -8)
 	local stateText = Text(content, "GameFontHighlightSmall", nowText, 0, -6)
 	stateText:SetPoint("RIGHT", content, "RIGHT", -16, 0)
@@ -327,8 +358,8 @@ function ns.CreateProfilerPanel(kit)
 	local function DrawGraph()
 		if count == 0 then
 			empty:SetText(ns.ProfileGameMetric and ns.ProfileGameMetric("addon", "RecentAverageTime") == nil
-				and "The game's profiler isn't on this client: use a recording below."
-				or (PageOn() and "No samples yet (one a second)." or "Off: turn on Enable page to sample."))
+				and L["The game's profiler isn't on this client: use a recording below."]
+				or (PageOn() and L["No samples yet (one a second)."] or L["Off: turn on Enable page to sample."]))
 			empty:Show()
 		else
 			empty:Hide()
@@ -390,13 +421,13 @@ function ns.CreateProfilerPanel(kit)
 			return
 		end
 		local newest = Slot(1)
-		nowText:SetText(("Now: |cffffd100%.1f%%|r of the frame (%.3f ms of %.2f ms)   |   %d s: average %.1f%%, " ..
-			"peak %.1f%%   |   all addons %.1f%%"):format(Share(addonMs[newest], appMs[newest]), addonMs[newest],
+		nowText:SetText(L["Now: |cffffd100%.1f%%|r of the frame (%.3f ms of %.2f ms)   |   %d s: average %.1f%%, " ..
+			"peak %.1f%%   |   all addons %.1f%%"]:format(Share(addonMs[newest], appMs[newest]), addonMs[newest],
 			appMs[newest], count, average, peak, Share(sumAll, sumApp)))
 		local parts = {}
 		for state = 1, #STATES do
 			if bySeconds[state] > 0 then
-				parts[#parts + 1] = ("%s |cffffd100%.1f%%|r (%.3f ms a frame, %d s)"):format(STATES[state][1],
+				parts[#parts + 1] = L["%s |cffffd100%.1f%%|r (%.3f ms a frame, %d s)"]:format(L[STATES[state][1]],
 					Share(byAddon[state], byApp[state]), byAddon[state] / bySeconds[state], bySeconds[state])
 			end
 		end
@@ -423,15 +454,15 @@ function ns.CreateProfilerPanel(kit)
 		hovered = i
 		local slot = Slot(i)
 		GameTooltip:SetOwner(graph, "ANCHOR_CURSOR")
-		GameTooltip:SetText(("%s, %d s ago"):format(date("%H:%M:%S", sampleAt[slot]), time() - sampleAt[slot]),
+		GameTooltip:SetText(L["%s, %d s ago"]:format(date("%H:%M:%S", sampleAt[slot]), time() - sampleAt[slot]),
 			1, 0.82, 0)
-		GameTooltip:AddLine(("Cinematic %.1f%% of the frame: %.3f ms of %.2f ms (%.0f fps)"):format(
+		GameTooltip:AddLine(L["Cinematic %.1f%% of the frame: %.3f ms of %.2f ms (%.0f fps)"]:format(
 			Share(addonMs[slot], appMs[slot]), addonMs[slot], appMs[slot],
 			appMs[slot] > 0 and 1000 / appMs[slot] or 0), 1, 1, 1)
-		GameTooltip:AddLine(("All addons %.1f%% (%.3f ms)"):format(Share(allMs[slot], appMs[slot]), allMs[slot]),
+		GameTooltip:AddLine(L["All addons %.1f%% (%.3f ms)"]:format(Share(allMs[slot], appMs[slot]), allMs[slot]),
 			0.8, 0.8, 0.8)
 		local state = STATES[sampleState[slot]]
-		GameTooltip:AddLine(("%s, camera %s"):format(state[1], tostring(sampleCam[slot] or "none")),
+		GameTooltip:AddLine(L["%s, camera %s"]:format(L[state[1]], tostring(sampleCam[slot] or L["none"])),
 			state[2], state[3], state[4])
 		GameTooltip:Show()
 	end
@@ -446,27 +477,32 @@ function ns.CreateProfilerPanel(kit)
 	end)
 
 	-- The recording.
-	local recordHeader = kit.Header(content, "Recording (the addon's own timers)", stateText, -22)
+	local recordHeader = kit.Header(content, L["Recording (the addon's own timers)"], stateText, -22)
 	local status
+	local function ArmedText(seconds, deep)
+		return (deep and L["Starts when you close the settings: %d seconds, detailed."]
+			or L["Starts when you close the settings: %d seconds."]):format(seconds)
+	end
 	local function Arm(seconds, deep)
 		if ns.IsProfiling() or not PageOn() then
 			return
 		end
 		armedSeconds, armedDeep = seconds, deep
 		armer:Show()
-		status:SetText(("Starts when you close the settings: %d seconds%s."):format(seconds, deep and ", deep" or ""))
+		status:SetText(ArmedText(seconds, deep))
 	end
-	local record30 = Button("Record 30 s", 110, "Times the addon's busy parts for 30 seconds, starting when you " ..
-		"close the settings. Play as usual meanwhile; open this page again for the results.", function() Arm(30) end)
+	local record30 = Button(L["Record 30 s"], 110, L["Times the addon's busy parts for 30 seconds, starting " ..
+		"when you close the settings. Play as usual meanwhile; open this page again for the results."],
+		function() Arm(30) end)
 	record30:SetPoint("TOPLEFT", recordHeader, "BOTTOMLEFT", 0, -8)
-	local record120 = Button("Record 2 min", 110, "The same for two minutes.", function() Arm(120) end)
+	local record120 = Button(L["Record 2 min"], 110, L["The same for two minutes."], function() Arm(120) end)
 	record120:SetPoint("LEFT", record30, "RIGHT", 8, 0)
-	local recordDeep = Button("Record 2 min, deep", 140, "Two minutes with every one of the addon's functions " ..
-		"on ns timed too (not just its busy parts), each listed under the part that called it: to see what " ..
-		"inside a busy part costs. The timing itself costs about a microsecond a call, so the parts read " ..
-		"higher than they are.", function() Arm(120, true) end)
+	local recordDeep = Button(L["Record 2 min, detailed"], 160, L["Two minutes with nearly every one of the " ..
+		"addon's functions timed too, not just its busy parts, each listed under the part that called it: it " ..
+		"shows what inside a busy part costs. The timing itself takes time, so everything reads higher than it is."],
+		function() Arm(120, true) end)
 	recordDeep:SetPoint("LEFT", record120, "RIGHT", 8, 0)
-	local stop = Button("Stop", 70, "Stops the recording now (or the one waiting for the settings to close).",
+	local stop = Button(L["Stop"], 70, L["Stops the recording now (or the one waiting for the settings to close)."],
 		function()
 			armedSeconds = nil
 			armer:Hide()
@@ -474,13 +510,10 @@ function ns.CreateProfilerPanel(kit)
 			Refresh()
 		end)
 	stop:SetPoint("LEFT", recordDeep, "RIGHT", 8, 0)
-	local copy = Button("Copy report", 110, "The last recording's full report as text, to copy (it's in /cine log " ..
-		"too).", function()
-			local last = ns.lastProfile
-			if last then
-				ns.ShowText("Profiler: press Ctrl+C to copy",
-					("/cine debug cpu (Cinematic %s)\n%s"):format(ns.Version(), table.concat(last.lines, "\n")))
-			end
+	local copy = Button(L["Copy report"], 110, L["Everything here as text, to copy and send us (on Discord, " ..
+		"or in a bug report): your game version, the graph's figures and the last recording. It's in English, " ..
+		"for us to read."], function()
+			ns.ShowText(L["Profiler: press Ctrl+C to copy"], ShareText())
 		end)
 	copy:SetPoint("LEFT", stop, "RIGHT", 8, 0)
 	status = Text(content, "GameFontHighlightSmall", record30, 0, -8)
@@ -488,20 +521,21 @@ function ns.CreateProfilerPanel(kit)
 	local summary = Text(content, "GameFontHighlight", status, 0, -8)
 	summary:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	local columns = Text(content, "GameFontDisableSmall", summary, 0, -10)
-	columns:SetText("section: ms a frame · share of measured · calls a frame · KB of garbage a second " ..
-		"(mouse over for more)")
+	columns:SetText(L["part: ms a frame · share of measured · calls a frame · KB of garbage a second " ..
+		"(mouse over for more)"])
 
 	-- The recorded sections: a row each, bar against the biggest, parts under it.
+	-- (Their names are the code's own, in English.)
 	local rows = {}
 	local function RowTip(row)
 		local data = row.data
 		GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
 		GameTooltip:SetText(data.name, 1, 0.82, 0)
-		GameTooltip:AddLine(("%.4f ms a frame, %.2f calls a frame"):format(data.ms, data.calls), 1, 1, 1)
-		GameTooltip:AddLine(("average %.4f ms a call, worst %.2f ms"):format(data.average, data.worst), 1, 1, 1)
-		GameTooltip:AddLine(("%.1f KB of garbage a second"):format(data.kb), 1, 1, 1)
+		GameTooltip:AddLine(L["%.4f ms a frame, %.2f calls a frame"]:format(data.ms, data.calls), 1, 1, 1)
+		GameTooltip:AddLine(L["average %.4f ms a call, worst %.2f ms"]:format(data.average, data.worst), 1, 1, 1)
+		GameTooltip:AddLine(L["%.1f KB of garbage a second"]:format(data.kb), 1, 1, 1)
 		if row.child then
-			GameTooltip:AddLine("(a part of the section above: its time is in that one's)", 0.7, 0.7, 0.7, true)
+			GameTooltip:AddLine(L["(Called by the part above: its time is part of that one's.)"], 0.7, 0.7, 0.7, true)
 		end
 		GameTooltip:Show()
 	end
@@ -566,28 +600,27 @@ function ns.CreateProfilerPanel(kit)
 	end
 	local function DrawRecording()
 		if ns.IsProfiling() then
-			status:SetText("Recording now: close the settings and play; open this page again when it's done.")
+			status:SetText(L["Recording now: close the settings and play; open this page again when it's done."])
 		elseif armedSeconds then
-			status:SetText(("Starts when you close the settings: %d seconds%s."):format(armedSeconds,
-				armedDeep and ", deep" or ""))
+			status:SetText(ArmedText(armedSeconds, armedDeep))
 		elseif not ns.lastProfile then
-			status:SetText("No recording yet since the last /reload.")
+			status:SetText(L["No recording yet."])
 		end
 		local last = ns.lastProfile
 		local used = 0
 		if last then
 			if not (ns.IsProfiling() or armedSeconds) then
-				status:SetText(("Last recording%s: %s, %.0f s (%.0f fps). At the start: %s"):format(
-					last.deep and " (deep)" or "", date("%H:%M:%S", last.finished), last.seconds, last.fps,
-					last.startState))
+				status:SetText((last.deep and L["Last recording (detailed): %s, %.0f s (%.0f fps). At the start: %s"]
+					or L["Last recording: %s, %.0f s (%.0f fps). At the start: %s"]):format(
+					date("%H:%M:%S", last.finished), last.seconds, last.fps, last.startState))
 			end
-			local text = ("Measured |cffffd100%.3f ms a frame|r (%.2f%% of the %.2f ms frame), garbage %.0f KB a " ..
-				"second; frames over 1 / 5 / 16 ms: %d / %d / %d, worst %.2f ms"):format(last.total,
+			local text = L["Measured |cffffd100%.3f ms a frame|r (%.2f%% of the %.2f ms frame), garbage %.0f KB a " ..
+				"second; frames over 1 / 5 / 16 ms: %d / %d / %d, worst %.2f ms"]:format(last.total,
 				last.total * 100 / last.frameMs, last.frameMs, last.kb, last.spikes[1], last.spikes[5], last.spikes[16],
 				last.worst)
 			if last.game then
-				text = text .. ("\nGame's figure meanwhile: |cffffd100%.3f ms a frame (%.1f%%)|r, so %.3f ms not " ..
-					"wrapped by the timers; all addons %.3f ms"):format(last.game.addon,
+				text = text .. "\n" .. L["The game's figure meanwhile: |cffffd100%.3f ms a frame (%.1f%%)|r, so " ..
+					"%.3f ms the timers don't cover; all addons %.3f ms"]:format(last.game.addon,
 					Share(last.game.addon, last.game.app), last.game.addon - last.total, last.game.overall)
 			end
 			summary:SetText(text)
@@ -618,7 +651,7 @@ function ns.CreateProfilerPanel(kit)
 		record120:SetEnabled(on)
 		recordDeep:SetEnabled(on)
 		if not on and not ns.IsProfiling() and not armedSeconds then
-			status:SetText("Turn on Enable page to record.")
+			status:SetText(L["Turn on Enable page to record."])
 		end
 	end
 	canvas:SetScript("OnShow", kit.PageShown(Refresh, content))

@@ -338,7 +338,7 @@ end
 -- quest tracker): { questID, index (quest log), link, itemID, icon,
 -- showComplete, complete } each. Also for QuestItemButton. say: a function
 -- told what each quest gives back (/cine debug questitem).
-function ns.QuestLogItems(say)
+local function ReadQuestLogItems(say)
 	local found = {}
 	local log = C_QuestLog
 	local SpecialItem = _G.GetQuestLogSpecialItemInfo or (log and log.GetQuestLogSpecialItemInfo)
@@ -378,6 +378,34 @@ function ns.QuestLogItems(say)
 		end
 	end
 	return found
+end
+
+-- (Asked every couple of seconds and on many events, and reading the whole
+-- log makes a lot of garbage: the list is kept until the quest log, your
+-- bags or a fight change, or for ten seconds at most. Callers only read it.)
+local KEEP_ITEMS = 10
+local keptItems, keptAt
+function ns.ForgetQuestLogItems()
+	keptItems = nil
+end
+function ns.QuestLogItems(say)
+	if say then
+		return ReadQuestLogItems(say) -- (/cine debug questitem: read afresh, step by step)
+	end
+	local now = GetTime()
+	if not keptItems or now - keptAt >= KEEP_ITEMS then
+		keptItems, keptAt = ReadQuestLogItems(), now
+	end
+	return keptItems
+end
+do
+	local forgetter = CreateFrame("Frame")
+	for _, event in ipairs({ "QUEST_LOG_UPDATE", "QUEST_ACCEPTED", "QUEST_REMOVED", "QUEST_TURNED_IN",
+		"QUEST_WATCH_LIST_CHANGED", "BAG_UPDATE_DELAYED", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_DISABLED",
+		"PLAYER_REGEN_ENABLED" }) do
+		pcall(forgetter.RegisterEvent, forgetter, event)
+	end
+	forgetter:SetScript("OnEvent", ns.ForgetQuestLogItems)
 end
 
 local function ItemQuests()
