@@ -17,50 +17,15 @@ ns.CHANGELOG_FEATURES = {
 	{ date = "2026-10-29", page = "General", title = "Reload button",
 		text = "A Reload button on the screen and a key to reload the UI in one go, and after any reload the " ..
 		"windows you had open (these settings at your page, bags, map, the game's windows) open again." },
-	{ date = "2026-10-29", page = "Raid Style", title = "Raid frames style",
-		text = "Raid frames, raid-style party frames and arena frames have a page of their own in the Style hub: " ..
-		"their health bar's texture, border and color, their background, and their names, with a Default tab " ..
-		"and a tab for each that can have its own look." },
-	{ date = "2026-10-29", page = "Unit Style", title = "Unit frames style",
-		text = "Your player, target, focus, pet and target of target frames have a page of their own in the Style " ..
-		"hub: their bars' texture and border, health and name colors, the name's font, and class icons for " ..
-		"players, with a Default tab and a tab for each frame that can have its own look." },
-	{ date = "2026-10-29", page = "Style General", title = "Style hub: General",
-		text = "One switch for every Style page, and a bar texture, font, outline and border every page " ..
-		"follows unless you give it its own, with a preview of several pages at once." },
-	{ date = "2026-10-29", page = "Personal Style", title = "Personal resources style",
-		text = "The bars under your character have a page of their own in the Style hub: their texture and " ..
-		"border, the health bar's color, each bar's size and your class resource's, with presets and a preview." },
-	{ date = "2026-10-29", page = "Cast Bar Style", title = "Cast bars style",
-		text = "Cast bars on nameplates have a page of their own in the Style hub: their size, fill and colors, " ..
-		"border, icon, spell name and the seconds left, with presets and a preview." },
-	{ date = "2026-10-29", page = "Tooltip Style", title = "Tooltips style",
-		text = "Tooltips have a page of their own in the Style hub: a dark or colored background, an edge in a " ..
-		"unit's or item's color, the words' font, size and outline, names in class colors, and where the health " ..
-		"bar goes, with presets and a preview." },
-	{ date = "2026-10-29", page = "Bubble Style", title = "Chat bubbles style",
-		text = "Chat bubbles have a page of their own in the Style hub: the game's bubble, a dark one, a color " ..
-		"of your own or just the words, the tail, the font, size and outline, for speech from behind you too, " ..
-		"with presets and a preview." },
-	{ date = "2026-10-29", page = "Quest Talk Style", title = "Quest talk style",
-		text = "Quest talk's speech bubbles and reply list have a page of their own in the Style hub: parchment, " ..
-		"the game's chat bubble, dark panels or none, their opacity, the words' font, size and outline, with " ..
-		"presets and a preview." },
+	{ date = "2026-10-29", page = "Style General", title = "Style hub",
+		text = "A page for the look of each part of your UI: unit, raid and arena frames, the bars under your " ..
+		"character, cast bars, tooltips, chat bubbles, quest talk, the loot roll window, the quest item button " ..
+		"and the letterbox, each with presets and a preview. A General page sets one bar texture, font and " ..
+		"border they all follow." },
 	{ date = "2026-10-29", page = "Combat Vision", title = "Combat Vision",
 		text = "A cue as you go into a fight and come out of it: a word on the screen or in a letterbox bar, a " ..
 		"pulse round the edges, an icon, and sounds you pick for each kind of fight, like horns for a raid boss. " ..
 		"Its look has a page in the Style hub, with presets and a preview." },
-	{ date = "2026-10-29", page = "Roll Style", title = "Roll Vision style",
-		text = "The loot roll window has a page of its own in the Style hub: its cards, text, the time bar, " ..
-		"picks as icons or colored words, and how the winner shows, with presets and a preview." },
-	{ date = "2026-10-29", page = "Quest Item Style", title = "Quest item button style",
-		text = "The quest item button has a page of its own in the Style hub: its size, a round or square " ..
-		"shape, its frame, a glow when it's ready, a draining cooldown fill with the seconds left, and its " ..
-		"numbers' font, with presets and a preview." },
-	{ date = "2026-10-29", page = "Letterbox Style", title = "Letterbox style",
-		text = "The letterbox bars have a page of their own in the Style hub: size them by height or a film's " ..
-		"frame, color them, feather their edges, add a line along them and choose how they come in, with " ..
-		"presets and a preview." },
 	{ date = "2026-10-28", page = "Cameras", title = "Cameras page",
 		text = "Camera Modes and Camera Triggers are now one Cameras page: a row for each trigger (an emote, " ..
 		"a campfire, going AFK, a flight...) with the camera it starts, its music and CineMode, and where it " ..

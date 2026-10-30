@@ -3756,3 +3756,13 @@ L["While you cast, the mana a spell will take shows as a pale stretch on your ma
 	"numbers can show what you'll have left."] =
 	"Mientras lanzas, el maná que gastará un hechizo se ve como un tramo pálido en tu barra de maná, y sus " ..
 	"números pueden mostrar lo que te quedará."
+-- What's new: Style hub
+L["Style hub"] = "Centro Estilo"
+L["A page for the look of each part of your UI: unit, raid and arena frames, the bars under your " ..
+	"character, cast bars, tooltips, chat bubbles, quest talk, the loot roll window, the quest item button " ..
+	"and the letterbox, each with presets and a preview. A General page sets one bar texture, font and " ..
+	"border they all follow."] =
+	"Una página para el aspecto de cada parte de tu interfaz: marcos de unidad, de banda y de arena, las barras " ..
+	"bajo tu personaje, barras de lanzamiento, descripciones emergentes, bocadillos de chat, diálogo de misiones, " ..
+	"la ventana de tiradas de botín, el botón del objeto de misión y las franjas, cada una con preajustes y una " ..
+	"vista previa. Una página General fija una textura de barra, una fuente y un borde que todas siguen."
