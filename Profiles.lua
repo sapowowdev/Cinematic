@@ -34,6 +34,7 @@ local PROFILE_TABLES = {
 	"tankHide", "healerHide", "damageHide",
 	"markNames", -- (the Nameplates page's rows' own names)
 	"cameraRows", -- (the Cameras page's rows: CameraRows.lua)
+	"lowHealthThemeEdits", "lowHealthMyThemes", -- (Vitals Vision's themes: players' versions of ours, and their own)
 	"lowHealthFromTheme", -- (which of the profile's Vitals settings its theme put on, not the player)
 }
 ns.PROFILE_TABLES = PROFILE_TABLES
@@ -643,8 +644,10 @@ end
 
 -- Everything back to a fresh install: every profile and setting goes, and the
 -- UI reloads so it starts over (the welcome window too). Other characters'
--- own profile picks fall back to the account's next login.
-function ns.ResetAddon()
+-- own profile picks fall back to the account's next login. keepBackups: the
+-- backups stay (Backups.lua), your own profiles among the deleted ones to
+-- bring back.
+function ns.ResetAddon(keepBackups)
 	-- (Not in a fight: Edit Mode's layouts can't change then.)
 	if ns.ResetLayouts and not ns.ResetLayouts() then
 		ns.Print(L["can't reset Cinematic in a fight: try again once it's over"])
@@ -658,8 +661,23 @@ function ns.ResetAddon()
 	-- (The dev copy keeps the Vitals Vision theme looks made with DEV SET
 	-- DEFAULT: work for LowHealthThemes.lua, not settings. resetKept: still a
 	-- fresh install to Core.lua.)
-	local themeEdits = ns.isDev and CinematicDB and CinematicDB.vitalsThemeEdits
-	CinematicDB = themeEdits and { vitalsThemeEdits = themeEdits, resetKept = true } or nil
+	local kept = {}
+	kept.vitalsThemeEdits = ns.isDev and CinematicDB and CinematicDB.vitalsThemeEdits or nil
+	if keepBackups and ns.BackupDeleted then
+		ns.SaveProfile()
+		for _, name in ipairs(ns.ProfileNames()) do
+			if not builtinByName[name] then
+				ns.BackupDeleted(name)
+			elseif next(ns.db.profiles[name] or {}) then
+				ns.BackupProfile(name, "reset") -- (a changed built-in's changes)
+			end
+		end
+		for _, k in ipairs({ "profileBackups", "deletedProfiles", "profileBackupsKeep", "profileBackupsDaily" }) do
+			kept[k] = ns.db[k]
+		end
+	end
+	if next(kept) then kept.resetKept = true end
+	CinematicDB = next(kept) and kept or nil
 	CinematicCharDB = nil
 	ns.db.profiles = {} -- (so logout's ns.SaveProfile writes into nothing kept)
 	ReloadUI()

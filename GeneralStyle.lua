@@ -148,6 +148,7 @@ local function MakePreview(parent, width)
 			local cell = make(holder, width, info.sized and CELL_H or nil)
 			cell:SetScript("OnShow", nil) -- (drawn by holder:Refresh)
 			cell:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -24)
+			cell:SetPoint("TOPRIGHT", holder, "TOPRIGHT", 0, -24) -- (as wide as the page makes it)
 			if cell.SetClipsChildren then cell:SetClipsChildren(true) end
 			-- (Held to the screen's size after each drawing, its own too: Roll
 			-- Vision's sizes itself to its cards as they tick.)
@@ -156,8 +157,8 @@ local function MakePreview(parent, width)
 				if own then own(self, ...) end
 				if math.abs(self:GetHeight() - CELL_H) > 0.5 then
 					self:SetHeight(CELL_H)
-					ns.RecutStyleScene(self)
 				end
+				ns.RecutStyleScene(self) -- (its shape: the screen's width may have changed too)
 			end
 			cell:Hide()
 			cells[#cells + 1] = { frame = cell, name = L[info[1]] }
@@ -208,6 +209,7 @@ local function MakePreview(parent, width)
 		arrow:SetPushedTexture(art .. "Down")
 		arrow:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
 		arrow:SetScript("OnClick", function() Step(side[3]) end)
+		if side[3] < 0 then holder.prevArrow = arrow end
 	end
 	holder:SetScript("OnShow", function(self) EndFade(); waited = 0; self:Refresh() end)
 	holder:SetScript("OnUpdate", function(_, elapsed)
@@ -264,7 +266,12 @@ function ns.CreateGeneralStylePanel(kit)
 	local rows = ns.StyleRows(kit, content, stack, Changed, "styleGeneral")
 
 	preview = MakePreview(content, 480)
+	preview.keepHeight = true -- (its name over the screen: StylePopout widens it only)
 	stack:Add(preview, "label")
+	local pop = ns.StylePopout(preview, kit.Tooltip) -- (StylePages.lua)
+	-- (left of the arrows, not over them)
+	pop:ClearAllPoints()
+	pop:SetPoint("RIGHT", preview.prevArrow, "LEFT", -6, 0)
 	kit.AddControl(preview)
 
 	rows.PresetMenu({

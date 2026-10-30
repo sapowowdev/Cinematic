@@ -3083,6 +3083,9 @@ function ns.EnsureTables()
 	ns.db.frameRules = ns.db.frameRules or {} -- row key -> rule text (Custom Visibility Rules, Advanced Frames page)
 	ns.db.markNames = ns.db.markNames or {} -- Nameplates page row id -> a name of your own for it
 	ns.db.cameraRows = ns.db.cameraRows or {} -- the Cameras page's rows (CameraRows.lua)
+	-- Vitals Vision: players' versions of its themes, and their own (LowHealth.lua)
+	ns.db.lowHealthThemeEdits = ns.db.lowHealthThemeEdits or {}
+	ns.db.lowHealthMyThemes = ns.db.lowHealthMyThemes or {}
 	-- Row key -> true: kept hidden in CineMode while you're that role (a frames grid row's roles button).
 	ns.db.tankHide = ns.db.tankHide or {}
 	ns.db.healerHide = ns.db.healerHide or {}
@@ -3248,6 +3251,22 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		-- The game keeps the font it first loaded, so changes need a game restart.
 		if ns.db.hideWorldText then
 			DAMAGE_TEXT_FONT = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Fonts\\Blank.ttf"
+		end
+		-- Vitals Vision's reaches: one for all four edges, now the top and
+		-- bottom's, with the sides' apart; the sides as they were. (Saved
+		-- profiles too; a reach a theme set stays the theme's.)
+		local function MigrateReaches(saved)
+			local fromTheme = type(saved.lowHealthFromTheme) == "table" and saved.lowHealthFromTheme.values
+			for _, key in ipairs({ "lowHealthReach", "lowHealthBloodReach", "lowHealthGameReach" }) do
+				if saved[key] ~= nil and saved[key .. "Sides"] == nil then
+					saved[key .. "Sides"] = saved[key]
+					if fromTheme and fromTheme[key] ~= nil then fromTheme[key .. "Sides"] = fromTheme[key] end
+				end
+			end
+		end
+		MigrateReaches(ns.db)
+		for _, saved in pairs(ns.db.profiles or {}) do
+			if type(saved) == "table" then MigrateReaches(saved) end
 		end
 		-- Older settings: one vertical range for up and down, and a separate
 		-- narrow behind mode (now behind mode with a 45 degree swing).

@@ -40,6 +40,7 @@ function ns.CreateRollStylePanel(kit)
 	-- (a won drop and one being picked on)
 	preview = ns.MakeRollPreview(content, 480)
 	stack:Add(preview, "label")
+	ns.StylePopout(preview, kit.Tooltip) -- (StylePages.lua)
 	kit.AddControl(preview)
 
 	-- The real window, with made-up drops (the Roll Vision page's test). (Works

@@ -498,6 +498,7 @@ function ns.CreatePersonalStylePanel(kit)
 
 	preview = ns.MakePersonalPreview(content, 480)
 	stack:Add(preview, "label")
+	ns.StylePopout(preview, kit.Tooltip) -- (StylePages.lua)
 	kit.AddControl(preview)
 
 	rows.PresetMenu({

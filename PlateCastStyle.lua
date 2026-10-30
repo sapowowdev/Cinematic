@@ -1123,6 +1123,7 @@ function ns.CreatePlateCastStylePanel(kit)
 	preview = CreateFrame("Frame", nil, content)
 	preview:SetSize(PREVIEW_W, PREVIEW_H)
 	stack:Add(preview, "label")
+	ns.StylePopout(preview, kit.Tooltip) -- (StylePages.lua)
 	ns.StyleScene(preview, 0.6, 0.8) -- (StylePages.lua)
 	local caption = kit.Label(preview, "GameFontDisableSmall", L["Preview"])
 	caption:SetPoint("TOPLEFT", 6, -5)
@@ -1132,11 +1133,11 @@ function ns.CreatePlateCastStylePanel(kit)
 	-- bar with the unit's name in it (here what the sample shows), the cast
 	-- bar under it.
 	local GAP = 14
-	local left = (PREVIEW_W - 3 * SAMPLE_W - 2 * GAP) / 2
+	local left = -(3 * SAMPLE_W + 2 * GAP) / 2 -- (from the middle, however wide the page makes it)
 	for i, info in ipairs(SAMPLES) do
 		local health = CreateFrame("StatusBar", nil, preview)
 		health:SetSize(SAMPLE_W, 13)
-		health:SetPoint("TOPLEFT", preview, "TOPLEFT", left + (i - 1) * (SAMPLE_W + GAP), -42)
+		health:SetPoint("TOPLEFT", preview, "TOP", left + (i - 1) * (SAMPLE_W + GAP), -42)
 		health:SetStatusBarTexture(FILLS.flat)
 		health:SetStatusBarColor(0.8, 0.1, 0.1)
 		health:SetMinMaxValues(0, 1)

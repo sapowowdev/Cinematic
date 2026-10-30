@@ -457,6 +457,7 @@ function ns.CreateTooltipStylePanel(kit)
 
 	preview = ns.MakeTooltipPreview(content, 480)
 	stack:Add(preview, "label")
+	ns.StylePopout(preview, kit.Tooltip) -- (StylePages.lua)
 	kit.AddControl(preview)
 
 	rows.PresetMenu({

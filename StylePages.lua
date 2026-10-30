@@ -259,6 +259,253 @@ function ns.StylePreviewTest(preview, kit, tip, onClick)
 	button.Refresh = function() end
 	button.pageSwitch = false
 	kit.AddControl(button)
+	-- (A Pop out button already there moves left of it: StylePopout.)
+	local pop = preview.popButton or (preview:GetParent() and preview:GetParent().popButton)
+	preview.styleTest = button
+	if pop then
+		pop:ClearAllPoints()
+		pop:SetPoint("RIGHT", button, "LEFT", -6, 0)
+	end
+	return button
+end
+
+-- Pop out: a preview's button that lifts the preview itself into a window of
+-- its own, larger, that you can drag anywhere and resize from its corner, so
+-- it stays in sight as you scroll down its page; it plays on as it does on
+-- the page. Again (or the window's X, Escape, or leaving the page) puts it
+-- back. While it's out, a dark frame of its size holds its place (click it to
+-- put it back), and what was placed from it is placed from that instead. One
+-- preview out at a time; the size you give the window is kept for the next.
+-- tooltip: the page's (kit.Tooltip, Options.lua's Tooltip).
+local POPOUT_SCALE = 1.5
+local POPOUT_MIN_SCALE = 0.75
+local popWindow, popped, popScale
+
+-- Everything on parent placed from from, placed from to instead.
+local function Repoint(parent, from, to)
+	local function Swap(object)
+		if object == from or object == to or not object.GetNumPoints then return end
+		local moved = {}
+		for i = 1, object:GetNumPoints() do
+			local point, relative, relPoint, x, y = object:GetPoint(i)
+			if relative == from then moved[#moved + 1] = { point, relPoint, x, y } end
+		end
+		for _, each in ipairs(moved) do object:SetPoint(each[1], to, each[2], each[3], each[4]) end
+	end
+	for _, child in ipairs({ parent:GetChildren() }) do Swap(child) end
+	for _, region in ipairs({ parent:GetRegions() }) do Swap(region) end
+end
+
+local function PutBack()
+	local preview = popped
+	if not preview then return end
+	popped = nil
+	local slot = preview.popSlot
+	preview:SetScale(1)
+	preview:SetParent(slot:GetParent())
+	preview:ClearAllPoints()
+	for _, each in ipairs(slot.points) do preview:SetPoint(unpack(each)) end
+	Repoint(slot:GetParent(), slot, preview)
+	slot:Hide()
+	preview.popButton:SetText(ns.L["Pop out"])
+	popWindow:Hide()
+	if preview.Refresh then preview:Refresh() end
+end
+
+-- The window's size: the preview's, scaled, with room for the title.
+local function FitWindow()
+	if not popped then return end
+	local scale = popped:GetScale()
+	popWindow:SetSize(popped:GetWidth() * scale + 24, popped:GetHeight() * scale + 42)
+	popped.popSlot:SetHeight(popped:GetHeight())
+end
+
+-- The popped preview at scale (kept between the smallest and what the screen
+-- holds), in the window's top left.
+local function ScalePopped(scale)
+	local width, height = math.max(popped:GetWidth(), 1), math.max(popped:GetHeight(), 1)
+	local most = math.min(UIParent:GetWidth() * 0.95 / width, (UIParent:GetHeight() - 60) / height)
+	local least = math.min(POPOUT_MIN_SCALE, most)
+	scale = math.max(least, math.min(scale, most))
+	-- (The window's corner can't go past the preview's own smallest and largest.)
+	local minW, minH = width * least + 24, height * least + 42
+	local maxW, maxH = width * most + 24, height * most + 42
+	if popWindow.SetResizeBounds then
+		popWindow:SetResizeBounds(minW, minH, maxW, maxH)
+	elseif popWindow.SetMinResize then
+		popWindow:SetMinResize(minW, minH)
+		popWindow:SetMaxResize(maxW, maxH)
+	end
+	popped:SetScale(scale)
+	popped:ClearAllPoints()
+	popped:SetPoint("TOPLEFT", popWindow, "TOPLEFT", 12 / scale, -30 / scale)
+	return scale
+end
+
+-- While you drag the corner, the preview grows to fill what the window
+-- allows; letting go fits the window back around it.
+local function Resizing(window)
+	if not (popped and window.sizing) then return end
+	local width, height = window:GetSize()
+	popScale = ScalePopped(math.min((width - 24) / math.max(popped:GetWidth(), 1),
+		(height - 42) / math.max(popped:GetHeight(), 1)))
+end
+
+local function Window()
+	if popWindow then return popWindow end
+	popWindow = CreateFrame("Frame", "CinematicPreviewWindow", UIParent, BackdropTemplateMixin and "BackdropTemplate")
+	popWindow:SetPoint("TOP", 0, -60)
+	popWindow:SetFrameStrata("DIALOG")
+	popWindow:SetToplevel(true)
+	popWindow:SetClampedToScreen(true)
+	popWindow:EnableMouse(true)
+	popWindow:SetMovable(true)
+	popWindow:RegisterForDrag("LeftButton")
+	popWindow:SetScript("OnDragStart", popWindow.StartMoving)
+	popWindow:SetScript("OnDragStop", popWindow.StopMovingOrSizing)
+	popWindow:SetBackdrop({
+		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+		tile = true, tileSize = 16, edgeSize = 16,
+		insets = { left = 4, right = 4, top = 4, bottom = 4 },
+	})
+	if ns.SkinWindow then ns.SkinWindow(popWindow) end
+	tinsert(UISpecialFrames, "CinematicPreviewWindow") -- Escape closes it
+	popWindow.title = popWindow:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	popWindow.title:SetPoint("TOPLEFT", 14, -10)
+	local close = CreateFrame("Button", nil, popWindow, "UIPanelCloseButton")
+	close:SetPoint("TOPRIGHT", 0, 0)
+	-- The corner grip (the chat frames' own) resizes it.
+	popWindow:SetResizable(true) -- (its bounds: ScalePopped)
+	local grip = CreateFrame("Button", nil, popWindow)
+	grip:SetSize(16, 16)
+	grip:SetPoint("BOTTOMRIGHT", -3, 3)
+	grip:SetFrameLevel(popWindow:GetFrameLevel() + 40)
+	grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+	grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+	grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+	grip:SetScript("OnMouseDown", function()
+		popWindow.sizing = true
+		popWindow:StartSizing("BOTTOMRIGHT")
+	end)
+	grip:SetScript("OnMouseUp", function()
+		popWindow:StopMovingOrSizing()
+		popWindow.sizing = nil
+		FitWindow()
+	end)
+	popWindow:SetScript("OnSizeChanged", Resizing)
+	popWindow:SetScript("OnHide", function()
+		if popWindow.sizing then
+			popWindow:StopMovingOrSizing()
+			popWindow.sizing = nil
+		end
+		PutBack()
+	end)
+	popWindow:Hide()
+	return popWindow
+end
+
+local function PopOut(preview)
+	PutBack()
+	local window = Window()
+	local parent = preview:GetParent()
+	local slot = preview.popSlot
+	if not slot then
+		slot = CreateFrame("Button", nil, parent)
+		-- (leaving the page puts it back: the slot hides with the page)
+		slot:SetScript("OnHide", function() if popped == preview then PutBack() end end)
+		slot:SetScript("OnClick", function() if popped == preview then PutBack() end end)
+		local bg = slot:CreateTexture(nil, "BACKGROUND")
+		bg:SetAllPoints()
+		bg:SetColorTexture(0, 0, 0, 0.6)
+		local hover = slot:CreateTexture(nil, "HIGHLIGHT")
+		hover:SetAllPoints()
+		hover:SetColorTexture(1, 1, 1, 0.05)
+		slot.label = slot:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+		slot.label:SetPoint("CENTER")
+		preview.popSlot = slot
+		preview:HookScript("OnSizeChanged", FitWindow)
+	end
+	slot.points = {}
+	for i = 1, preview:GetNumPoints() do slot.points[i] = { preview:GetPoint(i) } end
+	slot:ClearAllPoints()
+	for _, each in ipairs(slot.points) do slot:SetPoint(unpack(each)) end
+	slot:SetSize(preview:GetWidth(), preview:GetHeight())
+	slot.label:SetText(ns.L["Showing in its own window. Click here to put it back."])
+	slot:Show()
+	Repoint(parent, preview, slot)
+	popped = preview
+	window.title:SetText(preview.popTitle or ns.L["Preview"])
+	preview:SetParent(window)
+	ScalePopped(popScale or POPOUT_SCALE)
+	preview.popButton:SetText(ns.L["Put back"])
+	window:Show()
+	FitWindow()
+	if preview.Refresh then preview:Refresh() end
+end
+
+-- Every preview the page's width (from the column's edge to the page's right,
+-- less a margin), 270 high at 16:9: the height a 480-wide one has at the
+-- screen's shape (as the full-screen ones need). keepHeight: one with a height
+-- of its own (General's, its name over the screen). A spot of its size holds
+-- where the stack put it (the stack places what's next from the spot:
+-- stackSpot), the preview on its top left. Set again as it shows (and a frame
+-- later, once the page is laid out) and when the page is resized.
+local PREVIEW_W, PAGE_MARGIN = 480, 16
+local function FitPreview(preview)
+	if popped == preview then return end
+	local left, right = preview.stackSpot:GetLeft(), preview.stackSpot:GetParent():GetRight()
+	local width = left and right and math.max(PREVIEW_W, math.floor(right - left - PAGE_MARGIN)) or PREVIEW_W
+	local height = preview:GetHeight()
+	if not preview.keepHeight then
+		height = math.floor(PREVIEW_W * UIParent:GetHeight() / math.max(UIParent:GetWidth(), 1) + 0.5)
+	end
+	if math.abs(preview:GetWidth() - width) < 0.5 and math.abs(preview:GetHeight() - height) < 0.5 then return end
+	preview:SetSize(width, height)
+	ns.RecutStyleScene(preview)
+	-- (Not before the settings are there to draw from: the pages are built
+	-- while the addon loads, and count as shown then. Its OnShow fits it again.)
+	if preview.Refresh and ns.db and preview:IsVisible() then preview:Refresh() end
+end
+
+local function WidePreview(preview)
+	local parent = preview:GetParent()
+	local spot = CreateFrame("Frame", nil, parent)
+	for i = 1, preview:GetNumPoints() do spot:SetPoint(preview:GetPoint(i)) end
+	spot:SetSize(preview:GetWidth(), preview:GetHeight())
+	preview.stackSpot = spot
+	preview:ClearAllPoints()
+	preview:SetPoint("TOPLEFT", spot, "TOPLEFT")
+	preview:HookScript("OnSizeChanged", function(self, width, height)
+		if popped ~= self then spot:SetSize(width, height) end
+	end)
+	FitPreview(preview)
+	preview:HookScript("OnShow", function(self)
+		FitPreview(self)
+		C_Timer.After(0, function() FitPreview(self) end)
+	end)
+	parent:HookScript("OnSizeChanged", function()
+		if preview:IsVisible() then FitPreview(preview) end
+	end)
+end
+
+function ns.StylePopout(preview, tooltip, title)
+	WidePreview(preview)
+	local button = ns.PanelButton(preview)
+	button:SetSize(80, 20)
+	button:SetText(ns.L["Pop out"])
+	button:SetFrameLevel(preview:GetFrameLevel() + 30)
+	if preview.styleTest then
+		button:SetPoint("RIGHT", preview.styleTest, "LEFT", -6, 0)
+	else
+		button:SetPoint("TOPRIGHT", -6, -6)
+	end
+	tooltip(button, ns.L["Shows the preview larger, in a window of its own you can move anywhere and resize " ..
+		"from its corner, so you can watch it while you scroll down the page. Click again to put it back."])
+	button:SetScript("OnClick", function()
+		if popped == preview then PutBack() else PopOut(preview) end
+	end)
+	preview.popButton, preview.popTitle = button, title
 	return button
 end
 
@@ -614,12 +861,15 @@ function ns.StyleRows(kit, content, stack, changed, switchKey, fieldOf)
 	-- (A shared one: General first, named for the font it gives the page.)
 	function rows.Font(key, tip, test)
 		local font = kit.Dropdown(content, K(key), function()
-			local list = {}
+			local list, choices = {}, ns.StyleFontChoices()
 			local general = ns.GeneralStyleValue(key)
 			if general ~= nil then
 				list[1] = { value = "general", text = ns.L["General"] .. " (" .. ns.StyleFontName(general) .. ")" }
+				for _, choice in ipairs(choices) do
+					if choice.value == general then list[1].font = choice.font end -- (drawn in General's font)
+				end
 			end
-			for _, choice in ipairs(ns.StyleFontChoices()) do list[#list + 1] = choice end
+			for _, choice in ipairs(choices) do list[#list + 1] = choice end
 			return list
 		end, 200, changed)
 		if not font then return end

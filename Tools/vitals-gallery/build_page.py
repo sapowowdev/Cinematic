@@ -96,7 +96,7 @@ dialog p {{ color:#fff; text-align:center; margin:8px 0 0; font:600 18px var(--d
   <h1>Vitals Vision themes</h1>
   <p>Every low-health theme, drawn from the addon's own textures and colors at the page's default settings, at full low health, just after a hit. These are stills: in the game the glow throbs with the heartbeat, and a hit flashes the edges. Every theme has a soft haze of gas drifting over its edges, in its own color. The only other sprites are lightning (Storm, Windfury), twinkling stars and rising motes.</p>
   <p>Each theme is shown under every spec that uses it. Click a still to see it larger.</p>
-  <p><b>New:</b> {sum(1 for k in data["themes"] if data["themes"][k]["img"] != before[k]["img"])} themes moved off the drawn edges (cracks, vines, runes, flames, frost, wind, scales, leaves) onto the soft Smoke, Glow and Soak edges. They're marked <span class="tag">changed</span>; use <b>Show before</b> on a card to compare.</p>
+  <p><b>New:</b> Decay is now Unholy Death Knight's (in place of Plague), Affliction Warlock has Drained souls: fel green souls rising out of a near-black violet shadow; and Frost Death Knight has Hoarfrost: frost creeping over the glass on a new Rime edge, its cold front glowing.</p>
   <div class="filter" role="group" aria-label="Filter by edge material"><span>Edge material</span>{chips}</div>
 </header>
 {"".join(sections)}

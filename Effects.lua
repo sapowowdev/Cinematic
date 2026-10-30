@@ -3992,7 +3992,7 @@ function ns.CreateLetterbox()
 	ns.letterbox = CreateFrame("Frame", "CinematicLetterbox", UIParent)
 	ns.letterbox:SetAllPoints(UIParent)
 	ns.letterbox:SetFrameStrata("BACKGROUND")
-	ns.letterbox:SetFrameLevel(0)
+	ns.letterbox:SetFrameLevel(2) -- (over the tint and Vitals Vision, Tint.lua)
 	ns.letterbox:EnableMouse(false)
 	ns.MakeLetterboxBars(ns.letterbox)
 

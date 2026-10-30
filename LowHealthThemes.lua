@@ -132,8 +132,15 @@ ns.LOW_HEALTH_THEMES = {
 		} },
 
 	-- Warlock
-	{ key = "decay", name = "Decay", edge = "Smoke", body = { 0.22, 0.22, 0.1 },
-		shadow = { 0.1, 0.08, 0.05 }, flash = { 0.6, 0.7, 0.2 }, pulse = 0.8, bpm = 0.75 },
+	-- (Affliction: souls torn loose, fel green and ghostly, rising out of a
+	-- near-black shadow at the edges.)
+	{ key = "agony", name = "Drained souls", edge = "Smoke", body = { 0.1, 0.03, 0.14 },
+		shadow = { 0.03, 0, 0.06 }, flash = { 0.5, 1, 0.2 }, pulse = 0.9, bpm = 0.7, sparks = {
+			{ tex = "Mote", kind = "rise", at = "bottom", color = { 0.55, 1, 0.3 }, size = { 0.02, 0.045 },
+				life = { 3, 5 }, speed = 0.04, rate = 45, hit = { 3, 5 } },
+			{ tex = "Mote", kind = "rise", color = { 0.4, 0.9, 0.2 }, size = { 0.012, 0.028 },
+				life = { 2.5, 4 }, speed = 0.03, rate = 30, hit = { 2, 3 } },
+		} },
 	{ key = "fel", name = "Fel runes", edge = "Glow", glow = { 0.45, 1, 0.2 },
 		glowAlpha = 0.5, shadow = { 0.03, 0.12, 0 }, flash = { 0.5, 1, 0.2 }, sparks = {
 			{ tex = "Mote", kind = "rise", color = { 0.45, 1, 0.2 }, size = { 0.015, 0.03 },
@@ -163,10 +170,14 @@ ns.LOW_HEALTH_THEMES = {
 	-- Death Knight
 	{ key = "bloodrune", name = "Blood drawn", edge = "Soak", body = { 0.55, 0.02, 0.05 }, glow = { 0.6, 0.05, 0.08 },
 		glowAlpha = 0.5, shadow = { 0.25, 0, 0.02 }, flash = { 0.9, 0.05, 0.1 }, pulse = 1.3, bpm = 0.8 },
-	{ key = "runefrost", name = "Frost runes", edge = "Glow", glow = { 0.45, 0.75, 1 },
-		glowAlpha = 0.5, shadow = { 0.04, 0.08, 0.18 }, flash = { 0.6, 0.85, 1 }, bpm = 0.75 },
-	{ key = "plague", name = "Plague", edge = "Smoke", body = { 0.18, 0.26, 0.1 },
-		shadow = { 0.04, 0.1, 0.02 }, flash = { 0.5, 1, 0.2 }, pulse = 0.8 },
+	-- (Frost: frost creeping over the glass, its cold front glowing, ice glinting in it.)
+	{ key = "runefrost", name = "Hoarfrost", edge = "Rime", body = { 0.62, 0.78, 1 }, glow = { 0.45, 0.75, 1 },
+		glowAlpha = 0.5, shadow = { 0.03, 0.07, 0.17 }, flash = { 0.6, 0.85, 1 }, bpm = 0.75, sparks = {
+			{ tex = "Star", kind = "twinkle", color = { 0.75, 0.9, 1 }, size = { 0.02, 0.04 }, life = { 1, 2 },
+				rate = 25, hit = { 2, 3 } },
+		} },
+	{ key = "decay", name = "Decay", edge = "Smoke", body = { 0.22, 0.22, 0.1 },
+		shadow = { 0.1, 0.08, 0.05 }, flash = { 0.6, 0.7, 0.2 }, pulse = 0.8, bpm = 0.75 },
 	-- Monk
 	{ key = "stagger", name = "Stagger", edge = "Soak", body = { 0.75, 0.45, 0.1 }, glow = { 1, 0.75, 0.3 },
 		glowAlpha = 0.6, shadow = { 0.2, 0.1, 0 }, flash = { 1, 0.7, 0.2 }, sway = 1, bpm = 0.8 },
@@ -218,6 +229,7 @@ local function Haze(theme)
 	table.insert(theme.sparks, { tex = "Gas", kind = "drift", haze = true, flat = not add, color = color,
 		size = { 0.35, 0.6 }, life = { 3, 5 }, rate = 45, hit = { 3, 4 } })
 end
+ns.LowHealthHaze = Haze -- (players' own themes and versions of ours get it too: LowHealth.lua)
 
 -- Each theme's own defaults for the Style page (the look field above), as set
 -- with the dev copy's DEV SET DEFAULT.
@@ -244,6 +256,7 @@ local LOOKS = {
 	arcane = { lowHealthBloodReach = 0.4 },
 	fire = { lowHealthGameReach = 0.05 },
 	frost = { lowHealthBloodAlpha = 0.23 },
+	agony = { lowHealthBloodReach = 0.85, lowHealthGameReach = 0.6 },
 	decay = { lowHealthBloodReach = 0 },
 	felfire = { lowHealthBloodAlpha = 0.76, lowHealthBloodReach = 0.45, lowHealthGameReach = 0,
 		lowHealthGameAlpha = 0.81 },
@@ -251,17 +264,24 @@ local LOOKS = {
 	leaves = { lowHealthBloodAlpha = 0.12, lowHealthGameReach = 0.8, lowHealthGameAlpha = 0.91 },
 	bloodrune = { lowHealthBloodAlpha = 0.21, lowHealthBloodReach = 0.05, lowHealthGamePattern = 4876486,
 		lowHealthGameColors = "theme" },
-	runefrost = { lowHealthGameReach = 0.1 },
-	plague = { lowHealthBloodReach = 0.75, lowHealthGameReach = 0.2 },
+	runefrost = { lowHealthBloodAlpha = 0.42, lowHealthBloodReach = 0.3, lowHealthGameReach = 0.1 },
 	stagger = { lowHealthBloodAlpha = 0.29, lowHealthGameAlpha = 0.69 },
 	mist = { lowHealthBloodAlpha = 0.48, lowHealthGameAlpha = 0.38 },
 	bear = { lowHealthBloodAlpha = 0.23, lowHealthBloodReach = 0.3 },
 	outlaw = { lowHealthBloodAlpha = 0.94, lowHealthGameAlpha = 0.31 },
 }
 
+-- (A reach set without its Sides: the sides the same, as before reaches had two.)
+local REACH_KEYS = { "lowHealthReach", "lowHealthBloodReach", "lowHealthGameReach" }
+
 ns.LOW_HEALTH_THEME = {} -- (by key)
 for _, theme in ipairs(ns.LOW_HEALTH_THEMES) do
 	theme.look = theme.look or LOOKS[theme.key]
+	for _, key in ipairs(theme.look and REACH_KEYS or {}) do
+		if theme.look[key] ~= nil and theme.look[key .. "Sides"] == nil then
+			theme.look[key .. "Sides"] = theme.look[key]
+		end
+	end
 	Haze(theme)
 	ns.LOW_HEALTH_THEME[theme.key] = theme
 end
@@ -335,9 +355,9 @@ local THEIRS = {
 	ward = 4237661, feathers = 6225095, void = 4741753,
 	storm = 3522953, gale = 6214876, water = 5332774,
 	arcane = 5857669, fire = 4876486, frost = 2202483,
-	decay = 1305137, fel = 1273707, felfire = 2140999,
+	agony = 4541185, fel = 1273707, felfire = 2140999,
 	eclipse = 4741750, leaves = 6225364,
-	runefrost = 4237661, plague = 5198840,
+	runefrost = 4237661, decay = 1305137,
 	stagger = 2396780, mist = 6907568, chi = 4417751,
 	demon = 1273707, souls = 3509149, devour = 5857660,
 	dream = 2735672, sands = 5636771,
@@ -403,10 +423,10 @@ ns.LOW_HEALTH_CLASS_THEMES = {
 	PRIEST = { "ward", "feathers", "void" },
 	SHAMAN = { "storm", "gale", "water" },
 	MAGE = { "arcane", "fire", "frost" },
-	WARLOCK = { "decay", "fel", "felfire" },
+	WARLOCK = { "agony", "fel", "felfire" },
 	DRUID = { "eclipse", "claws", "leaves" },
 	-- (Later classes, on clients that have them.)
-	DEATHKNIGHT = { "bloodrune", "runefrost", "plague" },
+	DEATHKNIGHT = { "bloodrune", "runefrost", "decay" },
 	MONK = { "stagger", "mist", "chi" },
 	DEMONHUNTER = { "demon", "souls", "devour" },
 	EVOKER = { "dragonfire", "dream", "sands" },
@@ -433,11 +453,11 @@ ns.LOW_HEALTH_MENU = {
 	{ "PRIEST", "Priest", { { "Discipline", "ward" }, { "Holy", "feathers" }, { "Shadow", "void" } } },
 	{ "SHAMAN", "Shaman", { { "Elemental", "storm" }, { "Enhancement", "gale" }, { "Restoration", "water" } } },
 	{ "MAGE", "Mage", { { "Arcane", "arcane" }, { "Fire", "fire" }, { "Frost", "frost" } } },
-	{ "WARLOCK", "Warlock", { { "Affliction", "decay" }, { "Demonology", "fel" }, { "Destruction", "felfire" } } },
+	{ "WARLOCK", "Warlock", { { "Affliction", "agony" }, { "Demonology", "fel" }, { "Destruction", "felfire" } } },
 	{ "DRUID", "Druid", { { "Balance", "eclipse" }, { "Feral", "claws" }, { "Guardian", "bear", retail = true },
 		{ "Restoration", "leaves" } } },
 	{ "DEATHKNIGHT", "Death Knight", retail = true, { { "Blood", "bloodrune" }, { "Frost", "runefrost" },
-		{ "Unholy", "plague" } } },
+		{ "Unholy", "decay" } } },
 	{ "MONK", "Monk", retail = true, { { "Brewmaster", "stagger" }, { "Mistweaver", "mist" },
 		{ "Windwalker", "chi" } } },
 	{ "DEMONHUNTER", "Demon Hunter", retail = true, { { "Havoc", "demon" }, { "Vengeance", "souls" },

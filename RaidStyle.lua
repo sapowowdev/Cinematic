@@ -336,6 +336,7 @@ function ns.CreateRaidStylePanel(kit)
 
 	preview = ns.MakeRaidStylePreview(content, 480, Pick)
 	stack:Add(preview, "label")
+	ns.StylePopout(preview, kit.Tooltip) -- (StylePages.lua)
 	kit.AddControl(preview)
 	local refreshPreview = preview.Refresh
 	preview.Refresh = function(self) refreshPreview(self, editing) end

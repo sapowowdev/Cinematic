@@ -133,7 +133,7 @@ ns.WIND_GUIDE_STYLES = {
 
 	-- Warlock
 	-- (Affliction: creeping shadow, a few sickly souls drawn in through it.)
-	decay = { name = "Creeping shadow", parts = { Shadow({ { 0.1, 0.06, 0.12 }, { 0.08, 0.1, 0.06 } }, 0.25, 4),
+	agony = { name = "Creeping shadow", parts = { Shadow({ { 0.1, 0.06, 0.12 }, { 0.08, 0.1, 0.06 } }, 0.25, 4),
 		Motes({ { 0.55, 0.85, 0.3 }, { 0.45, 0.7, 0.25 } }, 0.22, "pull") } },
 	fel = { name = "Fel wisps", parts = { Wisps(FEL, 0.55, 0.45) } },
 	-- (Destruction: fire and shadow, embers with shadow smouldering among them.)
@@ -149,7 +149,7 @@ ns.WIND_GUIDE_STYLES = {
 	-- Death Knight
 	bloodrune = { name = "Blood mist", pulse = 60, parts = { Wisps({ { 0.75, 0.08, 0.08 } }, 0.35, 0.6) } },
 	runefrost = { name = "Blizzard", gust = 4, parts = { Snow(3), Wind({ { 0.75, 0.9, 1 } }, 0.65, 0.4) } },
-	plague = { name = "Plague wisps", gust = 10, parts = { Wisps({ { 0.5, 0.75, 0.2 }, { 0.4, 0.6, 0.15 } }, 0.3, 0.4) } },
+	decay = { name = "Plague wisps", gust = 10, parts = { Wisps({ { 0.5, 0.75, 0.2 }, { 0.4, 0.6, 0.15 } }, 0.3, 0.4) } },
 
 	-- Monk
 	stagger = { name = "Bubbles", parts = { { tex = { "Bubble" }, size = { 0.012, 0.05 }, spread = 2, speed = 0.18,
@@ -191,10 +191,10 @@ ns.WIND_GUIDE_COLORS = {
 	ward = { { 1, 0.95, 0.75 } }, feathers = { { 1, 1, 0.9 } }, void = { { 0.65, 0.3, 1 } },
 	storm = { { 0.6, 0.75, 1 } }, gale = { { 0.6, 0.85, 1 } }, water = { { 0.4, 0.8, 1 } },
 	arcane = { { 0.95, 0.5, 1 } }, fire = { { 1, 0.5, 0.15 } }, frost = { { 0.65, 0.9, 1 } },
-	decay = { { 0.55, 0.85, 0.3 } }, fel = { { 0.45, 1, 0.25 } }, felfire = { { 1, 0.45, 0.15 } },
+	agony = { { 0.6, 0.45, 0.85 } }, fel = { { 0.45, 1, 0.25 } }, felfire = { { 1, 0.45, 0.15 } },
 	eclipse = { { 1, 0.85, 0.45 }, { 0.6, 0.75, 1 } }, leaves = { { 0.45, 0.9, 0.35 } },
 	bear = { { 0.85, 0.65, 0.4 } },
-	bloodrune = { { 1, 0.15, 0.15 } }, runefrost = { { 0.55, 0.85, 1 } }, plague = { { 0.55, 0.95, 0.25 } },
+	bloodrune = { { 1, 0.15, 0.15 } }, runefrost = { { 0.55, 0.85, 1 } }, decay = { { 0.55, 0.95, 0.25 } },
 	stagger = { { 1, 0.8, 0.4 } }, mist = { { 0.45, 1, 0.8 } }, chi = { { 0.45, 1, 0.8 } },
 	demon = { { 0.45, 1, 0.25 } }, souls = { { 0.7, 0.45, 1 } }, devour = { { 0.6, 0.3, 0.95 } },
 	dragonfire = { { 1, 0.5, 0.15 } }, dream = { { 0.55, 1, 0.6 } }, sands = { { 1, 0.8, 0.45 } },

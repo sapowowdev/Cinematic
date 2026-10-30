@@ -10,6 +10,7 @@ through cracks, a fire's ember rim, a glow), tinted on its own.
   Soak   blood or water soaking in (a wet rim)
   Crack  a battered plate (steel, stone, glass) cracked from the edge
   Frost  frost crystals growing in
+  Rime   frost on glass creeping in, its cold front glowing; no drawn shapes
   Smoke  billowing smoke or cloud
   Flame  flames licking in from a charred edge
   Glow   no body: a soft glow round the edges
@@ -225,6 +226,26 @@ def frost():
     save("Frost", grey, alpha, 32)
     soft = mask_from(Image.fromarray((crystals * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(4)))
     save("FrostGlow", np.ones_like(x), np.clip(soft * 1.2, 0, 1) * 0.6)
+
+
+# --- Rime: frost on glass creeping in, no drawn shapes -------------------------
+def rime():
+    w, h = 1024, 512
+    x, y = grid(w, h)
+    r = rounded(x, y)
+    line = 0.8 + (fbm(x, y, 6, 5, 91) - 0.5) * 0.3
+    inside = r - line
+    band = smoothstep(-0.02, 0.14, inside)
+    # frosted glass: a soft fog with a fine grain, thicker toward the edge
+    fog = fbm(x, y, 16, 4, 95)
+    grain = fbm(x, y, 160, 2, 97)
+    ridge = smoothstep(0.55, 0.8, grain) * smoothstep(-0.02, 0.2, inside)
+    grey = 0.72 + (fog - 0.5) * 0.25 + ridge * 0.2
+    alpha = band * (0.45 + 0.3 * fog + 0.15 * ridge) * (0.75 + 0.25 * smoothstep(0, 0.25, inside))
+    save("Rime", grey, alpha, 32)
+    # (its glow: the cold front where the frost meets the clear glass)
+    front = np.exp(-((inside - 0.01) / 0.03) ** 2)
+    save("RimeGlow", np.ones_like(x), np.clip(front * 0.8 + band * ridge * 0.35, 0, 1))
 
 
 # --- Smoke: billowing in from the edges ---------------------------------------
@@ -734,6 +755,7 @@ def gas():
 soak()
 crack_plate()
 frost()
+rime()
 smoke()
 flame()
 glow()

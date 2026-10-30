@@ -16,12 +16,14 @@ DEFAULTS.lowHealthEdges = true     -- the screen's edges closing in (the health 
 DEFAULTS.lowHealthAlways = true    -- ...everywhere: its Show in row's Always (the rest: ROW_KEY's ticks and rule)
 DEFAULTS.lowHealthTheme = "auto"   -- a theme's key (LowHealthThemes.lua), or by class and talents
 DEFAULTS.lowHealthStart = 0.75     -- health (0-1) they start creeping in below
-DEFAULTS.lowHealthFull = 0.25      -- ...and are all the way in at
-DEFAULTS.lowHealthReach = 0.3      -- share of the screen each edge's shadow covers at full
+DEFAULTS.lowHealthFull = 0.15      -- ...and are all the way in at
+DEFAULTS.lowHealthReach = 0.3      -- share of the screen's height the top and bottom shadow covers at full
+DEFAULTS.lowHealthReachSides = 0.3 -- ...and of its width, the sides' (each reach has a Sides, the same way)
 DEFAULTS.lowHealthDark = 0.85      -- the shadow's darkness at full
 DEFAULTS.lowHealthRed = 0.6        -- 0 black (like the death screen) to 1 the theme's colour
 DEFAULTS.lowHealthBloodAlpha = 0.9
-DEFAULTS.lowHealthBloodReach = 0.7 -- how far in our art comes at full (0-1)
+DEFAULTS.lowHealthBloodReach = 0.7 -- how far in our art comes at full (0-1), top and bottom
+DEFAULTS.lowHealthBloodReachSides = 0.7
 -- Blizzard art: the game's screen effects, a layer of their own over ours
 -- (LowHealthThemes.lua's patterns). "auto": the theme's pick, and the pattern's
 -- own mask and colors.
@@ -29,11 +31,14 @@ DEFAULTS.lowHealthGamePattern = "auto" -- or a pattern's file number
 DEFAULTS.lowHealthGameMask = "auto"    -- or "none", or a mask's file number
 DEFAULTS.lowHealthGameColors = "auto"  -- or "theme" (greyed, tinted) or "own"
 DEFAULTS.lowHealthGameAlpha = 0.6
-DEFAULTS.lowHealthGameReach = 0.7  -- how far in Blizzard art comes at full (0-1)
+DEFAULTS.lowHealthGameReach = 0.7  -- how far in Blizzard art comes at full (0-1), top and bottom
+DEFAULTS.lowHealthGameReachSides = 0.7
 -- Our effects (with the shadow, heartbeat, grade and flash below).
 DEFAULTS.lowHealthSparks = true    -- the theme's sparks and haze
 DEFAULTS.lowHealthRipple = true    -- a wave of the game's art creeping in on each beat
 DEFAULTS.lowHealthStrength = 0.5   -- the look's strength: half as set, scaled down to none or up to double
+DEFAULTS.lowHealthReachAll = 0.5   -- every reach (shadow, both arts): half as set, down to none or up to double
+DEFAULTS.lowHealthBrightness = 0.5 -- both arts' colors: half as set, down toward black or up toward white
 DEFAULTS.lowHealthStyle = true     -- the Style hub's page: its look as set there (off: the defaults')
 DEFAULTS.lowHealthPulse = true     -- a heartbeat: the edges throb
 DEFAULTS.lowHealthPulseAmount = 0.25
@@ -43,8 +48,8 @@ DEFAULTS.lowHealthFollow = 0.1     -- seconds to close all the way in after a dr
 DEFAULTS.lowHealthLiftSpeed = 0.4  -- the most it lifts a second after healing (share of all the way);
                                    -- it eases up to that speed and slows as it settles
 DEFAULTS.lowHealthFlash = true     -- a flash at the edges on a big hit
-DEFAULTS.lowHealthFlashHit = 0.2   -- share of your health lost at once that counts
-DEFAULTS.lowHealthFlashAdded = 0.3 -- ...or lost in smaller hits adding up (since the last, in a fight)
+DEFAULTS.lowHealthFlashHit = 0.08  -- share of your health lost at once that counts
+DEFAULTS.lowHealthFlashAdded = 0.2 -- ...or lost in smaller hits adding up (since the last, in a fight)
 DEFAULTS.lowHealthCalm = 0.6       -- strength out of combat (eating up, say)
 -- Health bars: faded out in CineMode, they fade in between their own Starts
 -- (hidden above) and Full (fully up below), Frames.lua.
@@ -125,7 +130,6 @@ local secretCurves = {} -- (health that's secret: its alpha from the game, by th
 -- frame. Lost: a share of your health.)
 local woundLost, woundHit = 0, false
 local lostAdding = 0 -- (lost since the last flash, for Hits adding up to; again each fight)
-local testShare -- (the test's health now, for the health bars)
 local shadowColor = { 0, 0, 0 }
 
 -- The look's settings (the Style hub's Vitals Vision page): its own while
@@ -143,8 +147,14 @@ end
 -- scales by }: reach only partly, so it never shrinks to nothing).
 local SCALED = {
 	lowHealthDark = { 1, 1 }, lowHealthPulseAmount = { 0.6, 1 }, lowHealthBloodAlpha = { 1, 1 },
-	lowHealthGameAlpha = { 1, 1 }, lowHealthReach = { 0.5, 0.5 },
+	lowHealthGameAlpha = { 1, 1 }, lowHealthReach = { 0.5, 0.5 }, lowHealthReachSides = { 0.5, 0.5 },
 }
+-- (Reach, the master one (lowHealthReachAll), scales every reach the same way.)
+local REACHES = { lowHealthReach = { 0.5, 0.5 }, lowHealthBloodReach = { 1, 1 }, lowHealthGameReach = { 1, 1 },
+	lowHealthReachSides = { 0.5, 0.5 }, lowHealthBloodReachSides = { 1, 1 }, lowHealthGameReachSides = { 1, 1 } }
+local function Scaled(value, by, scaled)
+	return math.min(scaled[1], value * (1 + (by * 2 - 1) * scaled[2]))
+end
 -- (Settings a theme never sets, the player's alone: none now; the color grade,
 -- once one, follows Strength.)
 local NOT_THEMES = {}
@@ -161,8 +171,11 @@ local function ThemeLook(base, wanted)
 			if own ~= nil and not (ns.StyleOn and ns.StyleOn("lowHealthStyle")) then value = own end
 			local scaled = SCALED[key]
 			if scaled and type(value) == "number" then
-				local strength = base.lowHealthStrength or 0.5
-				value = math.min(scaled[1], value * (1 + (strength * 2 - 1) * scaled[2]))
+				value = Scaled(value, base.lowHealthStrength or 0.5, scaled)
+			end
+			local reach = REACHES[key]
+			if reach and type(value) == "number" then
+				value = Scaled(value, base.lowHealthReachAll or 0.5, reach)
 			end
 			return value
 		end })
@@ -198,20 +211,160 @@ local function SyncThemeLook(wanted, again)
 	from.theme, from.values = wanted.key, values
 end
 
+-- Players' own themes and their versions of ours (the Style page's theme
+-- controls), in the profile: db.lowHealthThemeEdits (ours: key -> the
+-- theme's fields as they've set them, all of them) and db.lowHealthMyThemes
+-- ("my<n>" -> a theme of theirs: name, from (the theme it started as, for
+-- its look and Blizzard art) and its fields). Built over LowHealthThemes.lua's
+-- into ns.LOW_HEALTH_THEME(S) when they change, or a profile brings others.
+local THEME_FIELDS = { "edge", "body", "glow", "glowAlpha", "shadow", "flash", "pulse", "bpm", "sparks" }
+-- (The edges offered: the soft ones, no drawn shapes.)
+local EDGES = { "Smoke", "Glow", "Soak", "Rime", "Fur" }
+local SPARK_TEXTURES = { Mote = true, Star = true, Bolt = true, Gas = true }
+local SPARK_KINDS = { rise = true, twinkle = true, flicker = true, drift = true }
+local SPARK_AT = { top = true, bottom = true, sides = true }
+local ORIGINAL = {} -- (LowHealthThemes.lua's, by key)
+for _, theme in ipairs(ns.LOW_HEALTH_THEMES) do ORIGINAL[theme.key] = theme end
+ns.LOW_HEALTH_MY_THEMES = {} -- (theirs, by name)
+local builtFrom = {} -- (the profile's tables they were built from: another's are others)
+
+local function Copy(value)
+	if type(value) ~= "table" then return value end
+	local copy = {}
+	for k, v in pairs(value) do copy[k] = Copy(v) end
+	return copy
+end
+
+-- A theme's fields, to keep as a player's: its sparks without the haze every theme gets.
+local function FieldsOf(theme)
+	local fields = {}
+	for _, name in ipairs(THEME_FIELDS) do fields[name] = Copy(theme[name]) end
+	local sparks = {}
+	for _, info in ipairs(theme.sparks or {}) do
+		if not info.haze then sparks[#sparks + 1] = Copy(info) end
+	end
+	fields.sparks = sparks
+	return fields
+end
+
+-- Saved fields as they can be drawn (they may come from a shared profile):
+-- what isn't, left out.
+local function Color(value)
+	if type(value) ~= "table" then return nil end
+	local color = {}
+	for i = 1, 3 do
+		local v = value[i]
+		if type(v) ~= "number" or v ~= v then return nil end
+		color[i] = math.max(0, math.min(1, v))
+	end
+	return color
+end
+local function Number(value, low, high)
+	if type(value) ~= "number" or value ~= value then return nil end
+	return math.max(low, math.min(high, value))
+end
+local function Range(value, low, high)
+	if type(value) ~= "table" then return nil end
+	local a, b = Number(value[1], low, high), Number(value[2], low, high)
+	return a and b and { math.min(a, b), math.max(a, b) } or nil
+end
+local function Cleaned(fields)
+	local clean = {}
+	local edge = fields.edge
+	for _, name in ipairs(EDGES) do
+		if edge == name then clean.edge = edge end
+	end
+	if edge == "Frost" then clean.edge = edge end -- (an old theme's, kept)
+	clean.body, clean.glow = Color(fields.body), Color(fields.glow)
+	clean.shadow, clean.flash = Color(fields.shadow) or { 0, 0, 0 }, Color(fields.flash) or { 1, 0, 0 }
+	clean.glowAlpha = Number(fields.glowAlpha, 0, 1)
+	clean.pulse, clean.bpm = Number(fields.pulse, 0, 3), Number(fields.bpm, 0.3, 2)
+	local sparks = {}
+	for _, info in ipairs(type(fields.sparks) == "table" and fields.sparks or {}) do
+		if type(info) == "table" and SPARK_TEXTURES[info.tex] and SPARK_KINDS[info.kind] and #sparks < 4 then
+			sparks[#sparks + 1] = { tex = info.tex, kind = info.kind, flat = info.flat == true or nil,
+				at = SPARK_AT[info.at] and info.at or nil, color = Color(info.color) or { 1, 1, 1 },
+				size = Range(info.size, 0.005, 0.8) or { 0.015, 0.03 }, life = Range(info.life, 0.1, 10) or { 1, 2 },
+				speed = Number(info.speed, 0, 0.5), rate = Number(info.rate, 0, 200),
+				hit = Range(info.hit, 0, 10) }
+			if sparks[#sparks].hit then
+				sparks[#sparks].hit = { math.floor(sparks[#sparks].hit[1]), math.floor(sparks[#sparks].hit[2]) }
+			end
+		end
+	end
+	clean.sparks = sparks
+	return clean
+end
+
+-- A theme as fields say, over one of ours (its look, Blizzard art, who it's for).
+local function Built(over, fields, extra)
+	local theme = {}
+	for k, v in pairs(over) do theme[k] = v end
+	local clean = Cleaned(fields)
+	for _, name in ipairs(THEME_FIELDS) do theme[name] = clean[name] end
+	for k, v in pairs(extra) do theme[k] = v end
+	ns.LowHealthHaze(theme)
+	return theme
+end
+
+local themesReady -- (built once since login)
+local function RebuildThemes()
+	local edits = db and db.lowHealthThemeEdits
+	local mine = db and db.lowHealthMyThemes
+	builtFrom.edits, builtFrom.mine = edits, mine
+	for i, theme in ipairs(ns.LOW_HEALTH_THEMES) do
+		local original = ORIGINAL[theme.key]
+		local own = type(edits) == "table" and edits[theme.key]
+		local built = type(own) == "table" and Built(original, own, { edited = true }) or original
+		ns.LOW_HEALTH_THEMES[i] = built
+		ns.LOW_HEALTH_THEME[theme.key] = built
+	end
+	for key, theme in pairs(ns.LOW_HEALTH_THEME) do
+		if theme.mine then ns.LOW_HEALTH_THEME[key] = nil end
+	end
+	wipe(ns.LOW_HEALTH_MY_THEMES)
+	for key, own in pairs(type(mine) == "table" and mine or {}) do
+		if type(key) == "string" and key:match("^my%d+$") and type(own) == "table" then
+			local name = type(own.name) == "string" and own.name ~= "" and own.name:sub(1, 40) or key
+			local theme = Built(ORIGINAL[own.from] or ns.LOW_HEALTH_THEMES[1], own,
+				{ key = key, name = name, mine = true, edited = false })
+			theme.who = nil
+			ns.LOW_HEALTH_THEME[key] = theme
+			ns.LOW_HEALTH_MY_THEMES[#ns.LOW_HEALTH_MY_THEMES + 1] = theme
+		end
+	end
+	table.sort(ns.LOW_HEALTH_MY_THEMES, function(a, b)
+		if a.name:lower() ~= b.name:lower() then return a.name:lower() < b.name:lower() end
+		return a.key < b.key
+	end)
+	wipe(themed)
+	if screen then screen.shown = nil end
+	themesReady = true
+end
+
+-- Built for the profile's tables now? (Switching profiles brings copies.)
+local function CheckThemes()
+	if db and (not themesReady or db.lowHealthThemeEdits ~= builtFrom.edits
+		or db.lowHealthMyThemes ~= builtFrom.mine) then
+		RebuildThemes()
+	end
+end
+ns.VitalsThemesCurrent = CheckThemes
+
 -- The dev copy's DEV SET DEFAULT: a theme's own defaults
 -- (CinematicDB.vitalsThemeEdits[key].look), over its look as written, to be
 -- written into LowHealthThemes.lua. (The old theme editor's other edits stay
 -- saved but do nothing: nothing on the page shows them.)
 local themeLookAsWritten = {} -- (by key: the look as LowHealthThemes.lua has it, or false)
 local function ThemeEdited(key)
-	local theme = ns.LOW_HEALTH_THEME[key]
+	local theme = ORIGINAL[key]
 	if not theme then return end
 	if themeLookAsWritten[key] == nil then themeLookAsWritten[key] = theme.look or false end
 	local edits = CinematicDB and CinematicDB.vitalsThemeEdits and CinematicDB.vitalsThemeEdits[key]
 	local look = edits and edits.look
 	if look == nil then look = themeLookAsWritten[key] end
 	theme.look = look or nil
-	if screen then screen.shown = nil end
+	RebuildThemes()
 end
 ns.VitalsThemeEdited = ThemeEdited
 
@@ -342,6 +495,7 @@ end
 
 local function WantedTheme(look)
 	if demoTheme then return demoTheme end
+	CheckThemes()
 	local key = (look or Look()).lowHealthTheme
 	if key == "autogame" then
 		key = ns.LowHealthAutoGameTheme()
@@ -349,6 +503,65 @@ local function WantedTheme(look)
 		key = ns.LowHealthAutoTheme()
 	end
 	return ns.LOW_HEALTH_THEME[key] or ns.LOW_HEALTH_THEMES[1]
+end
+
+-- The theme the Style page's theme controls change: the one picked (Auto's
+-- pick with Auto). None for a Game art one: the game's art is it.
+function ns.VitalsEditedTheme()
+	if not db then return nil end
+	local theme = WantedTheme()
+	return not theme.game and theme or nil
+end
+
+-- One of its fields set: one of ours becomes the player's version of it (all
+-- its fields kept, the first time); theirs, in it.
+function ns.SetVitalsThemeField(name, value)
+	local theme = ns.VitalsEditedTheme()
+	if not theme then return end
+	local fields
+	if theme.mine then
+		fields = db.lowHealthMyThemes[theme.key]
+	else
+		fields = db.lowHealthThemeEdits[theme.key] or FieldsOf(theme)
+		db.lowHealthThemeEdits[theme.key] = fields
+	end
+	fields[name] = Copy(value)
+	RebuildThemes()
+end
+
+-- A theme of their own, as the one shown is now, picked: its key.
+function ns.CreateVitalsTheme()
+	local from = ns.VitalsEditedTheme() or ns.LOW_HEALTH_THEMES[1]
+	local n = 1
+	while db.lowHealthMyThemes["my" .. n] do n = n + 1 end
+	local fields = FieldsOf(from)
+	fields.name = L["%s copy"]:format(L[from.name])
+	fields.from = from.mine and from.from or from.key
+	local key = "my" .. n
+	db.lowHealthMyThemes[key] = fields
+	db.lowHealthTheme = key
+	RebuildThemes()
+	return key
+end
+
+function ns.RenameVitalsTheme(key, name)
+	local fields = db.lowHealthMyThemes[key]
+	if fields and name ~= "" then
+		fields.name = name
+		RebuildThemes()
+	end
+end
+
+-- Theirs gone (the page back to Auto if it was picked); or ours back as it comes.
+function ns.DeleteVitalsTheme(key)
+	db.lowHealthMyThemes[key] = nil
+	if db.lowHealthTheme == key then db.lowHealthTheme = "auto" end
+	RebuildThemes()
+end
+
+function ns.ResetVitalsTheme(key)
+	db.lowHealthThemeEdits[key] = nil
+	RebuildThemes()
 end
 
 -- After settings are put back wholesale (a page's Reset, a profile loaded or
@@ -361,7 +574,8 @@ end
 
 -- A drawer's textures, in parent (the screen's overlay, or the preview).
 local function NewDrawer(parent)
-	local d = { frame = parent, sparks = {}, reach = 0, artScale = ART_OUT, level = 0, flash = 0, beat = 0 }
+	local d = { frame = parent, sparks = {}, reach = 0, reachSides = 0, artScale = ART_OUT, artScaleSides = ART_OUT,
+		level = 0, flash = 0, beat = 0 }
 	d.body = parent:CreateTexture(nil, "BORDER")
 	d.body:SetPoint("CENTER")
 	d.glow = parent:CreateTexture(nil, "BORDER", nil, 1)
@@ -400,7 +614,9 @@ local function Create()
 	frame = CreateFrame("Frame", nil, UIParent)
 	frame:SetAllPoints(UIParent)
 	frame:SetFrameStrata("BACKGROUND")
-	frame:SetFrameLevel(0) -- (under the letterbox, like the tint and death screen)
+	-- (Over the tint, else the zone's color and its vignette dulled the art on
+	-- the screen but not in the preview; under the letterbox.)
+	frame:SetFrameLevel(1)
 	frame:EnableMouse(false)
 	ns.AddOverlay(frame)
 	screen = NewDrawer(frame)
@@ -554,11 +770,11 @@ end
 -- Where a spark starts (shares of the screen across and down), about where
 -- the shadow reaches now: by the top or bottom edge, the sides, or any.
 -- spread: anywhere along the edge, corners too (else not the last tenths).
-local function Place(at, reach, spread)
+local function Place(at, reach, sides, spread)
 	local along = spread and math.random() or 0.1 + 0.8 * math.random()
-	local inset = reach * (0.4 + 0.7 * math.random())
 	local side = at == "top" and 1 or at == "bottom" and 2 or at == "sides" and math.random(3, 4)
 		or math.random(4)
+	local inset = (side <= 2 and reach or sides) * (0.4 + 0.7 * math.random())
 	if side == 1 then return along, inset end
 	if side == 2 then return along, 1 - inset end
 	-- (Left and right: the reach is a share of the width there, and screens are wide.)
@@ -574,7 +790,8 @@ local function Spark(d, info)
 			-- (Gas stays over the edges, where it blends in: alone further in, it
 			-- looked pasted on.)
 			local gas = info.kind == "drift"
-			spark.x, spark.y = Place(info.at, gas and d.reach * GAS_REACH or d.reach, gas)
+			local share = gas and GAS_REACH or 1
+			spark.x, spark.y = Place(info.at, d.reach * share, d.reachSides * share, gas)
 			spark.phase = math.random() * 2 * math.pi
 			spark.tex:SetTexture(ART .. info.tex)
 			spark.tex:SetBlendMode(info.flat and "BLEND" or "ADD")
@@ -659,6 +876,18 @@ local function Beat(d, look, elapsed)
 	return math.max(k, d.flash * 0.35), heart
 end
 
+-- An art's color as Brightness (lowHealthBrightness) says: at half as set,
+-- down toward black at 0, up toward white at full (not all the way: it'd be
+-- a white wash).
+local function Lit(color, bright)
+	local t = bright * 2 - 1
+	if t >= 0 then
+		t = t * 0.6
+		return color[1] + (1 - color[1]) * t, color[2] + (1 - color[2]) * t, color[3] + (1 - color[3]) * t
+	end
+	return color[1] * (1 + t), color[2] * (1 + t), color[3] * (1 + t)
+end
+
 -- Draws a drawer as the look says. k: how far in (0 none, 1 full; a little
 -- more on a beat or a flash); heart: the heartbeat now (0-1). Gives the
 -- shadow's reach.
@@ -671,6 +900,7 @@ local function Apply(d, look, k, fade, heart, secret)
 	local over = math.max(0, k - 1)
 	local width, height = d.frame:GetWidth(), d.frame:GetHeight()
 	local size = EDGE_START + (look.lowHealthReach - EDGE_START) * c + over * 0.1
+	local sides = EDGE_START + (look.lowHealthReachSides - EDGE_START) * c + over * 0.1
 	local alpha = math.min(1, look.lowHealthDark * c + flash * 0.35) * fade
 	-- The shadow: the theme's colour (as far as Shadow tint says), toward its
 	-- flash colour in a flash.
@@ -679,7 +909,7 @@ local function Apply(d, look, k, fade, heart, secret)
 		local v = shadow[i] * look.lowHealthRed
 		shadowColor[i] = v + (flashColor[i] - v) * flash * FLASH_TINT
 	end
-	ns.SetVignette(d.edges, size, alpha, shadowColor[1], shadowColor[2], shadowColor[3], width, height)
+	ns.SetVignette(d.edges, size, alpha, shadowColor[1], shadowColor[2], shadowColor[3], width, height, sides)
 	-- The grade: by how far in the edges are, not their throb (the world
 	-- shouldn't pulse). Not with secret health: the game's alpha may not fade
 	-- a multiplying layer, so it would stay at full.
@@ -701,7 +931,8 @@ local function Apply(d, look, k, fade, heart, secret)
 	-- The art: ours, Blizzard's, or both, closing in together.
 	-- (Each while its opacity's above none.)
 	local ours, blizz = look.lowHealthBloodAlpha > 0, look.lowHealthGameAlpha > 0 and d.pick
-	local artScale = d.artScale
+	local artScale, artSides = d.artScale, d.artScaleSides
+	local bright = look.lowHealthBrightness or 0.5
 	local sway = shown.sway
 	-- (a little bigger while it rocks, so its edges never come on screen)
 	local pad = sway and 4 * SWAY * sway or 0
@@ -711,9 +942,10 @@ local function Apply(d, look, k, fade, heart, secret)
 			local deep = ART_SHALLOWEST + (ART_DEEPEST - ART_SHALLOWEST) * reach
 			return math.max(1, ART_OUT + (deep - ART_OUT) * c - over * 0.05)
 		end
-		artScale = Scale(look.lowHealthBloodReach)
-		d.artScale = artScale
-		local theirsScale = Scale(look.lowHealthGameReach)
+		-- (Down by the top and bottom's reach, across by the sides'.)
+		artScale, artSides = Scale(look.lowHealthBloodReach), Scale(look.lowHealthBloodReachSides)
+		d.artScale, d.artScaleSides = artScale, artSides
+		local theirsScale, theirsSides = Scale(look.lowHealthGameReach), Scale(look.lowHealthGameReachSides)
 		-- Sloshing (liquid themes): the art rocks slowly side to side and up and down.
 		if sway then
 			local now = GetTime()
@@ -729,16 +961,15 @@ local function Apply(d, look, k, fade, heart, secret)
 		if blizz then
 			-- (The theme's color: a bright one, as it's added on as light: the glow's,
 			-- else the flash's; a smoke theme's art color is near black.)
-			local color = d.pick[4] and WHITE or shown.glow or shown.flash or shown.body or WHITE
+			local r, g, b = Lit(d.pick[4] and WHITE or shown.glow or shown.flash or shown.body or WHITE, bright)
 			local a = look.lowHealthGameAlpha * math.min(1, c * 3) * fade * (0.85 + 0.25 * heart + 0.3 * flash)
-			theirs:SetSize(width * (theirsScale + pad), height * (theirsScale + pad))
-			theirs:SetVertexColor(color[1], color[2], color[3], math.min(1, a))
+			theirs:SetSize(width * (theirsSides + pad), height * (theirsScale + pad))
+			theirs:SetVertexColor(r, g, b, math.min(1, a))
 			theirs:Show()
 			if look.lowHealthRipple then
-				local scale = theirsScale + pad + RIPPLE_SPAN * (1 - waveAt)
-				theirsWave:SetSize(width * scale, height * scale)
-				theirsWave:SetVertexColor(color[1], color[2], color[3],
-					math.min(1, a) * RIPPLE_ALPHA * math.sin(math.pi * waveAt))
+				local wave = RIPPLE_SPAN * (1 - waveAt)
+				theirsWave:SetSize(width * (theirsSides + pad + wave), height * (theirsScale + pad + wave))
+				theirsWave:SetVertexColor(r, g, b, math.min(1, a) * RIPPLE_ALPHA * math.sin(math.pi * waveAt))
 				theirsWave:Show()
 			else
 				theirsWave:Hide()
@@ -764,9 +995,10 @@ local function Apply(d, look, k, fade, heart, secret)
 		local own = gameArt and d.isScreen and type(gameArtTest) == "table" and gameArtTest.own and WHITE
 		color = color and own or color
 		if color and edged and (gameArt or d.hasBody) then
-			body:SetSize(width * (artScale + pad), height * (artScale + pad))
-			SizeMasks(body, width * (artScale + pad), height * (artScale + pad))
-			body:SetVertexColor(color[1], color[2], color[3], artAlpha)
+			body:SetSize(width * (artSides + pad), height * (artScale + pad))
+			SizeMasks(body, width * (artSides + pad), height * (artScale + pad))
+			local r, g, b = Lit(color, bright)
+			body:SetVertexColor(r, g, b, artAlpha)
 			body:Show()
 		else
 			body:Hide()
@@ -774,11 +1006,12 @@ local function Apply(d, look, k, fade, heart, secret)
 		color = shown.glow or gameArt and shown.body
 		color = color and own or color
 		if color and edged and (gameArt or d.hasGlow) then
-			glow:SetSize(width * (artScale + pad), height * (artScale + pad))
-			SizeMasks(glow, width * (artScale + pad), height * (artScale + pad))
+			glow:SetSize(width * (artSides + pad), height * (artScale + pad))
+			SizeMasks(glow, width * (artSides + pad), height * (artScale + pad))
 			-- (brighter on a beat and in a flash)
 			local a = artAlpha * (shown.glowAlpha or 1) * (0.8 + 0.3 * heart + 0.4 * flash)
-			glow:SetVertexColor(color[1], color[2], color[3], math.min(1, a))
+			local r, g, b = Lit(color, bright)
+			glow:SetVertexColor(r, g, b, math.min(1, a))
 			glow:Show()
 		else
 			glow:Hide()
@@ -787,10 +1020,11 @@ local function Apply(d, look, k, fade, heart, secret)
 			-- A wave creeping in from past the edges on each beat (each second
 			-- with no heartbeat), brightest halfway.
 			local p = look.lowHealthPulse and beat or GetTime() % 1
-			local scale = artScale + pad + RIPPLE_SPAN * (1 - p)
-			ripple:SetSize(width * scale, height * scale)
-			SizeMasks(ripple, width * scale, height * scale)
-			ripple:SetVertexColor(color[1], color[2], color[3], artAlpha * RIPPLE_ALPHA * math.sin(math.pi * p))
+			local wave = pad + RIPPLE_SPAN * (1 - p)
+			ripple:SetSize(width * (artSides + wave), height * (artScale + wave))
+			SizeMasks(ripple, width * (artSides + wave), height * (artScale + wave))
+			local r, g, b = Lit(color, bright)
+			ripple:SetVertexColor(r, g, b, artAlpha * RIPPLE_ALPHA * math.sin(math.pi * p))
 			ripple:Show()
 		else
 			ripple:Hide()
@@ -800,7 +1034,7 @@ local function Apply(d, look, k, fade, heart, secret)
 		glow:Hide()
 		ripple:Hide()
 	end
-	d.reach = size
+	d.reach, d.reachSides = size, sides
 	return size
 end
 
@@ -858,7 +1092,6 @@ local function Update(_, elapsed)
 		UseTheme(screen, theme, look)
 	end
 	local share, on, testing, dead = Wanted(now)
-	testShare = testing and share or nil
 	-- A big hit, or smaller ones adding up to Hits adding up to: a flash (only
 	-- by what was shown: a heal doesn't).
 	-- (Secret health, in fights on retail: by the hit event's amounts, plain.)
@@ -968,7 +1201,7 @@ end
 -- are cut too: else they'd show on the next level.)
 function ns.StopVitalsFlash()
 	if not (test and test.quiet) and not (glimpse and not test) then return end
-	test, testShare, lastHealth, glimpse = nil, nil, nil, nil
+	test, lastHealth, glimpse = nil, nil, nil
 	level, flash, liftSpeed = 0, 0, 0
 	ClearSparks(screen)
 	if frame then frame:Hide() end
@@ -978,6 +1211,13 @@ end
 function ns.StopLowHealthTest()
 	test = nil
 	Wake()
+end
+
+-- The page's test's seconds left (nil: none running; not a quick look's).
+function ns.LowHealthTestLeft()
+	if not test or test.quiet then return end
+	local left = test.start + test.time + (test.hold or TEST_HOLD) - GetTime()
+	return left > 0 and left or nil
 end
 
 -- /cine vital demo <seconds> [classes]: a random spec's theme each few
@@ -1272,16 +1512,14 @@ end
 -- Starts, fading in to fully up at its Full. nil: not ticked (or
 -- dead). "secret": the game won't say, so ns.SetVitalsSecretAlpha sets it.
 -- plate: Forever's personal resource bars (your own nameplate), which can't
--- take a secret alpha: fully up then.
+-- take a secret alpha: fully up then. (Not the page's test's health: those
+-- bars show your real health, and you aren't losing any.)
 local BAR_PREFIX = { portrait = "lowHealthPortrait", prd = "lowHealthPrd" }
 function ns.VitalsFrameAlpha(which, plate)
 	local prefix = BAR_PREFIX[which]
 	if not (db and db[prefix]) then return nil end
-	local share = testShare
-	if not share then
-		if not db.lowHealth or ns.Flag(UnitIsDeadOrGhost("player")) then return nil end
-		share = HealthShare()
-	end
+	if not db.lowHealth or ns.Flag(UnitIsDeadOrGhost("player")) then return nil end
+	local share = HealthShare()
 	if share then return LevelAt(share, prefix) end
 	if plate or not SecretCurve(prefix) then return 1 end
 	return "secret"
@@ -1714,57 +1952,84 @@ function ns.CreateVitalsStylePanel(kit)
 	end)
 	preview.pageSwitch = false
 	stack:Add(preview, "label")
+	ns.StylePopout(preview, kit.Tooltip) -- (StylePages.lua)
 	kit.AddControl(preview)
 
 	-- Test: the preview's from full health to 10% in hits, and the Vitals
-	-- Vision page's on the screen.
-	ns.StylePreviewTest(preview, kit, L["Your health falls in hits in the preview, and on the screen as the " ..
-		"Vitals Vision page's Test says. Close the settings to see it all."], function()
-			sim.test = GetTime()
-			ns.TestLowHealth()
+	-- Vision page's on the screen; Stop with the seconds left meanwhile (as
+	-- the camera tests').
+	local testButton = ns.StylePreviewTest(preview, kit, L["Your health falls in hits in the preview, and on the " ..
+		"screen as the Vitals Vision page's Test says. Close the settings to see it all."], function()
+			if ns.LowHealthTestLeft() then
+				sim.test = nil
+				ns.StopLowHealthTest()
+			else
+				sim.test = GetTime()
+				ns.TestLowHealth()
+			end
 		end)
+	local wait = 0
+	testButton:SetScript("OnUpdate", function(self, elapsed)
+		wait = wait - elapsed
+		if wait > 0 then return end
+		wait = 0.2
+		local left = ns.LowHealthTestLeft()
+		self:SetText(left and L["Stop (%d)"]:format(math.ceil(left)) or L["Test"])
+	end)
 
-	-- A row picking from a list: its name, then a dropdown, or (no dropdowns
-	-- on this client) a button stepping through it.
-	local function Pick(key, labelText, Choices, tip, test)
-		local name = stack:Add(kit.Label(content, "GameFontHighlight", labelText), "label")
-		name:SetSize(150, 30)
-		name:SetJustifyV("MIDDLE")
-		local picker = kit.Dropdown and kit.Dropdown(content, key, Choices, 280, Changed)
+	-- A dropdown picking from a list, or (no dropdowns on this client) a
+	-- button stepping through it. key: a setting, or a field ({ get, set }).
+	local function Choose(key, Choices, width, tip, test)
+		-- (A theme's field can grey others: a spark's kind, its row.)
+		local function Picked()
+			Changed()
+			if type(key) == "table" then kit.Refresh() end
+		end
+		local picker = kit.Dropdown and kit.Dropdown(content, key, Choices, width, Picked)
 		if not picker then
 			picker = ns.PanelButton(content)
-			picker:SetSize(280, 22)
+			picker:SetSize(width, 22)
 			picker:SetScript("OnClick", function(self)
-				local list, value = Choices(), ns.GetDB()[key]
+				local list, value = Choices(), ns.StyleKeyGet(key)
 				for i, choice in ipairs(list) do
 					if choice.value == value then
-						ns.GetDB()[key] = list[i % #list + 1].value
+						ns.StyleKeyPut(key, list[i % #list + 1].value)
 						break
 					end
 				end
-				Changed()
+				Picked()
 				self:Refresh()
 			end)
 			picker.Refresh = function(self)
-				local value = ns.GetDB()[key]
+				local value = ns.StyleKeyGet(key)
 				for _, choice in ipairs(Choices()) do
 					if choice.value == value then self:SetText(choice.text) end
 				end
 			end
 			kit.AddControl(picker)
 		end
-		picker:SetPoint("LEFT", name, "LEFT", 160, 0)
 		kit.Tooltip(picker, tip)
 		kit.GreyUnless(picker, test or On)
+		return picker
+	end
+	-- A row picking from a list: its name, then the dropdown.
+	local function Pick(key, labelText, Choices, tip, test, width)
+		local name = stack:Add(kit.Label(content, "GameFontHighlight", labelText), "label")
+		name:SetSize(150, 30)
+		name:SetJustifyV("MIDDLE")
+		local picker = Choose(key, Choices, width or 280, tip, test)
+		picker:SetPoint("LEFT", name, "LEFT", 160, 0)
 		return picker, name
 	end
 
 	-- The theme: Auto (and what it picks for you), or any of them, by class
 	-- and spec. (Game art's themes: no longer offered, Blizzard art being a
 	-- layer of its own; one already picked still works.)
+	local EDITED = " |cff999999(" .. L["edited"] .. ")|r"
 	local function ThemeName(key)
+		ns.VitalsThemesCurrent()
 		local info = ns.LOW_HEALTH_THEME[key]
-		return info and L[info.name] or key
+		return info and L[info.name] .. (info.edited and EDITED or "") or key
 	end
 	local function AutoText()
 		return L["Auto"] .. ": " .. ThemeName(ns.LowHealthAutoTheme())
@@ -1772,13 +2037,18 @@ function ns.CreateVitalsStylePanel(kit)
 	local function Choices() -- (flat: the button that steps through them)
 		local list = { { value = "auto", text = AutoText() } }
 		for _, info in ipairs(ns.LOW_HEALTH_THEMES) do
-			list[#list + 1] = { value = info.key, text = L[info.name] }
+			list[#list + 1] = { value = info.key, text = ThemeName(info.key) }
+		end
+		for _, info in ipairs(ns.LOW_HEALTH_MY_THEMES) do
+			list[#list + 1] = { value = info.key, text = info.name }
 		end
 		return list
 	end
 	local themePicker, themeName = Pick("lowHealthTheme", L["Theme:"], Choices,
 		L["The look: Auto picks your class and spec's (by the talent tree you've put most into, on clients " ..
-		"without specs), or pick any. Each class has a theme for each spec."])
+		"without specs), or pick any. Each class has a theme for each spec. Create theme makes one of your " ..
+		"own from the one shown, under Your themes; the theme's own settings below change the one shown " ..
+		"(ours become your version, which Reset theme puts back)."])
 	-- (Just after its name, not in line with the rows' choices below.)
 	themePicker:ClearAllPoints()
 	themePicker:SetPoint("LEFT", themeName, "LEFT", themeName:GetStringWidth() + 10, 0)
@@ -1815,19 +2085,236 @@ function ns.CreateVitalsStylePanel(kit)
 						function() return Picked(key) end, function() PickTheme(key) end)
 				end
 			end
+			-- Theirs, then a new one from the theme shown.
+			root:CreateDivider()
+			if #ns.LOW_HEALTH_MY_THEMES > 0 then
+				local menu = root:CreateButton(L["Your themes"])
+				for _, info in ipairs(ns.LOW_HEALTH_MY_THEMES) do
+					local key = info.key
+					menu:CreateRadio(info.name, function() return Picked(key) end, function() PickTheme(key) end)
+				end
+			end
+			root:CreateButton("|cff9fd0ff+ " .. L["Create theme"] .. "|r", function()
+				PickTheme(ns.CreateVitalsTheme())
+			end)
 		end)
 	end
 
-	-- Strength, on the theme's line. (After the dropdown's edge: its own text
-	-- is inside it, where the boxes would go after.)
-	local themeEnd = CreateFrame("Frame", nil, content)
-	themeEnd:SetSize(1, 22)
-	themeEnd:SetPoint("LEFT", themePicker, "RIGHT", -10, 0)
-	rows.Boxes(themeEnd):Box(L["Strength"], "lowHealthStrength", 0, 100, 5, "%d", 100, L["How strong it all is: " ..
+	-- Beside the theme: Rename and Delete for one of theirs, Reset theme for
+	-- their version of ours (each only when it's that); Create theme where
+	-- there's no menu to have it.
+	StaticPopupDialogs.CINEMATIC_VITALS_RENAME = StaticPopupDialogs.CINEMATIC_VITALS_RENAME
+		or ns.NamePopup(L["Rename the theme:"], function(name, key)
+			if name == "" then return true end
+			ns.RenameVitalsTheme(key, name)
+			Changed()
+			kit.Refresh()
+		end, { initial = function(key)
+			local info = ns.LOW_HEALTH_THEME[key]
+			return info and info.name or ""
+		end })
+	StaticPopupDialogs.CINEMATIC_VITALS_DELETE = StaticPopupDialogs.CINEMATIC_VITALS_DELETE or {
+		text = L["Delete the theme %s?"], button1 = YES, button2 = NO,
+		OnAccept = function(_, key)
+			ns.DeleteVitalsTheme(key)
+			Changed()
+			kit.Refresh()
+		end,
+		timeout = 0, whileDead = true, hideOnEscape = true,
+	}
+	StaticPopupDialogs.CINEMATIC_VITALS_RESET = StaticPopupDialogs.CINEMATIC_VITALS_RESET or {
+		text = L["Put %s back as it comes?"], button1 = YES, button2 = NO,
+		OnAccept = function(_, key)
+			ns.ResetVitalsTheme(key)
+			Changed()
+			kit.Refresh()
+		end,
+		timeout = 0, whileDead = true, hideOnEscape = true,
+	}
+	local function Shown() return ns.GetDB() and ns.VitalsEditedTheme() end
+	local function ThemeButton(text, tip, after, when, onClick)
+		local button = ns.PanelButton(content)
+		button:SetText(text)
+		local label = button:GetFontString()
+		button:SetSize(math.max(70, (label and label:GetStringWidth() or 50) + 20), 22)
+		button:SetPoint("LEFT", after, "RIGHT", 6, 0)
+		kit.Tooltip(button, tip)
+		button:SetScript("OnClick", function()
+			local theme = Shown()
+			if theme then onClick(theme) end
+		end)
+		button.Refresh = function(self)
+			local theme = Shown()
+			self:SetShown(theme and when(theme) and true or false)
+			self:SetEnabled(On(ns.GetDB()))
+		end
+		button.pageSwitch = false
+		kit.AddControl(button)
+		return button
+	end
+	local rename = ThemeButton(L["Rename"], L["A new name for this theme of yours."], themePicker,
+		function(theme) return theme.mine end, function(theme)
+			StaticPopup_Show("CINEMATIC_VITALS_RENAME", nil, nil, theme.key)
+		end)
+	ThemeButton(L["Delete"], L["Deletes this theme of yours."], rename, function(theme) return theme.mine end,
+		function(theme) StaticPopup_Show("CINEMATIC_VITALS_DELETE", theme.name, nil, theme.key) end)
+	ThemeButton(L["Reset theme"], L["Puts this theme back as it comes, undoing your changes to its own " ..
+		"settings (edge, colors, sparks, heartbeat)."], themePicker, function(theme) return theme.edited end,
+		function(theme) StaticPopup_Show("CINEMATIC_VITALS_RESET", L[theme.name], nil, theme.key) end)
+	if not themePicker.SetupMenu then
+		ThemeButton(L["Create theme"], L["A theme of your own, made from the one shown."], themePicker,
+			function(theme) return not theme.mine and not theme.edited end, function()
+				ns.CreateVitalsTheme()
+				SyncThemeLook(WantedTheme())
+				Changed()
+				kit.Refresh()
+			end)
+	end
+
+	-- The theme's own settings (the theme shown, Auto's pick with Auto): fields
+	-- of it, not settings (ns.SetVitalsThemeField). Not with a Game art theme.
+	local function Themed(d) return On(d) and ns.VitalsEditedTheme() ~= nil end
+	local function ThemeValue(name)
+		local theme = ns.GetDB() and ns.VitalsEditedTheme()
+		return theme and theme[name]
+	end
+	local function Field(name, default)
+		return {
+			get = function()
+				local value = ThemeValue(name)
+				if value == nil then value = default end
+				return value
+			end,
+			set = function(value)
+				if value == "none" then value = nil end
+				ns.SetVitalsThemeField(name, value)
+			end,
+		}
+	end
+	-- (A color's three parts, each a field, for the page's swatches.)
+	local function ColorKeys(name)
+		local keys = {}
+		for i = 1, 3 do
+			keys[i] = {
+				get = function()
+					local color = ThemeValue(name)
+					return color and color[i] or 0
+				end,
+				set = function(value)
+					local color = Copy(ThemeValue(name) or { 0, 0, 0 })
+					color[i] = value
+					ns.SetVitalsThemeField(name, color)
+				end,
+			}
+		end
+		return keys
+	end
+
+	-- The rest in folder tabs (ns.FolderTabs, made once every section is):
+	-- General, Blizzard's art and ours, the picked one's settings on the
+	-- panel under them. (section.body: what its tab made, hidden on the others:
+	-- search still finds it, and picks its tab; section.foot: under its last
+	-- row, the panel's bottom under it.)
+	local tabbed = { sections = {}, picked = 1, top = CreateFrame("Frame", nil, content) }
+	do
+		local room = CreateFrame("Frame", nil, content)
+		room:SetSize(PREVIEW_W, ns.FOLDER_TAB_HEIGHT + 4)
+		stack:Add(room, "label")
+		tabbed.top:SetSize(1, 1)
+		tabbed.top:SetPoint("TOPLEFT", room, "BOTTOMLEFT", -10, 0)
+	end
+	local function Widgets()
+		local set = {}
+		for _, object in ipairs({ content:GetChildren() }) do set[object] = true end
+		for _, object in ipairs({ content:GetRegions() }) do set[object] = true end
+		return set
+	end
+	-- A section's start: what's added from here to its Finish is its own.
+	function tabbed.Begin()
+		local section = { body = CreateFrame("Frame", nil, content), before = nil }
+		section.body:SetPoint("TOPLEFT", tabbed.top)
+		section.body:SetSize(1, 1)
+		section.body.searchAlways = true
+		local start = CreateFrame("Frame", nil, section.body)
+		start:SetSize(1, 1)
+		start:SetPoint("TOPLEFT", tabbed.top, "TOPLEFT", 12, -6)
+		stack:Continue(start, "header")
+		section.before = Widgets()
+		return section
+	end
+	function tabbed.Finish(section)
+		for object in pairs(Widgets()) do
+			if not section.before[object] then object:SetParent(section.body) end
+		end
+		section.before = nil
+		section.foot = CreateFrame("Frame", nil, section.body)
+		section.foot:SetSize(1, 1)
+		stack:Add(section.foot, "label")
+		tabbed.sections[#tabbed.sections + 1] = section
+	end
+	-- Shows the picked tab's section, the panel down past it and across the page.
+	function tabbed.Layout()
+		for i, section in ipairs(tabbed.sections) do section.body:SetShown(i == tabbed.picked) end
+		tabbed.Show(tabbed.picked)
+		local panel, left, right = tabbed.panel, tabbed.top:GetLeft(), content:GetRight()
+		panel:ClearAllPoints()
+		panel:SetPoint("TOPLEFT", tabbed.top)
+		panel:SetPoint("BOTTOMLEFT", tabbed.sections[tabbed.picked].foot, "BOTTOMLEFT", -12, -10)
+		panel:SetWidth(left and right and math.max(right - left - 16, PREVIEW_W) or PREVIEW_W + 140)
+		kit.FitContentHeight(content)
+	end
+
+	-- General: under the theme, the master controls: Strength, Reach, Brightness.
+	local general = tabbed.Begin()
+	local masters = rows.Boxes()
+	masters:Box(L["Strength"], "lowHealthStrength", 0, 100, 5, "%d", 100, L["How strong it all is: " ..
 		"at 50% as the settings below say (and the theme's own); less, lighter, down to nothing at 0%; more, up " ..
 		"to double. It scales the darkness, the shadow's reach, the throb and both arts' opacity. The color " ..
 		"grade (the world draining toward grey, tinged with the theme's color) is as strong as this says."], nil,
 		"%")
+	masters:Box(L["Reach"], "lowHealthReachAll", 0, 100, 5, "%d", 100, L["How far in it all comes: at 50% as " ..
+		"the settings below say (and the theme's own); less, nearer the edges, down to none at 0% (the shadow " ..
+		"only to half); more, further in, up to double. It scales the shadow's reach and both arts' reach."],
+		nil, "%")
+	masters:Box(L["Brightness"], "lowHealthBrightness", 0, 100, 5, "%d", 100, L["How bright both arts' colors " ..
+		"are: at 50% as the theme has them; less, darker, down to black at 0%; more, lighter, toward white."],
+		nil, "%")
+
+	stack:Header(content, L["Both"])
+	local reachBoxes = rows.Boxes()
+	reachBoxes:Box(L["Shadow reach, top and bottom"], "lowHealthReach", 10, 50, 1, "%d", 100,
+		L["How much of the screen's height the dark top and bottom edges cover at full."], nil, "%")
+	reachBoxes:Box(L["Sides"], "lowHealthReachSides", 10, 50, 1, "%d", 100,
+		L["How much of the screen's width the dark left and right edges cover at full."], nil, "%")
+	local shadowBoxes = rows.Boxes()
+	shadowBoxes:Box(L["Darkness"], "lowHealthDark", 0, 100, 5, "%d", 100, L["How dark the edges are at full."], nil, "%")
+	shadowBoxes:Box(L["Shadow tint"], "lowHealthRed", 0, 100, 5, "%d", 100,
+		L["0%: black, like the death screen. 100%: the theme's own color (deep red for blood)."], nil, "%")
+
+	rows.Colors(L["Theme colors"], {
+		{ L["Shadow"], ColorKeys("shadow"), L["The dark edges' color, at full Shadow tint."] },
+		{ L["Flash"], ColorKeys("flash"), L["A big hit's flash, and the color the world drains toward."] },
+	}, Themed)
+
+	local function Beating(d) return On(d) and d.lowHealthPulse end
+	local pulse = rows.Check("lowHealthPulse", L["Heartbeat"],
+		L["The edges throb with a heartbeat, quicker as you weaken."])
+	rows.Boxes(pulse):Box(L["Throb"], "lowHealthPulseAmount", 0, 60, 5, "%d", 100,
+		L["How much further in each beat pushes the edges (some themes throb more or less)."], Beating, "%")
+	local bpm = rows.Boxes()
+	bpm:Box(L["Beats a minute as they start"], "lowHealthBpmSlow", 30, 120, 5, "%d", 1, nil, Beating)
+	bpm:Box(L["At full"], "lowHealthBpmFast", 60, 200, 5, "%d", 1, L["Beats a minute at full"], Beating)
+	local function ThemeBeating(d) return Beating(d) and Themed(d) end
+	local themeBeat = rows.Boxes()
+	themeBeat:Box(L["Theme's speed"], Field("bpm", 1), 30, 200, 5, "%d", 100,
+		L["This theme's heartbeat, next to the beats a minute above (slower for a creeping theme)."], ThemeBeating,
+		"%")
+	themeBeat:Box(L["Theme's throb"], Field("pulse", 1), 0, 300, 10, "%d", 100,
+		L["How much this theme throbs, next to Throb above."], ThemeBeating, "%")
+	rows.Check("lowHealthFlash", L["Flash on big hits"],
+		L["The edges flash in the theme's color when a hit takes a lot at once. (What counts as big: the " ..
+		"Vitals Vision page.)"])
+	tabbed.Finish(general)
 
 	-- The art, in two layers: ours, and Blizzard's (the game's own screen
 	-- effects) over it, each on its own or both.
@@ -1851,21 +2338,157 @@ function ns.CreateVitalsStylePanel(kit)
 		kit.GreyUnless(check, test or On)
 		return check
 	end
-	stack:Header(content, L["Our art"])
+	local ours = tabbed.Begin()
+	stack:Header(content, L["Cinematic Art Assets"])
+	Pick(Field("edge", "none"), L["Edge:"], function()
+		local list = {}
+		for _, name in ipairs(EDGES) do list[#list + 1] = { value = name, text = L[name] } end
+		if ThemeValue("edge") == "Frost" then list[#list + 1] = { value = "Frost", text = L["Frost"] } end
+		list[#list + 1] = { value = "none", text = L["None"] }
+		return list
+	end, L["The theme's art: smoke billowing in, a soft glow, blood (or water) soaking in, frost on " ..
+		"glass, fur... None: no art, its sparks and shadow only."], Themed, 200)
+	rows.Colors(L["Colors"], {
+		{ L["Art"], ColorKeys("body"), L["The art's color."] },
+		{ L["Glow"], ColorKeys("glow"), L["The glow round it, added on as light (Glow's only color)."] },
+	}, Themed)
+	rows.Boxes():Box(L["Glow strength"], Field("glowAlpha", 1), 0, 100, 5, "%d", 100,
+		L["How strong the glow is, next to the art."], Themed, "%")
 	TickBeside(Opacity("lowHealthBloodAlpha", L["The theme's art soaking in from the edges as they close in " ..
 		"(blood, smoke, a glow...)."], Ours), "lowHealthSparks", L["Sparks"], L["The theme's sparks (motes, " ..
 		"stars, lightning) and the haze drifting over the edges."], Ours)
-	kit.GreyUnless(stack:Add(kit.Slider(content, "lowHealthBloodReach", L["Reach"], 0, 100, 5, "%d%%", 100,
-		Changed), "slider"), Ours)
+	-- (Each reach in two: the top and bottom's, as a share of the height, and the sides', of the width.)
+	local function Reaches(key, test)
+		local down = stack:Add(kit.Slider(content, key, L["Reach, top and bottom"], 0, 100, 5, "%d%%", 100, Changed),
+			"slider")
+		kit.Tooltip(down, L["How far in it comes from the top and bottom of the screen at full."])
+		kit.GreyUnless(down, test)
+		local across = stack:Add(kit.Slider(content, key .. "Sides", L["Reach, sides"], 0, 100, 5, "%d%%", 100,
+			Changed), "slider")
+		kit.Tooltip(across, L["How far in it comes from the left and right of the screen at full (screens are " ..
+			"wide: the same share comes further in there)."])
+		kit.GreyUnless(across, test)
+	end
+	Reaches("lowHealthBloodReach", Ours)
 
-	stack:Header(content, L["Blizzard art"])
+	-- The theme's sparks: up to four, each a kind (None: not there), its
+	-- color, how many and how big, and which edge they start from.
+	local SPARK_KINDS = {
+		motes = { tex = "Mote", kind = "rise", size = { 0.015, 0.03 }, life = { 2, 3.5 }, speed = 0.05, rate = 30,
+			hit = { 2, 4 } },
+		stars = { tex = "Star", kind = "twinkle", size = { 0.02, 0.04 }, life = { 1, 2 }, rate = 25, hit = { 2, 3 } },
+		lightning = { tex = "Bolt", kind = "flicker", at = "top", size = { 0.15, 0.25 }, life = { 0.3, 0.5 },
+			rate = 4, hit = { 1, 1 } },
+		gas = { tex = "Gas", kind = "drift", flat = true, size = { 0.35, 0.6 }, life = { 3, 5 }, rate = 45,
+			hit = { 3, 4 } },
+	}
+	local KIND_OF = { Mote = "motes", Star = "stars", Bolt = "lightning", Gas = "gas" }
+	local function Sparks() return ThemeValue("sparks") or {} end
+	local function SetSpark(i, change)
+		local sparks = {}
+		for _, info in ipairs(Sparks()) do
+			if not info.haze then sparks[#sparks + 1] = Copy(info) end
+		end
+		change(sparks, sparks[i])
+		ns.SetVitalsThemeField("sparks", sparks)
+	end
+	-- (The haze every theme gets isn't one of them.)
+	local function Spark(i)
+		local n = 0
+		for _, info in ipairs(Sparks()) do
+			if not info.haze then
+				n = n + 1
+				if n == i then return info end
+			end
+		end
+	end
+	local function SparkCount()
+		local n = 0
+		for _, info in ipairs(Sparks()) do
+			if not info.haze then n = n + 1 end
+		end
+		return n
+	end
+	local function SparkField(i, get, set)
+		return {
+			get = function()
+				local info = Spark(i)
+				return info and get(info)
+			end,
+			set = function(value) SetSpark(i, function(_, info) if info then set(info, value) end end) end,
+		}
+	end
+	local function Used(i) return function(d) return Themed(d) and Spark(i) ~= nil end end
+	local sparksName = stack:Add(kit.Label(content, "GameFontHighlight", L["Theme's sparks"]), "label")
+	sparksName.searchLabel = L["Theme's sparks"]
+	for i = 1, 4 do
+		local row = CreateFrame("Frame", nil, content)
+		row:SetSize(PREVIEW_W, 26)
+		stack:Add(row, "label")
+		local kind = Choose({
+			get = function()
+				local info = Spark(i)
+				return info and KIND_OF[info.tex] or "none"
+			end,
+			set = function(value)
+				SetSpark(i, function(sparks, info)
+					if value == "none" then
+						if info then table.remove(sparks, i) end
+						return
+					end
+					local new = Copy(SPARK_KINDS[value])
+					local theme = ns.VitalsEditedTheme()
+					new.color = info and info.color or Copy(theme.glow or theme.flash or { 1, 1, 1 })
+					if info and value ~= "lightning" then new.at = info.at end
+					sparks[info and i or #sparks + 1] = new
+				end)
+			end,
+		}, function()
+			return { { value = "none", text = L["None"] }, { value = "motes", text = L["Rising motes"] },
+				{ value = "stars", text = L["Twinkling stars"] }, { value = "lightning", text = L["Lightning"] },
+				{ value = "gas", text = L["Drifting gas"] } }
+		end, 140, L["What it is: motes of light floating up, stars twinkling, lightning flickering, or gas " ..
+			"drifting in over the edges. None: not there."], function(d) return Themed(d) and i <= SparkCount() + 1 end)
+		kind:SetPoint("LEFT", row, "LEFT", 0, 0)
+		-- (The swatch from just past the dropdown: from it, it'd sit on its text.)
+		local past = CreateFrame("Frame", nil, row)
+		past:SetSize(1, 1)
+		past:SetPoint("LEFT", kind, "RIGHT", 0, 0)
+		local swatch = rows.Swatch(past, nil, {
+			SparkField(i, function(info) return info.color[1] end, function(info, v) info.color[1] = v end),
+			SparkField(i, function(info) return info.color[2] end, function(info, v) info.color[2] = v end),
+			SparkField(i, function(info) return info.color[3] end, function(info, v) info.color[3] = v end),
+		}, L["Their color."], Used(i))
+		local boxes = rows.Boxes(swatch)
+		boxes:Box(L["Amount"], SparkField(i, function(info) return info.rate or 0 end,
+			function(info, v) info.rate = v end), 0, 120, 5, "%d", 1,
+			L["How many come a minute at full (a big hit brings a few more)."], Used(i))
+		boxes:Box(L["Size"], SparkField(i, function(info)
+			local base = SPARK_KINDS[KIND_OF[info.tex]]
+			return info.size[2] / base.size[2]
+		end, function(info, v)
+			local base = SPARK_KINDS[KIND_OF[info.tex]]
+			info.size = { base.size[1] * v, base.size[2] * v }
+		end), 20, 300, 10, "%d", 100, L["How big they are, next to the usual."], Used(i), "%")
+		local from = Choose(SparkField(i, function(info) return info.at or "any" end, function(info, v)
+			info.at = v ~= "any" and v or nil
+		end), function()
+			return { { value = "any", text = L["Any edge"] }, { value = "top", text = L["Top"] },
+				{ value = "bottom", text = L["Bottom"] }, { value = "sides", text = L["Sides"] } }
+		end, 100, L["Which edge they start from."], Used(i))
+		from:SetPoint("LEFT", boxes, "RIGHT", 4, 0)
+	end
+
+	tabbed.Finish(ours)
+
+	local theirs = tabbed.Begin()
+	stack:Header(content, L["Blizzard Art Assets"])
 	TickBeside(Opacity("lowHealthGameAlpha", L["The game's own screen effects (fire, frost, lightning, " ..
 		"ripples...) cut to an edge, closing in with ours, over it. Each theme has one picked to go with it. " ..
 		"Classic has only a few of them."], Theirs), "lowHealthRipple", L["Ripple wave"], L["A wave of the " ..
 		"game's art creeping in from past the edges on each heartbeat (each second without one). With Blizzard " ..
 		"art, or a Game art theme."])
-	kit.GreyUnless(stack:Add(kit.Slider(content, "lowHealthGameReach", L["Reach"], 0, 100, 5, "%d%%", 100,
-		Changed), "slider"), Theirs)
+	Reaches("lowHealthGameReach", Theirs)
 	local function PatternName(file)
 		local pattern = ns.LOW_HEALTH_BLIZZ_PATTERN[file]
 		return pattern and L[pattern[2]] or tostring(file)
@@ -1895,40 +2518,50 @@ function ns.CreateVitalsStylePanel(kit)
 			{ value = "theme", text = L["The theme's color"] }, { value = "own", text = L["Its own colors"] } }
 	end, L["The theme's color: the effect turned grey and tinted to match your theme. Its own colors: as " ..
 		"the game draws it."], Theirs)
+	tabbed.Finish(theirs)
 
-	stack:Header(content, L["Both"])
-	local shadowBoxes = rows.Boxes()
-	shadowBoxes:Box(L["Shadow reach"], "lowHealthReach", 10, 50, 1, "%d", 100,
-		L["How much of the screen the dark edges cover at full."], nil, "%")
-	shadowBoxes:Box(L["Darkness"], "lowHealthDark", 0, 100, 5, "%d", 100, L["How dark the edges are at full."], nil, "%")
-	shadowBoxes:Box(L["Shadow tint"], "lowHealthRed", 0, 100, 5, "%d", 100,
-		L["0%: black, like the death screen. 100%: the theme's own color (deep red for blood)."], nil, "%")
-
-	local function Beating(d) return On(d) and d.lowHealthPulse end
-	local pulse = rows.Check("lowHealthPulse", L["Heartbeat"],
-		L["The edges throb with a heartbeat, quicker as you weaken."])
-	rows.Boxes(pulse):Box(L["Throb"], "lowHealthPulseAmount", 0, 60, 5, "%d", 100,
-		L["How much further in each beat pushes the edges (some themes throb more or less)."], Beating, "%")
-	local bpm = rows.Boxes()
-	bpm:Box(L["Beats a minute as they start"], "lowHealthBpmSlow", 30, 120, 5, "%d", 1, nil, Beating)
-	bpm:Box(L["At full"], "lowHealthBpmFast", 60, 200, 5, "%d", 1, L["Beats a minute at full"], Beating)
-	rows.Check("lowHealthFlash", L["Flash on big hits"],
-		L["The edges flash in the theme's color when a hit takes a lot at once. (What counts as big: the " ..
-		"Vitals Vision page.)"])
+	-- The tabs, in their order (made in another: Blizzard's art uses ours' helpers).
+	-- ("Blizzard" as it is: its L key is the frost spell's name.)
+	do
+		local order = { general, theirs, ours }
+		local list = {
+			{ L["General"], L["The strength, reach and brightness of it all, the shadow, the heartbeat and big hits."] },
+			{ "Blizzard", L["The game's own screen effects, cut to an edge, over ours."] },
+			{ L["Cinematic"], L["The theme's own art and its sparks."] },
+		}
+		local function Pick(i)
+			tabbed.picked = i
+			tabbed.Layout()
+		end
+		for i, section in ipairs(order) do
+			section.body.openSection = function() Pick(i) end
+		end
+		tabbed.sections = order
+		local panel, _, show, base = ns.FolderTabs(content, list, Pick)
+		tabbed.panel, tabbed.Show = panel, show
+		base:SetPoint("TOPLEFT", tabbed.top)
+	end
+	-- (What follows from under the panel.)
+	local afterTabs = CreateFrame("Frame", nil, content)
+	afterTabs:SetSize(1, 1)
+	afterTabs:SetPoint("TOPLEFT", tabbed.panel, "BOTTOMLEFT", 10, -10)
+	stack:Continue(afterTabs, "label")
+	tabbed.Layout()
 
 	-- (Dev copy: DEV SET DEFAULT. This page's settings, as they show now, become
-	-- the picked theme's own defaults (CinematicDB.vitalsThemeEdits, to be
+	-- the shown theme's own defaults (CinematicDB.vitalsThemeEdits, to be
 	-- written into LowHealthThemes.lua), and the page goes back to its
-	-- defaults, so it follows the theme. Not with Auto: a theme must be picked.)
+	-- defaults, so it follows the theme. With Auto, the one Auto's on.)
 	if ns.isDev then
 		local LOOK_KEYS = { "lowHealthReach", "lowHealthDark", "lowHealthRed", "lowHealthBloodAlpha", "lowHealthBloodReach", "lowHealthGameReach",
+			"lowHealthReachSides", "lowHealthBloodReachSides", "lowHealthGameReachSides",
 			"lowHealthGamePattern", "lowHealthGameMask", "lowHealthGameColors", "lowHealthGameAlpha", "lowHealthSparks",
 			"lowHealthRipple", "lowHealthPulse", "lowHealthPulseAmount", "lowHealthBpmSlow", "lowHealthBpmFast",
 			"lowHealthFlash" }
-		local function Picked()
-			local d = ns.GetDB()
-			local key = d and d.lowHealthTheme
-			return key ~= "auto" and key ~= "autogame" and ns.LOW_HEALTH_THEME[key] and key or nil
+		local function Picked() -- (one of LowHealthThemes.lua's: not one of the player's own)
+			if not ns.GetDB() then return nil end
+			local key = WantedTheme().key
+			return ORIGINAL[key] and key or nil
 		end
 		local devRow = CreateFrame("Frame", nil, content)
 		devRow:SetSize(PREVIEW_W, 30)
@@ -1937,9 +2570,9 @@ function ns.CreateVitalsStylePanel(kit)
 		devSet:SetSize(140, 22)
 		devSet:SetText("DEV SET DEFAULT")
 		devSet:SetPoint("LEFT")
-		kit.Tooltip(devSet, "Dev copy: this page's settings, as they show now, become the picked theme's own " ..
-			"defaults, and the page goes back to its defaults so it follows the theme. Then ask Claude to write " ..
-			"them into LowHealthThemes.lua. Pick a theme first: not with Auto.")
+		kit.Tooltip(devSet, "Dev copy: this page's settings, as they show now, become the shown theme's own " ..
+			"defaults (with Auto, the one Auto's on), and the page goes back to its defaults so it follows the " ..
+			"theme. Then ask Claude to write them into LowHealthThemes.lua.")
 		devSet:SetScript("OnClick", function()
 			local key = Picked()
 			if not key then return end
@@ -1971,7 +2604,10 @@ function ns.CreateVitalsStylePanel(kit)
 		kit.AddControl(devSet)
 	end
 
-	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))
+	canvas:SetScript("OnShow", kit.PageShown(function()
+		kit.Refresh()
+		tabbed.Layout() -- (across the page, now it's sized)
+	end, content))
 	canvas:Hide()
 	kit.RegisterSubpage(canvas, "Vitals Style", L["Vitals Vision"])
 end
@@ -2022,7 +2658,7 @@ function ns.CreateVitalsVisionPanel(kit)
 	-- Where and when the edges close in: a Show in row as Combat Vision's.
 	local header = stack:Header(content, L["Show in"])
 	local lastRow = ns.ShowTable(content, header, {
-		opts = { anyFight = true },
+		opts = { anyFight = true }, underHeader = true,
 		{ key = ROW_KEY, label = L["Vitals Vision"], alwaysKey = "lowHealthAlways",
 			alwaysOn = function() return ns.GetDB().lowHealthAlways end,
 			setAlways = function(value) ns.GetDB().lowHealthAlways = value Changed() end,

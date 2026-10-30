@@ -1056,6 +1056,7 @@ function ns.CreateCombatVisionPanel(kit)
 		-- usual fights and targets left out).
 		local header = stack:Header(content, L["Show in"])
 		local lastRow = ns.ShowTable(content, header, {
+			underHeader = true,
 			opts = { anyFight = true, omit = { combatShow = true, enemyShow = true, friendlyShow = true },
 				combatItems = {
 					Edge("combatOnEnter", L["Entering combat"], L["The cue as a fight starts."]),
@@ -1077,6 +1078,7 @@ function ns.CreateCombatVisionPanel(kit)
 	parts.Part("boss", function()
 		local bossHeader = stack:Header(content, L["Show in"])
 		local bossRow = ns.ShowTable(content, bossHeader, {
+			underHeader = true,
 			opts = { anyFight = true, omit = { combatShow = true, enemyShow = true, friendlyShow = true },
 				combatItems = {
 					Edge("combatBossPull", L["Boss pulled"], L["The boss's name as its fight starts, in place of the " ..
@@ -1167,12 +1169,13 @@ function ns.MakeCombatPreview(parent, width, fixedH, kind)
 		ns.StyleScene(self)
 		local look = ns.StyleLook("combatVision")
 		local scale = previewH / math.max(screenH, 1)
+		local wide = self:GetWidth() -- (the page's width: StylePopout)
 		if kind and kind() == "boss" then
-			Play(stage, BossLook(look), true, width, previewH, scale, SampleBoss(look))
+			Play(stage, BossLook(look), true, wide, previewH, scale, SampleBoss(look))
 		else
 			-- (Going in, then coming out.)
-			Play(stage, look, true, width, previewH, scale, nil, function()
-				Play(stage, ns.StyleLook("combatVision"), false, width, previewH, scale)
+			Play(stage, look, true, wide, previewH, scale, nil, function()
+				Play(stage, ns.StyleLook("combatVision"), false, wide, previewH, scale)
 			end)
 		end
 	end
@@ -1225,6 +1228,7 @@ function ns.CreateCombatStylePanel(kit)
 	preview = ns.MakeCombatPreview(content, 480, nil, function() return lastKind end)
 	preview.pageSwitch = false
 	stack:Add(preview, "label")
+	ns.StylePopout(preview, kit.Tooltip) -- (StylePages.lua)
 	kit.AddControl(preview)
 
 	-- The tabs under the preview: what follows is the cue's or the Boss card's.

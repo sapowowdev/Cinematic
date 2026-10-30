@@ -252,14 +252,14 @@ end
 
 -- size: the fraction of the screen each edge covers; alpha: its darkness;
 -- r, g, b: its colour (black if left out); w, h: the frame's size, if not
--- the screen's (a preview).
-local function SetVignette(pieces, size, alpha, r, g, b, w, h)
+-- the screen's (a preview); sides: the sides' share of the width, if not size.
+local function SetVignette(pieces, size, alpha, r, g, b, w, h, sides)
 	local width, height = w or UIParent:GetWidth(), h or UIParent:GetHeight()
 	for name, piece in pairs(pieces) do
 		piece:SetShown(alpha > 0)
 		piece:SetVertexColor(r or 0, g or 0, b or 0, alpha)
 		if VIGNETTE_CORNERS[name] then
-			piece:SetSize(width * size, height * size)
+			piece:SetSize(width * (sides or size), height * size)
 		end
 	end
 end
@@ -637,10 +637,11 @@ local function CreateTint()
 
 	vignetteEdges = CreateVignette(tintFrame)
 	tintFrame:Hide()
-	-- Keep the letterbox bars above the tint so a glow doesn't tint them.
+	-- Keep the letterbox bars above the tint so a glow doesn't tint them (and
+	-- above Vitals Vision, a level over the tint).
 	local letterbox = ns.GetLetterbox()
 	if letterbox then
-		letterbox:SetFrameLevel(tintFrame:GetFrameLevel() + 1)
+		letterbox:SetFrameLevel(tintFrame:GetFrameLevel() + 2)
 	end
 end
 

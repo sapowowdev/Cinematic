@@ -63,7 +63,7 @@ function ns.CreateLetterboxStylePanel(kit)
 		preview:SetHeight(previewH)
 		ns.StyleScene(preview) -- (cut to the screen's shape: StylePages.lua)
 		local t = progress * progress * (3 - 2 * progress)
-		ns.DrawLetterbox(bars, ns.LetterboxLook(), PREVIEW_W, previewH, t, previewH / math.max(height, 1))
+		ns.DrawLetterbox(bars, ns.LetterboxLook(), preview:GetWidth(), previewH, t, previewH / math.max(height, 1))
 		bars:SetShown(progress > 0)
 	end
 	function preview:Refresh()
@@ -80,6 +80,7 @@ function ns.CreateLetterboxStylePanel(kit)
 	kit.AddControl(preview)
 
 	stack:Add(preview, "label")
+	ns.StylePopout(preview, kit.Tooltip) -- (StylePages.lua)
 	-- Test: the bars out, then back in once they're gone, as at a fight's start and end.
 	ns.StylePreviewTest(over, kit, L["Takes the bars out and brings them back in, as at a fight's start and end."],
 		function()

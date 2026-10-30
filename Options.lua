@@ -201,7 +201,8 @@ local function Stack(anchor, kind, inline)
 			placed = self:InlineRow(control, controlKind)
 			controlKind = "inline"
 		end
-		placed:SetPoint("TOPLEFT", self.last, "BOTTOMLEFT",
+		-- (A centered preview's spot: where it'd have been, the column's edge.)
+		placed:SetPoint("TOPLEFT", self.last.stackSpot or self.last, "BOTTOMLEFT",
 			STACK_X[controlKind] + indent - STACK_X[self.kind] - self.indent,
 			-STACK_GAP[controlKind][self.kind])
 		self.last, self.kind, self.indent = placed, controlKind, indent
@@ -246,7 +247,7 @@ local function Stack(anchor, kind, inline)
 	end
 	-- A note kept behind a "?" beside the header just added (see PageIntro).
 	function stack:Help(parent, text)
-		self.last, self.kind = PageIntro(parent, self.last, text), "label"
+		self.last, self.kind = PageIntro(parent, self.last.stackSpot or self.last, text), "label"
 		return self.last
 	end
 	-- Carries on from a control placed some other way.
@@ -408,8 +409,18 @@ local function BoxLine(parent)
 		local function Shown(value)
 			return type(fmt) == "function" and fmt(value) or fmt:format(value)
 		end
+		-- (A typed number is kept as typed, to the decimals the box shows,
+		-- not snapped to step; a % box's wheel moves 1% a time.)
+		local exact = step
+		if type(fmt) == "string" then
+			local decimals = fmt:match("%%[%d]*%.(%d)f")
+			exact = fmt:match("%%[%d]*d") and 1 or decimals and 10 ^ -tonumber(decimals) or step
+			exact = math.min(exact, step)
+		end
+		local percent = scale == 100 or (unit and unit:match("^%%"))
+		local wheelStep = percent and math.min(1, step) or step
 		local function Set(value)
-			value = math.max(minV, math.min(maxV, math.floor(value / step + 0.5) * step))
+			value = math.max(minV, math.min(maxV, math.floor(value / exact + 0.5) * exact))
 			if type(key) == "table" then
 				key.set(value / scale)
 			else
@@ -420,10 +431,10 @@ local function BoxLine(parent)
 			if onChange then onChange(value) end
 		end
 		box:SetScript("OnMouseWheel", function(self, delta)
-			if self:IsEnabled() then Set(Now() + delta * step) end
+			if self:IsEnabled() then Set(Now() + delta * wheelStep) end
 		end)
 		box:SetScript("OnEditFocusGained", function(self)
-			self:SetText(tostring(math.floor(Now() / step + 0.5) * step))
+			self:SetText(tostring(math.floor(Now() / exact + 0.5) * exact))
 			self:HighlightText()
 			self.edited = nil
 		end)
@@ -554,6 +565,57 @@ local function Choice(parent, key, value, label, tip)
 	return cb
 end
 
+-- A box of our own beside a dropdown, showing a font file (a font list's
+-- hovered entry): its name and a line of letters in it, sized to them, just
+-- right of the hovered line (line: the menu's; else the dropdown).
+-- FontSample(nil) hides it; it hides itself too once the dropdown's menu closes.
+local sample
+local function FontSample(dropdown, file, name, line)
+	if not dropdown then
+		if sample then sample:Hide() end
+		return
+	end
+	if not sample then
+		sample = CreateFrame("Frame", nil, UIParent, BackdropTemplateMixin and "BackdropTemplate")
+		sample:SetFrameStrata("TOOLTIP")
+		if sample.SetBackdrop then
+			sample:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8",
+				edgeSize = 1 })
+			sample:SetBackdropColor(0, 0, 0, 0.9)
+			sample:SetBackdropBorderColor(1, 0.82, 0, 1)
+		end
+		sample.name = sample:CreateFontString(nil, "OVERLAY")
+		sample.name:SetPoint("TOPLEFT", 10, -8)
+		sample.name:SetWordWrap(false)
+		sample.line = sample:CreateFontString(nil, "OVERLAY")
+		sample.line:SetPoint("TOPLEFT", sample.name, "BOTTOMLEFT", 0, -6)
+		sample.line:SetWordWrap(false)
+		sample:SetScript("OnUpdate", function(self)
+			if not (self.dropdown and self.dropdown.IsMenuOpen and self.dropdown:IsMenuOpen()) then self:Hide() end
+		end)
+	end
+	-- (A file the game won't set yet, not loaded: the game's, until it is.)
+	local fallback = (GameFontHighlight:GetFont())
+	for text, size in pairs({ [sample.name] = 18, [sample.line] = 14 }) do
+		local ok, set = pcall(text.SetFont, text, file, size, "")
+		if not ok or set == false then text:SetFont(fallback, size, "") end
+	end
+	sample.name:SetText(name)
+	sample.name:SetTextColor(1, 0.82, 0)
+	sample.line:SetText("The quick brown fox 0123")
+	sample.line:SetTextColor(1, 1, 1)
+	sample:SetSize(math.max(sample.name:GetStringWidth(), sample.line:GetStringWidth()) + 20,
+		sample.name:GetStringHeight() + sample.line:GetStringHeight() + 22)
+	sample.dropdown = dropdown
+	sample:ClearAllPoints()
+	if line and line.GetRight then
+		sample:SetPoint("LEFT", line, "RIGHT", 16, 0) -- (past the menu's edge)
+	else
+		sample:SetPoint("LEFT", dropdown, "RIGHT", 12, 0)
+	end
+	sample:Show()
+end
+
 -- A dropdown for a db key with a fixed set of choices ({ value, text,
 -- enabled = optional test(db): greyed in the menu unless it holds }), or
 -- a function giving them each time the menu opens.
@@ -594,6 +656,12 @@ local function Dropdown(parent, key, choices, width, onChange)
 					strip:SetDesaturated(grey)
 					if strip.SetDesaturation then strip:SetDesaturation(grey and 1 or 0) end
 				end)
+			end
+			-- (choice.font: hovered, a sample of it beside the dropdown. The menu's
+			-- own lines can't take a font: the game won't let addons SetFont them.)
+			if choice.font and radio and radio.SetOnEnter then
+				radio:SetOnEnter(function(line) FontSample(dropdown, choice.font, choice.text, line) end)
+				if radio.SetOnLeave then radio:SetOnLeave(function() FontSample(nil) end) end
 			end
 			-- (choice.tip: its tooltip in the open menu.)
 			if choice.tip and radio and radio.SetTooltip then
@@ -5054,8 +5122,9 @@ end
 -- ...: where the rows are (page, then section). The Chat page's rows
 -- aren't frames: rows.labelWidth widens the names, rows.columnTips[c] is a
 -- column's tip, rows.noHeadings leaves the headings out (a row added later
--- under a table's), and a row's alwaysOn() / setAlways(value) are its Always
--- box's own setting.
+-- under a table's), rows.underHeader sits it close under a stack:Header
+-- anchor (the one-line headings' empty top taken up), and a row's
+-- alwaysOn() / setAlways(value) are its Always box's own setting.
 local function ShowTable(content, anchor, rows, ...)
 	-- One table: a row per frame, a column per situation.
 	local LABEL_WIDTH, COLUMN_WIDTH, ROW_HEIGHT = rows.labelWidth or FRAME_LABEL_WIDTH, FRAME_COLUMN_WIDTH, 24
@@ -5063,7 +5132,7 @@ local function ShowTable(content, anchor, rows, ...)
 	SetSection(content, (select(2, ...))) -- (its heading: the rows' section)
 	local columnTop = CreateFrame("Frame", nil, content)
 	columnTop:SetSize(1, 1)
-	columnTop:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
+	columnTop:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, rows.underHeader and ns.GRID_MENUS and 6 or -12)
 	-- (The rows as dropdowns where the client has menus: GridRows.lua.)
 	if ns.GRID_MENUS then
 		return ns.GridTable(content, columnTop, rows, setmetatable(
@@ -6848,6 +6917,7 @@ local function CreateNameStylePanel()
 	preview = CreateFrame("Frame", nil, content)
 	preview:SetSize(PREVIEW_W, PREVIEW_H)
 	stack:Add(preview, "label")
+	ns.StylePopout(preview, Tooltip) -- (StylePages.lua)
 	ns.StyleScene(preview, 0.55, 0.8) -- (the Style pages' scene, darker under the names: StylePages.lua)
 	local caption = Label(preview, "GameFontDisableSmall", L["Preview"])
 	caption:SetPoint("TOPLEFT", 6, -5)
@@ -6856,10 +6926,18 @@ local function CreateNameStylePanel()
 	for i in ipairs(SAMPLES) do
 		local text = preview:CreateFontString(nil, "ARTWORK")
 		text:SetFontObject("GameFontNormal")
-		text:SetPoint("CENTER", preview, "LEFT", PREVIEW_W * (i - 0.5) / #SAMPLES, -4)
 		text.searchSkip = true
 		texts[i] = text
 	end
+	-- (Spread evenly, however wide the page makes it: StylePopout.)
+	local function PlaceTexts(_, width)
+		for i, text in ipairs(texts) do
+			text:ClearAllPoints()
+			text:SetPoint("CENTER", preview, "LEFT", width * (i - 0.5) / #SAMPLES, -4)
+		end
+	end
+	PlaceTexts(nil, PREVIEW_W)
+	preview:HookScript("OnSizeChanged", PlaceTexts)
 	-- The plates' own font, as the game sets it up (or the usual one).
 	local function PlateFont()
 		local object = _G.SystemFont_NamePlate or _G.SystemFont_NamePlateFixed or _G.GameFontNormal
@@ -7151,6 +7229,7 @@ do
 		preview = CreateFrame("Frame", nil, content)
 		preview:SetSize(560, 160)
 		stack:Add(preview, "label")
+		ns.StylePopout(preview, Tooltip) -- (StylePages.lua)
 		ns.StyleScene(preview, 0.55, 0.8) -- (the Style pages' scene, darker under the plate: StylePages.lua)
 		local caption = Label(preview, "GameFontNormal", "")
 		caption:SetPoint("TOPLEFT", 8, -7)
@@ -11993,6 +12072,8 @@ local function NamePopup(text, accept, opts)
 	}
 end
 
+ns.NamePopup = NamePopup -- (Vitals Vision's themes too: LowHealth.lua)
+
 -- Checks a new profile name (old: the one being renamed); says why not on
 -- screen if it can't be used. Names differing only in capitals count as the
 -- same (/cine profile ignores them).
@@ -12040,11 +12121,14 @@ StaticPopupDialogs.CINEMATIC_PROFILE_RESET = {
 	end,
 	timeout = 0, whileDead = true, hideOnEscape = true,
 }
+-- (Keep backups: your own profiles wait among the deleted ones, Backups.lua.)
 StaticPopupDialogs.CINEMATIC_ADDON_RESET = {
 	text = L["Reset Cinematic? Every profile and setting goes, your own profiles too, and the UI reloads. " ..
-		"Cinematic's Edit Mode layouts are removed too, and your own layout comes back."],
-	button1 = YES, button2 = NO,
-	OnAccept = function() ns.ResetAddon() end,
+		"Cinematic's Edit Mode layouts are removed too, and your own layout comes back.\n\n" ..
+		"Keep backups keeps your profiles' backups, and your own profiles to bring back from Backups for 30 days."],
+	button1 = L["Keep backups"], button2 = CANCEL, button3 = L["Delete everything"],
+	OnAccept = function() ns.ResetAddon(true) end,
+	OnAlt = function() ns.ResetAddon() end,
 	timeout = 0, whileDead = true, hideOnEscape = true,
 }
 
@@ -12247,7 +12331,9 @@ local function CreateProfilesPanel()
 	end
 
 	-- The last card: a new profile of your own, from the settings you have now.
-	local newTip = L["A profile of your own, a copy of the active one as you have it now, named after it. " ..
+	local newTip = PROFILE_MENUS and L["A profile of your own, a copy of the active one as you have it now, named " ..
+		"after it. To copy another profile, right-click it, then New profile from it."]
+		or L["A profile of your own, a copy of the active one as you have it now, named after it. " ..
 		"To copy another profile, switch to it first."]
 	local newCard = Card()
 	newCard.label:SetText(L["New profile"])
@@ -12264,7 +12350,7 @@ local function CreateProfilesPanel()
 	end
 	-- (Named after the one it starts from, no asking: My Cinema, or a copy of
 	-- yours with a number; Rename is there for another name.)
-	newCard:SetScript("OnClick", function()
+	local function NewFromActive()
 		local from = ns.ActiveProfile()
 		local base = ns.IsBuiltinProfile(from) and L["My %s"]:format(ns.ProfileLabel(from)) or from
 		local name, n = base, 1
@@ -12274,7 +12360,8 @@ local function CreateProfilesPanel()
 		end
 		ns.NewProfile(name)
 		Refresh()
-	end)
+	end
+	newCard:SetScript("OnClick", NewFromActive)
 	tips[#tips + 1] = newTip
 
 	local ProfileMenu -- (below)
@@ -12340,10 +12427,10 @@ local function CreateProfilesPanel()
 		return button
 	end
 	-- Sharing (Share.lua): a profile pasted in. Backups (Backups.lua): copies of
-	-- the active profile to go back to, and deleted ones. The rest is on a
+	-- every profile to go back to, and deleted ones. The rest is on a
 	-- card's right-click menu (ProfileMenu below), for that profile; clients
 	-- without the game's menus have buttons for the active one instead.
-	local backups = Button(buttons, L["Backups"], 90, L["Copies of the active profile from earlier days and from " ..
+	local backups = Button(buttons, L["Backups"], 90, L["Copies of your profiles from earlier days and from " ..
 		"just before Delete or Reset profile, to bring one back as a new profile. Deleted profiles too."], function()
 		ns.ShowBackups()
 	end)
@@ -12393,6 +12480,12 @@ local function CreateProfilesPanel()
 			if name ~= active then
 				root:CreateButton(L["Switch to it"], function() cell:Click("LeftButton") end)
 			end
+			-- (A copy of that one: switched to first, as New profile copies the active one.)
+			root:CreateButton(L["New profile from it"], function()
+				picker:Hide()
+				if name ~= ns.ActiveProfile() then ns.SetProfile(name) end
+				NewFromActive()
+			end)
 			if own then
 				root:CreateButton(L["Rename"], function() StaticPopup_Show("CINEMATIC_PROFILE_RENAME", nil, nil, name) end)
 				root:CreateButton(L["Description"], function() StaticPopup_Show("CINEMATIC_PROFILE_NOTE", nil, nil, name) end)

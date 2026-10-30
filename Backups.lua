@@ -178,8 +178,9 @@ loginFrame:SetScript("OnEvent", function()
 	C_Timer.After(DAILY_DELAY, Daily)
 end)
 
--- The Backups window (the Profiles page's Backups button): the active
--- profile's backups, deleted profiles, and how many to keep.
+-- The Backups window: every profile's backups (the Profiles page's Backups
+-- button) or one's (a card's right-click menu), deleted profiles, and how
+-- many to keep.
 
 local window
 local ROW_H = 36
@@ -270,7 +271,7 @@ local function CreateWindow()
 	-- (The rows as wide as the box, the scroll bar only when they don't all fit.)
 	scroll:SetScript("OnSizeChanged", function(_, width) list:SetWidth(width) end)
 	window.scroll = scroll
-	window.list, window.rows = list, {}
+	window.list, window.rows, window.headers = list, {}, {}
 	window.empty = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	window.empty:SetJustifyH("LEFT")
 	window.deletedHeader = list:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -338,14 +339,24 @@ local function GetRow(i)
 	return row
 end
 
--- The list as it is now: the active profile's backups, then deleted profiles.
+-- A profile's name over its backups (when showing every profile's).
+local function GetHeader(i)
+	local header = window.headers[i]
+	if not header then
+		header = window.list:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		window.headers[i] = header
+	end
+	return header
+end
+
+-- The list as it is now: the profile's backups (or each profile's, under its
+-- name), then deleted profiles.
 function Fill()
 	local db = ns.db
-	local name = window.profile
-	window.title:SetText(L["Backups of %s"]:format(ns.ProfileLabel(name)))
-	local backups = db.profileBackups and db.profileBackups[name] or {}
+	local only = window.profile
+	window.title:SetText(only and L["Backups of %s"]:format(ns.ProfileLabel(only)) or L["Backups"])
 	local deleted = db.deletedProfiles or {}
-	local y, n = 0, 0
+	local y, n, h, any = 0, 0, 0, false
 	local function Next(title, sub, tag, color, onClick)
 		n = n + 1
 		local row = GetRow(n)
@@ -360,20 +371,40 @@ function Fill()
 		row:Show()
 		y = y + ROW_H
 	end
-	for i, backup in ipairs(backups) do
-		local tag = backup.why == "reset" and L["Before reset"] or backup.why == "delete" and L["Before delete"]
-			or L["Daily"]
-		Next(When(backup.time), L["Version %s, %d settings changed"]:format(backup.version or "?", Count(backup.settings or {})),
-			tag, backup.why == "daily" and { 0.6, 0.6, 0.6 } or { 1, 0.65, 0.2 }, function()
-				local new = ns.RestoreBackup(name, i)
-				if new then window:Hide() end
-			end)
+	for _, name in ipairs(only and { only } or ns.ProfileNames()) do
+		local backups = db.profileBackups and db.profileBackups[name] or {}
+		if #backups > 0 then
+			any = true
+			if not only then
+				h = h + 1
+				local header = GetHeader(h)
+				header:SetText(ns.ProfileLabel(name))
+				header:ClearAllPoints()
+				header:SetPoint("TOPLEFT", 4, -y - (h > 1 and 10 or 4))
+				header:Show()
+				y = y + (h > 1 and 30 or 24)
+			end
+			for i, backup in ipairs(backups) do
+				local tag = backup.why == "reset" and L["Before reset"] or backup.why == "delete" and L["Before delete"]
+					or L["Daily"]
+				Next(When(backup.time), L["Version %s, %d settings changed"]:format(backup.version or "?",
+					Count(backup.settings or {})), tag, backup.why == "daily" and { 0.6, 0.6, 0.6 } or { 1, 0.65, 0.2 },
+					function()
+						local new = ns.RestoreBackup(name, i)
+						if new then window:Hide() end
+					end)
+			end
+		end
 	end
+	for i = h + 1, #window.headers do window.headers[i]:Hide() end
 	window.empty:ClearAllPoints()
 	window.empty:SetPoint("TOPLEFT", 4, -y - 6)
 	window.empty:SetPoint("RIGHT", -4, 0)
-	if #backups == 0 then
-		window.empty:SetText(ns.IsBuiltinProfile(name)
+	if not any then
+		window.empty:SetText(not only
+			and L["None yet. Your own profiles are backed up the first day they change, and just before Delete; " ..
+				"built-in ones just before Reset profile."]
+			or ns.IsBuiltinProfile(only)
 			and L["None yet. A built-in profile is backed up just before Reset profile."]
 			or L["None yet. One's taken the first day this profile changes, and just before Delete."])
 		window.empty:Show()
@@ -407,11 +438,11 @@ function Fill()
 	end
 end
 
--- name: whose (the active profile's if none).
+-- name: whose (every profile's if none).
 function ns.ShowBackups(name)
 	if not ns.db then return end
 	if not window then CreateWindow() end
-	window.profile = name or ns.ActiveProfile()
+	window.profile = name
 	window.refreshing = true
 	window.keep:SetValue(ns.BackupKeep())
 	window:KeepLabel(ns.BackupKeep())

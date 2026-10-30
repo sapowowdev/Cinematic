@@ -28,18 +28,28 @@ function ns.MakeQuestItemPreview(parent, width)
 	caption:SetText(L["Preview"])
 	caption:SetPoint("TOPLEFT", 6, -5)
 	caption.searchSkip = true
-	local samples = {}
+	local samples, names = {}, {}
 	for i, label in ipairs({ L["Ready"], L["Cooling down"] }) do
 		local frame = CreateFrame("Frame", nil, preview)
-		frame:SetPoint("CENTER", preview, "LEFT", width * (i == 1 and 0.32 or 0.68), 8)
 		frame.parts = ns.MakeQuestItemParts(frame)
 		frame.parts.count:SetText("3")
 		local name = preview:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 		name:SetText(label)
-		name:SetPoint("BOTTOM", preview, "BOTTOMLEFT", width * (i == 1 and 0.32 or 0.68), 10)
 		name.searchSkip = true
-		samples[i] = frame
+		samples[i], names[i] = frame, name
 	end
+	-- (A third of the way in from each side, however wide the page makes it.)
+	local function Place(_, w)
+		for i, frame in ipairs(samples) do
+			local x = w * (i == 1 and 0.32 or 0.68)
+			frame:ClearAllPoints()
+			frame:SetPoint("CENTER", preview, "LEFT", x, 8)
+			names[i]:ClearAllPoints()
+			names[i]:SetPoint("BOTTOM", preview, "BOTTOMLEFT", x, 10)
+		end
+	end
+	Place(nil, width)
+	preview:HookScript("OnSizeChanged", Place)
 	local cooling = samples[2]
 	local function Icon()
 		local items = ns.QuestLogItems and ns.QuestLogItems() or {}
@@ -99,6 +109,7 @@ function ns.CreateQuestItemStylePanel(kit)
 
 	preview = ns.MakeQuestItemPreview(content, 480)
 	stack:Add(preview, "label")
+	ns.StylePopout(preview, kit.Tooltip) -- (StylePages.lua)
 	kit.AddControl(preview)
 
 	-- Presets: a few looks to start from.

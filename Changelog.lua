@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-30", page = "Vitals Style", title = "Your own Vitals themes",
+		text = "Change any Vitals Vision theme's art, colors, sparks and heartbeat, or make themes of your own " ..
+		"from one, and rename or delete them. Reset theme puts one of ours back as it comes." },
 	{ date = "2026-10-30", page = "Advanced Frames", title = "Find frames to fade",
 		text = "Type part of a frame's name, or of the addon that made it, to find frames to fade. Hover a " ..
 		"match to see it marked on screen, then click it to fade it." },

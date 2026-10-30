@@ -181,12 +181,15 @@ function ns.StyleFontName(value)
 	return type(value) == "string" and value:match("^lsm:(.+)") or tostring(value)
 end
 
--- The list, for a dropdown: { value, text } each, ours first, then the
--- shared ones (sorted; any with a file of ours left out).
+-- The list, for a dropdown: { value, text, font } each, ours first, then
+-- the shared ones (sorted; any with a file of ours left out). font: its file,
+-- to draw the name in (not where the language needs the game's: the pages
+-- keep it there).
+local ROMAN = not ({ ruRU = true, koKR = true, zhCN = true, zhTW = true })[GetLocale and GetLocale() or ""]
 function ns.StyleFontChoices()
 	local list, known = {}, {}
 	for _, info in ipairs(ns.QUEST_ITEM_FONTS) do
-		list[#list + 1] = { value = info[1], text = info[2] }
+		list[#list + 1] = { value = info[1], text = info[2], font = ROMAN and info[3] or nil }
 		if info[3] then known[info[3]:lower()] = true end
 	end
 	local media = SharedMedia()
@@ -195,7 +198,9 @@ function ns.StyleFontChoices()
 		local shared = {}
 		for _, name in ipairs(ok and names or {}) do
 			local path = ns.StyleFontFile("lsm:" .. name) -- (nil for one with no small letters: left out)
-			if path and not known[path:lower()] then shared[#shared + 1] = { value = "lsm:" .. name, text = name } end
+			if path and not known[path:lower()] then
+				shared[#shared + 1] = { value = "lsm:" .. name, text = name, font = ROMAN and path or nil }
+			end
 		end
 		table.sort(shared, function(a, b) return a.text:lower() < b.text:lower() end)
 		for _, choice in ipairs(shared) do list[#list + 1] = choice end

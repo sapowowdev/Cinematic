@@ -37,6 +37,7 @@ function ns.CreateQuestTalkStylePanel(kit)
 
 	preview = ns.MakeQuestTalkPreview(content, 480)
 	stack:Add(preview, "label")
+	ns.StylePopout(preview, kit.Tooltip) -- (StylePages.lua)
 	kit.AddControl(preview)
 
 	rows.PresetMenu({
