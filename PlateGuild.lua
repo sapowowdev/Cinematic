@@ -2,7 +2,7 @@
 -- showing their name alone (CineMode, away from dungeons and raids). There
 -- the name sits on the plate in place of the one over the unit's head, which
 -- the game takes away with its second line: this puts that line back. A
--- guild as far as the Names grid's Guild Names row keeps guilds up
+-- guild as far as the Names grid's Guild names row keeps guilds up
 -- (ns.plateGuildLevel, from Effects) and the name shows; an NPC's title
 -- (<Innkeeper>) wherever its name shows, as over heads. Drawn like the name
 -- above it: its font, colour, shadow and size.
@@ -82,7 +82,7 @@ local function NPCTitle(unit)
 end
 
 -- The line under a plate's name: its player's guild or its NPC's title, and
--- whether it's a guild (with the Guild Names row, then).
+-- whether it's a guild (with the Guild names row, then).
 local function LineText(plate, unit)
 	if IsPlayer(unit) then
 		return GuildText(unit), true
@@ -159,7 +159,7 @@ function ns.SetPlateGuild(plate, share)
 	end
 end
 
--- From Effects, as the Guild Names row fades guilds up or down.
+-- From Effects, as the Guild names row fades guilds up or down.
 function ns.RefreshPlateGuilds()
 	for plate in pairs(shares) do
 		Refresh(plate)

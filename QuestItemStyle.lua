@@ -101,7 +101,7 @@ function ns.CreateQuestItemStylePanel(kit)
 		if preview then preview:Refresh() end
 	end
 
-	local switch = kit.PageSwitch(content, "questItemStyle", L["Enable page"],
+	local switch = kit.PageSwitch(content, "questItemStyle", L["Enable Page"],
 		L["On: the button looks as this page says. Off: like the game's extra ability button (the preview " ..
 		"shows that too). Each setting keeps its value for when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")

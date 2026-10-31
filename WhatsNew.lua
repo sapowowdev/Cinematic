@@ -211,8 +211,10 @@ local function LinkRows(kit, content, last, links)
 
 		-- Read-only: any typing puts the link back; a click selects all of it.
 		local box = ns.SkinEditBox(CreateFrame("EditBox", nil, row, "InputBoxTemplate"))
-		box:SetSize(340, 20)
+		-- Out to the row's edge: the bug form's link doesn't fit a short box.
+		box:SetHeight(20)
 		box:SetPoint("TOPLEFT", icon, "BOTTOMLEFT", ICON + 16, -6)
+		box:SetPoint("RIGHT", row, "RIGHT", -4, 0)
 		box:SetAutoFocus(false)
 		box:SetText(social.url)
 		box:SetCursorPosition(0)

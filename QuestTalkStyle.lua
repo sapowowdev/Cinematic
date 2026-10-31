@@ -29,7 +29,7 @@ function ns.CreateQuestTalkStylePanel(kit)
 		if preview then preview:Refresh() end
 	end
 
-	local switch = kit.PageSwitch(content, "questTalkStyled", L["Enable page"],
+	local switch = kit.PageSwitch(content, "questTalkStyled", L["Enable Page"],
 		L["On: the dialogue looks as this page says. Off: parchment, in the game's fonts (the preview shows " ..
 		"that too). Each setting keeps its value for when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")
@@ -77,7 +77,7 @@ function ns.CreateQuestTalkStylePanel(kit)
 	stack:Header(content, L["Layout"])
 	local SIDE_TIP = L["Where the quest card (the objective, rewards and buttons, or the list of replies) " ..
 		"goes beside the bubble. Below: as wide as the bubble, which moves up to make room for it. Side: " ..
-		"with Opposite Clicked, on the bubble's outer side (away from the middle of the screen), else on " ..
+		"with Opposite clicked, on the bubble's outer side (away from the middle of the screen), else on " ..
 		"the right. Right or Left: always that side. Beside it, it's as tall as the bubble."] .. " " ..
 		L["Separate: the card stays where you drag it (or at the list's height), wherever the bubble goes."]
 	-- (Default leaves the card where it is: under the bubble or the list's own spot.)

@@ -534,7 +534,7 @@ function ns.CreateProfilerPanel(kit)
 
 	-- The switch, and Clear all data beside it.
 	local Refresh -- (below)
-	local switch = kit.PageSwitch(content, "profilerPage", L["Enable page"],
+	local switch = kit.PageSwitch(content, "profilerPage", L["Enable Page"],
 		L["On: the graph samples the game's figure every second and keeps it over a reload, and you can " ..
 		"record. Off (to start with): nothing is sampled or saved, and it costs nothing."], intro,
 		function() Refresh() end)
@@ -628,7 +628,7 @@ function ns.CreateProfilerPanel(kit)
 		if count == 0 then
 			empty:SetText(ns.ProfileGameMetric and ns.ProfileGameMetric("addon", "RecentAverageTime") == nil
 				and L["The game's profiler isn't on this client: use a recording below."]
-				or (PageOn() and L["No samples yet (one a second)."] or L["Off: turn on Enable page to sample."]))
+				or (PageOn() and L["No samples yet (one a second)."] or L["Off: turn on Enable Page to sample."]))
 			empty:Show()
 		else
 			empty:Hide()
@@ -812,8 +812,15 @@ function ns.CreateProfilerPanel(kit)
 	end
 	function DrawAddons()
 		addonTable:ShowSort(addonSort)
-		local list = SortedAddons(addonSort)
-		if next(addonFilter) then
+		-- (Off: the game's figures aren't read or shown either.)
+		local on = PageOn()
+		local list = on and SortedAddons(addonSort) or filtered
+		if not on then
+			wipe(filtered)
+		end
+		addonEmpty:SetText(on and L["The game's profiler isn't on this client."]
+			or L["Off: turn on Enable Page to sample."])
+		if on and next(addonFilter) then
 			wipe(filtered)
 			for _, addon in ipairs(list) do
 				if addonFilter[addon.name] then
@@ -1009,7 +1016,7 @@ function ns.CreateProfilerPanel(kit)
 		elseif PageOn() then
 			status:SetText(L["No recording yet."])
 		else
-			status:SetText(L["Turn on Enable page to record."])
+			status:SetText(L["Turn on Enable Page to record."])
 		end
 		local used = 0
 		for _, tile in ipairs(recordTiles) do
@@ -1093,14 +1100,16 @@ function ns.CreateProfilerPanel(kit)
 	canvas:HookScript("OnShow", function() onSample = DrawGraph end)
 	canvas:SetScript("OnHide", function() onSample = nil end)
 	-- (The addons' figures, and whether a recording's running, read again
-	-- every second while the page shows: reading them costs nothing while
-	-- it's closed.)
+	-- every second while the page shows and is on: reading them costs
+	-- nothing while it's closed or off.)
 	local shownAt, wasBusy = 0, false
 	canvas:SetScript("OnUpdate", function()
 		local now = GetTime()
 		if now - shownAt >= 1 then
 			shownAt = now
-			DrawAddons()
+			if PageOn() then
+				DrawAddons()
+			end
 			local busy = ns.IsProfiling() or armedSeconds ~= nil
 			if busy ~= wasBusy then
 				wasBusy = busy

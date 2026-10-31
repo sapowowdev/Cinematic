@@ -307,7 +307,7 @@ function ns.CreateGeneralStylePanel(kit)
 	local okStyle, gameStyle = pcall(GetCVar, "nameplateStyle")
 	if okStyle and gameStyle ~= nil then
 		local STYLES = { [0] = "Modern", "Thin Bars", "Blocky Bars", "Clean Health", "Blocky Cast", "Legacy Red" }
-		local styleName = stack:Add(kit.Label(content, "GameFontHighlight", L["Game's nameplate Style:"]), "label")
+		local styleName = stack:Add(kit.Label(content, "GameFontHighlight", L["Game's nameplate style:"]), "label")
 		styleName:SetSize(150, 30)
 		styleName:SetJustifyV("MIDDLE")
 		local box = ns.PanelButton(content)

@@ -13,6 +13,7 @@ local _, ns = ...
 local L = ns.L
 
 local DEFAULTS = ns.DEFAULTS
+DEFAULTS.personalResources = true   -- the page's switch: off, none of the below works
 DEFAULTS.fightWaitPower = true      -- the resource bar waits for your power to change at a fight's start
 DEFAULTS.fightWaitHealth = false    -- ...the health bar for your health
 DEFAULTS.fightWaitPortrait = false  -- ...the player frame for either
@@ -25,6 +26,12 @@ DEFAULTS.prdManaRecent = 3          -- ...only for this many seconds after you u
 
 -- The resource bar's stand-in (Frames.lua; none: no personal resource display).
 local personalPower = _G.CinematicPersonalPower
+
+-- Whether the page's switch is on (PersonalMana*.lua ask too).
+function ns.PersonalResourcesOn(db)
+	db = db or ns.db
+	return db ~= nil and db.personalResources ~= false
+end
 
 -- No change for this long: at rest. (Regeneration ticks every 2 seconds.)
 local REST_WINDOW = 3
@@ -74,7 +81,7 @@ local ROW_WAIT = {
 }
 function ns.FightHold(row)
 	local wait = ROW_WAIT[row]
-	if not wait or not ns.db[wait[1]] then
+	if not wait or not ns.db[wait[1]] or not ns.PersonalResourcesOn() then
 		return false
 	end
 	local now = GetTime()
@@ -133,6 +140,9 @@ end
 -- within the Calm Timer of a fight or fall, or coming back to life.
 function ns.KeepYourFrameUp(setting, entry, afterFight, fighting)
 	local db = ns.db
+	if not ns.PersonalResourcesOn(db) then
+		return false
+	end
 	if entry.name == "PetFrame" then
 		return db.petWhenNotFull and afterFight and ns.IsPetRecovering() or false
 	end
@@ -170,7 +180,15 @@ function ns.CreatePersonalResourcesPanel(kit)
 	-- Their look: the Style hub's Personal Resource Display page (PersonalStyle.lua).
 	ns.StyleLink(content, title, "Personal Style", L["Opens the Style hub's Personal Resource Display page: how the " ..
 		"bars look."], kit.Tooltip)
-	local stack = kit.Stack(intro, "label")
+	local switch = kit.PageSwitch(content, "personalResources", L["Enable Page"],
+		L["On: your player frame, pet frame and personal resource display stay up or wait as this page says, " ..
+		"and its mana bar and mana cost show. Off: none of it; they come up only as their Standard Frames " ..
+		"rows say."], intro, function()
+		if ns.UpdatePersonalMana then ns.UpdatePersonalMana() end
+		if ns.RefreshPersonalStyle then ns.RefreshPersonalStyle() end
+		if ns.UpdateManaCost then ns.UpdateManaCost() end
+	end)
+	local stack = kit.Stack(switch, "check")
 	local function Tick(key, label, tip, enabledBy)
 		local check = stack:Add(kit.Check(content, key, label, tip), "check")
 		if enabledBy then kit.GreyUnless(check, enabledBy) end

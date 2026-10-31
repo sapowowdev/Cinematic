@@ -62,6 +62,9 @@ if ns.ChatCamCommand then
 	TRIGGERS[#TRIGGERS + 1] = { key = "Chat", camera = "chatCamera", cameras = { "chat", "none" }, off = "none" }
 	TRIGGERS[#TRIGGERS + 1] = { key = "ChatNearby", camera = "chatNearbyCamera", cameras = { "chat", "none" },
 		off = "none" }
+	-- Capital cities' citizens never stop chatting: that row's Cities unticked
+	-- to start with (its other ticks follow the chat camera's).
+	ns.LIST_DEFAULTS.cityShow["trig:ChatNearby"] = false
 end
 ns.CAMERA_TRIGGERS = TRIGGERS
 local TRIGGER = {}
@@ -189,12 +192,14 @@ end })
 function ns.CameraRowKey(id) return ROW_KEY[id] end
 
 -- Whether a trigger's own row has a When of its own yet (else its camera's
--- counts, rule, roles and all, as before the page was one).
+-- counts, rule, roles and all, as before the page was one). A tick it starts
+-- with (ns.LIST_DEFAULTS) counts.
 local function OwnWhen(id)
 	local db, key = ns.db or ns.GetDB(), ROW_KEY[id]
 	if Rows()[id .. ".always"] ~= nil or Rows()[id .. ".calm"] ~= nil then return true end
 	for _, list in ipairs(ns.CAMERA_ROW_LISTS) do
 		if type(db[list]) == "table" and db[list][key] ~= nil then return true end
+		if ns.LIST_DEFAULTS[list] and ns.LIST_DEFAULTS[list][key] ~= nil then return true end
 	end
 	return false
 end

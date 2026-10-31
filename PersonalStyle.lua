@@ -426,7 +426,7 @@ function ns.MakePersonalPreview(parent, width)
 		local _, _, realHealth, realPower = Parts()
 		-- (The mana bar while it's ticked: a third bar, under the power bar, in
 		-- the power bar's game fill.)
-		local withMana = ns.PERSONAL_MANA and ns.db.prdMana and true or false
+		local withMana = ns.PERSONAL_MANA and ns.db.prdMana and ns.PersonalResourcesOn() and true or false
 		mana:SetShown(withMana)
 		-- (Spaced for the border: ns.PersonalBarGap.)
 		local gap, reach = ns.PersonalBarGap(look)
@@ -490,7 +490,7 @@ function ns.CreatePersonalStylePanel(kit)
 		if preview then preview:Refresh() end
 	end
 
-	local switch = kit.PageSwitch(content, "prdStyle", L["Enable page"],
+	local switch = kit.PageSwitch(content, "prdStyle", L["Enable Page"],
 		L["On: the bars look as this page says. Off: the game's own (the preview shows that too). Each " ..
 		"setting keeps its value for when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")

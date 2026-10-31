@@ -769,16 +769,16 @@ end
 ns.hasWorldMarkerWheel = CinematicWorldMarkerWheel ~= nil
 
 -- The visions: each one's switch, turned on and off by its keybind and the
--- vision wheel. Duel and Roll Vision's ticks are on the Vision page, under
--- its Enable page switch (page): turning one on turns that on too. Apply()
+-- vision wheel. Each is under Enable Visions (Vision > General, page):
+-- turning one on turns that on too. Apply()
 -- puts the change into effect, as the options pages do.
 local VISIONS = {
-	{ key = "heal", setting = "handleHealVision", label = "Heal Vision",
+	{ key = "heal", setting = "handleHealVision", page = "handleVision", label = "Heal Vision",
 		icon = "Interface\\Icons\\Spell_Holy_FlashHeal", trim = true, color = { 0.35, 1, 0.45 },
 		Apply = function()
 			if ns.ApplyHealVisionFrames then ns.ApplyHealVisionFrames() end
 		end },
-	{ key = "quest", setting = "questVision", label = "Quest Vision",
+	{ key = "quest", setting = "questVision", page = "handleVision", label = "Quest Vision",
 		icon = "Interface\\Icons\\INV_Misc_Head_Dragon_01", trim = true, color = { 1, 0.82, 0 },
 		Apply = function()
 			if ns.RefreshTargetQuestIcon then ns.RefreshTargetQuestIcon() end
@@ -795,7 +795,7 @@ if ns.hasRollWindow then
 			if ns.RefreshRollWindow then ns.RefreshRollWindow() end
 		end }
 end
-VISIONS[#VISIONS + 1] = { key = "vitals", setting = "lowHealth", label = "Vitals Vision",
+VISIONS[#VISIONS + 1] = { key = "vitals", setting = "lowHealth", page = "handleVision", label = "Vitals Vision",
 	icon = "Interface\\Icons\\Spell_Shadow_LifeDrain02", trim = true, color = { 1, 0.25, 0.4 },
 	Apply = function()
 		if ns.RefreshLowHealth then ns.RefreshLowHealth() end

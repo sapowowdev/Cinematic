@@ -449,7 +449,7 @@ function ns.CreateTooltipStylePanel(kit)
 		if preview then preview:Refresh() end
 	end
 
-	local switch = kit.PageSwitch(content, "tooltipStyle", L["Enable page"],
+	local switch = kit.PageSwitch(content, "tooltipStyle", L["Enable Page"],
 		L["On: tooltips look as this page says. Off: the game's own (the preview shows that too). Each " ..
 		"setting keeps its value for when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")

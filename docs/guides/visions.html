@@ -143,7 +143,7 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
   <section>
     <div class="eyebrow">At a glance</div>
     <h2>Five visions</h2>
-    <p>Each vision has a page in the <b>Visions</b> group of Cinematic's settings (Duel Vision is on its General page), with an <b>Enable page</b> switch at the top. Turning a page off keeps all its ticks for when you turn it back on.</p>
+    <p>Each vision has a page in the <b>Visions</b> group of Cinematic's settings, with an <b>Enable Page</b> switch at the top. Turning a page off keeps all its ticks for when you turn it back on. <b>Enable Visions</b> on the General page turns every vision on or off at once, each keeping its own settings.</p>
     <div class="cards">
       <article class="card"><a href="#heal"><div class="name"><i style="background:#59ff73"></i>Heal Vision</div></a>
         <p class="muted">Party and raid frames show only who needs healing.</p><span class="tag">Off until you pick where</span></article>
@@ -184,7 +184,7 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
     <h3>Setting it up</h3>
     <p>Heal Vision does nothing until you say where. Its page has a row like the other grids in Cinematic:</p>
     <div class="opts">
-      <div class="opt"><span class="l">Show in</span><span class="d"><b>Always</b> (everywhere), or the places: Open World, Cities, Dungeons, Raids, BGs &amp; Arenas. <b>Party</b> and <b>Raid</b> turn it on while you're in one, wherever you are.</span></div>
+      <div class="opt"><span class="l">Show in</span><span class="d"><b>Always</b> (everywhere), or the places: Open world, Cities, Dungeons, Raids, BGs &amp; arenas. <b>Party</b> and <b>Raid</b> turn it on while you're in one, wherever you are.</span></div>
       <div class="opt"><span class="l">Combat and targets</span><span class="d"><b>In combat</b>, the <b>Calm Timer</b> after a fight, <b>Enemy targeted</b> and <b>Friend targeted</b> turn it on at those times only.</span></div>
       <div class="opt"><span class="l">Roles</span><span class="d">To start with it's on only while you're a healer (your specialization's role, or the one you picked in the group finder). Tick tanks or damage too, or none for every role.</span></div>
       <div class="opt"><span class="l">Tanks, Healers, Damage, Pets</span><span class="d">For each kind, <b>Show below health</b> (100% shows tanks always, at full health too) and <b>Opacity while hidden</b> (0% hides them completely).</span></div>
@@ -226,7 +226,10 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
     <div class="eyebrow">For watching</div>
     <h2>Duel Vision</h2>
     <p>In CineMode, the nameplates of two players dueling near you show, so you can follow their health. Each duel has its own colored border and class icons, and the winner and loser show when it ends. It works in the open world, out of fights, and needs the Nameplate &amp; Names page enabled.</p>
-    <p class="muted">While it watches, it turns on friendly player nameplates, but keeps everyone's invisible and click-through except the two duelists'. Its tick is under <b>Duel Vision</b> on the Visions General page.</p>
+    <div class="opts">
+      <div class="opt"><span class="l">Crowd control</span><span class="d">A feared, stunned, polymorphed, rooted or silenced duelist gets an icon of the spell beside their nameplate, with the time left. On to start with.</span></div>
+    </div>
+    <p class="muted">While it watches, it turns on friendly player nameplates, but keeps everyone's invisible and click-through except the two duelists'.</p>
   </section>
 
   <section id="vitals">
@@ -253,7 +256,7 @@ dl.faq dd { margin: 2px 0 0; color: var(--muted) }
       <div class="opt"><span class="l">Style</span><span class="d">The <b>Style</b> button by the title opens its look on the Style hub (below).</span></div>
       <div class="opt"><span class="l">Health bars</span><span class="d">Your <b>Player frame</b> and, on game versions that have one, the <b>Personal resource display</b>, each fading in as your health drops while CineMode has them hidden. Each has its own <b>Starts</b> and <b>Full</b> on its row.</span></div>
       <div class="opt"><span class="l">Screen edges</span><span class="d">The edges closing in, with their own <b>Starts</b> and <b>Full</b>, and a weaker <b>Strength out of combat</b> for eating and drinking back up. Its <b>Show in</b> row picks where and when: <b>Always</b>, or only in fights, with a target, or in certain places.</span></div>
-      <div class="opt"><span class="l">Damage Taken Alert</span><span class="d">What counts as a big hit for the flash: 8% of your health at once, or smaller hits adding up to 20%.</span></div>
+      <div class="opt"><span class="l">Damage taken alert</span><span class="d">What counts as a big hit for the flash: 8% of your health at once, or smaller hits adding up to 20%.</span></div>
       <div class="opt"><span class="l">Style hub: Vitals Vision</span><span class="d">The look has its own page in the Style hub, with a live preview of the edges closing in (its <b>Test</b> button, top right, runs your health down in hits there and on the screen), and a <b>Strength</b> from 0 to 100% that scales the whole look: at 50% it's as set, lower is lighter, higher is stronger.</span></div>
       <div class="opt"><span class="l">Theme</span><span class="d"><b>Auto</b> picks your class and spec's (on game versions without specs, the talent tree you've put the most into), or pick any. Each class has a theme for each spec.</span></div>
       <div class="opt"><span class="l">Shadow</span><span class="d">How far in and how dark the edges come, black or tinted, and the color grade that drains the world as they close in.</span></div>

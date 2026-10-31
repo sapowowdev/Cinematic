@@ -2215,13 +2215,14 @@ end
 local function IsListOn(list, key, defaults)
 	local on = ns.db[list][key]
 	if on == nil then
-		if ROW_FALLBACK[key] then
+		-- (A default of its own wins over the row it follows: NPCs chatting nearby's Cities.)
+		local more = ns.LIST_DEFAULTS[list]
+		if ROW_FALLBACK[key] and not (more and more[key] ~= nil) then
 			return IsListOn(list, ROW_FALLBACK[key], defaults)
 		end
 		if IsExtraKey(key) then
 			return false
 		end
-		local more = ns.LIST_DEFAULTS[list]
 		return defaults[key] or (more and more[key]) or false
 	end
 	return on
@@ -2282,8 +2283,8 @@ function ns.IsFriendlyShowOn(key) return IsListOn("friendlyShow", key, TARGET_SH
 -- Places as the Nameplates page has them (bar its PvP flagged column, which
 -- goes with the open world here). Their defaults are below.
 ns.PLACE_SHOW = {
-	{ list = "bgShow", label = L["BGs & Arenas"], tip = L["Show all through CineMode in battlegrounds and arenas."] },
-	{ list = "worldShow", label = L["Open World"],
+	{ list = "bgShow", label = L["BGs & arenas"], tip = L["Show all through CineMode in battlegrounds and arenas."] },
+	{ list = "worldShow", label = L["Open world"],
 		tip = L["Show all through CineMode out in the world, inns included (capital cities are Cities)."] },
 	{ list = "cityShow", label = L["Cities"], tip = L["Show all through CineMode in capital cities."] },
 	{ list = "groupShow", label = L["Grouped"],
@@ -3036,8 +3037,8 @@ end
 
 -- Frame names to show right now, from the Standard Frames page's column that
 -- applies: In combat (while staying cinematic, and with combatShowCalm on
--- until the Calm Timer has run out after the fight), Tar Enemy (out of combat
--- with a living enemy targeted) or Tar Friendly (anything else targeted:
+-- until the Calm Timer has run out after the fight), Tar enemy (out of combat
+-- with a living enemy targeted) or Tar friendly (anything else targeted:
 -- friends, NPCs, dead enemies).
 -- Rows with Always ticked are always in it: they don't fade in CineMode at all.
 -- Rows with a Calm Timer option of their own on their page: their In combat
@@ -3141,7 +3142,7 @@ do
 	-- Modes') is on now, as a Standard Frames row would show: its rule if it
 	-- has one, else Always (always: its own setting, when it has one), a place
 	-- that applies here, In a camera mode, In combat / Out of combat, or Tar
-	-- Enemy / Tar Friendly; never while you're a role its roles button has
+	-- Enemy / Tar friendly; never while you're a role its roles button has
 	-- unticked. anyFight: In combat counts in any fight (else only while
 	-- CineMode stays on in them).
 	function ns.RowOnNow(key, always, anyFight)
@@ -3686,7 +3687,7 @@ do
 	end
 end
 
--- For the log (Exit Calm Timer when Healthy): which of your health, power and
+-- For the log (Exit Calm Timer when healthy): which of your health, power and
 -- pet's health could be read, and which were secret (judged by their events).
 function ns.VitalsReadout()
 	local function Read(value, maxValue)
@@ -4432,7 +4433,7 @@ local function OnPadButton(button, via)
 			and "unticked on the Gamepad page" or "what it's bound to"))
 		return
 	end
-	if ns.db and ns.db.gamepadPressReveal and not pendingPress then
+	if ns.db and ns.db.gamepadPressReveal and ns.PageOn("handleGamepad") and not pendingPress then
 		pendingPress = { at = GetTime(), button = button }
 	end
 end
@@ -4786,7 +4787,7 @@ end
 -- (db.cooldownReadyOnly: spell ID -> true): out of fights, and in fights
 -- while it's recharging, a spell's icon fades out, the rest of its bar as
 -- usual (the icon's place stays: it leaves a gap). It comes back once it's
--- ready, or with Show Early (db.cooldownEarlyOn[spell ID]) a little before:
+-- ready, or with Show early (db.cooldownEarlyOn[spell ID]) a little before:
 -- db.cooldownReadyEarly[spell ID] seconds, or by default READY_EARLY of its
 -- cooldown. Recharging: its swipe
 -- says so, when the game lets it be read; in fights WoW Forever keeps it
@@ -4876,7 +4877,7 @@ local CooldownLength = ns.CooldownLength
 -- one does when it hasn't been set on its own: the group's settings
 -- (db.cooldownGroupDefaults[group]), else these.
 ns.COOLDOWN_GROUP_MODES = { utility = "recharge" }
--- The bars whose spells with no cooldown go by Smart Set (ns.SmartCooldownMode)
+-- The bars whose spells with no cooldown go by Smart set (ns.SmartCooldownMode)
 -- until their group's mode is set.
 ns.COOLDOWN_SMART_GROUPS = { essential = true, utility = true }
 ns.COOLDOWN_BAR_GROUPS = { EssentialCooldownViewer = "essential", UtilityCooldownViewer = "utility" }
@@ -4896,14 +4897,14 @@ function ns.CooldownGroupCentered(group)
 	return ns.COOLDOWN_GROUP_CENTER[group] or false
 end
 
--- A group's mode, and its Resources and Show Early seconds (nil: the default share).
+-- A group's mode, and its Resources and Show early seconds (nil: the default share).
 function ns.CooldownGroupSettings(group)
 	local set = ns.db.cooldownGroupDefaults[group] or NO_DEFAULTS
 	return set.mode or ns.COOLDOWN_GROUP_MODES[group] or "always", set.power, set.early
 end
 
 -- A spell's mode ("always", "ready", "recharge", "proc"), whether it's its
--- own (else its group's), and for "ready" its Resources, Show Early on, and
+-- own (else its group's), and for "ready" its Resources, Show early on, and
 -- seconds (nil: the default share). Set under what it's turned into (from
 -- before settings went by the base) or its base.
 function ns.CooldownSpellMode(id, group)
@@ -4921,7 +4922,7 @@ function ns.CooldownSpellMode(id, group)
 	elseif db.cooldownAlwaysShow[id] then
 		return "always", true
 	end
-	-- (Its group's mode not set: the Smart Set pick, if it has one and Smart Set's ticked.)
+	-- (Its group's mode not set: the Smart set pick, if it has one and Smart set's ticked.)
 	local set = db.cooldownGroupDefaults[group or "other"]
 	if db.cooldownSmartDefaults and not (set and set.mode) and ns.COOLDOWN_SMART_GROUPS[group] then
 		local pick = ns.SmartCooldownMode(id)
@@ -4956,7 +4957,7 @@ end
 -- How long before a spell's icon is ready it comes back (sec), or nil until its cooldown's known.
 local function ReadyEarly(earlyOn, seconds, length)
 	if not earlyOn then
-		return 0 -- (Show Early unticked: back once it's ready)
+		return 0 -- (Show early unticked: back once it's ready)
 	end
 	return seconds or (length and length * ns.READY_EARLY)
 end
@@ -5050,8 +5051,8 @@ function ns.SpellHasPower(id)
 	return true
 end
 
--- The Cooldown Manager page's Smart Set: what a spell with no cooldown is
--- best as. "power" (When Ready with Resources) when it costs a resource you
+-- The Cooldown Manager page's Smart set: what a spell with no cooldown is
+-- best as. "power" (When ready with Resources) when it costs a resource you
 -- build up, like Maelstrom; "proc" when it costs nothing or only one that's
 -- always there (mana, rage, energy, focus: an instant Lightning Bolt). nil
 -- for a spell with a cooldown or charges (even one that recharges), or when the game won't say.
@@ -5135,7 +5136,7 @@ do
 		wipe(picks)
 	end
 
-	-- Smart Set's reasons for a spell, for /cine debug cooldowns.
+	-- Smart set's reasons for a spell, for /cine debug cooldowns.
 	function ns.ReportSmartPick(id)
 		local function Show(value)
 			if Secret(value) then return "secret" end
@@ -5155,7 +5156,7 @@ do
 	end
 end
 
--- Whether a When Ready spell's icon shows: in fights, once it's nearly ready
+-- Whether a When ready spell's icon shows: in fights, once it's nearly ready
 -- (or when it can't tell), and with Resources ticked once you can pay for it.
 local function IconShows(icon, id, now, power, earlyOn, seconds)
 	local left, length = IconTimeLeft(icon, id, now)
@@ -5663,7 +5664,7 @@ do
 		end
 	end
 
-	-- Each pass of the When Ready check: every centered bar's goals.
+	-- Each pass of the When ready check: every centered bar's goals.
 	function ns.CenterCooldownIcons()
 		local on = false
 		for _, group in pairs(ns.COOLDOWN_BAR_GROUPS) do
@@ -7072,7 +7073,8 @@ function ns.UpdateFrames(cinematic, elapsed)
 	-- (Keep open and Reveal, Minimap page: "Except in" is for gathering tracking only.)
 	events.tracking = minimapPage and not taxiHidesMinimap and ((keepForGathering and not trackingPaused) or keepForCreatures
 		or ns.IsMinimapRevealed(now))
-	events.quest, events.gamepad, events.roster = ns.PageOn("handleQuests") and questReveal, padReveal, rosterReveal
+	events.quest, events.roster = ns.PageOn("handleQuests") and questReveal, rosterReveal
+	events.gamepad = ns.PageOn("handleGamepad") and padReveal
 	-- (Each bar's own Stay up while recharging: Essential's, with Enhanced
 	-- Cooldown Manager's bars, and Utility's. A bar comes up only for its own
 	-- cooldowns; anything else in the group, for either.)

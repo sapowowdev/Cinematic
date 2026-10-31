@@ -33,7 +33,7 @@ local PAD_X, PAD_Y = 16, 12
 local PANEL_WIDTH = 440 -- the card's own width (below the bubble, as wide as it)
 local NO_NPC_Y = 0.66      -- the bubble's bottom with no NPC (share of the screen's height)
 local PORTRAIT = 54        -- the NPC's portrait, across (questTalkPortrait)
-local OPPOSITE_X = 0.7     -- Opposite Clicked, till it's dragged: the bubble's middle this share across the screen
+local OPPOSITE_X = 0.7     -- Opposite clicked, till it's dragged: the bubble's middle this share across the screen
 local OVER_PLATE = 22      -- the tail's tip over the nameplate's top (clear of the interact arrow over it)
 local ROW_HEIGHT = 20
 local ART_RECHECK = 0.2   -- seconds: the game's quest art read again after a screen opens
@@ -469,7 +469,7 @@ local function CameraMoving()
 	return GetTime() - camMove.at < MOVE_SETTLE
 end
 
--- Opposite Clicked: which half of the screen to keep clear ("left" or
+-- Opposite clicked: which half of the screen to keep clear ("left" or
 -- "right"): the half you clicked them on; with no click, where the quest cam
 -- frames them while it's turning for this talk. nil: neither.
 local function NpcSide()
@@ -480,7 +480,7 @@ local function NpcSide()
 	return ns.QuestCamSide and ns.QuestCamSide()
 end
 
--- Whether Opposite Clicked has someone to be opposite (else the bubble opens
+-- Whether Opposite clicked has someone to be opposite (else the bubble opens
 -- at its own spot, unmirrored; the card still follows it).
 local function Opposite()
 	return PlaceMode() == "opposite" and (talk.clickX ~= nil or NpcSide() ~= nil)
@@ -513,7 +513,7 @@ function ns.TalkWindowPlace()
 	return mode ~= "head" and mode or nil
 end
 
--- ...and with Opposite Clicked, the half of the screen to keep clear for a
+-- ...and with Opposite clicked, the half of the screen to keep clear for a
 -- window opening now ("left" or "right"; nil: neither). starting: a new
 -- conversation (no talk window open yet): its click is read.
 function ns.TalkWindowSide(starting)
@@ -534,7 +534,7 @@ local function Place()
 	bubble:ClearAllPoints()
 	local mode = PlaceMode()
 	local plate = mode == "head" and NpcPlate()
-	-- (follow: the card goes beside it, over their head or Opposite Clicked;
+	-- (follow: the card goes beside it, over their head or Opposite clicked;
 	-- questTalkCardSide "separate": never, the card keeps its own spot.)
 	local separate = ns.db.questTalkCardSide == "separate"
 	bubble.free, bubble.side, bubble.follow = false, nil, not separate
@@ -560,14 +560,14 @@ local function Place()
 	local scale = bubble:GetScale()
 	-- Not over anyone: where it was last dragged (db.questTalkBubbleSpot: its
 	-- bottom middle, as shares of the screen), else above the middle of the
-	-- screen (Opposite Clicked: off to the right of it). It can be dragged
+	-- screen (Opposite clicked: off to the right of it). It can be dragged
 	-- (bubble.free).
 	local spot = ns.db.questTalkBubbleSpot
 	local x, bottom = mode == "opposite" and OPPOSITE_X or 0.5, NO_NPC_Y
 	if type(spot) == "table" and type(spot.x) == "number" and type(spot.bottom) == "number" then
 		x, bottom = spot.x, spot.bottom
 	end
-	-- Opposite Clicked: the other half of the screen from the NPC (NpcSide)
+	-- Opposite clicked: the other half of the screen from the NPC (NpcSide)
 	-- is the clearer one. On their half, it opens at the mirror of its spot on
 	-- the other half instead; the card follows it, on its outer side. (Near
 	-- the middle, it stays where you put it.)
@@ -577,7 +577,7 @@ local function Place()
 		x = 1 - x
 	end
 	bubble:SetPoint("BOTTOM", UIParent, "BOTTOMLEFT", x * width / scale, bottom * height / scale)
-	-- (The card follows it in Opposite Clicked even with no click to go by:
+	-- (The card follows it in Opposite clicked even with no click to go by:
 	-- an object's talk, the interact key.)
 	bubble.follow = mode == "opposite" and not separate
 	bubble.side = mode == "opposite" and (x > 0.5 and "right" or "left") or nil
@@ -1324,7 +1324,7 @@ local function PlacePanel()
 		panel:SetPoint("TOP", bubble, "BOTTOM", 0, -FOLLOW_GAP)
 		return
 	end
-	-- questTalkCardSide: "left", "right", or "side": with Opposite Clicked the
+	-- questTalkCardSide: "left", "right", or "side": with Opposite clicked the
 	-- bubble's outer side (away from the middle, so the middle stays clear),
 	-- else the right.
 	local cardSide = ns.db.questTalkCardSide
@@ -2136,7 +2136,7 @@ local function Open(kind)
 	if not panel then
 		CreatePanel()
 	end
-	-- (A new conversation: where you clicked them, for Opposite Clicked.)
+	-- (A new conversation: where you clicked them, for Opposite clicked.)
 	if not talk.kind then
 		talk.clickX = ns.TalkClickX()
 	end

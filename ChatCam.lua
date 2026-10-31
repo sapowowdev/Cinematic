@@ -227,6 +227,7 @@ ns.DEFAULTS.chatCamImmersive = false
 -- own settings start with "chat"). Added here, so after Core.lua made the
 -- other cameras' defaults: its own follow (no camera in battlegrounds and
 -- arenas, waits out the Calm Timer as the quest camera does, minimap left up).
+-- (Not in capital cities for NPCs chatting nearby: CameraRows.lua.)
 table.insert(ns.CAMERA_OFF_CAMS, { "chatcam", ns.L["Chat"] })
 for _, where in ipairs(ns.CAMERA_OFF_WHERE) do
 	ns.DEFAULTS["chatcamOffIn" .. where] = where == "BGs"

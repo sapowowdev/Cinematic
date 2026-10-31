@@ -473,8 +473,8 @@ end
 -- tells us exactly which window to reveal. Never filters anything out.
 local function ChatPeekFilter(chatFrame, event, text, author, _, channelString, _, _, _, channelNumber, channelBaseName,
 		_, _, guid)
-	if not ns.db.chatPeek then
-		if BUBBLE_SPEECH[event] then SpeechTrace("\"Show chat when a message arrives\" is off") end
+	if not ns.db.chatPeek or ns.db.handleChat == false then
+		if BUBBLE_SPEECH[event] then SpeechTrace("\"Show chat when a message arrives\" or the Chat page is off") end
 		return false
 	end
 	local wanted
@@ -555,7 +555,7 @@ local function WatchServerMessages()
 			return
 		end
 		sinceCheck = 0
-		local peekOn = ns.db.chatPeek and IsPeekTypeOn("server")
+		local peekOn = ns.db.chatPeek and ns.db.handleChat ~= false and IsPeekTypeOn("server")
 		for chatFrame, watch in pairs(serverWatch) do
 			CheckServerLines(chatFrame, watch, peekOn)
 		end

@@ -119,6 +119,7 @@ local function PrintDebugHelp()
 	print("  /cine debug marker [across up size] - where the kept raid markers sit over faded plates")
 	print("  /cine debug platewatch - log how faded nameplates are drawn each time it changes, to find one flashing up")
 	print("  /cine debug duels - duel nameplates: watching or why not, and which nearby players can attack each other")
+	print("  /cine debug duels test - pretend duels between friendly players around you, to see how they look")
 	print("  /cine debug questglow - quest object glow: what soft targeting picked and why it glows or not")
 	print("  /cine debug questmob - the unit under your mouse: the cursor the game gives it, its quest checks and quest items")
 	print("  /cine debug questitem - print each cast aimed at an NPC and whether it counts as a quest item used on it (again to stop)")
@@ -920,6 +921,10 @@ local function HandleSlash(msg)
 			.. " (/reload to write the log)")
 	elseif cmd == "debug" and arg == "duels" then
 		ns.PrintDuelsDebug()
+	elseif cmd == "debug" and arg == "duels test" then
+		local on, why = ns.ToggleDuelTest()
+		ns.Print("pretend duels between friendly players around you: " .. OnOff(on)
+			.. (on and " (5 minutes, or run this again)" or "") .. (why and (" - not shown now: " .. why) or ""))
 	elseif cmd == "debug" and arg == "questglow" then
 		ns.PrintQuestGlowDebug()
 	elseif cmd == "debug" and arg == "chatcopy" then

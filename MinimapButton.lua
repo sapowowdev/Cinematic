@@ -30,7 +30,7 @@ local VISIONS = {
 		icon = "Interface\\Icons\\Spell_Holy_FlashHeal", trim = true },
 	{ label = "Quest Vision", page = "Quest Vision", active = "QuestVisionActive", color = { 1, 0.82, 0 },
 		icon = "Interface\\Icons\\INV_Misc_Head_Dragon_01", trim = true },
-	{ label = "Duel Vision", page = "Vision", active = "DuelVisionActive", color = { 1, 0.35, 0.3 },
+	{ label = "Duel Vision", page = "Duel Vision", active = "DuelVisionActive", color = { 1, 0.35, 0.3 },
 		icon = "Interface\\Icons\\Ability_DualWield", trim = true },
 	{ label = "Roll Vision", page = "Roll Vision", active = "RollVisionActive", color = { 0.45, 0.7, 1 },
 		icon = "Interface\\Icons\\INV_Misc_Dice_01", trim = true },

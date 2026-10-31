@@ -277,7 +277,7 @@ for _, group in ipairs(GROUPS) do TAB_NAMES[group[1]] = group[2] end
 
 function ns.CreateRaidStylePanel(kit)
 	local canvas, content = kit.CreateScrollPage()
-	local title = kit.Label(content, "GameFontNormalLarge", L["Raid frames"])
+	local title = kit.Label(content, "GameFontNormalLarge", L["Raid Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
 	local intro = kit.PageIntro(content, title,
 		L["How the raid frames look, the party's when the game draws them raid-style, and the arena's. The " ..
@@ -321,7 +321,7 @@ function ns.CreateRaidStylePanel(kit)
 		if preview then preview:Refresh(editing) end
 	end
 
-	local switch = kit.PageSwitch(content, "rfStyle", L["Enable page"],
+	local switch = kit.PageSwitch(content, "rfStyle", L["Enable Page"],
 		L["On: the raid frames look as this page says. Off: the game's own (the preview shows that too). Each " ..
 		"setting keeps its value for when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")
@@ -451,5 +451,5 @@ function ns.CreateRaidStylePanel(kit)
 
 	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))
 	canvas:Hide()
-	kit.RegisterSubpage(canvas, "Raid Style", L["Raid frames"])
+	kit.RegisterSubpage(canvas, "Raid Style", L["Raid Frames"])
 end

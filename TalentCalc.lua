@@ -1,7 +1,7 @@
 -- Cinematic: a talent calculator (WoW Forever only). Your class's three trees
 -- drawn as the talents window draws them, starting from the talents you
 -- have: left click adds a point, right click takes one back, with the level
--- the build needs and the points left, Reset, Undo, and Copy Over Changes to
+-- the build needs and the points left, Reset, Undo, and Copy over changes to
 -- put the plan in the talents window for its own Apply Changes. A button on
 -- the talents window opens it in that window's place (talentCalc, on the
 -- Quality of life page), and so does /cine talents.
@@ -331,7 +331,7 @@ end
 
 -------------------------------------------------------------------------------
 -- Your own talents: the plan starts from them, Undo goes back to them, and
--- Copy Over Changes puts what the plan adds in the talents window.
+-- Copy over changes puts what the plan adds in the talents window.
 -------------------------------------------------------------------------------
 local learned = {} -- nodeID -> ranks you have
 
@@ -1004,7 +1004,7 @@ local function BackToTalents()
 	end
 end
 
--- Copy Over Changes: puts what the plan adds into your talents window, top row
+-- Copy over changes: puts what the plan adds into your talents window, top row
 -- first, and takes you back there. Nothing is learned: they wait there, as
 -- points you'd clicked in yourself, for its own Apply Changes (or its undo).
 -- Anything it had waiting is dropped first. On a refusal nothing is kept.
@@ -1214,11 +1214,11 @@ local function MakeWindow()
 		"GameFontHighlightLarge"))
 	frame.points:SetPoint("CENTER", box, "RIGHT", -28, 0)
 
-	-- Where it has Apply Changes: Copy Over Changes, glowing while there's
-	-- something to copy over, Undo Pending Changes to its right, and Reset at
+	-- Where it has Apply Changes: Copy over changes, glowing while there's
+	-- something to copy over, Undo pending changes to its right, and Reset at
 	-- the far left.
 	frame.apply = CreateFrame("Button", nil, controls, "UIPanelButtonTemplate")
-	frame.apply:SetText(ns.L["Copy Over Changes"])
+	frame.apply:SetText(ns.L["Copy over changes"])
 	frame.apply:SetSize(math.max(frame.apply:GetFontString():GetStringWidth() + 40, 164), 22)
 	frame.apply:SetPoint("BOTTOM", tab, "BOTTOM", 0, 8)
 	frame.apply:SetMotionScriptsWhileDisabled(true)
@@ -1226,7 +1226,7 @@ local function MakeWindow()
 	frame.apply:SetScript("OnEnter", function(self)
 		local adds, why = ApplyCheck()
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
-		GameTooltip:SetText(ns.L["Copy Over Changes"])
+		GameTooltip:SetText(ns.L["Copy over changes"])
 		if adds then
 			GameTooltip:AddLine(ns.L["Put the %d points the plan adds into your talents window, for its Apply Changes."]:format(adds),
 				1, 1, 1, true)
@@ -1277,7 +1277,7 @@ local function MakeWindow()
 	end)
 	frame.undo:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:SetText(ns.L["Undo Pending Changes"])
+		GameTooltip:SetText(ns.L["Undo pending changes"])
 		GameTooltip:Show()
 	end)
 	frame.undo:SetScript("OnLeave", GameTooltip_Hide)

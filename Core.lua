@@ -128,7 +128,7 @@ local DEFAULTS = {
 	                                -- with Enhanced Cooldown Manager's; the Utility bar's below)
 	cooldownUtilityWhileRecharging = false,
 	cooldownUtilityAfterCombat = true,
-	cooldownSmartDefaults = true, -- Cooldown Manager page: spells with no cooldown default to Smart Set's pick
+	cooldownSmartDefaults = true, -- Cooldown Manager page: spells with no cooldown default to Smart set's pick
 	minimapIndoors = false,    -- keep the minimap up indoors (hidden there, its map goes stale)
 	minimapKeepQuest = true,   -- keep the minimap up while a quest is tracked
 	minimapKeepQuestFor = 1,   -- ...only this many minutes after picking one up or progress on one (0 = off)
@@ -349,6 +349,7 @@ local DEFAULTS = {
 	questCamLower = 0,        -- ...degrees the camera comes down, toward eye level (0: keep your angle)
 	questCamAllGossip = false, -- ...for every NPC you talk to, not just quest givers
 	questCamNotMounted = true, -- ...but not while you're mounted
+	questCamNotDaily = true, --...nor when all the quest giver has is dailies or weeklies
 	-- Shoulder Cam (ShoulderCam.lua): the camera sits over your right shoulder (a Blizzard experimental setting)
 	shoulderCam = false,
 	indoorLimits = true,      -- indoors, keep the camera modes from pushing into walls:
@@ -541,7 +542,7 @@ DEFAULTS.weatherOffInCombat = false
 -- ones you'd walk or run off into after one (RP walking, auto-running), the
 -- tele camera and the quest camera; the rest start straight away. Not the death camera: you die in a fight.
 ns.CALM_WAIT_NEVER = { death = true }
--- The Cameras page's Enable cameras switch: off, no
+-- The Cameras page's Enable Cameras switch: off, no
 -- camera mode starts (ns.IsCameraOffHere).
 DEFAULTS.cameraModes = true
 local CALM_WAIT_DEFAULT = { walk = true, run = true, tele = true, quest = true }
@@ -966,11 +967,12 @@ DEFAULTS.questTalkKeys = true         -- 1-0 pick, Space turns the page / first 
 DEFAULTS.questTalkScale = 1
 DEFAULTS.questTalkTopGap = 0.03       -- the bubble kept this share of the screen down from its top (and the bar)
 DEFAULTS.questTalkLines = 7          -- the bubble's height, in lines of its words
-DEFAULTS.questTalkCardSide = "below" -- the quest card beside the bubble: "below", "side" (Opposite Clicked: its outer side, else the right), "right", "left" or "separate" (never beside it: its own spot)
+DEFAULTS.questTalkCardSide = "below" -- the quest card beside the bubble: "below", "side" (Opposite clicked: its outer side, else the right), "right", "left" or "separate" (never beside it: its own spot)
 DEFAULTS.questTalkCardSame = true    -- the card on the bubble's background
 DEFAULTS.questTalkPortrait = true -- the NPC's portrait on the bubble's corner
 DEFAULTS.questTalkListY = 0.46 -- the list's top edge up the screen, till it's dragged
 DEFAULTS.duelPlates = true -- in CineMode, the nameplates of two players dueling near you show (see Effects)
+DEFAULTS.duelCC = true -- and crowd control on a duelist shows as an icon by their plate
 DEFAULTS.minimapVisions = true -- the minimap button glows and lists the visions in use (see MinimapButton)
 DEFAULTS.handleCooldowns = true -- the Cooldown Manager page's master switch (off: left alone)
 DEFAULTS.cooldownKeybinds = false -- its Show keybinds: each spell's key on its icon (Frames.lua)
@@ -1051,6 +1053,7 @@ DEFAULTS.healVisionDeadAlpha = 0.05 -- the dead: always hidden, this much shows
 DEFAULTS.healVisionOfflineAlpha = 0.05 -- and the offline
 DEFAULTS.healVisionFarAlpha = 0.05 -- those more than 100 yards away (another zone...), whatever else: 1, off
 DEFAULTS.healVisionTargetAlpha = 1 -- your target while hidden, if more than their kind's (1: always shown)
+DEFAULTS.healVisionMouseoverAlpha = 0 -- the member under the mouse fades in to this, in fights too (0: off)
 DEFAULTS.healVisionDispel = true -- so do members with a debuff you can dispel
 DEFAULTS.healVisionAnyDebuff = false -- or with any debuff
 -- The page's Tank, Healer and Damage tabs: while you're that role, with
@@ -1059,7 +1062,8 @@ DEFAULTS.healVisionAnyDebuff = false -- or with any debuff
 -- role starts from its own values: the Default tab's but for HEAL_VISION_ROLE_STARTS.
 ns.HEAL_VISION_ROLE_KEYS = { "healVisionTankBelow", "healVisionTankAlpha", "healVisionHealerBelow",
 	"healVisionHealerAlpha", "healVisionShowBelow", "healVisionMinAlpha", "healVisionPetBelow",
-	"healVisionPetAlpha", "healVisionTargetAlpha", "healVisionDeadAlpha", "healVisionOfflineAlpha",
+	"healVisionPetAlpha", "healVisionTargetAlpha", "healVisionMouseoverAlpha", "healVisionDeadAlpha",
+	"healVisionOfflineAlpha",
 	"healVisionFarAlpha", "healVisionDispel", "healVisionAnyDebuff" }
 ns.HEAL_VISION_ROLES = { "TANK", "HEALER", "DAMAGER" }
 local HEAL_VISION_ROLE_STARTS = {
@@ -1126,7 +1130,7 @@ do
 		local list = role == "TANK" and "tankHide" or role == "HEALER" and "healerHide"
 			or role == "DAMAGER" and "damageHide"
 		if list and ns.RoleHidden(db, list, "healVision") then return false end
-		if db.handleHealVision == false then return false end -- (its page's switch)
+		if not ns.Setting("handleHealVision") then return false end -- (its page's switch, and the Visions')
 		-- (Its rule, edited on its row, decides instead of its ticks.)
 		local facts = ns.RuleFactsNow and ns.RuleFactsNow()
 		local rule = facts and ns.RuleShows("healVision", facts)
@@ -1202,12 +1206,12 @@ DEFAULTS.plateAlwaysYourTarget = true
 ns.NAME_TARGET_ROWS = { "YourTarget" }
 DEFAULTS.plateAlwaysGroupMembers = true
 DEFAULTS.plateAlwaysGroupMinions = true
--- The Plate Parts grid's rows (see PlateParts): each part of the plates that
+-- The Plate parts grid's rows (see PlateParts): each part of the plates that
 -- are up, with the same columns (keys plate<column>Part<part>). All shown
 -- everywhere to start with, as the game has them.
 ns.PLATE_PARTS = { "Health", "Name", "CastBar", "Buffs", "Debuffs", "RaidMarker", "Classification", "Level",
 	"Threat", "Highlight", "Widgets" }
--- The Names grid's Raid Marker row (see KeepRaidMarker in Effects), the same
+-- The Names grid's Raid marker row (see KeepRaidMarker in Effects), the same
 -- columns: raid markers (skull, moon...) kept up over units as their plates
 -- fade, or show their names alone (keys plate<column>PartMarker). Kept
 -- everywhere to start with. (It was a grid of its own, friendly and enemy
@@ -1245,7 +1249,7 @@ for _, part in ipairs(ns.UNIT_PARTS) do
 	end
 end
 DEFAULTS.handleUnitFrames = true -- the Unit Frames page's switch
--- Pages of helpers, each ticked on its own, with an Enable page switch
+-- Pages of helpers, each ticked on its own, with an Enable Page switch
 -- (handle<page>): off, none of the page's helpers work. ns.Setting reads one
 -- of them as its page's switch leaves it.
 DEFAULTS.handleQuality = true -- Quality of life > General
@@ -1258,14 +1262,28 @@ for page, keys in pairs({
 		"centerPanels", "dragPanels", "chatCopyButton", "loginZoom",
 		"reloadButton", "reloadKeepWindows" },
 	handleHunter = { "hunterAmmoSort", "hunterQuiverFill" },
-	handleVision = { "duelPlates", "minimapVisions" }, -- Vision > General (Roll Vision has its own page: rollWindow)
+	-- Vision > General's Enable Visions: every vision's page switch, and its Vision Helper.
+	handleVision = { "minimapVisions", "handleHealVision", "questVision", "rollWindow", "duelPlates",
+		"lowHealth", "combatVision" },
+	duelPlates = { "duelCC" }, -- Duel Vision's page
 }) do
 	for _, key in ipairs(keys) do PAGE_SWITCH[key] = page end
 end
+-- (A page's switch can be under another's: Duel Vision's ticks under its page's
+-- switch, under Enable Visions.)
 function ns.Setting(key)
 	local db = ns.db
-	if not db or db[PAGE_SWITCH[key] or ""] == false then return false end
+	if not db then return false end
+	local page = PAGE_SWITCH[key]
+	while page do
+		if db[page] == false then return false end
+		page = PAGE_SWITCH[page]
+	end
 	return db[key]
+end
+-- The switch a setting's page is under, or nil (the options pages grey by it).
+function ns.PageSwitchOf(key)
+	return PAGE_SWITCH[key]
 end
 -- A Quest Vision tick as its Enable leaves it.
 function ns.QuestVisionSetting(key)
@@ -2744,7 +2762,7 @@ for _, key in ipairs(GRID_EFFECTS) do EFFECT_ROWS[key] = "effect:" .. key end
 local effectWanted = {}
 local lastFightAt = -math.huge
 ns.OnCalmEnd(function(cut) lastFightAt = math.min(lastFightAt, cut) end)
-local calmHealthySince -- (Exit Calm Timer when Healthy: when you were last back to full)
+local calmHealthySince -- (Exit Calm Timer when healthy: when you were last back to full)
 local calmTrace = { fighting = false } -- (and for its log lines: a fight was on last tick)
 
 local function OnUpdate(_, elapsed)
@@ -2819,7 +2837,7 @@ local function OnUpdate(_, elapsed)
 			ns.Log("calm", "fight ended")
 		end
 	end
-	-- Exit Calm Timer when Healthy: the Calm Timer ends calmFullAfter seconds
+	-- Exit Calm Timer when healthy: the Calm Timer ends calmFullAfter seconds
 	-- after your health and power (and your pet's, if ticked) are back to full.
 	if not inCombat and ns.db.calmEndsAtFull and now - lastFightAt < ns.db.calmTime then
 		local healthy = ns.IsPlayerRecovering and Step(ns.IsPlayerRecovering) == false
@@ -3128,14 +3146,14 @@ function ns.EnsureTables()
 	ns.db.camShow = ns.db.camShow or {}
 	ns.db.cooldownReadyOnly = ns.db.cooldownReadyOnly or {} -- Cooldown Manager page: spell ID -> true
 	ns.db.cooldownReadyEarly = ns.db.cooldownReadyEarly or {} -- ...spell ID -> seconds early it comes back
-	ns.db.cooldownEarlyOn = ns.db.cooldownEarlyOn or {} -- ...spell ID -> true: Show Early ticked
+	ns.db.cooldownEarlyOn = ns.db.cooldownEarlyOn or {} -- ...spell ID -> true: Show early ticked
 	ns.db.cooldownRechargeOnly = ns.db.cooldownRechargeOnly or {} -- ...spell ID -> true: only while recharging
 	ns.db.cooldownNeedsPower = ns.db.cooldownNeedsPower or {} -- ...spell ID -> true: ready needs its resources
 	ns.db.cooldownProcOnly = ns.db.cooldownProcOnly or {} -- ...spell ID -> true: only while it glows (a proc)
 	ns.db.cooldownAlwaysShow = ns.db.cooldownAlwaysShow or {} -- ...spell ID -> true: Always, whatever its group's
 	ns.db.cooldownGroupDefaults = ns.db.cooldownGroupDefaults or {} -- ...group -> { mode, power, early }
 	ns.db.cooldownBuffMode = ns.db.cooldownBuffMode or {} -- ...tracked buff's spell ID -> its own mode
-	ns.db.cooldownEarlyOff = nil -- (a test build's, when Show Early started ticked)
+	ns.db.cooldownEarlyOff = nil -- (a test build's, when Show early started ticked)
 	ns.db.gamepadPressButtons = ns.db.gamepadPressButtons or {} -- Gamepad page: button -> reveals the bars
 	ns.db.cineFade = nil -- (a test build's CineMode column, before it became cineShow)
 	ns.db.tooltipCineMode = nil -- (a test build's: the Tooltips page's master switch decides now)
@@ -3549,7 +3567,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			}, OLD_NAME_KEYS)
 			ns.db.plateRowsV1 = true
 		end
-		-- Enemy Units split into Enemy Players (still "Enemies") and Enemy NPCs:
+		-- Enemy Units split into Enemy players (still "Enemies") and Enemy NPCs:
 		-- the new row starts out ticked wherever the old one was.
 		if not ns.db.plateEnemyNPCsV1 then
 			for _, prefix in ipairs({ "plateCombat", "plateCinematic", "plateInCities", "plateInInns",
@@ -4704,7 +4722,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			for _, saved in pairs(ns.db.profiles or {}) do Healers(saved) end
 			ns.db.healVisionHealersV1 = true
 		end
-		-- The Plate Parts' Buffs/debuffs row (Part Auras) was split into Buffs
+		-- The Plate parts' Buffs/debuffs row (Part Auras) was split into Buffs
 		-- and Debuffs rows: each takes its boxes, in every profile.
 		local function SplitAuras(t)
 			local keys = {}
@@ -5104,8 +5122,8 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 			ns.db.chatNpcOnV1 = true
 		end
-		-- The grids' Open World no longer covers capital cities (they're Cities,
-		-- their own list): every row ticked Open World gets Cities ticked, and
+		-- The grids' Open world no longer covers capital cities (they're Cities,
+		-- their own list): every row ticked Open world gets Cities ticked, and
 		-- rules' world (the same, now) is world or city. Once, in every profile.
 		-- Nameplates page rows' Also color went with the mark's color; now the
 		-- plate has its own (PlateColor). A row with any part ticked keeps its
@@ -5428,7 +5446,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		end
 		-- Immersive (CDM) now shows the Cooldown Manager in place of action
 		-- bars 1 to 3 with an enemy targeted too. Once, in that profile (and the
-		-- live settings when they're its), where its Tar Enemy column is still as it was.
+		-- live settings when they're its), where its Tar enemy column is still as it was.
 		if not ns.db.cdmEnemyV1 then
 			local function CooldownsOn(t)
 				local list = type(t) == "table" and t.enemyShow
@@ -5591,7 +5609,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			end
 		end
 		-- The Raid Markers grid's Friendly and Enemy rows are now the Names
-		-- grid's one Raid Marker row: ticked in each column where either was.
+		-- grid's one Raid marker row: ticked in each column where either was.
 		local function MarkersJoined(t)
 			if type(t) ~= "table" then
 				return
@@ -5770,6 +5788,21 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 			"cozyTentZoom", -- (now cozyTentClose)
 		}) do
 			ns.db[key] = nil
+		end
+		-- Vision > General's switch turned off its page (the Vision Helper, and
+		-- Duel Vision before it had a page); it's Enable Visions now, over every
+		-- vision. Off, it's on again with those two off, as they were. Once.
+		if not ns.db.visionsMasterV1 then
+			local function Keep(saved)
+				if saved.handleVision == false then
+					saved.handleVision, saved.minimapVisions, saved.duelPlates = true, false, false
+				end
+			end
+			Keep(ns.db)
+			for _, saved in pairs(ns.db.profiles or {}) do
+				if type(saved) == "table" then Keep(saved) end
+			end
+			ns.db.visionsMasterV1 = true
 		end
 		-- New settings start as the active profile has them (a built-in's
 		-- changes to the defaults included). A fresh install (or Reset addon)

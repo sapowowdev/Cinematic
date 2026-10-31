@@ -237,12 +237,19 @@ end
 
 -- A Visions hub page's link to its Style hub page: a small Style button right
 -- of the page's title, past its "?" (PageIntro). page: the Style page's name,
--- as ns.OpenOptions takes it. Tooltip: the page's (Options.lua's).
-function ns.StyleLink(content, title, page, tip, Tooltip)
+-- as ns.OpenOptions takes it. Tooltip: the page's (Options.lua's). label: its
+-- text when not just Style (a page with more than one Style page), after: the
+-- link it goes right of (else the title).
+function ns.StyleLink(content, title, page, tip, Tooltip, label, after)
 	local button = ns.PanelButton(content)
 	button:SetSize(70, 20)
-	button:SetText(ns.L["Style"])
-	button:SetPoint("LEFT", title, "RIGHT", 44, 0)
+	button:SetText(label or ns.L["Style"])
+	button:SetWidth(math.max(70, button:GetFontString():GetStringWidth() + 24))
+	if after then
+		button:SetPoint("LEFT", after, "RIGHT", 6, 0)
+	else
+		button:SetPoint("LEFT", title, "RIGHT", 44, 0)
+	end
 	Tooltip(button, tip)
 	button:SetScript("OnClick", function() ns.OpenOptions(page) end)
 	return button

@@ -1,4 +1,4 @@
--- Cinematic: the Wheels pages, a row of icons on the Quality of life hub, one per wheel. A wheel's
+-- Cinematic: the Wheels pages, a row of icons on the Wheels hub (under Quality of life), one per wheel. A wheel's
 -- page says what it does, shows its ring as it is now (point at an icon for
 -- its name) and has its keybind, and, but for the master wheel's, an "On the
 -- master wheel" tick. The master wheel's page lists the wheels on it, in

@@ -589,7 +589,7 @@ end
 -- (combatOnEnter, combatOnLeave) say which; a rule says it all itself.
 local fightStart, cineAtStart = 0, false
 local function Allowed(db, edge)
-	if not db.combatVision then
+	if not ns.Setting("combatVision") then
 		return false
 	end
 	ns.combatEdge, ns.combatEdgeCine = edge, cineAtStart
@@ -692,7 +692,7 @@ end
 
 -- Whether a boss card may show now, by tick (combatBossPull...) and its Show in row, and why not.
 local function BossAllowed(db, tick)
-	if not db.combatVision then return false, "Combat Vision off" end
+	if not ns.Setting("combatVision") then return false, "Combat Vision off" end
 	if not db[tick] then return false, tick .. " off" end
 	ns.combatEdge, ns.combatEdgeCine = "enter", ns.lastCinematic and true or false
 	local ok, shows = pcall(ns.RowOnNow, BOSS_KEY, db.combatBossAlways, true)
@@ -744,7 +744,7 @@ nearLook:SetScript("OnUpdate", function(_, elapsed)
 	if nearWait > 0 then return end
 	nearWait = NEAR_EVERY
 	local db = ns.db
-	if not (db and db.combatVision and db.combatBossNear) or InCombatLockdown() or bossRun.encounterOn
+	if not (db and ns.Setting("combatVision") and db.combatBossNear) or InCombatLockdown() or bossRun.encounterOn
 		or GetTime() - bossRun.preAt < PRE_HOLD then
 		return
 	end
@@ -853,7 +853,7 @@ watcher:SetScript("OnEvent", function(_, event, ...)
 			Plain(tostring, success) == "1" and "the next boss's card may show before its pull" or "a card before a pull stays held"))
 		-- (The Boss tab's sounds for a kill or a wipe.)
 		local result = Plain(tostring, success)
-		if db.combatVision and result then
+		if ns.Setting("combatVision") and result then
 			ns.PlayCombatCueSound(result == "1" and "kill" or "wipe", ns.lastCinematic and true or false)
 		end
 	elseif event == "PLAYER_TARGET_CHANGED" then
@@ -1043,7 +1043,7 @@ function ns.CreateCombatVisionPanel(kit)
 		L["A cue for a few seconds as you go into a fight and come out of it: a word on the screen or in a " ..
 		"letterbox bar, a pulse round the screen's edges, an icon and a sound. How it looks: the Style tab."])
 	local function Changed() end
-	local switch = kit.PageSwitch(content, "combatVision", L["Enable page"],
+	local switch = kit.PageSwitch(content, "combatVision", L["Enable Page"],
 		L["On: the cue shows as this page says. Off: never. Each setting keeps its value for when you turn " ..
 		"this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")
@@ -1211,7 +1211,7 @@ function ns.CreateCombatStylePanel(kit)
 	local function Changed() Replay() end
 	content.combatChanged = Changed
 
-	local switch = kit.PageSwitch(content, "combatVision", L["Enable page"],
+	local switch = kit.PageSwitch(content, "combatVision", L["Enable Page"],
 		L["On: the cue shows as the Vision tab says, looking as this page says. Off: " ..
 		"never. Each setting keeps its value for when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")

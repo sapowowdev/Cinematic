@@ -192,7 +192,7 @@ ns.PROFILE_MODULES = {
 			set("combatShow", All({ "minimap", "minimapheader", "minimaptracking", "minimapcalendar", "minimapzone",
 				"minimapclock" }, false))
 		end },
-	{ key = "fewer-group-plates", name = "Fewer group nameplates", scope = { "Nameplates/Friendly Nameplates" },
+	{ key = "fewer-group-plates", name = "Fewer group nameplates", scope = { "Nameplates/Friendly nameplates" },
 		tip = "Group members' pets, and the Grouped column for friendly players and minions, don't stay up.",
 		apply = function(set)
 			set("plateAlwaysGroupMinions", false)
@@ -268,13 +268,13 @@ ns.PROFILE_MODULES = {
 			"Standard Frames/Interface", "Advanced Frames/Supported addons",
 			"Gamepad/top" },
 		tip = "No action bars, micro menu, bags or XP bar in fights, with an enemy targeted or in instances; " ..
-		"the Cooldown Manager in fights, and up whenever a cooldown is recharging, out of fights too.",
+		"the Cooldown Manager in fights, and up after one until its cooldowns are ready, within the Calm Timer.",
 		apply = function(set)
 			set("cooldownManagerOn", true)
 			set("cooldownWhileRecharging", true)
-			set("cooldownAfterCombat", false)
+			set("cooldownAfterCombat", true)
 			set("cooldownUtilityWhileRecharging", true)
-			set("cooldownUtilityAfterCombat", false)
+			set("cooldownUtilityAfterCombat", true)
 			local fights = All({ "mainbar", "art", "bottomleft", "bottomright", "pet", "stance", "totems", "micro",
 				"bags", "xp" }, false)
 			local combat = {}
@@ -486,7 +486,7 @@ ns.PROFILE_MODULES = {
 	{ key = "letterbox-in-fights", name = "Letterbox stays in fights", scope = { "Letterbox/Show in" },
 		tip = "Fights don't bring the letterbox down.",
 		apply = function(set) set("letterboxOffInCombat", false) end },
-	{ key = "rain-view-distance", name = "Reduce View Distance in Rain", scope = { "Effects/Show in" },
+	{ key = "rain-view-distance", name = "Reduce view distance in rain", scope = { "Effects/Show in" },
 		tip = "In CineMode, rain pulls the view distance in from yours, all the way in a downpour.",
 		apply = function(set) set("rainViewScale", 1) end },
 	{ key = "no-time-message", name = "No time of day message", scope = { "Tint Style/Time of day" },

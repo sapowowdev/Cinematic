@@ -561,7 +561,7 @@ function ns.CreateWindGuidePanel(kit)
 	local function Changed()
 		ns.RefreshWindGuide()
 	end
-	local switch = kit.PageSwitch(content, "windGuide", L["Enable page"],
+	local switch = kit.PageSwitch(content, "windGuide", L["Enable Page"],
 		L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
 		"when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")

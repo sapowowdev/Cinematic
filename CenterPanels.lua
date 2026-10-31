@@ -417,7 +417,7 @@ local function OpenPanels()
 	return open, row
 end
 
--- keepClear: Quest Vision's Opposite Clicked (Custom dialogue frames off),
+-- keepClear: Quest Vision's Opposite clicked (Custom dialogue frames off),
 -- the half of the screen the NPC's on ("left" or "right"): a talking row on
 -- it goes to the mirror of its spot on the other half. center: centerPanels
 -- (else the row stays where the game put it, but for that).

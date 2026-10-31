@@ -37,7 +37,7 @@ function ns.CreateRollStylePanel(kit)
 		if preview then preview:Refresh() end
 	end
 
-	local switch = kit.PageSwitch(content, "rollStyle", L["Enable page"],
+	local switch = kit.PageSwitch(content, "rollStyle", L["Enable Page"],
 		L["On: the window looks as this page says. Off: as Roll Vision has always looked. Each setting " ..
 		"keeps its value for when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")

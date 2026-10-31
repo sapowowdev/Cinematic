@@ -13,7 +13,7 @@ local PRESET_KEYS = { "bubblesBack", "bubblesAlpha", "bubblesEdge", "bubblesTail
 
 function ns.CreateBubbleStylePanel(kit)
 	local canvas, content = kit.CreateScrollPage()
-	local title = kit.Label(content, "GameFontNormalLarge", L["Chat bubbles"])
+	local title = kit.Label(content, "GameFontNormalLarge", L["Chat Bubbles"])
 	title:SetPoint("TOPLEFT", 16, -16)
 	local intro = kit.PageIntro(content, title,
 		L["How chat bubbles look, and speech from behind you with them. Where bubbles show: the UI " ..
@@ -25,7 +25,7 @@ function ns.CreateBubbleStylePanel(kit)
 		if preview then preview:Refresh() end
 	end
 
-	local switch = kit.PageSwitch(content, "bubblesStyle", L["Enable page"],
+	local switch = kit.PageSwitch(content, "bubblesStyle", L["Enable Page"],
 		L["On: chat bubbles look as this page says. Off: the game's own bubbles (the preview shows that " ..
 		"too). Each setting keeps its value for when you turn this back on. (Not in instances on retail: " ..
 		"the game doesn't let addons change bubbles there.)"], intro, Changed)
@@ -155,5 +155,5 @@ function ns.CreateBubbleStylePanel(kit)
 
 	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))
 	canvas:Hide()
-	kit.RegisterSubpage(canvas, "Bubble Style", L["Chat bubbles"])
+	kit.RegisterSubpage(canvas, "Bubble Style", L["Chat Bubbles"])
 end

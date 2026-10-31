@@ -11,7 +11,7 @@
 -- (<key>_<BAR>). The bars past the nameplates' keep the game's look until
 -- their tab's "Restyle these bars" is ticked (plateCastOn_<BAR>), and keep
 -- the game's size (yours is sized in Edit Mode). Whether the nameplates'
--- show (in CineMode): the Nameplates page's Plate Parts grid. A preview at
+-- show (in CineMode): the Nameplates page's Plate parts grid. A preview at
 -- the top, drawn by the same code as the real ones.
 
 local _, ns = ...
@@ -1066,13 +1066,13 @@ for _, info in ipairs(BARS) do TAB_NAMES[info[1]] = info[2] end
 
 function ns.CreatePlateCastStylePanel(kit)
 	local canvas, content = kit.CreateScrollPage()
-	local title = kit.Label(content, "GameFontNormalLarge", L["Cast bars"])
+	local title = kit.Label(content, "GameFontNormalLarge", L["Cast Bars"])
 	title:SetPoint("TOPLEFT", 16, -16)
 	local intro = kit.PageIntro(content, title,
 		L["How the cast bars look: on nameplates, yours, your target's and focus's, and the bosses' and arena " ..
 		"enemies'. The Default tab's settings are every bar's until its own tab has Use default settings " ..
 		"unticked. All but the nameplates' keep the game's look until their tab's Restyle these bars is " ..
-		"ticked. Whether the nameplates' show in CineMode: the Nameplates page's Plate Parts grid. Changes " ..
+		"ticked. Whether the nameplates' show in CineMode: the Nameplates page's Plate parts grid. Changes " ..
 		"show at once, here and on bars casting now."])
 
 	-- The tab being edited (nil: Default), and each setting as the field it
@@ -1104,7 +1104,7 @@ function ns.CreatePlateCastStylePanel(kit)
 		if preview then preview:Refresh() end
 	end
 
-	local switch = kit.PageSwitch(content, "plateCastStyle", L["Enable page"],
+	local switch = kit.PageSwitch(content, "plateCastStyle", L["Enable Page"],
 		L["On: the cast bars look as this page says. Off: the game's own (the preview shows that too). Each " ..
 		"setting keeps its value for when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")
@@ -1367,7 +1367,7 @@ function ns.CreatePlateCastStylePanel(kit)
 
 	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))
 	canvas:Hide()
-	kit.RegisterSubpage(canvas, "Cast Bar Style", L["Cast bars"])
+	kit.RegisterSubpage(canvas, "Cast Bar Style", L["Cast Bars"])
 end
 
 -- One sample cast bar, for the General page's nameplate preview: dressed as

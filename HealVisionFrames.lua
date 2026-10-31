@@ -35,6 +35,8 @@ local hooked = {}   -- member frames whose scripts are followed
 local curves = {}   -- kind (TANKS...) -> { below, floor, [step] = its curve (false: none on this client) }
 local hovered = false
 local reveal, revealStep = 0, 0 -- the mouse's fade: how far in (0-1), and as a step
+local hoverFrame = nil -- the member frame the mouse is over now (in fights too)
+local hoverIn = {}     -- member frame -> how far its own mouseover fade is in (0-1), while it's above 0
 local sinceScan, sinceUpdate = RESCAN_EVERY, 0
 
 local function Secret(value)
@@ -232,6 +234,19 @@ local function Hook(frame)
 	frame:HookScript("OnUpdate", Reassert)
 end
 
+-- The mouse onto a member: it fades in (Mouseover, at least), and out from
+-- the moment the mouse is off it. (Off: asked each frame while it's there,
+-- so a buff icon on it, taking the mouse, still counts as on.)
+local entering = {}
+local function Entered(frame)
+	if members[frame] then hoverFrame = frame end
+end
+local function HookEnter(frame)
+	if entering[frame] or not frame.HookScript then return end
+	entering[frame] = true
+	frame:HookScript("OnEnter", Entered)
+end
+
 -- (A main tank's target beside them is refreshed every frame from another
 -- frame's OnUpdate (the game's onUpdateFrame), which the script hooks above
 -- miss: the game's alpha won there between our updates, a flicker. Followed
@@ -301,6 +316,7 @@ local function AddMember(frame, kind, found, whole)
 	-- (Found afresh each time: the game adds parts as it needs them.)
 	found[frame] = { unit = unit, parts = Parts(frame), whole = whole, beside = beside }
 	if whole then Hook(frame) end
+	HookEnter(frame)
 end
 
 -- A group's title ("Group 1", "Party"): hidden while its kind is on, as the
@@ -590,6 +606,19 @@ function ns.HealVisionDebug(unit)
 		Secret(alpha) and "secret" or tostring(alpha), table.concat(list, "; "))
 end
 
+-- A member's step of the fade: the mouse over all the frames' (out of
+-- combat), or its own mouseover's, as far in as that goes (its opacity:
+-- the step where Shown reaches it), whichever is further.
+local function HoverStep(frame, kind)
+	local hover = hoverIn[frame]
+	if not hover then return revealStep end
+	local floor = math.max(0, math.min(Floor(kind), 1))
+	local most = tonumber(Setting("healVisionMouseoverAlpha")) or 0
+	if most <= floor or floor >= 1 then return revealStep end
+	local top = math.min(STEPS, math.ceil((most - floor) / (1 - floor) * STEPS - 0.001))
+	return math.max(revealStep, math.floor(hover * top + 0.5))
+end
+
 local function Update(frame)
 	local member = members[frame]
 	if not member then return end
@@ -601,11 +630,11 @@ local function Update(frame)
 	local alpha, gone, rule = 1, nil, nil
 	if revealStep < STEPS and UnitExists(unit) then
 		rule, gone = Rule(unit, member.beside)
-		if rule == "health" and IsTarget(unit) then
-			fade = Curve(revealStep, TargetOf(kind)) or fade
-		end
+		if rule == "health" and IsTarget(unit) then kind = TargetOf(kind) end
+		local step = HoverStep(frame, gone or kind)
+		fade = Curve(step, kind) or fade
 		if gone then
-			alpha = Shown(revealStep, gone)
+			alpha = Shown(step, gone)
 		elseif rule == "health" then
 			-- (Health as it is, not with heals being cast. Secret: straight to the game.)
 			local ok, value = pcall(UnitHealthPercent, unit, false, fade)
@@ -702,6 +731,22 @@ watcher:SetScript("OnUpdate", function(_, elapsed)
 				revealStep = step
 				UpdateAll()
 			end
+		end
+	end
+	-- One member's mouseover: in while the mouse is on it, out the moment it's off.
+	if hoverFrame then
+		local ok, over = pcall(hoverFrame.IsMouseOver, hoverFrame)
+		if not members[hoverFrame] or not ok or Secret(over) or not over then hoverFrame = nil end
+	end
+	if hoverFrame and not hoverIn[hoverFrame] then hoverIn[hoverFrame] = 0 end
+	for frame, value in pairs(hoverIn) do
+		local on = frame == hoverFrame
+		local now = ns.Approach(value, on and 1 or 0, elapsed, on and ns.FadeInTime() or ns.FadeOutTime())
+		if now <= 0 and not on then now = nil end
+		hoverIn[frame] = now
+		-- (Again only as it moves a step: STEPS of the way at most.)
+		if math.floor((now or 0) * STEPS + 0.5) ~= math.floor(value * STEPS + 0.5) and members[frame] then
+			Update(frame)
 		end
 	end
 	sinceScan, sinceUpdate = sinceScan + elapsed, sinceUpdate + elapsed

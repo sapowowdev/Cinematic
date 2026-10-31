@@ -35,7 +35,7 @@ end
 -- Whether mana has a bar of its own now: ticked, and mana not the power the
 -- display shows while you have some. (Secret: as it was.)
 local function Wanted()
-	if not (ns.db and ns.db.prdMana) then return false end
+	if not (ns.db and ns.db.prdMana and ns.PersonalResourcesOn()) then return false end
 	local powerType = UnitPowerType("player")
 	local maxMana = UnitPowerMax("player", MANA)
 	if not (Readable(powerType) and Readable(maxMana)) then return shown end

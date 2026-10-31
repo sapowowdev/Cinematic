@@ -593,7 +593,7 @@ for _, info in ipairs(FRAMES) do TAB_NAMES[info[1]] = info[2] end
 
 function ns.CreateUnitStylePanel(kit)
 	local canvas, content = kit.CreateScrollPage()
-	local title = kit.Label(content, "GameFontNormalLarge", L["Unit frames"])
+	local title = kit.Label(content, "GameFontNormalLarge", L["Unit Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
 	local intro = kit.PageIntro(content, title,
 		L["How your player, target, focus, pet, target of target and party frames look. The Default tab's " ..
@@ -638,7 +638,7 @@ function ns.CreateUnitStylePanel(kit)
 		if preview then preview:Refresh(editing) end
 	end
 
-	local switch = kit.PageSwitch(content, "ufStyle", L["Enable page"],
+	local switch = kit.PageSwitch(content, "ufStyle", L["Enable Page"],
 		L["On: the unit frames look as this page says. Off: the game's own (the preview shows that too). " ..
 		"Each setting keeps its value for when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")
@@ -775,5 +775,5 @@ function ns.CreateUnitStylePanel(kit)
 
 	canvas:SetScript("OnShow", kit.PageShown(kit.Refresh, content))
 	canvas:Hide()
-	kit.RegisterSubpage(canvas, "Unit Style", L["Unit frames"])
+	kit.RegisterSubpage(canvas, "Unit Style", L["Unit Frames"])
 end

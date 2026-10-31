@@ -525,7 +525,7 @@ local function RefreshControl(control, timing)
 			if label then SetLabelFont(label, "GameFontDisable") end
 		end
 	else
-		-- (A page's switch greys with the one it's under: a vision's with Enable visions.)
+		-- (A page's switch greys with the one it's under: a vision's with Enable Visions.)
 		local master = switch and ns.PageSwitchOf(switch.key)
 		local label = master and (control.Text or control.text)
 		if label then
@@ -1229,7 +1229,7 @@ local function CreatePanel()
 		L["Also toggled with /cine or the keybind under Key Bindings > AddOns."], ns.SetEnabled)
 	enabled:SetPoint("TOPLEFT", general, "BOTTOMLEFT", -2, -6)
 
-	local fadeUI = Check(panel, "fadeUI", L["Start in CineMode (Fade UI, Queue Music, etc.)"],
+	local fadeUI = Check(panel, "fadeUI", L["Start in CineMode (fade UI, queue music, etc.)"],
 		L["Off: the UI stays as it is and the camera's left to you, with just the visual effects " ..
 		"over it (as the Visual Effects page says), as in the Subtle profile. Triggers with CineMode " ..
 		"ticked on the Cameras page still bring CineMode on while their camera " ..
@@ -1492,21 +1492,21 @@ do
 					or "Interface\\Icons\\INV_BannerPVP_02"
 			end, section = "Frames" },
 			{ "Advanced Frames", "Interface\\Icons\\INV_Misc_Gear_01", section = "Frames" },
-			{ "Mouseover groups", "Interface\\Icons\\Spell_Holy_MindVision", section = "Frames" },
+			{ "Mouseover groups", "Interface\\Icons\\Spell_Holy_MindVision", label = "Mouseover Groups", section = "Frames" },
 			{ "Gamepad", "Interface\\Icons\\INV_Gizmo_01", section = "Frames" },
 			{ "Nameplates", "Interface\\Icons\\Ability_Hunter_SniperShot", label = "Nameplate & Names",
 				section = "Combat" },
 			{ "Unit Frames", "Interface\\Icons\\INV_Misc_Head_Dwarf_01", section = "Combat" },
 			{ "Personal Resources", "Interface\\Icons\\Ability_Racial_BloodRage", -- (Bloodrage: health into power)
 				section = "Combat" },
-			{ "Buffs/debuffs", "Interface\\Icons\\Spell_Holy_WordFortitude", section = "Combat" },
+			{ "Buffs/debuffs", "Interface\\Icons\\Spell_Holy_WordFortitude", label = "Buffs/Debuffs", section = "Combat" },
 			{ "Cooldown Manager", "Interface\\Icons\\INV_Misc_PocketWatch_01", section = "Combat" },
-			{ "Swing timer", "Interface\\Icons\\INV_Sword_04", section = "Combat" },
+			{ "Swing timer", "Interface\\Icons\\INV_Sword_04", label = "Swing Timer", section = "Combat" },
 			{ "Minimap", "Interface\\Icons\\INV_Misc_Map_01", section = "World" },
-			{ "Quest tracker", "Interface\\Icons\\INV_Misc_Note_01", section = "World" },
+			{ "Quest tracker", "Interface\\Icons\\INV_Misc_Note_01", label = "Quest Tracker", section = "World" },
 			{ "Tooltips", "Interface\\Icons\\INV_Misc_Book_09", section = "World" },
 			{ "Chat", "Interface\\Icons\\INV_Scroll_03", section = "Chat" },
-			{ "Chat bubbles", "Interface\\Icons\\Ability_Warrior_BattleShout", section = "Chat" },
+			{ "Chat bubbles", "Interface\\Icons\\Ability_Warrior_BattleShout", label = "Chat Bubbles", section = "Chat" },
 		} },
 		-- (Camera Settings' icons, one per camera, name their sections themselves)
 		{ name = "Camera", colors = {
@@ -1537,15 +1537,15 @@ do
 			HUD = { 0.35, 0.6, 0.9 }, Overhead = { 0.65, 0.45, 0.9 },
 		}, pages = {
 			{ "Style General", "Interface\\Icons\\INV_Misc_Gear_08", label = "General" },
-			{ "Unit Style", "Interface\\Icons\\INV_Misc_Head_Human_01", label = "Unit frames", section = "HUD" },
-			{ "Raid Style", "Interface\\Icons\\INV_Misc_GroupNeedMore", label = "Raid frames", section = "HUD" },
+			{ "Unit Style", "Interface\\Icons\\INV_Misc_Head_Human_01", label = "Unit Frames", section = "HUD" },
+			{ "Raid Style", "Interface\\Icons\\INV_Misc_GroupNeedMore", label = "Raid Frames", section = "HUD" },
 			{ "Personal Style", "Interface\\Icons\\Spell_Holy_SealOfVengeance", label = "Personal Resource Display",
 				section = "HUD" },
 			{ "Tooltip Style", "Interface\\Icons\\INV_Misc_Note_05", label = "Tooltips", section = "HUD" },
 			{ "Nameplate Style", "Interface\\Icons\\Ability_Marksmanship", label = "Nameplates", section = "Overhead" },
 			{ "Name Style", "Interface\\Icons\\INV_Misc_Note_02", label = "Names", section = "Overhead" },
-			{ "Cast Bar Style", "Interface\\Icons\\Spell_Nature_Lightning", label = "Cast bars", section = "Overhead" },
-			{ "Bubble Style", "Interface\\Icons\\Ability_Warrior_RallyingCry", label = "Chat bubbles",
+			{ "Cast Bar Style", "Interface\\Icons\\Spell_Nature_Lightning", label = "Cast Bars", section = "Overhead" },
+			{ "Bubble Style", "Interface\\Icons\\Ability_Warrior_RallyingCry", label = "Chat Bubbles",
 				section = "Overhead" },
 		} },
 		-- (General and the dev copy's Wind Guide in no section: plain icons)
@@ -1562,15 +1562,19 @@ do
 			{ "Quest Item Style", "Interface\\Icons\\INV_Misc_Key_03", tabOf = "Quest Vision" },
 			{ "Roll Vision", "Interface\\Icons\\INV_Misc_Dice_01", section = "World" },
 			{ "Roll Style", "Interface\\Icons\\INV_Misc_Dice_02", tabOf = "Roll Vision" },
+			{ "Duel Vision", "Interface\\Icons\\Ability_DualWield", section = "World" },
 			{ "Wind Guide", "Interface\\Icons\\Spell_Nature_Cyclone", dev = true },
 		} },
-		-- (the wheels are WheelsPage.lua's pages)
-		{ name = "Quality of life", colors = { Helpers = { 0.3, 0.7, 0.5 }, Wheels = { 0.65, 0.45, 0.9 } }, pages = {
+		{ name = "Quality of life", colors = { Helpers = { 0.3, 0.7, 0.5 } }, pages = {
 			{ "General", "Interface\\Icons\\INV_Misc_Bag_07" },
 			{ "Fishing", "Interface\\Icons\\Trade_Fishing", section = "Helpers" },
 			{ "Hunter", "Interface\\Icons\\INV_Weapon_Bow_07", section = "Helpers" },
-			{ "Master wheel", "Interface\\Icons\\Spell_Nature_WispSplode", section = "Wheels" },
-			{ "Your wheels", "Interface\\Icons\\INV_Misc_Note_01", section = "Wheels" },
+		} },
+		-- (WheelsPage.lua's pages; listed under Quality of life, as Style is under
+		-- UI Manager. The master wheel first, plain; the wheels it opens on a band.)
+		{ name = "Wheels", under = "Quality of life", colors = { Wheels = { 0.65, 0.45, 0.9 } }, pages = {
+			{ "Master wheel", "Interface\\Icons\\Spell_Nature_WispSplode" },
+			{ "Your wheels", "Interface\\Icons\\INV_Misc_Note_01" },
 			{ "Camera wheel", "Interface\\Icons\\INV_Misc_Spyglass_03", section = "Wheels" },
 			{ "Menu wheel", "Interface\\Icons\\INV_Misc_Gear_01", section = "Wheels" },
 			{ "Marker wheel", "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8", section = "Wheels" },
@@ -2021,7 +2025,7 @@ local function CreateRevealPanel()
 		"long before fading back in. Your portrait and buffs, if they only show after combat, " ..
 		"count a fight as recent for this long too, the RP walk, auto-run and cozy cameras " ..
 		"wait this long before starting, and music muted for fights comes back after it. Then " ..
-		"things fade out at the Fade out time. 0 settles at once. Exit Calm Timer when Healthy, " ..
+		"things fade out at the Fade out time. 0 settles at once. Exit Calm Timer when healthy, " ..
 		"below, can end it early."])
 
 	-- Off at the left end; past it, how long after you're back to full the
@@ -2041,7 +2045,7 @@ local function CreateRevealPanel()
 				db.calmFullAfter = value
 			end
 		end,
-	}, L["Exit Calm Timer when Healthy"], -1, 15, 1, function(value)
+	}, L["Exit Calm Timer when healthy"], -1, 15, 1, function(value)
 		if value < 0 then
 			return L["Off"]
 		end
@@ -2161,7 +2165,7 @@ end
 local function CreateBuffsPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", L["Buffs/debuffs"])
+	local title = Label(content, "GameFontNormalLarge", L["Buffs/Debuffs"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local note = PageIntro(content, title,
@@ -2170,7 +2174,7 @@ local function CreateBuffsPanel()
 	local buffPeek = Check(content, "buffPeek", L["Show buffs when you gain or refresh one"],
 		L["Gaining or refreshing a buff briefly shows your buffs and debuffs. Not on flights."])
 	buffPeek:SetPoint("TOPLEFT", note, "BOTTOMLEFT", -2, -48)
-	PageSwitch(content, "handleBuffs", L["Enable page"],
+	PageSwitch(content, "handleBuffs", L["Enable Page"],
 		L["On: this page's peeks bring your buffs and debuffs up in CineMode. Off: no peeks; they still " ..
 		"fade as their Standard Frames row says."], note)
 	buffPeek:HookScript("OnClick", Refresh) -- grey out / enable the options below
@@ -2351,7 +2355,7 @@ local function CreateBuffsPanel()
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Buffs/debuffs")
+	RegisterSubpage(canvas, "Buffs/debuffs", L["Buffs/Debuffs"])
 end
 
 -- Slow zoom controls for one profile (idleZoom* or taxiZoom*), stacked under
@@ -2393,7 +2397,7 @@ end
 -- The camera modes' switch, on the Cameras page: off, no camera mode
 -- starts, and it and the Camera Settings page grey out.
 local function CameraModesSwitch(content, anchor)
-	return PageSwitch(content, "cameraModes", L["Enable cameras"],
+	return PageSwitch(content, "cameraModes", L["Enable Cameras"],
 		L["On: the cameras start as the rows below say. Off: none of them ever starts, and the camera is " ..
 		"left to you; CineMode still fades the UI. The Camera Settings page greys out with it."], anchor)
 end
@@ -3437,9 +3441,9 @@ local function CreateCameraSettingsPanel()
 	}
 	-- (and its group in the hub's row: at rest, travel, then moments)
 	local GROUPS = {
-		["AFK Cam"] = "At rest", ["Cozy Cam"] = "At rest", ["Vista Cam"] = "At rest",
+		["AFK Cam"] = "At rest", ["Cozy Cam"] = "At rest", ["Vista Cam"] = "At rest", ["Fish Cam"] = "At rest",
 		["Flight Cam"] = "Travel", ["Tele Cam"] = "Travel", ["Auto-run Cam"] = "Travel", ["RP Walk Cam"] = "Travel",
-		["Quest Cam"] = "Moments", ["Chat Cam"] = "Moments", ["Fish Cam"] = "Moments", ["Death Cam"] = "Moments",
+		["Quest Cam"] = "Moments", ["Chat Cam"] = "Moments",["Death Cam"] = "Moments",
 	}
 	local GROUP_ORDER = { ["At rest"] = 1, Travel = 2, Moments = 3 }
 	canvas.hubTabs = {}
@@ -3464,6 +3468,9 @@ local function CreateCameraSettingsPanel()
 		if groupA ~= groupB then return groupA < groupB end
 		return a.index < b.index
 	end)
+	-- (each camera's place in that row, for the Cameras page's Sort by: Hub)
+	ns.CAMERA_HUB_ORDER = {}
+	for i, tab in ipairs(canvas.hubTabs) do ns.CAMERA_HUB_ORDER[tab.name] = i end
 	RegisterSubpage(canvas, "Camera Settings")
 end
 
@@ -3497,7 +3504,7 @@ ns.OpenColorPicker = OpenColorPicker
 -- The master switch, on both tabs: off, none of the effects show (each keeps
 -- its own setting), and the tab's other controls grey out.
 local function VisualEffectsSwitch(content, anchor)
-	local master = Check(content, "visualEffects", L["Enable visual effects"],
+	local master = Check(content, "visualEffects", L["Enable Visual Effects"],
 		L["Turns every visual effect on or off at once, these and the Tint tab's: the letterbox, tint, time " ..
 		"of day, zone tints, vignette, inn glow, weather and depth of field. Each keeps its own settings for " ..
 		"when you turn this back on."], function(value)
@@ -3622,7 +3629,7 @@ local function CreateEffectsPanel()
 	-- weather and has the view distance setting.
 	local lastRow = weatherTintStrength
 	if C_Weather and C_Weather.GetCurrentWeather and GetCVar("horizonStart") ~= nil then
-		lastRow = InlineSlider(weatherTintStrength.rowName, 18, "rainViewScale", L["Reduce View Distance in Rain"], 100, 5)
+		lastRow = InlineSlider(weatherTintStrength.rowName, 18, "rainViewScale", L["Reduce view distance in rain"], 100, 5)
 		Tooltip(lastRow, L["In CineMode, as it rains, the view distance comes in from yours: the harder the rain, " ..
 			"the closer. At 100% a downpour brings it all the way in, as far as the Graphics menu's lowest View " ..
 			"distance; it never goes further out than yours. Yours is put back once the rain stops or you go " ..
@@ -3665,7 +3672,7 @@ local function CreateEffectsPanel()
 end
 
 -- Sub-page: the visual effects' Tint tab: the colour grading (a preset, its
--- strength and drift), time of day and zone tints. Its Enable page switch is
+-- strength and drift), time of day and zone tints. Its Enable Page switch is
 -- the General tab's too.
 local function CreateTintPanel()
 	local canvas, content = CreateScrollPage()
@@ -4187,7 +4194,7 @@ local function CreateGraphicsPanel()
 		"over its new settings."])
 
 	local function Changed() ns.ApplyGraphicsPlus() end
-	local switch = PageSwitch(content, "graphicsPlus", L["Enable page"],
+	local switch = PageSwitch(content, "graphicsPlus", L["Enable Page"],
 		L["On: the settings below, as you've set them. Off: the game's own settings, put back as they were."],
 		subtitle, Changed)
 	local stack = Stack(switch, "check")
@@ -4339,7 +4346,7 @@ local function CreateAudioPanel()
 		"back afterwards, even after a crash. Pick which cameras play music as they start."])
 
 	-- The page's switch: off, CineMode leaves music alone (nothing below applies).
-	local music = PageSwitch(content, "musicInCinematic", L["Enable page"],
+	local music = PageSwitch(content, "musicInCinematic", L["Enable Page"],
 		L["On: with your game music off, a camera starting (the ones ticked under Music on the Camera " ..
 		"Triggers page) switches it on and fades it in, at your music volume; it fades out when " ..
 		"the UI returns and your music is switched off again (logging out too). With your game " ..
@@ -4372,7 +4379,7 @@ local function CreateAudioPanel()
 		"Music coming back after a mute doesn't count. 0 turns this off."])
 
 	-- Right column: stopping as you leave the camera modes.
-	local muteHeader = Label(content, "GameFontNormal", L["Stop Music"])
+	local muteHeader = Label(content, "GameFontNormal", L["Stop music"])
 	muteHeader:SetPoint("TOPLEFT", musicHeader, "TOPLEFT", 320, 0)
 
 	local movingMusic = Check(content, "musicPauseWhenMoving", L["Leaving a camera mode"],
@@ -4412,8 +4419,8 @@ local FRAME_LABEL_WIDTH, FRAME_COLUMN_WIDTH, FRAME_HEADING_HEIGHT = 160, 52, 24
 local FRAME_COLUMNS = {
 	{ L["Always"], ns.IsCineShowOn, "cineShow", false },
 	{ L["In combat"], ns.IsCombatShowOn, "combatShow", true },
-	{ L["Tar Enemy"], ns.IsEnemyShowOn, "enemyShow", false },
-	{ L["Tar Friendly"], ns.IsFriendlyShowOn, "friendlyShow", false },
+	{ L["Tar enemy"], ns.IsEnemyShowOn, "enemyShow", false },
+	{ L["Tar friendly"], ns.IsFriendlyShowOn, "friendlyShow", false },
 }
 for _, place in ipairs(ns.PLACE_SHOW) do
 	FRAME_COLUMNS[#FRAME_COLUMNS + 1] = {
@@ -4632,15 +4639,15 @@ local function CreateCamerasPanel()
 	local WHEN_CHIP = { 0.08, 0.2, 0.35, 0.55, 0.8, 1 }
 	local NEVER_CHIP = { 0.35, 0.25, 0.05, 1, 0.8, 0.35 }
 	local PLAIN_CHIP = { 0.18, 0.18, 0.18, 0.8, 0.8, 0.8 }
-	local PLACE_NAMES = { world = L["Open World"], city = L["Cities"], instance = L["Instances"],
-		bg = L["BGs & Arenas"], group = L["Grouped"] }
+	local PLACE_NAMES = { world = L["Open world"], city = L["Cities"], instance = L["Instances"],
+		bg = L["BGs & arenas"], group = L["Grouped"] }
 	local PLACE_WORDS = { "world", "city", "instance", "bg" }
 	local WHEN_LAYOUT = { groups = { ns.GRID_COMBAT, ns.GRID_LOCATION }, roles = ROLES_MENU, edit = true }
 	local WHEN_HELP = { [ns.GRID_COMBAT] = L["Whether this row's camera may start in a fight (unticked, one " ..
 		"running stops when a fight starts), and whether it waits for things to calm down after one."],
 		[ns.GRID_LOCATION] = L["Where this row's camera may start (Grouped: in a party or raid). Anywhere else the " ..
 		"next row of its trigger is tried, and with none the camera doesn't start (or stops if it's running). For " ..
-		"flights, Cities means taking off from one, and Open World taking off anywhere else."] }
+		"flights, Cities means taking off from one, and Open world taking off anywhere else."] }
 
 	-- A row's line: its arrows, on/off tick, name and chips, then copy, open and remove;
 	-- its drawer under it, a line each (Name, Camera, When, and what its
@@ -4788,13 +4795,21 @@ local function CreateCamerasPanel()
 		return button
 	end
 
-	-- The rows as shown: the triggers by name, or (Sort: by camera) grouped by
-	-- their first row's camera, then by name; each trigger's rows together in
-	-- their order.
-	local CAM_ORDER = { tele = 1, flight = 2, quest = 3, chat = 4, cozy = 5, vista = 6, fish = 7, afk = 8, walk = 9,
-		run = 10, [true] = 11 }
+	-- The rows as shown, grouped by their first row's camera (Sort by: Hub,
+	-- in the Camera hub's icon order; Camera, by its name) then by trigger
+	-- name, or by trigger name alone (Trigger); no camera last. Each
+	-- trigger's rows together in their order.
+	local HUB_NAMES = { cozy = "Cozy Cam", vista = "Vista Cam", fish = "Fish Cam", afk = "AFK Cam",
+		tele = "Tele Cam", flight = "Flight Cam", quest = "Quest Cam", walk = "RP Walk Cam", run = "Auto-run Cam",
+		[true] = "Death Cam", chat = "Chat Cam" }
+	local SORTS = { { nil, "Hub" }, { "camera", "Camera" }, { "trigger", "Trigger" } }
+	local function SortOf()
+		local sort = ns.GetDB().cameraRows.sort
+		return (sort == "camera" or sort == "trigger") and sort or nil
+	end
 	local function ShownRows()
-		local byCamera = ns.GetDB().cameraRows.sort == "camera"
+		local sort = SortOf()
+		local hubOrder = ns.CAMERA_HUB_ORDER or {}
 		local groups, byTrigger = {}, {}
 		for _, id in ipairs(ns.CameraRowOrder()) do
 			local trigger = ns.CameraRowTrigger(id)
@@ -4802,7 +4817,13 @@ local function CreateCamerasPanel()
 			if not group then
 				-- (Its name without a leading slash: /dance among the d's.)
 				local name = (LABELS[trigger.key] or trigger.key):gsub("^%p+", ""):lower()
-				group = { name = name, cam = byCamera and CAM_ORDER[ns.CameraRowValue(id, "camera")] or 99 }
+				local camera, cam = ns.CameraRowValue(id, "camera"), ""
+				if sort == nil then
+					cam = hubOrder[HUB_NAMES[camera]] or 99
+				elseif sort == "camera" then
+					cam = HUB_NAMES[camera] and (ns.CAMERA_NAMES[camera] or ""):lower() or "\255"
+				end
+				group = { name = name, cam = cam }
 				byTrigger[trigger], groups[#groups + 1] = group, group
 			end
 			group[#group + 1] = id
@@ -4817,21 +4838,45 @@ local function CreateCamerasPanel()
 		end
 		return sorted
 	end
-	local sort = ns.PanelButton(content)
-	sort:SetSize(130, 22)
+	local function SetSort(value)
+		ns.GetDB().cameraRows.sort = value
+		Refresh()
+	end
+	-- (a dropdown, or on a client without the modern one a button that steps)
+	local ok, sort = ns.MenuDropdown(content)
+	if ok and sort and sort.SetupMenu then
+		sort:SetWidth(110)
+		sort:SetupMenu(function(_, root)
+			for _, entry in ipairs(SORTS) do
+				root:CreateRadio(L[entry[2]], function() return ns.GetDB() ~= nil and SortOf() == entry[1] end,
+					function() SetSort(entry[1]) end)
+			end
+		end)
+		sort.Refresh = function(self) self:GenerateMenu() end
+	else
+		sort = ns.PanelButton(content)
+		sort:SetSize(110, 22)
+		sort:SetScript("OnClick", function()
+			local now = SortOf()
+			for i, entry in ipairs(SORTS) do
+				if entry[1] == now then SetSort(SORTS[i % #SORTS + 1][1]) return end
+			end
+		end)
+		sort.Refresh = function(self)
+			local now = SortOf()
+			for _, entry in ipairs(SORTS) do
+				if entry[1] == now then self:SetText(L[entry[2]]) end
+			end
+		end
+	end
 	sort:SetPoint("BOTTOMRIGHT", grid, "TOPRIGHT", 0, 4)
 	sort.searchSkip = true
-	Tooltip(sort, L["How the rows are listed: by trigger name, or grouped by camera. Either way a trigger's rows " ..
-		"stay together, in the order they're tried."])
-	sort:SetScript("OnClick", function()
-		local db = ns.GetDB().cameraRows
-		db.sort = db.sort ~= "camera" and "camera" or nil
-		Refresh()
-	end)
-	sort.Refresh = function(self)
-		self:SetText(ns.GetDB().cameraRows.sort == "camera" and L["Sort: by camera"] or L["Sort: by name"])
-	end
+	Tooltip(sort, L["How the rows are listed: Hub groups them by camera in the Camera hub's order, Camera by " ..
+		"camera name, Trigger by trigger name. Either way a trigger's rows stay together, in the order they're tried."])
 	controls[#controls + 1] = sort
+	local sortLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+	sortLabel:SetPoint("RIGHT", sort, "LEFT", -6, 0)
+	sortLabel:SetText(L["Sort by"])
 
 	function grid:Refresh()
 		local list = ShownRows()
@@ -5393,6 +5438,9 @@ local function CreateCombatPanel()
 
 	local title = Label(content, "GameFontNormalLarge", L["Standard Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
+	-- The party and raid rows' look: the Style hub's Raid frames page (RaidStyle.lua).
+	ns.StyleLink(content, title, "Raid Style", L["Opens the Style hub's Raid frames page: how the raid and " ..
+		"raid-style party frames look."], Tooltip, L["Raid style"])
 
 	-- (The rows are dropdowns where the client has menus, else a column each: GridRows.lua.)
 	local subtitle = PageIntro(content, title, ns.GRID_MENUS
@@ -5410,7 +5458,7 @@ local function CreateCombatPanel()
 	-- The game's frames this client has, in sections (their page: see
 	-- ROW_SECTIONS), each a table of its own; the gamepad's are on the
 	-- Gamepad page, other addons' frames on the Advanced Frames page.
-	local switch = PageSwitch(content, "handleFrames", L["Enable page"],
+	local switch = PageSwitch(content, "handleFrames", L["Enable Page"],
 		L["On: CineMode fades the frames on this page as their rows say. Off: it leaves them all " ..
 		"alone, the minimap, quest tracker, buffs and Cooldown Manager included (their pages' " ..
 		"switches only count while this is on)."], subtitle, function()
@@ -5664,7 +5712,7 @@ local function CreatePortraitsPanel()
 	-- target's; unticked, it opens with the target's rows to start from.
 	local OpenSections -- (opens You, your pet and Target, and the frames set apart from the target)
 	if hasParts then
-		local note = PageSwitch(content, "handleUnitFrames", L["Enable page"],
+		local note = PageSwitch(content, "handleUnitFrames", L["Enable Page"],
 			L["On: the unit frames show the parts the grids below say. Off: CineMode leaves them alone, " ..
 			"every part showing as the game has it."], subtitle, function() ns.ApplyUnitFrameParts() end)
 
@@ -5887,7 +5935,7 @@ end
 local function CreateBubblesPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", L["Chat bubbles"])
+	local title = Label(content, "GameFontNormalLarge", L["Chat Bubbles"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = PageIntro(content, title,
@@ -5904,7 +5952,7 @@ local function CreateBubblesPanel()
 
 	local function Changed() if ns.ApplyBubbles then ns.ApplyBubbles() end end
 
-	local switch = PageSwitch(content, "handleBubbles", L["Enable page"],
+	local switch = PageSwitch(content, "handleBubbles", L["Enable Page"],
 		L["On: chat bubbles show where this page says. Off: the game's own chat bubble settings, as " ..
 		"you had them."], subtitle, Changed)
 	-- Show in: a row per kind of bubble, as the Standard Frames page's
@@ -5947,7 +5995,7 @@ local function CreateBubblesPanel()
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, "Chat bubbles")
+	RegisterSubpage(canvas, "Chat bubbles", L["Chat Bubbles"])
 end
 
 -- Sub-page: quality of life, small helpers grouped by section (General, ...).
@@ -5960,7 +6008,7 @@ local function CreateQualityPanel()
 
 	local subtitle = PageIntro(content, title, L["Small helpers for getting about the world. Ideas for more in the spirit of this page are " ..
 		"welcome: please send them to the developer."])
-	local switch = PageSwitch(content, "handleQuality", L["Enable page"],
+	local switch = PageSwitch(content, "handleQuality", L["Enable Page"],
 		L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
 		"when you turn this back on."], subtitle, function()
 		if ns.RefreshTalentLink then ns.RefreshTalentLink() end
@@ -6017,7 +6065,7 @@ local function CreateQualityPanel()
 			L["A button on your talents window opens a talent calculator: your class's three trees side by side, " ..
 			"to plan a build without learning anything. Left-click adds a point, right-click takes one back; above " ..
 			"the trees, the level the build needs and the points left. It opens in the talents window's place, " ..
-			"and a button on it takes you back. It starts from the talents you have; Copy Over Changes puts what the plan " ..
+			"and a button on it takes you back. It starts from the talents you have; Copy over changes puts what the plan " ..
 			"adds in your talents window, to apply there. Also /cine talents."],
 			function(value)
 				ns.GetDB().talentCalc = value
@@ -6079,7 +6127,7 @@ local function CreateQualityPanel()
 		canvas, content = CreateScrollPage()
 		title = Label(content, "GameFontNormalLarge", L["Hunter"])
 		title:SetPoint("TOPLEFT", 16, -16)
-		switch = PageSwitch(content, "handleHunter", L["Enable page"],
+		switch = PageSwitch(content, "handleHunter", L["Enable Page"],
 			L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
 			"when you turn this back on."], title)
 		stack = Stack(switch, "check")
@@ -6108,7 +6156,7 @@ local function CreateFishingPanel()
 	local subtitle = PageIntro(content, title,
 		L["Casting and catching, with the mouse or a gamepad, CineMode or not."])
 
-	local switch = PageSwitch(content, "handleFishing", L["Enable page"],
+	local switch = PageSwitch(content, "handleFishing", L["Enable Page"],
 		L["On: right-click (or a gamepad button) casts again, and the Fishing cast bar hides, as this " ..
 		"page says. Off: fishing is left to the game. (The fish camera is on the Cameras " ..
 		"page.)"], subtitle)
@@ -6201,7 +6249,7 @@ local function CreateGamepadPanel()
 			rows[#rows + 1] = item
 		end
 	end
-	local switch = PageSwitch(content, "handleGamepad", L["Enable page"],
+	local switch = PageSwitch(content, "handleGamepad", L["Enable Page"],
 		L["On: CineMode fades the gamepad's bars, button hints and reticle as this page says. Off: it " ..
 		"leaves them alone."], subtitle)
 	local lastRow = ShowTable(content, switch, rows, "Gamepad")
@@ -6290,20 +6338,25 @@ local function CreateGamepadPanel()
 	Tooltip(fadeOut, L["How long the gamepad action bars take to fade out."])
 
 	stack:Header(content, L["Settings window"])
-	stack:Add(Check(content, "forceReloadOnSettingsExit", L["Force Reload on Settings Exit"],
+	-- (These two guard against freezes, so they work with the page off too: not greyed with it.)
+	local forceReload = stack:Add(Check(content, "forceReloadOnSettingsExit", L["Force reload on Settings exit"],
 		L["A workaround for a game bug: in gamepad mode, closing the Settings window after using an " ..
 		"addon's settings (any addon's, not just Cinematic's) can freeze the game. With this on, once " ..
 		"you've opened a Cinematic page, closing Settings (X, Close, Escape or the gamepad) reloads " ..
 		"the UI instead, which closes it without the freeze. Your settings are saved first, as they are " ..
-		"on every reload. Turning it off takes effect after a reload."]), "check")
-	stack:Add(Check(content, "hideMinimapButtonGamepad", L["Hide the minimap button in gamepad mode"],
+		"on every reload. Turning it off takes effect after a reload."] .. " "
+		.. L["Works with this page switched off too."]), "check")
+	forceReload.pageSwitch = false -- (not greyed with the switch: see SwitchOf)
+	local hideButton = stack:Add(Check(content, "hideMinimapButtonGamepad", L["Hide the minimap button in gamepad mode"],
 		L["Using Cinematic's minimap button in gamepad mode tends to freeze the game, like closing " ..
 		"Settings does. With this on, the button is hidden while gamepad mode is on and comes back " ..
-		"when it's off. Cinematic's settings are still in the game's Settings (AddOns tab), or type /cine."],
+		"when it's off. Cinematic's settings are still in the game's Settings (AddOns tab), or type /cine."]
+		.. " " .. L["Works with this page switched off too."],
 		function(value)
 			ns.GetDB().hideMinimapButtonGamepad = value
 			if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end
 		end), "check")
+	hideButton.pageSwitch = false
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -6450,13 +6503,21 @@ local function CreatePlatesPanel()
 
 	local title = Label(content, "GameFontNormalLarge", L["Nameplate & Names"])
 	title:SetPoint("TOPLEFT", 16, -16)
+	-- Their look: the Style hub's Nameplates, Names and Cast bars pages.
+	local plateLink = ns.StyleLink(content, title, "Nameplate Style",
+		L["Opens the Style hub's Nameplates page: how nameplates look."], Tooltip, L["Plate style"])
+	local nameLink = ns.StyleLink(content, title, "Name Style",
+		L["Opens the Style hub's Names page: how names over heads look."], Tooltip, L["Name style"], plateLink)
+	ns.StyleLink(content, title, "Cast Bar Style",
+		L["Opens the Style hub's Cast bars page: how nameplate cast bars look."], Tooltip, L["Cast bar style"],
+		nameLink)
 
 	local subtitle = PageIntro(content, title,
 		L["Which nameplates and names stay up in CineMode: in groups, in fights and in each kind of place."])
 
 	-- The page's master switch: off, CineMode leaves nameplates and names to
 	-- the game's own options (everything below greys out).
-	local handleCheck = Check(content, "handlePlates", L["Enable page"],
+	local handleCheck = Check(content, "handlePlates", L["Enable Page"],
 		L["On: CineMode fades nameplates and names as this page says. Off: it leaves them alone, " ..
 		"and the game's own options decide, in CineMode and out."],
 		function(value)
@@ -6604,7 +6665,7 @@ local function CreatePlatesPanel()
 		section.before = nil
 	end
 
-	local friendlySection = Section(L["Friendly Nameplates"], "Friendly", L["Friendly"])
+	local friendlySection = Section(L["Friendly nameplates"], "Friendly", L["Friendly"])
 	-- The grid can't keep plates up out of fights while the game's own
 	-- "Always Show Nameplates" is off: say so beside the page's switch, seen
 	-- on every tab (checked as the page shows).
@@ -6616,15 +6677,15 @@ local function CreatePlatesPanel()
 	end
 	controls[#controls + 1] = showAllWarning
 	-- The columns: Always (set apart: it stands for the rest of its row), In
-	-- Combat, In PvP Combat, PvP and BGs & Arenas, the other places, and
+	-- Combat, In PvP combat, PvP and BGs & arenas, the other places, and
 	-- Grouped (not a place) beside Instances.
 	local PLACE_COLUMNS = {
 		{ always = true },
 		{ combat = true },
 		{ pvpCombat = true },
 		{ "PvP", L["PvP"], L["Show while PvP flagged, outside battlegrounds and arenas."] },
-		{ "BGs", L["BGs & Arenas"], L["Show in battlegrounds and arenas."] },
-		{ "", L["Open World"], L["Show out in the world, inns included (capital cities are Cities)."] },
+		{ "BGs", L["BGs & arenas"], L["Show in battlegrounds and arenas."] },
+		{ "", L["Open world"], L["Show out in the world, inns included (capital cities are Cities)."] },
 		{ "Cities", L["Cities"], L["Show in capital cities."] },
 		{ group = true },
 		{ "Instances", L["Instances"], L["Show in dungeons, scenarios and raids."] },
@@ -6637,15 +6698,15 @@ local function CreatePlatesPanel()
 	-- your group last) only add to the game's own nameplate options' rows:
 	-- ns.PLATE_UNIT_ROWS; group members have no use for Grouped.
 	local FRIENDLY_KINDS = {
-		{ "MyPet", L["Your Pet"] },
-		{ "Friends", L["Friendly Players"] },
+		{ "MyPet", L["Your pet"] },
+		{ "Friends", L["Friendly players"] },
 		{ "FriendlyMinions", L["Minions"], true },
 		{ "FriendlyNPCs", L["Friendly NPCs"] },
-		{ "GroupMembers", L["Group Members"], nil, true },
+		{ "GroupMembers", L["Group members"], nil, true },
 		{ "GroupMinions", L["Minions"], true, true },
 	}
 	local ENEMY_KINDS = {
-		{ "Enemies", L["Enemy Players"] },
+		{ "Enemies", L["Enemy players"] },
 		{ "EnemyMinions", L["Minions"], true },
 		{ "EnemyNPCs", L["Hostile NPCs"] },
 		{ "EnemyMinor", L["Minor"], true },
@@ -6655,11 +6716,11 @@ local function CreatePlatesPanel()
 	local tip = L[" Also turns these nameplates on in the game's options."]
 	local UNIT_ROW_TIPS = {
 		YourTarget = L[" Your target's nameplate, whatever the Nameplates grid says. For some kinds only, name " ..
-			"them in its rule (Edit): Enemy Players, Hostile NPCs, Neutral Players... In dungeons and raids, " ..
-			"friendly targets go by Friendly Plates in Dungeons and Raids."],
+			"them in its rule (Edit): Enemy players, Hostile NPCs, Neutral players... In dungeons and raids, " ..
+			"friendly targets go by Friendly plates in dungeons and raids."],
 		MyPet = L[" Your pet's nameplate, whatever the Minions rows say, grouped or not."],
-		GroupMembers = L[" Your party or raid members' nameplates, whatever Friendly Players says. Not in dungeons " ..
-			"and raids: there, Friendly Plates in Dungeons and Raids decides."],
+		GroupMembers = L[" Your party or raid members' nameplates, whatever Friendly players says. Not in dungeons " ..
+			"and raids: there, Friendly plates in dungeons and raids decides."],
 		GroupMinions = L[" Your party or raid members' pets, whatever the Minions rows say."],
 	}
 	-- Friendly rows: in dungeons and raids, Friendly Plates in Dungeons and
@@ -6685,11 +6746,11 @@ local function CreatePlatesPanel()
 		end
 		local alwaysKey = "plateAlways" .. kind[1]
 		local rowTip = UNIT_ROW_TIPS[kind[1]]
-		local part = kind[1]:find("^Part") -- (Plate Parts rows: no game settings of their own)
+		local part = kind[1]:find("^Part") -- (Plate parts rows: no game settings of their own)
 		local tip = rowTip and (part or kind[1]:find("Target$")) and rowTip or (rowTip or "") .. tip
 		RecordKey(content, alwaysKey)
-		local combat = { Item(L["In Combat"], "plateCombat" .. kind[1], COMBAT_TIP .. tip),
-			Item(L["In PvP Combat"], "plateCombatPvP" .. kind[1], PVP_COMBAT_TIP .. tip) }
+		local combat = { Item(L["In combat"], "plateCombat" .. kind[1], COMBAT_TIP .. tip),
+			Item(L["In PvP combat"], "plateCombatPvP" .. kind[1], PVP_COMBAT_TIP .. tip) }
 		local targets = { Item(L["Enemy targeted"], "plateTargetEnemy" .. kind[1], TARGET_ENEMY_TIP .. tip),
 			Item(L["Friend targeted"], "plateTargetFriendly" .. kind[1], TARGET_FRIEND_TIP .. tip) }
 		local places, ticks = {}, { { "plateCombat" .. kind[1], "combat" },
@@ -6706,7 +6767,7 @@ local function CreatePlatesPanel()
 				end
 			elseif place[1] then
 				-- The open world keeps the original "keep up in CineMode" key; the
-				-- friendly rows have no Instances (Friendly Plates in Dungeons and Raids).
+				-- friendly rows have no Instances (Friendly plates in dungeons and raids).
 				local key = place[1] == "" and ("plateCinematic" .. kind[1]) or ("plateIn" .. place[1] .. kind[1])
 				if not (place[1] == "Instances" and INSTANCE_LOCKED[kind[1]]) then
 					places[#places + 1] = Item(place[2], key, place[3] .. tip)
@@ -6752,7 +6813,7 @@ local function CreatePlatesPanel()
 	-- Friendly plates in dungeons and raids: the game won't let addons fade
 	-- them there, so each kind is just on or off (see Effects). The grids
 	-- have no Instances boxes for them (INSTANCE_LOCKED, AddPlateRow).
-	local instanceSection = Section(L["Friendly Plates in Dungeons and Raids"], "Instances", L["Dungeons & Raids"])
+	local instanceSection = Section(L["Friendly plates in dungeons and raids"], "Instances", L["Dungeons & raids"])
 	local instanceAnchor = PageIntro(instanceSection.frame, instanceSection.title,
 		L["In dungeons and raids the game won't let addons fade friendly nameplates, so each kind below is " ..
 		"either all on or all off there, in CineMode. The grids' friendly rows (your target's included) have no " ..
@@ -6761,8 +6822,8 @@ local function CreatePlatesPanel()
 		"switch nameplates on or off during a fight: they stay as the fight found them.\n\nFriendly players' " ..
 		"setting covers their pets too, so with pets shown, friendly players' plates show as well."])
 	local INSTANCE_CHOICES = {
-		{ "Friends", L["Friendly Players"], target = true },
-		{ "FriendlyMinions", L["Pets and Minions"] },
+		{ "Friends", L["Friendly players"], target = true },
+		{ "FriendlyMinions", L["Pets and minions"] },
 		{ "FriendlyNPCs", L["Friendly NPCs"], target = true },
 	}
 	BeginSection(instanceSection)
@@ -6789,7 +6850,7 @@ local function CreatePlatesPanel()
 	EndSection(instanceSection, lastInstanceRow)
 
 	-- Enemy and neutral units, laid out the same way.
-	local enemySection = Section(L["Enemy Nameplates"], "Enemy", L["Enemy"])
+	local enemySection = Section(L["Enemy nameplates"], "Enemy", L["Enemy"])
 	table.insert(sections, 1, table.remove(sections)) -- (its tab before Friendly's)
 	BeginSection(enemySection)
 	local enemyTop = TableTop(enemySection.frame, PLATE_LAYOUT)
@@ -6805,22 +6866,22 @@ local function CreatePlatesPanel()
 	local markerRangeTip = L[" Beyond nameplate range (the game's nameplateMaxDistance setting: 60 yards on retail) " ..
 		"the game draws raid markers over units itself, as it does over your own head, and addons can't hide them."]
 	local PARTS = {
-		{ "Health", L["Health Bar"], L[" The health bar."] },
+		{ "Health", L["Health bar"], L[" The health bar."] },
 		{ "Name", L["Name"], L[" The name on the plate (the Names grid below is for names without a plate)."] },
-		{ "CastBar", L["Cast Bar"], L[" The cast bar."] },
+		{ "CastBar", L["Cast bar"], L[" The cast bar."] },
 		{ "Buffs", L["Buffs"], L[" The buffs shown on the plate."] },
 		{ "Debuffs", L["Debuffs"], L[" The debuffs (and crowd control) shown on the plate."] },
-		{ "RaidMarker", L["Raid Marker"], L[" The raid target marker (skull, star...)."] .. markerRangeTip },
-		{ "Classification", L["Elite/Rare Icon"], L[" The elite, rare or boss icon."] },
+		{ "RaidMarker", L["Raid marker"], L[" The raid target marker (skull, star...)."] .. markerRangeTip },
+		{ "Classification", L["Elite/rare icon"], L[" The elite, rare or boss icon."] },
 		{ "Level", L["Level"], L[" The level."] },
-		{ "Threat", L["Threat Glow"], L[" The glow while a mob has you (or is about to) as its target."] },
-		{ "Highlight", L["Target Highlight"], L[" The border round your target's or mouseover's plate."] },
-		{ "Widgets", L["Quest/Widget Icons"], L[" Quest objective icons and other widgets over the plate."] },
-		{ "ClassFriendly", L["Class Icon (Friendly)"], L[" A class icon beside friendly players' health bars."], icon = true },
-		{ "ClassEnemy", L["Class Icon (Enemy)"], L[" A class icon beside enemy players' health bars."], icon = true },
-		{ "RoleTank", L["Role Icon (Tank)"], L[" A role icon beside your group's tanks' health bars."], icon = true },
-		{ "RoleHealer", L["Role Icon (Healer)"], L[" A role icon beside your group's healers' health bars."], icon = true },
-		{ "RoleDamager", L["Role Icon (Damage)"], L[" A role icon beside your group's damage dealers' health bars."],
+		{ "Threat", L["Threat glow"], L[" The glow while a mob has you (or is about to) as its target."] },
+		{ "Highlight", L["Target highlight"], L[" The border round your target's or mouseover's plate."] },
+		{ "Widgets", L["Quest/widget icons"], L[" Quest objective icons and other widgets over the plate."] },
+		{ "ClassFriendly", L["Class icon (friendly)"], L[" A class icon beside friendly players' health bars."], icon = true },
+		{ "ClassEnemy", L["Class icon (enemy)"], L[" A class icon beside enemy players' health bars."], icon = true },
+		{ "RoleTank", L["Role icon (tank)"], L[" A role icon beside your group's tanks' health bars."], icon = true },
+		{ "RoleHealer", L["Role icon (healer)"], L[" A role icon beside your group's healers' health bars."], icon = true },
+		{ "RoleDamager", L["Role icon (damage)"], L[" A role icon beside your group's damage dealers' health bars."],
 			icon = true },
 		{ "TargetArrow", L["Target Indicator"], L[" A mark on your target's nameplate (and its name, health bar or " ..
 			"border in its color), shown even while the rest of the plate is faded or shows just its name. Its " ..
@@ -6828,7 +6889,7 @@ local function CreatePlatesPanel()
 	}
 	-- (The class and role icons and the arrow are the addon's own: off unless
 	-- ticked, outside CineMode shown only with Always ticked, and in a section
-	-- of their own, Cinematic Plate Parts, below the game's.)
+	-- of their own, Cinematic plate parts, below the game's.)
 	local iconTip = L[" Off unless ticked. In CineMode, on the nameplates that are up; outside it, only with Always ticked."]
 	local r
 	local function PartsSection(heading, key, tab, ours)
@@ -6846,8 +6907,8 @@ local function CreatePlatesPanel()
 		EndSection(section, lastLabel)
 		return top
 	end
-	local partsTop = PartsSection(L["Plate Parts"], "Parts")
-	local ourPartsTop = PartsSection(L["Cinematic Plate Parts"], "CinematicParts", L["Cinematic Parts"], true)
+	local partsTop = PartsSection(L["Plate parts"], "Parts")
+	local ourPartsTop = PartsSection(L["Cinematic plate parts"], "CinematicParts", L["Cinematic parts"], true)
 
 	-- Names, laid out the same way. Outside cinematic mode the game's own
 	-- name options decide.
@@ -6889,9 +6950,9 @@ local function CreatePlatesPanel()
 		end
 		local alwaysKey = "nameAlways" .. key
 		RecordKey(content, alwaysKey)
-		-- (Names can't change mid-fight: In PvP Combat goes by how the fight started.)
-		local combat = { Item(L["In Combat"], "nameCombat" .. key, COMBAT_TIP .. tip),
-			Item(L["In PvP Combat"], "nameCombatPvP" .. key,
+		-- (Names can't change mid-fight: In PvP combat goes by how the fight started.)
+		local combat = { Item(L["In combat"], "nameCombat" .. key, COMBAT_TIP .. tip),
+			Item(L["In PvP combat"], "nameCombatPvP" .. key,
 				PVP_COMBAT_TIP .. L[" The game only allows this to be set as the fight starts."] .. tip) }
 		local targets = { Item(L["Enemy targeted"], "nameTargetEnemy" .. key, TARGET_ENEMY_TIP .. tip),
 			Item(L["Friend targeted"], "nameTargetFriendly" .. key, TARGET_FRIEND_TIP .. tip) }
@@ -6944,9 +7005,9 @@ local function CreatePlatesPanel()
 	-- their plates fades or shows their names alone (see KeepRaidMarker).
 	UNIT_ROW_TIPS.PartMarker = L[" Ticked, raid markers (skull, moon...) stay over their units in CineMode as the " ..
 		"rest of their nameplates fades, or shows just their names, so your group can still see what's marked. " ..
-		"Unticked, they fade with the plates (the Plate Parts row decides them on the plates that are up)."]
+		"Unticked, they fade with the plates (the Plate parts row decides them on the plates that are up)."]
 		.. markerRangeTip
-	AddPlateRow(namesTop, r + 1, { "PartMarker", L["Raid Marker"] })
+	AddPlateRow(namesTop, r + 1, { "PartMarker", L["Raid marker"] })
 	EndSection(namesSection, lastLabel)
 
 	-- Your target: its plate and its name, whatever its kind's rows say, a
@@ -6958,7 +7019,7 @@ local function CreatePlatesPanel()
 	local targetTop = TableTop(targetSection.frame, PLATE_LAYOUT)
 	AddPlateRow(targetTop, 1, { "YourTarget", L["Nameplates"] })
 	local targetNameTip = L[" Your target's name, even with its kind's names off in the Names grid. For some kinds " ..
-		"only, name them in its rule (Edit): Enemy Players, Hostile NPCs, Neutral Players... Beyond nameplate range, " ..
+		"only, name them in its rule (Edit): Enemy players, Hostile NPCs, Neutral players... Beyond nameplate range, " ..
 		"and in dungeons and raids, the game has one setting for your target's name, which can't change in fights: " ..
 		"it stays as the fight found it."] .. nameTip
 	AddNameRow(targetTop, 2, targetGroup, "YourTarget", L["Names"], nil, targetNameTip)
@@ -7010,7 +7071,7 @@ local function CreateNameStylePanel()
 	local function On(db) return db.plateNameStyle end
 
 	-- (Its switch: names as this page says, or as the plates draw them.)
-	local switch = PageSwitch(content, "plateNameStyle", L["Enable page"],
+	local switch = PageSwitch(content, "plateNameStyle", L["Enable Page"],
 		L["On: these names look as this page says. Off: as the nameplate draws them: white or gray " ..
 		"for every unit, with a heavy black outline, growing and shrinking with distance (the preview shows " ..
 		"that too). Each setting keeps its value for when you turn this back on."], subtitle, Changed)
@@ -7318,7 +7379,7 @@ do
 			L["How your target, focus and the unit under the mouse stand out on the nameplates, for when no " ..
 			"target frame shows them: a mark on each one's plate, a row for each in the grid, and its name, " ..
 			"health bar or border in its mark's color (the row's Also color). When they show is the Target Indicator row's, on " ..
-			"the Nameplates page's Cinematic Plate Parts grid. Changes show at once, here and on the plates."])
+			"the Nameplates page's Cinematic plate parts grid. Changes show at once, here and on the plates."])
 
 		local preview -- (below: drawn again as each setting changes)
 		local function Changed()
@@ -7326,7 +7387,7 @@ do
 			if preview then preview:Refresh() end
 		end
 		-- (Its switch: the marks and their colors on the plates, or none at all.)
-		local switch = PageSwitch(content, "handlePlateStyle", L["Enable page"],
+		local switch = PageSwitch(content, "handlePlateStyle", L["Enable Page"],
 			L["On: the marks and colors on this page show on the plates, when the Nameplates page's Target " ..
 			"Indicator row says. Off: none of them do. Each setting keeps its value for when you turn this " ..
 			"back on."], subtitle, Changed)
@@ -7705,8 +7766,8 @@ do
 			near28 = 2 }
 		local WHEN_NAMES = { combat = L["In combat"], calm = L["Calm Timer"], nocombat = L["Out of combat"],
 			camera = L["In a camera mode"], enemy = L["Enemy targeted"], friendly = L["Friend targeted"],
-			near = L["Near (11 yards)"], near28 = L["Near (28 yards)"], world = L["Open World"], city = L["Cities"],
-			inn = L["Inns"], bg = L["BGs & Arenas"], instance = L["Instances"], dungeon = L["Dungeons"],
+			near = L["Near (11 yards)"], near28 = L["Near (28 yards)"], world = L["Open world"], city = L["Cities"],
+			inn = L["Inns"], bg = L["BGs & arenas"], instance = L["Instances"], dungeon = L["Dungeons"],
 			raid = L["Raids"], group = L["Grouped"] }
 
 		-- What's set apart from the usual on a row, for its chips: { text,
@@ -9103,7 +9164,7 @@ do
 			"always shows it."])
 
 		-- On top: the master switch and the peek's own options.
-		local switch = PageSwitch(chatPanel, "handleChat", L["Enable page"],
+		local switch = PageSwitch(chatPanel, "handleChat", L["Enable Page"],
 			L["On: CineMode fades the chat windows and tabs as this page says. Off: it leaves them alone."],
 			subtitle)
 
@@ -9300,7 +9361,9 @@ do
 		attackAlert:SetPoint("TOPLEFT", otherBody, "TOPLEFT", -2, -6)
 		local updateNotice = Check(otherBody, "updateNotice", L["Get notified of updates"],
 			L["The first time you log in after Cinematic updates, a line in chat says so, with a " ..
-			"What's new link to what's been added. Chat shows for it while the UI is faded."])
+			"What's new link to what's been added. Chat shows for it while the UI is faded."] .. " "
+			.. L["Works with this page switched off too."])
+		updateNotice.pageSwitch = false -- (not greyed with the switch: see SwitchOf)
 		updateNotice:SetPoint("TOPLEFT", attackAlert, "BOTTOMLEFT", 0, -2)
 
 		for _, section in ipairs(sections) do
@@ -9461,7 +9524,7 @@ local function CreateMinimapPanel()
 		L["When the minimap (and on retail the quest waypoint) stays up in CineMode. " ..
 		"Hovering the minimap always shows it. To keep it up all the time, or in fights, " ..
 		"see the Standard Frames page."])
-	local switch = PageSwitch(content, "handleMinimap", L["Enable page"],
+	local switch = PageSwitch(content, "handleMinimap", L["Enable Page"],
 		L["On: this page's settings can bring the minimap up or keep it up in CineMode. Off: they don't; " ..
 		"it still fades as its Standard Frames rows say."], subtitle)
 
@@ -9704,7 +9767,7 @@ end
 local function CreateQuestTrackerPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", L["Quest tracker"])
+	local title = Label(content, "GameFontNormalLarge", L["Quest Tracker"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = PageIntro(content, title,
@@ -9716,7 +9779,7 @@ local function CreateQuestTrackerPanel()
 		"Mouseover groups that have Quest progress ticked): it goes after \"Stays after " ..
 		"mouseover\" (Mouseover groups page)."])
 	reveal:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", -2, -48)
-	PageSwitch(content, "handleQuests", L["Enable page"],
+	PageSwitch(content, "handleQuests", L["Enable Page"],
 		L["On: this page's settings can bring the quest tracker, quest timer and durability figure up in " ..
 		"CineMode. Off: they don't; they still fade as their Standard Frames rows say."], subtitle)
 	reveal:HookScript("OnClick", Refresh) -- grey out / enable the option below
@@ -9801,7 +9864,7 @@ local function CreateQuestTrackerPanel()
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, L["Quest tracker"])
+	RegisterSubpage(canvas, L["Quest tracker"], L["Quest Tracker"])
 end
 
 -- Sub-page: Classic's swing timer bars: only the weapons in use, and the
@@ -9809,7 +9872,7 @@ end
 local function CreateSwingPanel()
 	local canvas, content = CreateScrollPage()
 
-	local title = Label(content, "GameFontNormalLarge", L["Swing timer"])
+	local title = Label(content, "GameFontNormalLarge", L["Swing Timer"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local subtitle = PageIntro(content, title,
@@ -9818,7 +9881,7 @@ local function CreateSwingPanel()
 
 	-- The page's master switch: off, everything below greys out and does
 	-- nothing; the bars still fade as their Standard Frames row says.
-	local handleCheck = PageSwitch(content, "handleSwing", L["Enable page"],
+	local handleCheck = PageSwitch(content, "handleSwing", L["Enable Page"],
 		L["On: this page's settings can fade out the bars you aren't using. Off: they don't; the swing " ..
 		"timer still fades as its Standard Frames row says, every bar alike."], subtitle)
 
@@ -9849,7 +9912,7 @@ local function CreateSwingPanel()
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
-	RegisterSubpage(canvas, L["Swing timer"])
+	RegisterSubpage(canvas, L["Swing timer"], L["Swing Timer"])
 end
 
 -- Sub-page: the Cooldown Manager (the game's, or Forever Enhanced Cooldown Manager).
@@ -9866,7 +9929,7 @@ local function CreateCooldownPanel()
 
 	-- The page's master switch: off, everything below greys out and does
 	-- nothing; the Cooldown Manager still fades as its Standard Frames row says.
-	local handleCheck = PageSwitch(content, "handleCooldowns", L["Enable page"],
+	local handleCheck = PageSwitch(content, "handleCooldowns", L["Enable Page"],
 		L["On: this page's settings can keep the Cooldown Manager up in CineMode, or show only the icons " ..
 		"you pick. Off: they don't; it still fades as its Standard Frames row says."], subtitle)
 	local function Handled() return ns.GetDB().handleCooldowns end
@@ -9914,7 +9977,7 @@ local function CreateCooldownPanel()
 	local readyHeader = Label(content, "GameFontNormal", L["Spell icons"])
 	readyHeader:SetPoint("TOPLEFT", afterCombat, "BOTTOMLEFT", 2, -18)
 	local readyNote = PageIntro(content, readyHeader,
-		L["Pick when each spell's icon shows. Always: as the game shows it. When Ready: out of " ..
+		L["Pick when each spell's icon shows. Always: as the game shows it. When ready: out of " ..
 		"fights, and while it recharges, it fades out; it comes back once it's ready, or the seconds in " ..
 		"its box before (empty: %d%% of its cooldown). While recharging: in fights or not, it shows " ..
 		"only while it recharges. When it procs: in fights or not, it shows only while the game makes it " ..
@@ -9923,7 +9986,7 @@ local function CreateCooldownPanel()
 		"settings beside each group's name set every spell in it at once."]:format(ns.READY_EARLY * 100) .. " " ..
 		L["Tracked buffs and bars: Always, In combat, Out of combat or Hidden (the game keeps your buffs " ..
 		"secret in fights, so they go by that alone). Each group has a tab of its own."] .. " " ..
-		L["With Smart Set ticked, until you set a bar's mode, its spells with no cooldown go by what they " ..
+		L["With Smart set ticked, until you set a bar's mode, its spells with no cooldown go by what they " ..
 		"cost; unticked, by their group's setting."])
 	RecordKey(content, "cooldownReadyOnly") -- (for the page's Reset)
 	RecordKey(content, "cooldownReadyEarly")
@@ -9955,7 +10018,7 @@ local function CreateCooldownPanel()
 	modeHeading:SetPoint("TOPLEFT", panelTop, "TOPLEFT", 12 + MODE_X, -10)
 	local powerHeading = Label(content, "GameFontNormalSmall", L["Resources"])
 	powerHeading:SetPoint("TOPLEFT", panelTop, "TOPLEFT", 12 + POWER_X - 4, -10)
-	local earlyHeading = Label(content, "GameFontNormalSmall", L["Show Early"])
+	local earlyHeading = Label(content, "GameFontNormalSmall", L["Show early"])
 	earlyHeading:SetPoint("TOPLEFT", panelTop, "TOPLEFT", 12 + EARLY_X, -10)
 	local noSpells = Label(content, "GameFontDisable", L["Nothing in the Cooldown Manager right now."])
 	noSpells:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -42)
@@ -9977,7 +10040,7 @@ local function CreateCooldownPanel()
 	-- db.cooldownAlwaysShow, ReadyOnly, RechargeOnly, ProcOnly; else its group's).
 	local MODES = {
 		{ value = "always", text = L["Always"] },
-		{ value = "ready", text = L["When Ready"] },
+		{ value = "ready", text = L["When ready"] },
 		{ value = "recharge", text = L["While recharging"] },
 		{ value = "proc", text = L["When it procs"] },
 	}
@@ -9994,8 +10057,8 @@ local function CreateCooldownPanel()
 	-- early = seconds or nil for the default share; a mode not set: the
 	-- built-in one, ns.COOLDOWN_GROUP_MODES). A spell not set on its own
 	-- follows its group; setting the group's mode puts every spell in it back
-	-- to following it. A spell made When Ready on its own starts with its
-	-- group's Resources and Show Early.
+	-- to following it. A spell made When ready on its own starts with its
+	-- group's Resources and Show early.
 	local function GroupDefaults(group)
 		local all = ns.GetDB().cooldownGroupDefaults
 		all[group] = all[group] or {}
@@ -10011,8 +10074,8 @@ local function CreateCooldownPanel()
 	local function SetSpellMode(spell, mode)
 		local db = ns.GetDB()
 		if mode == "ready" and not db.cooldownReadyOnly[spell] then
-			-- (Newly When Ready: as it was following its group, or its group's
-			-- Resources and Show Early; the seconds box empty, the default
+			-- (Newly When ready: as it was following its group, or its group's
+			-- Resources and Show early; the seconds box empty, the default
 			-- share, unless the group says.)
 			local _, power, early = ns.CooldownGroupSettings(groupOf[spell] or "other")
 			db.cooldownEarlyOn[spell], db.cooldownReadyEarly[spell] = true, early
@@ -10022,7 +10085,7 @@ local function CreateCooldownPanel()
 			db[key][spell] = value == mode or nil
 		end
 	end
-	-- A spell following its group's When Ready gets its own (the same) before one part changes.
+	-- A spell following its group's When ready gets its own (the same) before one part changes.
 	local function OwnReady(spell)
 		if not ns.GetDB().cooldownReadyOnly[spell] then SetSpellMode(spell, "ready") end
 	end
@@ -10079,10 +10142,10 @@ local function CreateCooldownPanel()
 		Length = function() return nil end,
 		modes = MODES,
 		tip = L["Sets every spell in this group to this. Spells you haven't set on their own follow it, " ..
-			"and a spell here made When Ready on its own starts with its Resources and Show Early."],
+			"and a spell here made When ready on its own starts with its Resources and Show early."],
 	}
 	-- A tracked buff or bar (db.cooldownBuffMode), and their groups' settings.
-	-- (No Resources or Show Early: those are When Ready's.)
+	-- (No Resources or Show early: those are When ready's.)
 	local function NoValue() return nil end
 	local BUFF = {
 		Mode = function(spell) return (ns.CooldownBuffMode(spell, buffGroupOf[spell])) end,
@@ -10110,7 +10173,7 @@ local function CreateCooldownPanel()
 	local rows, buffRows, groupRows = {}, {}, {}
 
 	-- A row: a name, its mode (a dropdown, or on clients without the modern
-	-- one a button stepping through them), and for When Ready its Resources
+	-- one a button stepping through them), and for When ready its Resources
 	-- tick and seconds box. access: SPELL or GROUP; row.key what it's for.
 	local function NewRow(access, font)
 		local row = { access = access, font = font }
@@ -10153,7 +10216,7 @@ local function CreateCooldownPanel()
 		end
 		Tooltip(row.mode, access.tip)
 
-		-- Resources (When Ready only): ticked, ready also means you have the
+		-- Resources (When ready only): ticked, ready also means you have the
 		-- power to cast it (Maelstrom, mana...).
 		local power = Check(content, nil, "", L["Ready also needs the resources to cast it: Maelstrom, " ..
 			"mana, rage and so on. Until you have them the icon stays faded."], function(value)
@@ -10167,7 +10230,7 @@ local function CreateCooldownPanel()
 		row.power = power
 
 		-- Seconds before it's ready that it comes back: empty for the default,
-		-- 0 for once it's ready. (Stored as before: Show Early on or off, and
+		-- 0 for once it's ready. (Stored as before: Show early on or off, and
 		-- its seconds.)
 		local early = ns.SkinEditBox(CreateFrame("EditBox", nil, content, "InputBoxTemplate"))
 		early:SetSize(36, 20)
@@ -10384,20 +10447,20 @@ local function CreateCooldownPanel()
 		Refresh()
 		FitContentHeight(content)
 	end, nil, GROUP_WIDTH + 8)
-	-- (Under Smart Set.)
+	-- (Under Smart set.)
 	panelTop:SetPoint("TOPLEFT", readyNote, "BOTTOMLEFT", 0, -38 - height)
 	panel:SetPoint("TOPLEFT", panelTop, "TOPLEFT")
-	panel:SetWidth(EARLY_X + 200) -- (room for Show Early's "sec (empty: 15%)" beside its box)
+	panel:SetWidth(EARLY_X + 200) -- (room for Show early's "sec (empty: 15%)" beside its box)
 	base:SetPoint("TOPLEFT", panelTop, "TOPLEFT")
 
-	-- Smart Set (db.cooldownSmartDefaults): until you set a bar's mode, its
+	-- Smart set (db.cooldownSmartDefaults): until you set a bar's mode, its
 	-- spells with no cooldown that you haven't set yourself go by what they
-	-- cost (ns.SmartCooldownMode): When Ready with Resources for a resource you
+	-- cost (ns.SmartCooldownMode): When ready with Resources for a resource you
 	-- build up (Maelstrom), When it procs for the rest. Off: by their group's
 	-- setting.
-	local smartSet = Check(content, "cooldownSmartDefaults", L["Smart Set"],
+	local smartSet = Check(content, "cooldownSmartDefaults", L["Smart set"],
 		L["Ticked: the spells with no cooldown you haven't set yourself go by what they cost, until you set " ..
-		"their group's mode: When Ready with Resources if they spend a resource you build up (like Maelstrom), " ..
+		"their group's mode: When ready with Resources if they spend a resource you build up (like Maelstrom), " ..
 		"else When it procs (like Lightning Bolt). Spells with a cooldown or charges go by their group's " ..
 		"setting. Unticked: every spell you haven't set yourself goes by its group's setting."],
 		function(value)
@@ -10415,7 +10478,7 @@ local function CreateCooldownPanel()
 	iconsReset:SetPoint("LEFT", smartSet.Text or smartSet.text or smartSet, "RIGHT", 16, 0)
 	iconsReset:SetText(L["Reset"])
 	iconsReset.searchSkip = true
-	Tooltip(iconsReset, L["Put every spell's, buff's and group's icon setting, and Smart Set, back to the " ..
+	Tooltip(iconsReset, L["Put every spell's, buff's and group's icon setting, and Smart set, back to the " ..
 		"active profile's own."])
 	iconsReset:SetScript("OnClick", function()
 		StaticPopup_Show("CINEMATIC_RESET_PART", nil, nil, { content = content, keys = SPELL_ICON_KEYS,
@@ -10435,9 +10498,9 @@ local function CreateCooldownPanel()
 end
 
 -- Sub-pages: the visions, each a way of showing just what matters, in a hub
--- of their own. General: Duel Vision, the plates of two players dueling near
--- you (see Effects). Roll Vision: a window of the group's loot rolls
--- (RollWindow.lua). Heal Vision: the party and raid frames show only who
+-- of their own. General: what they share (the Vision Helper). Duel Vision: the
+-- plates of two players dueling near you (see Effects). Roll Vision: a window
+-- of the group's loot rolls (RollWindow.lua). Heal Vision: the party and raid frames show only who
 -- needs healing (HealVisionFrames.lua). Quest Vision: what you still need for
 -- your quests (QuestMobs.lua, QuestGlow.lua).
 local function CreateVisionPanel()
@@ -10447,13 +10510,19 @@ local function CreateVisionPanel()
 	title:SetPoint("TOPLEFT", 16, -16)
 
 	local note = PageIntro(content, title,
-		L["Ways of showing just what matters: the health of a duel near you. Heal Vision, Quest Vision, " ..
-		"Roll Vision and Vitals Vision have pages of their own."])
+		L["Ways of showing just what matters. Each vision has a page of its own: this one turns them all " ..
+		"on or off, and has what they share."])
 
-	local switch = PageSwitch(content, "handleVision", L["Enable page"],
-		L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
-		"when you turn this back on."], note, function()
+	local switch = PageSwitch(content, "handleVision", L["Enable Visions"],
+		L["On: every vision works as its page says. Off: none of them do (Heal, Quest, Roll, Duel, Vitals " ..
+		"and Combat Vision, and the Vision Helper), and each keeps its settings for when you turn this back on. " ..
+		"The visions' pages grey out with it."], note, function()
 		if ns.RefreshRollWindow then ns.RefreshRollWindow() end
+		if ns.ApplyHealVisionFrames then ns.ApplyHealVisionFrames() end
+		if ns.RefreshTargetQuestIcon then ns.RefreshTargetQuestIcon() end
+		if ns.UpdateQuestGlow then ns.UpdateQuestGlow() end
+		if ns.RefreshQuestItemButton then ns.RefreshQuestItemButton() end
+		if ns.RefreshLowHealth then ns.RefreshLowHealth() end
 	end)
 
 	local stack = Stack(switch, "check")
@@ -10461,13 +10530,6 @@ local function CreateVisionPanel()
 		L["While a vision is doing something (Heal Vision fading frames, a duel being watched, the roll " ..
 		"window up...), the minimap button glows in its color, and its menu and tooltip list it with a " ..
 		"link to its page."]), "check")
-	stack:Header(content, L["Duel Vision"])
-	local duelCheck = stack:Add(Check(content, "duelPlates", L["Enable"],
-		L["In CineMode, the nameplates of two players dueling near you show, so you can watch their health. " ..
-		"Only in the open world, out of fights. Turns on friendly player nameplates while it watches, " ..
-		"kept invisible and click-through bar the duelists'. Each duel has its own color, and the winner " ..
-		"and loser show when it ends. Needs the Nameplates page enabled."]), "check")
-	GreyUnless(duelCheck, function(db) return db.handlePlates end)
 
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
@@ -10489,7 +10551,7 @@ local function CreateVisionPanel()
 		if ns.RefreshQuestItemButton then ns.RefreshQuestItemButton() end
 	end
 	-- (Its switch: questVision, its Enable before it had a page.)
-	local questSwitch = PageSwitch(content, "questVision", L["Enable page"],
+	local questSwitch = PageSwitch(content, "questVision", L["Enable Page"],
 		L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
 		"when you turn this back on."], note, ApplyQuest)
 	local questStack = Stack(questSwitch, "check")
@@ -10609,15 +10671,15 @@ local function CreateVisionPanel()
 		local PLACES = {
 			{ value = "fixed", text = L["Default"] },
 			{ value = "head", text = L["Over the head"], enabled = TalkOn },
-			{ value = "opposite", text = L["Opposite Clicked"] },
+			{ value = "opposite", text = L["Opposite clicked"] },
 		}
 		local PLACE_TIP = L["Where the bubble goes. Over the head: over the NPC's nameplate, following them on " ..
-			"the screen. Default: above the middle of the screen, or wherever you drag it. Opposite Clicked: " ..
+			"the screen. Default: above the middle of the screen, or wherever you drag it. Opposite clicked: " ..
 			"wherever you drag it, but when you clicked the NPC on that half of the screen, at the same spot on " ..
 			"the other half (they stand where you clicked, so that half is clearer), the quest card beside it. " ..
 			"With nobody to stand over or no click (a quest from an item, or the interact key), it goes where " ..
 			"Default would."] .. "\n\n" .. L["With Custom dialogue frames unticked, it places the game's own gossip and " ..
-			"quest window instead. Default: wherever you drag it (else where the game puts it). Opposite Clicked: " ..
+			"quest window instead. Default: wherever you drag it (else where the game puts it). Opposite clicked: " ..
 			"the same, but on the other half of the screen from where you clicked the NPC. Over the head isn't " ..
 			"for a whole window (it would cover them): the game's window is left where the game puts it."]
 		local placeLabel = questStack:Add(Label(content, "GameFontHighlight", L["Bubble position"]), "label")
@@ -10725,7 +10787,7 @@ local function CreateVisionPanel()
 			"for the time left, and everyone's pick (need, greed, transmog) and number, the winner lit at the top. " ..
 			"It opens as an item drops, just under the game's roll frame, so you can see who's picked what before you choose, and takes its place once you have. Each item fades a few seconds after it's won (point at them to keep them). It stays with the game's roll frames: with \"Drag windows to move them\" on, dragging either moves both. " ..
 			"/cine rolls shows the latest rolls."])
-		local rollSwitch = PageSwitch(content, "rollWindow", L["Enable page"],
+		local rollSwitch = PageSwitch(content, "rollWindow", L["Enable Page"],
 			L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
 			"when you turn this back on."], note, function() ns.RefreshRollWindow() end)
 		stack = Stack(rollSwitch, "check")
@@ -10802,6 +10864,56 @@ local function CreateVisionPanel()
 		RegisterSubpage(canvas, "Roll Vision")
 	end
 
+	-- Duel Vision: the plates of two players dueling near you (see Effects).
+	-- (Its switch: duelPlates, its Enable before it had a page.)
+	canvas, content = CreateScrollPage()
+	title = Label(content, "GameFontNormalLarge", L["Duel Vision"])
+	title:SetPoint("TOPLEFT", 16, -16)
+	note = PageIntro(content, title,
+		L["In CineMode, the nameplates of two players dueling near you show, so you can watch their health. " ..
+		"Only in the open world, out of fights. Turns on friendly player nameplates while it watches, " ..
+		"kept invisible and click-through bar the duelists'. Each duel has its own color, and the winner " ..
+		"and loser show when it ends. Needs the Nameplates page enabled."])
+	local duelSwitch = PageSwitch(content, "duelPlates", L["Enable Page"],
+		L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
+		"when you turn this back on."], note)
+	GreyUnless(duelSwitch, function(db) return db.handlePlates end)
+	stack = Stack(duelSwitch, "check")
+	local duelCC = stack:Add(Check(content, "duelCC", L["Crowd control"],
+		L["A feared, stunned, polymorphed, rooted or silenced duelist gets an icon of the spell beside their " ..
+		"nameplate, with the time left."]), "check")
+	GreyUnless(duelCC, function(db) return db.handlePlates and db.duelPlates end)
+	-- Test: pretend duels for 30 seconds (see Effects); Stop with the seconds
+	-- left meanwhile (as the camera tests').
+	local duelTest = ns.PanelButton(content)
+	duelTest:SetSize(90, 22)
+	duelTest:SetText(L["Test"])
+	Tooltip(duelTest, L["Friendly players around you duel for 30 seconds, in pretend: their nameplates, " ..
+		"made-up crowd control, and winners and losers, to see how it looks. Needs CineMode and other " ..
+		"players nearby. Clicking Stop ends it."])
+	duelTest:SetScript("OnClick", function()
+		if ns.DuelTestLeft() then
+			ns.ToggleDuelTest()
+		else
+			local _, why = ns.ToggleDuelTest(30)
+			if why then
+				ns.Print(L["Duel Vision test: not shown now (%s)."]:format(why))
+			end
+		end
+	end)
+	local duelWait = 0
+	duelTest:SetScript("OnUpdate", function(self, elapsed)
+		duelWait = duelWait - elapsed
+		if duelWait > 0 then return end
+		duelWait = 0.2
+		local left = ns.DuelTestLeft()
+		self:SetText(left and L["Stop (%d)"]:format(math.ceil(left)) or L["Test"])
+	end)
+	stack:Add(duelTest, "label")
+	canvas:SetScript("OnShow", PageShown(Refresh, content))
+	canvas:Hide()
+	RegisterSubpage(canvas, "Duel Vision")
+
 	-- Heal Vision.
 	canvas, content = CreateScrollPage()
 	do
@@ -10828,11 +10940,11 @@ local function CreateVisionPanel()
 		-- Show in: Always, then the places and groups (a Location dropdown).
 		-- Always greys the rest.
 		local PLACES = {
-			World = { L["Open World"], L["out in the world, inns included (capital cities are Cities)"] },
+			World = { L["Open world"], L["out in the world, inns included (capital cities are Cities)"] },
 			Cities = { L["Cities"], L["in capital cities"] },
 			Dungeons = { L["Dungeons"], L["in dungeons and scenarios"] },
 			Raids = { L["Raids"], L["in raids"] },
-			BGs = { L["BGs & Arenas"], L["in battlegrounds and arenas"] },
+			BGs = { L["BGs & arenas"], L["in battlegrounds and arenas"] },
 		}
 		local COLUMNS = { { key = "", heading = L["Always"] } }
 		local function Place(where)
@@ -10845,7 +10957,7 @@ local function CreateVisionPanel()
 		COLUMNS[#COLUMNS + 1] = { key = "InRaid", heading = L["Raid"] }
 		Place("Dungeons")
 		Place("Raids")
-		local healSwitch = PageSwitch(content, "handleHealVision", L["Enable page"],
+		local healSwitch = PageSwitch(content, "handleHealVision", L["Enable Page"],
 			L["On: Heal Vision works as ticked below. Off: it doesn't, and each keeps its tick for " ..
 			"when you turn this back on."], healIntro, ApplyFrames)
 
@@ -11014,6 +11126,9 @@ local function CreateVisionPanel()
 		local ROLE_ICON = "|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES:16:16:0:0:64:64:%s|t"
 		local PET_ICON = "|TInterface\\Icons\\Ability_Hunter_BeastCall:16:16:0:0:64:64:5:59:5:59|t"
 		local TARGET_ICON = "|TInterface\\Cursor\\Crosshairs:16:16|t"
+		local OFFLINE_ICON = "|TInterface\\CharacterFrame\\Disconnect-Icon:16:16:0:0:64:64:12:52:12:52|t"
+		local FAR_ICON = "|TInterface\\Icons\\INV_Misc_Spyglass_03:16:16:0:0:64:64:5:59:5:59|t"
+		local MOUSE_ICON = "|TInterface\\Cursor\\Point:16:16|t"
 		local SKULL_ICON = "|TInterface\\TargetingFrame\\UI-TargetingFrame-Skull:16:16|t"
 		local NAME_W, COLUMN_W = 150, 200
 		local function Percent(value, default)
@@ -11090,13 +11205,16 @@ local function CreateVisionPanel()
 			L["Target min opacity"], L["The least of the member you've targeted that shows while they'd be hidden. " ..
 			"It only ever makes them more visible: a target whose own opacity above is higher (a tank shown always, " ..
 			"say) keeps it. 100% always shows them, at full health too."])
+		Cell(Row(MOUSE_ICON, L["Mouseover, at least"]), 2, Field("healVisionMouseoverAlpha"),
+			L["Mouseover min opacity"], L["The member under your mouse fades in to at least this, in fights too, " ..
+			"and starts fading out the moment the mouse leaves them. 0% turns it off."])
 		Cell(Row(SKULL_ICON, L["Dead"], 12), 2, Field("healVisionDeadAlpha"), L["Dead opacity"],
 			L["Dead members are hidden whatever their health, debuffs or role (unless one is your " ..
 			"target). How much of them still shows. 0% hides them completely."])
-		Cell(Row(SKULL_ICON, L["Offline"]), 2, Field("healVisionOfflineAlpha"), L["Offline opacity"],
+		Cell(Row(OFFLINE_ICON, L["Offline"]), 2, Field("healVisionOfflineAlpha"), L["Offline opacity"],
 			L["Offline members are hidden whatever their health, debuffs or role (unless one is " ..
 			"your target). How much of them still shows. 0% hides them completely."])
-		Cell(Row(SKULL_ICON, L["Far away"]), 2, Field("healVisionFarAlpha"), L["Far away opacity"],
+		Cell(Row(FAR_ICON, L["Far away"]), 2, Field("healVisionFarAlpha"), L["Far away opacity"],
 			L["Members more than 100 yards away show this much, out of reach of your heals, whatever " ..
 			"their health, debuffs or role (unless one is your target). In a dungeon or raid, so does anyone not " ..
 			"in it with you. In battlegrounds, where WoW Forever won't say how far anyone is, members out of " ..
@@ -11123,7 +11241,7 @@ local function CreateTooltipPanel()
 		"key (set it on the Keybinds page) to see a hidden one anyway."])
 	-- Their look: the Style hub's Tooltips page (TooltipStyle.lua).
 	ns.StyleLink(content, title, "Tooltip Style", L["Opens the Style hub's Tooltips page: how tooltips look."], Tooltip)
-	local switch = PageSwitch(content, "handleTooltips", L["Enable page"],
+	local switch = PageSwitch(content, "handleTooltips", L["Enable Page"],
 		L["On: CineMode hides tooltips as this page says. Off: every tooltip shows as normal."], note)
 
 	-- Fade in/out (tooltipFadeTime): with the page switched off too.
@@ -11352,7 +11470,7 @@ local function CreateExtrasPanel()
 	local title = Label(content, "GameFontNormalLarge", L["Advanced Frames"])
 	title:SetPoint("TOPLEFT", 16, -16)
 
-	local switch = PageSwitch(content, "handleAddonFrames", L["Enable page"],
+	local switch = PageSwitch(content, "handleAddonFrames", L["Enable Page"],
 		L["On: CineMode fades the supported addons' frames, and frames you added, as this page says. " ..
 		"Off: it leaves them all alone."], title)
 	local stack = Stack(switch, "check")
@@ -11835,7 +11953,7 @@ local KEYBINDS = {
 	{ action = "CINEMATIC_TOGGLE", label = L["Toggle CineMode"],
 		tip = L["Turns CineMode on or off, like /cine."] },
 	{ action = "CINEMATIC_TOGGLEEFFECTS", label = L["Toggle visual effects"],
-		tip = L["Turns the visual effects on or off (their Enable visual effects switch): the letterbox, tint, " ..
+		tip = L["Turns the visual effects on or off (their Enable Visual Effects switch): the letterbox, tint, " ..
 			"vignette, weather and the rest."] },
 	{ action = "CINEMATIC_RELOAD", label = L["Reload the UI"],
 		tip = L["Reloads the UI, like /reload. With Keep windows open across a reload ticked (Quality of " ..
@@ -11866,10 +11984,10 @@ local KEYBINDS = {
 			"point at one and let go to turn it on or off, in a fight too. Tap it instead and the wheel stays " ..
 			"up for you to click one."] },
 	{ action = "CINEMATIC_VISION_HEAL", label = L["Toggle Heal Vision"], section = L["Visions"],
-		tip = L["Turns Heal Vision on or off (its Enable page switch), in a fight too: off, the party and " ..
+		tip = L["Turns Heal Vision on or off (its Enable Page switch), in a fight too: off, the party and " ..
 			"raid frames all show again."] },
 	{ action = "CINEMATIC_VISION_QUEST", label = L["Toggle Quest Vision"],
-		tip = L["Turns Quest Vision on or off (its Enable page switch)."] },
+		tip = L["Turns Quest Vision on or off (its Enable Page switch)."] },
 	{ action = "CLICK CinematicQuestItemButton:LeftButton", label = L["Use the quest item"],
 		tip = L["Uses the item on Quest Vision's quest item button, while it shows."] },
 	{ action = "CINEMATIC_VISION_DUEL", label = L["Toggle Duel Vision"],
@@ -11878,7 +11996,7 @@ local KEYBINDS = {
 		show = function() return ns.hasRollWindow end,
 		tip = L["Turns Roll Vision on or off."] },
 	{ action = "CINEMATIC_VISION_VITALS", label = L["Toggle Vitals Vision"],
-		tip = L["Turns Vitals Vision on or off (its Enable page switch)."] },
+		tip = L["Turns Vitals Vision on or off (its Enable Page switch)."] },
 	{ action = "CINEMATIC_CAM_IDLE", label = L["AFK camera"], section = L["Cameras"],
 		tip = L["Starts the AFK camera now, without waiting out its delay. " ..
 			"Press again, move or jump to stop it."] },
@@ -11899,7 +12017,7 @@ local KEYBINDS = {
 			"while you're on a unit or something in the world brings its tooltip up; anything else, " ..
 			"hover it again with the key held."] },
 	{ action = "CINEMATIC_TOGGLETOOLTIPS", label = L["Toggle tooltip hiding"],
-		tip = L["Turns the Tooltips page on or off (its Enable page switch)."] },
+		tip = L["Turns the Tooltips page on or off (its Enable Page switch)."] },
 }
 if ns.ChatCamCommand then -- (ChatCam.lua, so here rather than in Bindings.xml)
 	KEYBINDS[#KEYBINDS + 1] = { action = "CLICK CinematicChatTargetButton:LeftButton",
@@ -12458,7 +12576,7 @@ local function CreateProfilesPanel()
 
 	-- The last card: a new profile of your own, from the settings you have now.
 	local newTip = PROFILE_MENUS and L["A profile of your own, a copy of the active one as you have it now, named " ..
-		"after it. To copy another profile, right-click it, then Copy Profile."]
+		"after it. To copy another profile, right-click it, then Copy profile."]
 		or L["A profile of your own, a copy of the active one as you have it now, named after it. " ..
 		"To copy another profile, switch to it first."]
 	local newCard = Card()
@@ -12610,7 +12728,7 @@ local function CreateProfilesPanel()
 				root:CreateButton(L["Switch to it"], function() cell:Click("LeftButton") end)
 			end
 			-- (A copy of that one: switched to first, as New profile copies the active one.)
-			root:CreateButton(L["Copy Profile"], function()
+			root:CreateButton(L["Copy profile"], function()
 				picker:Hide()
 				if name ~= ns.ActiveProfile() then ns.SetProfile(name) end
 				NewFromActive()
@@ -12723,14 +12841,14 @@ local function CreateMouseoverPanel()
 	local LEFT, WIDTH, ROW = 16, 560, 22
 	local RESULTS_SHOWN = 8
 
-	local title = Label(content, "GameFontNormalLarge", L["Mouseover groups"])
+	local title = Label(content, "GameFontNormalLarge", L["Mouseover Groups"])
 	title:SetPoint("TOPLEFT", LEFT, -16)
 	local subtitle = PageIntro(content, title,
 		L["Frames in the same group come up together when you mouse over any of them. A frame can " ..
 		"be in more than one group; one in no group comes up on its own."] .. " " ..
 		L["Click a group's icon below to go to it, or the + to make one of your own."])
 
-	local mouseover = Check(content, "mouseover", L["Enable page"],
+	local mouseover = Check(content, "mouseover", L["Enable Page"],
 		L["Pointing at a faded frame shows it, with the rest of its groups."], function(value)
 			ns.GetDB().mouseover = value
 			Refresh() -- grey out / enable the hold time
@@ -13377,7 +13495,7 @@ local function CreateMouseoverPanel()
 		picker:Hide()
 	end)
 	canvas:Hide()
-	RegisterSubpage(canvas, "Mouseover groups")
+	RegisterSubpage(canvas, "Mouseover groups", L["Mouseover Groups"])
 end
 
 -- WoW Forever freezes closing Settings in gamepad mode once one of our
@@ -13408,7 +13526,7 @@ local function GuardGamepadClose()
 			end
 			return Close(...)
 		end
-		print("|cffffd100Cinematic:|r " .. L["closing Settings now reloads the UI (Force Reload on Settings Exit, " ..
+		print("|cffffd100Cinematic:|r " .. L["closing Settings now reloads the UI (Force reload on Settings exit, " ..
 			"Gamepad page)."])
 	end
 	-- Runs only while Settings is open (a child of it).

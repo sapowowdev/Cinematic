@@ -30,8 +30,8 @@ end
 -- { name, colour, { { word, label }... } }. Made when asked,
 -- once the language is known.
 function ns.RulePieces()
-	local location = { { "world", L["Open World"] }, { "city", L["Cities"] }, { "inn", L["Inns"] },
-		{ "bg", L["BGs & Arenas"] } }
+	local location = { { "world", L["Open world"] }, { "city", L["Cities"] }, { "inn", L["Inns"] },
+		{ "bg", L["BGs & arenas"] } }
 	if ns.isRetail then -- (apart where there are arenas)
 		location[#location + 1] = { "battleground", L["Battlegrounds"] }
 		location[#location + 1] = { "arena", L["Arenas"] }
@@ -58,9 +58,9 @@ function ns.RulePieces()
 			{ "nocombat", L["Out of combat"] }, { "camera", L["In a camera mode"] },
 			{ "entering", L["Entering combat"] }, { "leaving", L["Leaving combat"] }, { "boss", L["Boss fight"] } } },
 		{ L["Target"], { 1, 0.65, 0.25 }, { { "enemy", L["Enemy targeted"] }, { "friendly", L["Friend targeted"] },
-			{ "target", L["Anything targeted"] }, { "targetself", L["You"] }, { "enemyplayer", L["Enemy Players"] },
-			{ "hostilenpc", L["Hostile NPCs"] }, { "neutralplayer", L["Neutral Players"] },
-			{ "neutralnpc", L["Neutral NPCs"] }, { "friendlyplayer", L["Friendly Players"] },
+			{ "target", L["Anything targeted"] }, { "targetself", L["You"] }, { "enemyplayer", L["Enemy players"] },
+			{ "hostilenpc", L["Hostile NPCs"] }, { "neutralplayer", L["Neutral players"] },
+			{ "neutralnpc", L["Neutral NPCs"] }, { "friendlyplayer", L["Friendly players"] },
 			{ "friendlynpc", L["Friendly NPCs"] }, { "noplate", L["Plate off screen"] }, { "near", L["Near (11 yards)"] }, { "near28", L["Near (28 yards)"] } } },
 		{ L["Spell range"], { 0.45, 0.9, 0.9 }, ranges },
 		{ L["Nearby"], { 1, 0.5, 0.8 }, { { "elite11", L["Elite near (11 yards)"] },

@@ -145,6 +145,65 @@ local function GossipHasQuestOptions()
 	return false
 end
 
+-- A quest that comes round again (daily, weekly or another reset): its
+-- frequency (Enum.QuestFrequency; 1 daily, 2 weekly, 3 on a schedule).
+local function Resets(frequency)
+	return type(frequency) == "number" and not (issecretvalue and issecretvalue(frequency)) and frequency > 0
+end
+
+-- In your quest log, a quest that resets (nil: not in it, or the game won't say).
+local function LogQuestResets(questID)
+	local log = C_QuestLog
+	if type(questID) ~= "number" or (issecretvalue and issecretvalue(questID))
+		or not (log and log.GetLogIndexForQuestID and log.GetInfo) then
+		return nil
+	end
+	local index = log.GetLogIndexForQuestID(questID)
+	local info = index and log.GetInfo(index)
+	return info and Resets(info.frequency)
+end
+
+-- Everything this quest giver has (to offer or take in) is a daily or weekly
+-- (questCamNotDaily). Anything the game won't say counts as not.
+local function OnlyDailies(event)
+	if event == "GOSSIP_SHOW" then
+		local info = C_GossipInfo
+		if not (info and info.GetAvailableQuests and info.GetActiveQuests) then
+			return false
+		end
+		local any = false
+		for _, list in ipairs({ info.GetAvailableQuests() or {}, info.GetActiveQuests() or {} }) do
+			for _, quest in ipairs(list) do
+				if not (Resets(quest.frequency) or LogQuestResets(quest.questID)) then
+					return false
+				end
+				any = true
+			end
+		end
+		return any
+	elseif event == "QUEST_GREETING" then
+		if not (GetNumAvailableQuests and GetAvailableQuestInfo and GetNumActiveQuests) then
+			return false
+		end
+		local any = false
+		for i = 1, GetNumAvailableQuests() or 0 do
+			local _, frequency = GetAvailableQuestInfo(i)
+			if not Resets(frequency) then return false end
+			any = true
+		end
+		for i = 1, GetNumActiveQuests() or 0 do
+			if not (GetActiveQuestID and LogQuestResets(GetActiveQuestID(i))) then return false end
+			any = true
+		end
+		return any
+	end
+	-- One quest's window (its text, progress or reward).
+	if (QuestIsDaily and ns.Flag(QuestIsDaily())) or (QuestIsWeekly and ns.Flag(QuestIsWeekly())) then
+		return true
+	end
+	return GetQuestID and LogQuestResets(GetQuestID()) or false
+end
+
 -- Speed (0-1) at t along a move of T seconds: half-cosine ramps of ease*T at
 -- either end (as Camera.lua's EaseShape).
 local function EaseShape(t, T, ease)
@@ -694,7 +753,11 @@ local function HandOver(what)
 		m.amount = 0
 	end
 	if not (zoomer.leaving and zoomer.moving and ns.lastCameraInputWhat ~= "zoom") then
-		StopZoom(true, "you took the camera: " .. tostring(what)) -- (your own zooming goes at your speed)
+		-- Your own zooming goes at your speed at once. A turn with the mouse
+		-- doesn't need it: the speed eases back, as the game's zoom still has
+		-- a bit to go past where it's stopped, and at your speed that went in
+		-- a lurch (1.3 yards in half a second).
+		StopZoom(ns.lastCameraInputWhat == "zoom", "you took the camera: " .. tostring(what))
 		ns.RestoreZoomLimit()
 	end
 	cam.steps, cam.handedOver = {}, true
@@ -897,7 +960,7 @@ clickWatcher:SetScript("OnEvent", function()
 end)
 
 -- How far across the screen (a share of its width) the click that opened the
--- conversation was, or nil if it wasn't a click (Quest talk's Opposite Clicked).
+-- conversation was, or nil if it wasn't a click (Quest talk's Opposite clicked).
 function ns.ClickedX()
 	return GetTime() - lastClick.at <= CLICK_WINDOW and lastClick.x or nil
 end
@@ -1001,6 +1064,9 @@ local function OnEvent(_, event)
 		end
 		if not cam.since and ns.db and ns.db.questCamNotMounted and IsMounted and ns.Flag(IsMounted()) then
 			return -- on a mount, and you'd rather it didn't
+		end
+		if not cam.since and which == "Quest" and ns.db and ns.db.questCamNotDaily and OnlyDailies(event) then
+			return -- only dailies here, and you'd rather it didn't
 		end
 		-- The wait before starting (questCamDelay), from the first window. Each
 		-- window after adds WINDOW_EXTRA (and leaves at least that): clicking
@@ -1319,7 +1385,7 @@ end
 -- while the quest cam is running or about to for this conversation; nil
 -- otherwise. (The camera coming round to your left frames them on the left:
 -- with "Where you clicked them", a click on the right turns it toward the
--- right, so they end up on the left.) Quest talk's Opposite Clicked goes on
+-- right, so they end up on the left.) Quest talk's Opposite clicked goes on
 -- the other half when you didn't click them.
 function ns.QuestCamSide()
 	local left

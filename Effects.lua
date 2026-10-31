@@ -21,7 +21,7 @@ ns.letterboxDirty = false
 -- range, where no unit has one, the game's own names still show as the rows
 -- say. Your own name and critters' have no plate.
 ns.NAME_GROUPS = {
-	{ key = "Self", label = L["My Name"], cvars = { "UnitNameOwn" } },
+	{ key = "Self", label = L["My name"], cvars = { "UnitNameOwn" } },
 	-- The game's NPC Names choice (None, quest NPCs... all NPCs) split three
 	-- ways: hostile, neutral and friendly NPCs. On plates (CineMode, near
 	-- enough) each row decides its own; beyond them, and in dungeons and raids,
@@ -40,14 +40,14 @@ ns.NAME_GROUPS = {
 		tip = L[" Beyond nameplate range, and in dungeons and raids, the game only shows friendly NPCs with " ..
 			"something for you (quest givers, vendors, flight masters...) unless all three NPC rows show: then " ..
 			"all of them, guards too."] },
-	{ key = "Critters", label = L["Critters and Companions"], cvars = { "UnitNameNonCombatCreatureName" } },
-	{ key = "Friends", label = L["Friendly Players"], plate = true, cvars = { "UnitNameFriendlyPlayerName" } },
+	{ key = "Critters", label = L["Critters and companions"], cvars = { "UnitNameNonCombatCreatureName" } },
+	{ key = "Friends", label = L["Friendly players"], plate = true, cvars = { "UnitNameFriendlyPlayerName" } },
 	{ key = "FriendlyMinions", label = L["Minions"], indent = true, plate = true,
 		cvars = {
 			"UnitNameFriendlyMinionName", "UnitNameFriendlyPetName", "UnitNameFriendlyGuardianName",
 			"UnitNameFriendlyTotemName",
 		} },
-	{ key = "Enemies", label = L["Enemy Players"], plate = true, cvars = { "UnitNameEnemyPlayerName" } },
+	{ key = "Enemies", label = L["Enemy players"], plate = true, cvars = { "UnitNameEnemyPlayerName" } },
 	{ key = "EnemyMinions", label = L["Minions"], indent = true, plate = true,
 		cvars = {
 			"UnitNameEnemyMinionName", "UnitNameEnemyPetName", "UnitNameEnemyGuardianName",
@@ -55,7 +55,7 @@ ns.NAME_GROUPS = {
 		} },
 	-- Players' guilds (<Guild>) under their names, wherever their names show:
 	-- over their heads, and on plates showing just the name (PlateGuild.lua).
-	{ key = "Guild", label = L["Guild Names"], cvars = { "UnitNamePlayerGuild" },
+	{ key = "Guild", label = L["Guild names"], cvars = { "UnitNamePlayerGuild" },
 		tip = L[" Players' guilds, under their names wherever their names show: over their heads, and in CineMode " ..
 			"on nameplates showing just the name."] },
 	-- Not in the game's menu: whatever you've targeted shows its name
@@ -545,7 +545,7 @@ end
 -- on) during a mute. That lifts the mute until it clears by itself or a new
 -- reason to mute comes up (a fight starting while you walk on, say).
 local function UpdateCombatMusic(elapsed, playerOverride)
-	-- Muted while fighting (if chosen) or in a place chosen under "Stop Music".
+	-- Muted while fighting (if chosen) or in a place chosen under "Stop music".
 	-- Only when the addon handles music at all: with "Play music in cinematic
 	-- mode" off, the player's volumes are left alone (any ducking eases back).
 	local handlesMusic = ns.db.musicInCinematic
@@ -1049,7 +1049,7 @@ local function KeepInteractPrompt(frame)
 	if not (prompt and prompt.SetIgnoreParentAlpha) or (prompt.IsForbidden and prompt:IsForbidden()) then
 		return
 	end
-	local keep = ns.db and ns.db.showInteractPrompt and true or false
+	local keep = ns.db and ns.db.showInteractPrompt and ns.db.handleGamepad ~= false or false
 	if prompt.cinematicKept ~= keep then
 		prompt:SetIgnoreParentAlpha(keep)
 		prompt.cinematicKept = keep
@@ -1406,7 +1406,7 @@ end
 -- The Nameplates grid's rows for particular units (ns.PLATE_UNIT_ROWS): your
 -- target, your pet, your party or raid's players and their pets. They only
 -- add: a plate shows as far as its kind's row or any of these lets it. In
--- fights a row's In Combat boxes count; out of them, where you are (and just
+-- fights a row's In combat boxes count; out of them, where you are (and just
 -- after a fight, both).
 local function UnitRowWanted(row)
 	if InCombatLockdown() then
@@ -1414,7 +1414,7 @@ local function UnitRowWanted(row)
 	end
 	return KeptHere(row) or (ns.FightLingering() and ShownInFights(row))
 end
-ns.PlateRowWanted = UnitRowWanted -- (the Plate Parts rows go by the same columns: see PlateParts)
+ns.PlateRowWanted = UnitRowWanted -- (the Plate parts rows go by the same columns: see PlateParts)
 
 -- Whether a unit row has anyone to show now (your target's has its own fade, below).
 -- Quest mobs (ns.QuestMobsShow, the Vision page's Quest Vision): units that
@@ -1640,12 +1640,14 @@ do
 
 	-- Why duels aren't watched now (nil: they are).
 	local function NotWatchingWhy()
-		if not ns.Setting("duelPlates") then
+		if not (ns.Setting("duelPlates") or duels.test) then
 			return "option off"
 		elseif not platesActive then
 			return "not in CineMode"
 		elseif InCombatLockdown() or Ask(UnitAffectingCombat, "player") then
 			return "in combat"
+		elseif duels.test then
+			return nil -- (pretend duels: anywhere, cities too)
 		elseif GetTime() < duels.selfUntil then
 			return "dueling yourself"
 		elseif Ask(ns.OnTaxi) then
@@ -1709,6 +1711,206 @@ do
 		return Known(targetName) and targetName == name and Ask(UnitCanAttack, unit, target)
 	end
 
+	-- A unit's debuffs, as far as the game says: a list of { name, spellId,
+	-- icon, duration, expirationTime } (any of them may be secret), and nil
+	-- with why when it won't say at all.
+	function duels.Debuffs(unit)
+		local list = {}
+		for i = 1, 40 do
+			local aura
+			if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+				-- (Errors rather than returning nil while auras are secret.)
+				local ok, data = pcall(C_UnitAuras.GetAuraDataByIndex, unit, i, "HARMFUL")
+				if not ok then
+					return nil, "error"
+				elseif not Known(data) then
+					return nil, "secret"
+				end
+				aura = data
+			elseif UnitDebuff then
+				local values = { pcall(UnitDebuff, unit, i) }
+				if not values[1] then
+					return nil, "error"
+				end
+				aura = values[2] and { name = values[2], icon = values[3], duration = values[6],
+					expirationTime = values[7], spellId = values[11] }
+			end
+			if not aura then
+				break
+			end
+			list[#list + 1] = aura
+		end
+		return list
+	end
+
+	-- Crowd control on a duelist (feared, stunned, polymorphed, rooted,
+	-- silenced...): matched by name, from these spells' names in the game's
+	-- language, so every rank counts. Older and newer clients' spells both:
+	-- ones a client hasn't are skipped.
+	local CC_SPELLS = {
+		-- Fears and horrors
+		5782, 8122, 5484, 5246, 6789, 6358,
+		-- Polymorphs, sleeps and other incapacitates
+		118, 28272, 28271, 2637, 6770, 1776, 2094, 19503, 3355, 20066, 19386, 605, 51514, 115078, 99, 31661,
+		82691, 217832, 360806, 710, 33786,
+		-- Stuns
+		853, 408, 1833, 7922, 20253, 5211, 9005, 12809, 20549, 24394, 12355, 15269, 5530, 20170, 18093,
+		119381, 30283, 132169, 132168, 108194, 179057, 211881, 22570, 44572, 91800, 200200, 117526,
+		-- Roots
+		122, 339, 19975, 12494, 19229, 19185, 19675, 23694, 33395,
+		-- Silences
+		15487, 18469, 18425, 24259, 18498, 47476, 81261,
+	}
+	local CC_SIZE = 28
+	local GetSpellName = (C_Spell and C_Spell.GetSpellName) or function(id) return (GetSpellInfo(id)) end
+	local GetSpellIcon = (C_Spell and C_Spell.GetSpellTexture) or GetSpellTexture
+	local ccNames -- [name] = a spell id with it, made on first use
+
+	local function CCNames()
+		if not ccNames then
+			ccNames = {}
+			for _, id in ipairs(CC_SPELLS) do
+				local ok, name = pcall(GetSpellName, id)
+				if ok and Known(name) and type(name) == "string" and name ~= "" then
+					ccNames[name] = ccNames[name] or id
+				end
+			end
+		end
+		return ccNames
+	end
+
+	-- The crowd control holding a unit longest (one with no end, or none the
+	-- game gives, first): its aura, or nil.
+	function duels.HeldBy(unit)
+		local list = duels.Debuffs(unit)
+		if not list then
+			return nil
+		end
+		local names, best, bestEnd = CCNames(), nil, nil
+		for _, aura in ipairs(list) do
+			local name = aura.name
+			if Known(name) and type(name) == "string" and names[name] then
+				local ends = aura.expirationTime
+				ends = (Known(ends) and type(ends) == "number" and ends > 0) and ends or math.huge
+				if not best or ends > bestEnd then
+					best, bestEnd = aura, ends
+				end
+			end
+		end
+		-- (Pretend duels' made-up ones, where there's no real one.)
+		if not best and duels.test then
+			local name = UnitName(unit)
+			for _, pair in pairs(duels.pairs) do
+				local cc = pair.test and pair.test.cc
+				if cc and Known(name) and cc.victim == name and cc.aura.expirationTime > GetTime() then
+					return cc.aura
+				end
+			end
+		end
+		return best
+	end
+
+	-- The crowd control icon's time left, a few times a second while it shows.
+	local function CCTick(cc, elapsed)
+		cc.wait = (cc.wait or 0) - elapsed
+		if cc.wait > 0 or not cc.ends then
+			return
+		end
+		cc.wait = 0.1
+		local left = cc.ends - GetTime()
+		if left <= 0 then
+			cc:Hide() -- (until the next look: the next one, if any)
+			return
+		end
+		cc.time:SetText(left >= 10 and ("%d"):format(left) or ("%.1f"):format(left))
+	end
+
+	-- Pretend duels (/cine debug duels test), to see how they look: up to
+	-- TEST_PAIRS pairs of friendly players near you, picked at random, each
+	-- "dueling" a while with now and then a made-up crowd control on one of
+	-- them, then a random winner (or one fled), and new pairs after.
+	local TEST_PAIRS = 3
+	local testCC -- the crowd control spells' names, as a list
+
+	local function FakeCC(pair, now)
+		if not testCC then
+			testCC = {}
+			for _, id in ipairs(CC_SPELLS) do
+				local ok, name = pcall(GetSpellName, id)
+				if ok and Known(name) and type(name) == "string" and name ~= "" then
+					testCC[#testCC + 1] = { name = name, spellId = id }
+				end
+			end
+		end
+		local spell = testCC[math.random(math.max(#testCC, 1))]
+		if not spell then
+			return
+		end
+		local ok, icon = pcall(GetSpellIcon, spell.spellId)
+		local duration = math.random(3, 8)
+		pair.test.cc = { victim = pair.names[math.random(2)], aura = { name = spell.name, spellId = spell.spellId,
+			icon = ok and icon or nil, duration = duration, expirationTime = now + duration } }
+		pair.test.nextCC = now + duration + math.random(2, 6)
+	end
+
+	local function TestPairs(now, byName)
+		local busy, count = {}, 0
+		for _, pair in pairs(duels.pairs) do
+			for _, name in ipairs(pair.names) do
+				busy[name] = true
+			end
+			if pair.test and not pair.endedAt then
+				count = count + 1
+				if byName[pair.names[1]] or byName[pair.names[2]] then
+					pair.seen = now
+				end
+				if now >= pair.test.endsAt then
+					local i = math.random(2)
+					DuelEnded(pair.names[i], pair.names[3 - i], math.random() < 0.25)
+				elseif now >= pair.test.nextCC then
+					FakeCC(pair, now)
+				end
+			end
+		end
+		local free = {}
+		for name in pairs(byName) do
+			if not busy[name] and not duels.ended[name] then
+				free[#free + 1] = name
+			end
+		end
+		while count < TEST_PAIRS and #free >= 2 do
+			local a = table.remove(free, math.random(#free))
+			local b = table.remove(free, math.random(#free))
+			local pair = PairFor(PairKey(a, b), a, b)
+			pair.test = { endsAt = now + math.random(10, 18), nextCC = now + math.random(2, 4) }
+			pair.seen = now
+			count = count + 1
+		end
+	end
+
+	-- Seconds the pretend duels have left, or nil when they're off (the
+	-- Duel Vision page's Test button).
+	function ns.DuelTestLeft()
+		return duels.test and math.max(duels.test.stopAt - GetTime(), 0) or nil
+	end
+
+	-- Pretend duels on or off: on (and why they won't show, if they won't).
+	-- They stop by themselves after seconds (five minutes when not given).
+	function ns.ToggleDuelTest(seconds)
+		if duels.test then
+			duels.test = nil
+			for key, pair in pairs(duels.pairs) do
+				if pair.test then
+					duels.pairs[key] = nil
+				end
+			end
+		else
+			duels.test = { stopAt = GetTime() + (seconds or 300) }
+		end
+		duels.scanAt = 0
+		return duels.test ~= nil, duels.test and NotWatchingWhy()
+	end
+
 	-- The duels near you: [plate] = { pair, name } for each player in one
 	-- (or whose one just ended), and the friendly players in combat looked at.
 	function duels.Scan()
@@ -1745,6 +1947,9 @@ do
 				end
 			end
 		end
+		if duels.test then
+			TestPairs(now, byName)
+		end
 		-- A duel already found stays up until LOST_TIME passes with no sign of
 		-- it going on, fighting or not (a few quiet seconds drop them out of
 		-- combat), and one of them can stay up with the other's plate gone;
@@ -1766,8 +1971,8 @@ do
 
 	-- Each duelist's plate: a border in the duel's colour round the health
 	-- bar, and a badge beside it (their class icon; a crown or a cross once it's
-	-- over, with Won or Lost below). On the plate's unit frame, so it fades
-	-- with the plate. [plate] = frame.
+	-- over, with Won or Lost below), and left of that any crowd control on
+	-- them. On the plate's unit frame, so it fades with the plate. [plate] = frame.
 	local overlays = {}
 
 	local function Overlay(plate)
@@ -1811,8 +2016,65 @@ do
 		overlay.badge:SetPoint("RIGHT", overlay, "LEFT", -1, 0)
 		overlay.result = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 		overlay.result:SetPoint("TOP", overlay, "BOTTOM", 0, -1)
+		local cc = CreateFrame("Frame", nil, overlay)
+		cc:SetSize(CC_SIZE, CC_SIZE)
+		cc:SetPoint("RIGHT", overlay.badge, "LEFT", -2, 0)
+		local back = cc:CreateTexture(nil, "BACKGROUND")
+		back:SetPoint("TOPLEFT", -1, 1)
+		back:SetPoint("BOTTOMRIGHT", 1, -1)
+		back:SetColorTexture(0, 0, 0, 0.8)
+		cc.icon = cc:CreateTexture(nil, "ARTWORK")
+		cc.icon:SetAllPoints()
+		cc.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		cc.cooldown = CreateFrame("Cooldown", nil, cc, "CooldownFrameTemplate")
+		cc.cooldown:SetAllPoints()
+		if cc.cooldown.SetHideCountdownNumbers then
+			cc.cooldown:SetHideCountdownNumbers(true)
+		end
+		-- (Its own frame, above the cooldown's swipe.)
+		local front = CreateFrame("Frame", nil, cc)
+		front:SetAllPoints()
+		front:SetFrameLevel(cc.cooldown:GetFrameLevel() + 2)
+		cc.time = front:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+		cc.time:SetPoint("CENTER", 0, 0)
+		cc:SetScript("OnUpdate", CCTick)
+		cc:Hide()
+		overlay.cc = cc
 		overlays[plate] = overlay
 		return overlay
+	end
+
+	-- The crowd control icon on a duelist's overlay, as their debuffs are now
+	-- (none once the duel's over).
+	local function ShowCC(plate, overlay)
+		local cc, info = overlay.cc, overlay.info
+		local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+		local aura = info and not info.pair.endedAt and unit and ns.Setting("duelCC") and duels.HeldBy(unit)
+		if not aura then
+			cc:Hide()
+			return
+		end
+		local icon = aura.icon
+		if not (Known(icon) and icon) then
+			local ok, art = pcall(GetSpellIcon, CCNames()[aura.name])
+			icon = ok and Known(art) and art or nil
+		end
+		cc.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+		local duration, ends = aura.duration, aura.expirationTime
+		if Known(duration) and Known(ends) and type(duration) == "number" and type(ends) == "number"
+			and duration > 0 and ends > 0 then
+			if cc.ends ~= ends then
+				cc.cooldown:SetCooldown(ends - duration, duration)
+			end
+			cc.ends = ends
+			cc.cooldown:Show()
+		else
+			cc.ends = nil
+			cc.cooldown:Hide()
+			cc.time:SetText("")
+		end
+		cc.wait = 0
+		cc:Show()
 	end
 
 	local function ShowOverlay(plate, info)
@@ -1874,7 +2136,32 @@ do
 		overlay.info = info
 		overlay:Show()
 		overlay.border:Show()
-		ns.RefreshClassIcon(plate) -- (the Plate Parts class icon gives way to the badge)
+		ShowCC(plate, overlay)
+		ns.RefreshClassIcon(plate) -- (the Plate parts class icon gives way to the badge)
+	end
+
+	-- A duelist's debuffs changing: their crowd control icon at once, not at
+	-- the next scan. Only listened to while a duel is shown.
+	local auraWatcher = CreateFrame("Frame")
+	auraWatcher:SetScript("OnEvent", function(_, _, unit)
+		if not (Known(unit) and type(unit) == "string" and unit:find("^nameplate")) then
+			return
+		end
+		local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, unit)
+		local overlay = ok and plate and overlays[plate]
+		if overlay and overlay.info then
+			ShowCC(plate, overlay)
+		end
+	end)
+	local function WatchAuras(on)
+		if on ~= (auraWatcher.on or false) then
+			auraWatcher.on = on
+			if on then
+				auraWatcher:RegisterEvent("UNIT_AURA")
+			else
+				auraWatcher:UnregisterEvent("UNIT_AURA")
+			end
+		end
 	end
 
 	-- Whether a plate has a duel's border and badge on it.
@@ -1925,6 +2212,9 @@ do
 	-- Moves the duelists' plates' fades on; true while any of them is moving.
 	function duels.Update(elapsed)
 		local now = GetTime()
+		if duels.test and now >= duels.test.stopAt then
+			ns.ToggleDuelTest()
+		end
 		duels.watching = duels.on and NotWatchingWhy() == nil
 		for key, pair in pairs(duels.pairs) do
 			if (pair.endedAt and now - pair.endedAt >= RESULT_TIME)
@@ -1952,6 +2242,7 @@ do
 				ShowOverlay(plate, info)
 			end
 		end
+		WatchAuras(duels.watching and next(duels.shown) ~= nil and ns.Setting("duelCC") or false)
 		local moving = false
 		local wanted = {}
 		for plate in pairs(duels.shown) do
@@ -2077,7 +2368,7 @@ end
 -- game draw its marker over their head itself, and nothing hides that one
 -- (tested on WoW Forever; nor the one over your own head). Only where
 -- markers are seen: in a group, or once you've marked something yourself.
--- Not in dungeons and raids: there the Friendly Plates in Dungeons and Raids
+-- Not in dungeons and raids: there the Friendly plates in dungeons and raids
 -- choices switch the same settings, and the two put back each other's
 -- saved values (tested: a delve companion's plate stayed up).
 local function MarkersHiddenOverFriends()
@@ -2735,12 +3026,42 @@ function ns.PrintPlatesDebug()
 	ns.Print(table.concat(names, ", "))
 end
 
+-- One line of a unit's debuffs for /cine debug duels: name, spell id,
+-- duration and time left (whether other players' are readable, for the
+-- duel plates' crowd-control icon).
+local function PrintDebuffs(unit)
+	local list, why = duels.Debuffs(unit)
+	if not list then
+		ns.Print("    debuffs: " .. why)
+		return
+	end
+	local now, parts = GetTime(), {}
+	local function Show(value)
+		return Known(value) and tostring(value) or "secret"
+	end
+	for _, aura in ipairs(list) do
+		local left = aura.expirationTime
+		if Known(left) and type(left) == "number" then
+			left = left > 0 and ("%.1fs left"):format(left - now) or "no end"
+		else
+			left = Show(left)
+		end
+		parts[#parts + 1] = ("%s #%s %ss %s"):format(Show(aura.name), Show(aura.spellId), Show(aura.duration), left)
+	end
+	ns.Print(("    debuffs (%s): %s"):format(C_UnitAuras and C_UnitAuras.GetAuraDataByIndex and "C_UnitAuras" or "UnitDebuff",
+		#parts > 0 and table.concat(parts, "; ") or "none"))
+	local held = duels.HeldBy(unit)
+	ns.Print("    crowd control icon: " .. (held and Show(held.name) or "none"))
+end
+
 -- For /cine debug duels: whether duels are watched (or why not), and each
--- friendly player in combat with a plate, against the others.
+-- friendly player in combat with a plate, against the others, with their
+-- debuffs (and your target's).
 function ns.PrintDuelsDebug()
 	local why = duels.NotWatchingWhy()
-	ns.Print(("duel plates: on=%s, watching=%s%s, for markers=%s, friendly plates=%s/%s, click-through=%s"):format(
+	ns.Print(("duel plates: on=%s, watching=%s%s%s, for markers=%s, friendly plates=%s/%s, click-through=%s"):format(
 		tostring(duels.on), tostring(duels.watching), why and (" (" .. why .. ")") or "",
+		duels.test and (", PRETEND DUELS for %.0fs more"):format(duels.test.stopAt - GetTime()) or "",
 		tostring(MarkersHiddenOverFriends()),
 		tostring(GetCVar("nameplateShowFriends")), tostring(GetCVar("nameplateShowFriendlyPlayers")),
 		tostring(C_NamePlate and C_NamePlate.GetNamePlateFriendlyClickThrough
@@ -2761,6 +3082,13 @@ function ns.PrintDuelsDebug()
 		ns.Print(("  %s (%s)%s, can attack: %s, shown %.2f"):format(Known(a.name) and tostring(a.name) or "?",
 			a.unit, info and (" DUELING (color " .. info.pair.color .. ")") or "",
 			#canAttack > 0 and table.concat(canAttack, ", ") or "-", duels.Level(a.plate)))
+		PrintDebuffs(a.unit)
+	end
+	-- (Your target too, so other players' debuffs can be checked without a duel.)
+	if Ask(UnitExists, "target") and not Ask(UnitIsUnit, "target", "player") then
+		local name = UnitName("target")
+		ns.Print(("target %s:"):format(Known(name) and tostring(name) or "?"))
+		PrintDebuffs("target")
 	end
 	ns.Print(("duel lines: %s / %s (the game's own; nil: English used)"):format(tostring(DUEL_WINNER),
 		tostring(DUEL_FLED)))
@@ -3269,7 +3597,7 @@ function ns.UpdatePlates(cinematic, elapsed)
 			end
 		end
 	end
-	-- The Guild Names row likewise, for the guild line under those names (PlateGuild.lua).
+	-- The Guild names row likewise, for the guild line under those names (PlateGuild.lua).
 	local guildTarget = platesForced and NameKeptHere("Guild", inCombat) and 1 or 0
 	if ns.plateGuildLevel ~= guildTarget then
 		ns.plateGuildLevel = ns.plateGuildLevel and ns.Approach(ns.plateGuildLevel, guildTarget, elapsed,
@@ -3338,7 +3666,7 @@ function Cinematic_ToggleTooltips()
 end
 
 -- The Toggle visual effects keybind: the Visual Effects page's master switch
--- (visualEffects), as its Enable visual effects box does.
+-- (visualEffects), as its Enable Visual Effects box does.
 function Cinematic_ToggleVisualEffects()
 	if not ns.db then
 		return

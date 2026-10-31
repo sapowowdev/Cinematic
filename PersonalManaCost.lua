@@ -132,7 +132,7 @@ local function Update()
 	local drawn, mute = {}, {}
 	for where, key in pairs(KEYS) do
 		local bar = bars[where]
-		if bar and db and db[key] then
+		if bar and db and db[key] and ns.PersonalResourcesOn(db) then
 			if casting and Draw(bar) then drawn[bar] = true end
 			for _, piece in ipairs(GameCost(bar)) do mute[piece] = true end
 		end

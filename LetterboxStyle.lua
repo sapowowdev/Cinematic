@@ -22,13 +22,13 @@ local EFFECT_PAGES = {
 		tip = "Where and when the bars show.", styleTip = "How the letterbox bars look and come in.",
 		intro = "Black bars at the top and bottom of the screen in CineMode, like a film's. Where and when they " ..
 			"show: the row below (nothing ticked: off). Their size and look: the Style tab. The Visual Effects " ..
-			"page's Enable page turns them off too." },
+			"page's Enable Page turns them off too." },
 	tint = { name = "Tint", page = "Tint", style = "Tint Style",
 		tip = "Where and when the tint shows.",
 		styleTip = "The color grading: a preset, the time of day and each zone's mood.",
 		intro = "The color grading over the game world in CineMode. Where and when it shows: the row below " ..
 			"(nothing ticked: off). Its preset, the time of day and the zones' tints: the Style tab. The Visual " ..
-			"Effects page's Enable page turns it off too. The UI isn't tinted." },
+			"Effects page's Enable Page turns it off too. The UI isn't tinted." },
 }
 
 -- Under the Tint tab's row: how strong it is, its drift, and the zone
@@ -129,7 +129,7 @@ function ns.CreateLetterboxStylePanel(kit)
 		if preview then preview:Refresh() end
 	end
 
-	local switch = kit.PageSwitch(content, "letterboxStyle", L["Enable page"],
+	local switch = kit.PageSwitch(content, "letterboxStyle", L["Enable Page"],
 		L["On: the bars look as this page says. Off: Cinematic's own, thin black bars sliding in with the " ..
 		"UI's fade (the preview shows that too). Each setting keeps its value for when you turn this back on."],
 		intro, Changed)

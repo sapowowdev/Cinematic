@@ -86,7 +86,7 @@ function ns.CreateShoulderCamPanel(kit)
 	title:SetPoint("TOPLEFT", 16, -16)
 	local intro = kit.PageIntro(content, title,
 		L["The camera sits over your right shoulder, with you on the left of the screen."])
-	kit.PageSwitch(content, "shoulderCam", L["Enable page"],
+	kit.PageSwitch(content, "shoulderCam", L["Enable Page"],
 		L["On: the camera moves over your right shoulder. This uses one of Blizzard's experimental " ..
 		"camera settings: the game shows its experimental camera warning (Accept keeps it working). " ..
 		"The game's Keep Character Centered option (Accessibility) stops it, so that's turned off " ..

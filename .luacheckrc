@@ -353,7 +353,7 @@ read_globals = {
 	"seterrorhandler",
 	"tinsert",
 	-- QuestTalk.lua
-	"AcceptQuest", "DeclineQuest", "CloseQuest", "CompleteQuest", "GetQuestReward", "GetQuestID",
+	"AcceptQuest", "DeclineQuest", "CloseQuest", "CompleteQuest", "GetQuestReward", "GetQuestID", "GetActiveQuestID", "QuestIsDaily", "QuestIsWeekly",
 	"GetTitleText", "GetQuestText", "GetObjectiveText", "GetProgressText", "GetRewardText", "GetGreetingText",
 	"GetNumQuestChoices", "GetNumQuestItems", "GetNumQuestRewards", "GetQuestItemInfo", "GetQuestMoneyToGet",
 	"GetRewardMoney", "GetRewardXP", "IsQuestCompletable", "GetNumActiveQuests", "GetNumAvailableQuests",

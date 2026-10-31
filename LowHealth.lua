@@ -1071,7 +1071,7 @@ local function Wanted(now)
 			return test.from + (test.to - test.from) * progress, db.lowHealthEdges, true
 		end
 	end
-	if not db.lowHealth or not db.lowHealthEdges or not RowShows(now) then
+	if not ns.Setting("lowHealth") or not db.lowHealthEdges or not RowShows(now) then
 		return 1, false
 	end
 	if ns.Flag(UnitIsDeadOrGhost("player")) then
@@ -1504,7 +1504,7 @@ end)
 -- Is it showing now? (The minimap button's Vision Helper.) Only once your
 -- health is under Starts: secret health can't tell, so it stays dark.
 function ns.VitalsVisionActive()
-	return db ~= nil and db.lowHealth and db.lowHealthEdges and belowStart and level > 0
+	return db ~= nil and ns.Setting("lowHealth") and db.lowHealthEdges and belowStart and level > 0
 end
 
 -- Your health bar faded out in CineMode (Frames.lua asks, each tick): which
@@ -1518,7 +1518,7 @@ local BAR_PREFIX = { portrait = "lowHealthPortrait", prd = "lowHealthPrd" }
 function ns.VitalsFrameAlpha(which, plate)
 	local prefix = BAR_PREFIX[which]
 	if not (db and db[prefix]) then return nil end
-	if not db.lowHealth or ns.Flag(UnitIsDeadOrGhost("player")) then return nil end
+	if not ns.Setting("lowHealth") or ns.Flag(UnitIsDeadOrGhost("player")) then return nil end
 	local share = HealthShare()
 	if share then return LevelAt(share, prefix) end
 	if plate or not SecretCurve(prefix) then return 1 end
@@ -1883,7 +1883,7 @@ function ns.CreateVitalsStylePanel(kit)
 		ns.RefreshLowHealth()
 		if preview and preview.drawer then preview.drawer.shown = nil end
 	end
-	local switch = kit.PageSwitch(content, "lowHealthStyle", L["Enable page"],
+	local switch = kit.PageSwitch(content, "lowHealthStyle", L["Enable Page"],
 		L["On: the edges look as this page says. Off: as they start out (each setting keeps its value for " ..
 		"when you turn this back on)."], intro, Changed)
 	local stack = kit.Stack(switch, "check")
@@ -2346,7 +2346,7 @@ function ns.CreateVitalsStylePanel(kit)
 		return check
 	end
 	local ours = tabbed.Begin()
-	stack:Header(content, L["Cinematic Art Assets"])
+	stack:Header(content, L["Cinematic art assets"])
 	Pick(Field("edge", "none"), L["Edge:"], function()
 		local list = {}
 		for _, name in ipairs(EDGES) do list[#list + 1] = { value = name, text = L[name] } end
@@ -2489,7 +2489,7 @@ function ns.CreateVitalsStylePanel(kit)
 	tabbed.Finish(ours)
 
 	local theirs = tabbed.Begin()
-	stack:Header(content, L["Blizzard Art Assets"])
+	stack:Header(content, L["Blizzard art assets"])
 	TickBeside(Opacity("lowHealthGameAlpha", L["The game's own screen effects (fire, frost, lightning, " ..
 		"ripples...) cut to an edge, closing in with ours, over it. Each theme has one picked to go with it. " ..
 		"Classic has only a few of them."], Theirs), "lowHealthRipple", L["Ripple wave"], L["A wave of the " ..
@@ -2634,7 +2634,7 @@ function ns.CreateVitalsVisionPanel(kit)
 	local function Changed()
 		ns.RefreshLowHealth()
 	end
-	local switch = kit.PageSwitch(content, "lowHealth", L["Enable page"],
+	local switch = kit.PageSwitch(content, "lowHealth", L["Enable Page"],
 		L["On: everything below works as ticked. Off: none of it does, and each keeps its tick for " ..
 		"when you turn this back on."], intro, Changed)
 	local stack = kit.Stack(switch, "check")
@@ -2725,7 +2725,7 @@ function ns.CreateVitalsVisionPanel(kit)
 			L["The fastest the edges lift when you're healed, as a share of all the way each second (40%: a " ..
 			"full heal takes at least 2.5 seconds). They speed up to it and slow as they settle."], Edges })
 
-	stack:Header(content, L["Damage Taken Alert"])
+	stack:Header(content, L["Damage taken alert"])
 	Boxes({ "lowHealthFlashHit", L["A big hit takes"], 2, 40, 1, "%d%%", 100,
 			L["The share of your health a hit has to take at once to count as big."], Edges },
 		{ "lowHealthFlashAdded", L["Or hits adding up to"], 5, 60, 1, "%d%%", 100,

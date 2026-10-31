@@ -1,4 +1,4 @@
--- Cinematic: the Nameplates page's Plate Parts grid. In CineMode each part of
+-- Cinematic: the Nameplates page's Plate parts grid. In CineMode each part of
 -- the game's nameplates (health bar, name, cast bar, auras...) shows as its
 -- row says, fading like the plates themselves. Outside CineMode, or with the
 -- page's master switch off, the parts are left to the game.
@@ -19,7 +19,7 @@ local PART_FRAMES = {
 	Buffs = { "AurasFrame.BuffListFrame" },
 	Debuffs = { "AurasFrame.DebuffListFrame", "AurasFrame.CrowdControlListFrame", all = true,
 		fallback = { "BuffFrame" } },
-	-- (On the plates that are up. Over the rest, the Names grid's Raid Marker
+	-- (On the plates that are up. Over the rest, the Names grid's Raid marker
 	-- row keeps one of Effects' own.)
 	RaidMarker = { "RaidTargetFrame" },
 	Classification = { "ClassificationFrame", "classificationIndicator", all = true },
