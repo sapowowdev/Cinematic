@@ -505,38 +505,77 @@ local function ControlName(control)
 	return control.debugName or control.searchLabel
 		or (control.GetObjectType and control:GetObjectType()) or "?"
 end
+-- One control as its setting is now (timing: the dev copy's, as Refresh's).
+local function RefreshControl(control, timing)
+	local started = timing and debugprofilestop()
+	local switch = control.SetEnabled and SwitchOf(control)
+	if switch and switch.check ~= control then
+		-- (Enabled first, so its own greying decides; then off with the switch.)
+		local label = control.GetObjectType and control:GetObjectType() == "CheckButton"
+			and (control.Text or control.text)
+		if label then
+			control.baseFont = control.baseFont or label:GetFontObject() or "GameFontHighlight"
+			SetLabelFont(label, control.baseFont)
+		end
+		control:SetEnabled(true)
+		control:Refresh()
+		local master = ns.PageSwitchOf(switch.key)
+		if not ns.GetDB()[switch.key] or (master and ns.GetDB()[master] == false) then
+			control:SetEnabled(false)
+			if label then SetLabelFont(label, "GameFontDisable") end
+		end
+	else
+		-- (A page's switch greys with the one it's under: a vision's with Enable visions.)
+		local master = switch and ns.PageSwitchOf(switch.key)
+		local label = master and (control.Text or control.text)
+		if label then
+			control.baseFont = control.baseFont or label:GetFontObject() or "GameFontHighlight"
+			SetLabelFont(label, control.baseFont)
+			control:SetEnabled(true)
+		end
+		control:Refresh()
+		if master and ns.GetDB()[master] == false then
+			control:SetEnabled(false)
+			if label then SetLabelFont(label, "GameFontDisable") end
+		end
+	end
+	if timing then
+		local ms = debugprofilestop() - started
+		if ms > 1 then
+			local slowest = timing.slowest
+			slowest[#slowest + 1] = { ms, ControlName(control) }
+			table.sort(slowest, function(a, b) return a[1] > b[1] end)
+			slowest[6] = nil
+		end
+	end
+end
+
+-- The settings page a control is on (RegisterSubpage marks them), or nil:
+-- not on one (the welcome window's, a popup's).
+local function PageOf(control)
+	if control.onSettingsPage then return control.onSettingsPage end
+	local frame = control.GetParent and control:GetParent()
+	while frame and not frame.pageWatch do
+		frame = frame:GetParent()
+	end
+	control.onSettingsPage = frame -- (not kept when nil: its page may not be registered yet)
+	return frame
+end
+
+-- Every control as its setting is now. Only the pages on screen: a page out
+-- of sight is marked stale and refreshed as it comes into view (its
+-- pageWatch), as a switch of profile refreshing them all took ~130 ms.
 local function Refresh()
 	if not ns.GetDB() then return end
 	local timing = ns.isDev and { count = #controls, slowest = {} }
 	ns.pageTiming = timing
 	for _, control in ipairs(controls) do
-		local started = timing and debugprofilestop()
-		local switch = control.SetEnabled and SwitchOf(control)
-		if switch and switch.check ~= control then
-			-- (Enabled first, so its own greying decides; then off with the switch.)
-			local label = control.GetObjectType and control:GetObjectType() == "CheckButton"
-				and (control.Text or control.text)
-			if label then
-				control.baseFont = control.baseFont or label:GetFontObject() or "GameFontHighlight"
-				SetLabelFont(label, control.baseFont)
-			end
-			control:SetEnabled(true)
-			control:Refresh()
-			if not ns.GetDB()[switch.key] then
-				control:SetEnabled(false)
-				if label then SetLabelFont(label, "GameFontDisable") end
-			end
+		local page = PageOf(control)
+		if page and not page:IsVisible() then
+			page.stale = true
 		else
-			control:Refresh()
-		end
-		if timing then
-			local ms = debugprofilestop() - started
-			if ms > 1 then
-				local slowest = timing.slowest
-				slowest[#slowest + 1] = { ms, ControlName(control) }
-				table.sort(slowest, function(a, b) return a[1] > b[1] end)
-				slowest[6] = nil
-			end
+			if page then page.stale = nil end -- (refreshed now: its pageWatch needn't again)
+			RefreshControl(control, timing)
 		end
 	end
 end
@@ -692,24 +731,32 @@ local SCROLLBAR_WIDTH = 26
 local RESET_TO_NIL = { hoverGroups = true }
 -- More for a page's reset to do: [page content] = fn, after its settings are back.
 local resetHooks = {}
+local function DeepCopy(source)
+	if type(source) ~= "table" then return source end
+	local result = {}
+	for k, v in pairs(source) do result[k] = DeepCopy(v) end
+	return result
+end
 -- only: just these settings of the page (a part's own Reset), key -> true.
 local function ResetPage(content, only)
 	local db = ns.GetDB()
-	local base = ns.ProfileBase() -- (the active profile's values, not just the defaults)
+	-- (The active profile's values, not just the defaults; its reset point's
+	-- if the player saved one.)
+	local base = ns.ResetBase()
+	local point = db.profileResetPoints and db.profileResetPoints[ns.ActiveProfile()]
 	for key in pairs(pageKeys[content] or {}) do
 		local default = base[key]
 		local rows = pageRows[content] and pageRows[content][key]
 		if only and not only[key] then -- luacheck: ignore 542 (not this part's)
-		elseif RESET_TO_NIL[key] then
+		elseif RESET_TO_NIL[key] and not (point and point[key]) then
 			db[key] = nil
 		elseif type(default) == "table" then
-			-- A built-in profile's own list (copied: the profile's base stays as it
-			-- is), just this page's rows of it when pages share it.
+			-- A built-in profile's own list or the reset point's (copied: those
+			-- stay as they are), just this page's rows of it when pages share it.
 			if rows and type(db[key]) == "table" then
-				for k in pairs(rows) do db[key][k] = default[k] end
+				for k in pairs(rows) do db[key][k] = DeepCopy(default[k]) end
 			else
-				db[key] = {}
-				for k, v in pairs(default) do db[key][k] = v end
+				db[key] = DeepCopy(default)
 			end
 		elseif type(db[key]) == "table" and default == nil then
 			for k in pairs(db[key]) do
@@ -1899,6 +1946,16 @@ local function RegisterSubpage(subpanel, name, shown)
 	subpanel.name = shown or L[name]
 	subpanel.pageName = name -- (ns.PageSettings)
 	subpanel.parent = "Cinematic"
+	-- (Its controls refreshed as it comes into view if a Refresh passed it by
+	-- while hidden. A child of its own, so the page's OnShow stays the page's.)
+	local watch = CreateFrame("Frame", nil, subpanel)
+	watch:SetScript("OnShow", function()
+		if subpanel.stale then
+			subpanel.stale = nil
+			Refresh()
+		end
+	end)
+	subpanel.pageWatch = watch
 	subpages[name] = subpanel
 	local page = { name = shown or L[name], key = name, canvas = subpanel }
 	searchPages[#searchPages + 1] = page
@@ -12168,6 +12225,28 @@ StaticPopupDialogs.CINEMATIC_PROFILE_RESET = {
 	end,
 	timeout = 0, whileDead = true, hideOnEscape = true,
 }
+-- (A profile with a reset point of the player's goes back to that: Profiles.lua.)
+StaticPopupDialogs.CINEMATIC_PROFILE_RESET_POINT = {
+	text = L["Put the profile %s back to how you last saved it? Changes you've made since then go."],
+	button1 = YES, button2 = NO,
+	OnAccept = function()
+		ns.ResetSettings()
+		Refresh()
+	end,
+	timeout = 0, whileDead = true, hideOnEscape = true,
+}
+-- Save: the profile as it is now becomes what Reset goes back to (the one
+-- it replaces kept among the backups: Profiles.lua). No question asked.
+local function SaveResetPoint(name)
+	ns.SaveResetPoint(name)
+	ns.Print(L["profile %s saved: Reset puts it back to this"]:format(ns.ProfileLabel(name)))
+	Refresh()
+end
+-- Reset profile's question: back to the reset point, or to how it started.
+local function AskResetProfile()
+	local label = ns.ProfileLabel(ns.ActiveProfile())
+	StaticPopup_Show(ns.HasResetPoint() and "CINEMATIC_PROFILE_RESET_POINT" or "CINEMATIC_PROFILE_RESET", label)
+end
 -- (Keep backups: your own profiles wait among the deleted ones, Backups.lua.)
 StaticPopupDialogs.CINEMATIC_ADDON_RESET = {
 	text = L["Reset Cinematic? Every profile and setting goes, your own profiles too, and the UI reloads. " ..
@@ -12379,7 +12458,7 @@ local function CreateProfilesPanel()
 
 	-- The last card: a new profile of your own, from the settings you have now.
 	local newTip = PROFILE_MENUS and L["A profile of your own, a copy of the active one as you have it now, named " ..
-		"after it. To copy another profile, right-click it, then New profile from it."]
+		"after it. To copy another profile, right-click it, then Copy Profile."]
 		or L["A profile of your own, a copy of the active one as you have it now, named after it. " ..
 		"To copy another profile, switch to it first."]
 	local newCard = Card()
@@ -12432,7 +12511,7 @@ local function CreateProfilesPanel()
 				if ns.StopVitalsFlash then ns.StopVitalsFlash() end
 				local level = LEVELS[self.name]
 				if level and level.flash == "vitals" and ns.FlashVitals then ns.FlashVitals(2) end
-				Refresh()
+				-- (No Refresh here: switching refreshed every page already.)
 			elseif not ns.IsBuiltinProfile(self.name) then
 				picker:Open(self, self.name, ns.ProfileIcon(self.name))
 			end
@@ -12478,7 +12557,7 @@ local function CreateProfilesPanel()
 	-- card's right-click menu (ProfileMenu below), for that profile; clients
 	-- without the game's menus have buttons for the active one instead.
 	local backups = Button(buttons, L["Backups"], 90, L["Copies of your profiles from earlier days and from " ..
-		"just before Delete or Reset profile, to bring one back as a new profile. Deleted profiles too."], function()
+		"just before Delete or Reset, to bring one back as a new profile. Deleted profiles too."], function()
 		ns.ShowBackups()
 	end)
 	backups:SetPoint("LEFT", buttons, "LEFT", 0, 0)
@@ -12487,7 +12566,7 @@ local function CreateProfilesPanel()
 		ns.ShowImport()
 	end)
 	import:SetPoint("LEFT", backups, "RIGHT", 8, 0)
-	local rename, note, delete, reset, export
+	local rename, note, delete, reset, export, savePoint
 	if not PROFILE_MENUS then
 		rename = Button(buttons, L["Rename"], 90, L["Rename the active profile (your own ones only)."], function()
 			local name = ns.ActiveProfile()
@@ -12506,16 +12585,19 @@ local function CreateProfilesPanel()
 			StaticPopup_Show("CINEMATIC_PROFILE_DELETE", name, nil, name)
 		end)
 		delete:SetPoint("LEFT", note, "RIGHT", 8, 0)
-		reset = Button(buttons, L["Reset profile"], 100, L["Put the active built-in profile back to its own values (your own " ..
-			"profiles keep your changes as you go)."], function()
-			StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ProfileLabel(ns.ActiveProfile()))
-		end)
+		reset = Button(buttons, L["Reset"], 100, L["Put the active profile back to how you last saved it, or a " ..
+			"built-in one back to its own values (your own profiles keep your changes as you go)."], AskResetProfile)
 		reset:SetPoint("TOPLEFT", backups, "BOTTOMLEFT", 0, -8)
 		export = Button(buttons, L["Export"], 84, L["The active profile as a line of text to copy and paste " ..
 			"wherever your friends will see it, so they can import it (your own ones only: everyone has the built-in ones)."], function()
 			ns.ShowExport()
 		end)
 		export:SetPoint("LEFT", reset, "RIGHT", 8, 0)
+		savePoint = Button(buttons, L["Save"], 84, L["Keep the active profile as it is now: Reset and each " ..
+			"page's Reset put it back to this instead of Cinematic's own settings."], function()
+			SaveResetPoint(ns.ActiveProfile())
+		end)
+		savePoint:SetPoint("LEFT", export, "RIGHT", 8, 0)
 	end
 	-- Right-clicking a card: what's done to a profile, for that one.
 	function ProfileMenu(cell)
@@ -12528,7 +12610,7 @@ local function CreateProfilesPanel()
 				root:CreateButton(L["Switch to it"], function() cell:Click("LeftButton") end)
 			end
 			-- (A copy of that one: switched to first, as New profile copies the active one.)
-			root:CreateButton(L["New profile from it"], function()
+			root:CreateButton(L["Copy Profile"], function()
 				picker:Hide()
 				if name ~= ns.ActiveProfile() then ns.SetProfile(name) end
 				NewFromActive()
@@ -12538,11 +12620,12 @@ local function CreateProfilesPanel()
 				root:CreateButton(L["Description"], function() StaticPopup_Show("CINEMATIC_PROFILE_NOTE", nil, nil, name) end)
 				root:CreateButton(L["Change icon"], function() picker:Open(cell, name, ns.ProfileIcon(name)) end)
 				root:CreateButton(L["Export"], function() ns.ShowExport(name) end)
-			elseif name == active then
-				root:CreateButton(L["Reset profile"], function()
-					StaticPopup_Show("CINEMATIC_PROFILE_RESET", ns.ProfileLabel(name))
-				end)
 			end
+			if name == active and (not own or ns.HasResetPoint(name)) then
+				root:CreateButton(L["Reset"], AskResetProfile)
+			end
+			-- (Reset points: what Reset goes back to, the player's own.)
+			root:CreateButton(L["Save"], function() SaveResetPoint(name) end)
 			root:CreateButton(L["Backups"], function() ns.ShowBackups(name) end)
 			if own then
 				root:CreateDivider()
@@ -12617,8 +12700,9 @@ local function CreateProfilesPanel()
 			rename:SetEnabled(own)
 			note:SetEnabled(own)
 			delete:SetEnabled(own)
-			reset:SetEnabled(active ~= nil and not own)
+			reset:SetEnabled(active ~= nil and (not own or ns.HasResetPoint(active)))
 			export:SetEnabled(own)
+			savePoint:SetEnabled(active ~= nil)
 		end
 		FitContentHeight(content)
 	end
@@ -12627,8 +12711,7 @@ local function CreateProfilesPanel()
 	end }
 
 	canvas:SetScript("OnShow", function()
-		Refresh()
-		Layout()
+		Refresh() -- (Layout too: its control above, the canvas shown now)
 		C_Timer.After(0, function() FitContentHeight(content) end)
 	end)
 	canvas:Hide()
@@ -13367,7 +13450,7 @@ ns.OnLanguage(function()
 	ns.TranslateFields(THIRD_PARTY_COLUMNS, 1) -- (the rest are FRAME_COLUMNS' own)
 	ns.TranslateFields(KEYBINDS, "label", "tip")
 	for _, popup in ipairs({ "CINEMATIC_RESET_PAGE", "CINEMATIC_RESET_PART", "CINEMATIC_PROFILE_RENAME",
-		"CINEMATIC_PROFILE_NOTE", "CINEMATIC_PROFILE_DELETE", "CINEMATIC_PROFILE_RESET",
+		"CINEMATIC_PROFILE_NOTE", "CINEMATIC_PROFILE_DELETE", "CINEMATIC_PROFILE_RESET", "CINEMATIC_PROFILE_RESET_POINT",
 		"CINEMATIC_ADDON_RESET" }) do
 		StaticPopupDialogs[popup].text = L[StaticPopupDialogs[popup].text]
 	end

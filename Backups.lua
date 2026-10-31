@@ -1,7 +1,7 @@
 -- Backups of profiles: a few copies of each kept in the saved settings, to
 -- go back to. A copy is taken once a day at login when a profile of your own
 -- has changed (db.profileBackupsDaily, on unless unticked), and always just
--- before Delete or Reset profile. db.profileBackups[name] is a profile's,
+-- before Delete or Reset (and on Save, the saved version it replaces). db.profileBackups[name] is a profile's,
 -- newest first, at most db.profileBackupsKeep of them. Each is stored as
 -- sharing stores a profile (ns.ProfileForSharing: changes from the
 -- defaults), so one from an older version still restores. Restoring adds it
@@ -66,13 +66,14 @@ local function TrimAll()
 end
 
 -- A copy of the profile's settings as they are now (why: "daily", "reset"
--- or "delete"). None when they're the same as its newest.
-function ns.BackupProfile(name, why)
+-- or "delete"), or of the given ones (as ns.ProfileForSharing has them: "save",
+-- the saved version Save replaces). None when they're the same as its newest.
+function ns.BackupProfile(name, why, given)
 	local db = ns.db
 	if not (db and db.profiles and name and ns.ProfileExists(name)) then return end
 	db.profileBackups = db.profileBackups or {}
 	local list = db.profileBackups[name] or {}
-	local settings = CopyTable(ns.ProfileForSharing(name))
+	local settings = CopyTable(given or ns.ProfileForSharing(name))
 	if list[1] and Same(list[1].settings, settings) then return end
 	table.insert(list, 1, { time = time(), version = Version(), why = why, settings = settings,
 		note = db.profileNotes and db.profileNotes[name], icon = ns.ProfileIcon(name) })
@@ -327,7 +328,7 @@ local function CreateWindow()
 	always:SetPoint("BOTTOMLEFT", 18, 16)
 	always:SetJustifyH("LEFT")
 	always:SetTextColor(0.6, 0.6, 0.6)
-	always:SetText(L["Always backed up just before Delete and Reset profile."])
+	always:SetText(L["Always backed up just before Delete and Reset, and the saved version on Save."])
 end
 
 local function GetRow(i)
@@ -386,7 +387,7 @@ function Fill()
 			end
 			for i, backup in ipairs(backups) do
 				local tag = backup.why == "reset" and L["Before reset"] or backup.why == "delete" and L["Before delete"]
-					or L["Daily"]
+					or backup.why == "save" and L["Before save"] or L["Daily"]
 				Next(When(backup.time), L["Version %s, %d settings changed"]:format(backup.version or "?",
 					Count(backup.settings or {})), tag, backup.why == "daily" and { 0.6, 0.6, 0.6 } or { 1, 0.65, 0.2 },
 					function()
@@ -403,9 +404,9 @@ function Fill()
 	if not any then
 		window.empty:SetText(not only
 			and L["None yet. Your own profiles are backed up the first day they change, and just before Delete; " ..
-				"built-in ones just before Reset profile."]
+				"built-in ones just before Reset."]
 			or ns.IsBuiltinProfile(only)
-			and L["None yet. A built-in profile is backed up just before Reset profile."]
+			and L["None yet. A built-in profile is backed up just before Reset."]
 			or L["None yet. One's taken the first day this profile changes, and just before Delete."])
 		window.empty:Show()
 		y = y + window.empty:GetStringHeight() + 14

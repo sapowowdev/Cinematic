@@ -191,6 +191,7 @@ end
 -- next wanted. The live settings stay as they are.
 function ns.ForgetProfileBases()
 	wipe(baseCache)
+	if ns.ForgetPartValues then ns.ForgetPartValues() end
 end
 
 -- The settings of rows added on the Style hub's Nameplates page in a
@@ -362,7 +363,9 @@ switchFrame:SetScript("OnEvent", function(self, event, name)
 	ApplyProfileSwitches()
 end)
 
--- Everything that reads settings once picks up the new ones.
+-- Everything that reads settings once picks up the new ones. (optionsMs:
+-- how long the settings pages took to refresh, for SetProfile's log line.)
+local optionsMs = 0
 local function SettingsChanged()
 	ns.letterboxDirty = true
 	if ns.RestartTimers then ns.RestartTimers() end
@@ -373,7 +376,9 @@ local function SettingsChanged()
 	if ns.SwitchProfileLayout then ns.SwitchProfileLayout() end
 	if ns.ApplyShoulderCam then ns.ApplyShoulderCam() end
 	ApplyProfileSwitches()
+	local started = debugprofilestop()
 	if ns.RefreshOptions then ns.RefreshOptions() end
+	optionsMs = debugprofilestop() - started
 end
 
 -- Keeps the live settings in the active profile (on switching and logout).
@@ -419,11 +424,16 @@ function ns.SetProfile(name)
 		if first then SettingsChanged() end -- (the first pick: Cinematic starts)
 		return
 	end
+	-- (How long it took, in the log: the settings pages' refresh is most of it.)
+	local started = debugprofilestop()
 	ns.SaveProfile()
 	Choose(name)
 	Load(name)
+	local loaded = debugprofilestop()
 	SettingsChanged()
-	ns.Log("state", "profile: " .. name)
+	local applied = debugprofilestop() - loaded
+	ns.Log("state", ("profile: %s (%.0f ms: load %.0f, apply %.0f, settings pages %.0f)"):format(name,
+		debugprofilestop() - started, loaded - started, applied - optionsMs, optionsMs))
 end
 
 -- One choice on its own over the live settings (the welcome window's
@@ -432,17 +442,33 @@ end
 -- lists) are set as the choice has them, the rest left as they are.
 do
 	-- The settings with that choice: the defaults, with its modules on top.
+	-- Kept (by slot and part): matching every choice on the Profiles page's
+	-- Customize took ~6 ms each. Not to be changed by whoever asks for it.
+	local partCache, slotKeys = {}, {}
 	local function PartValues(slot, part)
+		local id = slot .. "|" .. tostring(part)
+		if partCache[id] then return partCache[id] end
 		local values = {}
 		for k, v in pairs(ns.DEFAULTS) do values[k] = v end
-		return ns.ApplyModules(ns.ChoiceModules(slot, part, ns.CLIENT) or {}, values, ns.CLIENT)
+		values = ns.ApplyModules(ns.ChoiceModules(slot, part, ns.CLIENT) or {}, values, ns.CLIENT)
+		partCache[id] = values
+		return values
 	end
+	-- (After a built-in's modules change: ns.ForgetProfileBases.)
+	ns.ForgetPartValues = function() wipe(partCache) end
 	-- fn(key, row, value) for each of the slot's settings and list rows.
 	local function EachInSlot(slot, values, fn)
-		for k in pairs(ns.DEFAULTS) do
-			if IsProfileKey(k) and type(values[k]) ~= "table" and ns.SettingSlot(k) == slot then
-				fn(k, nil, values[k])
+		-- (The slot's settings, found once.)
+		local keys = slotKeys[slot]
+		if not keys then
+			keys = {}
+			for k in pairs(ns.DEFAULTS) do
+				if IsProfileKey(k) and ns.SettingSlot(k) == slot then keys[#keys + 1] = k end
 			end
+			slotKeys[slot] = keys
+		end
+		for _, k in ipairs(keys) do
+			if type(values[k]) ~= "table" then fn(k, nil, values[k]) end
 		end
 		-- (The Nameplates page's added rows' settings: the choice's, and the
 		-- live ones it hasn't got, which go.)
@@ -482,6 +508,29 @@ do
 			if type(value) ~= "table" and live ~= value then same = false end
 		end)
 		return same
+	end
+
+	-- Worked out ahead (ns.InitProfiles): every choice's settings, one a
+	-- moment, so the Profiles page's Customize is quick the first time too.
+	-- (Not in fights: it waits.)
+	local WARM_DELAY, WARM_STEP = 15, 0.1 -- seconds after login; between choices
+	function ns.WarmPartValues()
+		local todo = {}
+		for _, slot in ipairs(ns.PROFILE_SLOTS or {}) do
+			for _, choice in ipairs(ns.SlotChoices(slot.key) or {}) do
+				todo[#todo + 1] = { slot.key, choice.part }
+			end
+		end
+		local i = 0
+		local function Step()
+			if InCombatLockdown() then return C_Timer.After(1, Step) end
+			i = i + 1
+			local item = todo[i]
+			if not item then return end
+			EachInSlot(item[1], PartValues(item[1], item[2]), function() end)
+			C_Timer.After(WARM_STEP, Step)
+		end
+		C_Timer.After(WARM_DELAY, Step)
 	end
 
 	-- On a built-in, a profile of your own (named ownName, numbered if
@@ -614,6 +663,8 @@ function ns.RenameProfile(old, new)
 	ns.db.profiles[new], ns.db.profiles[old] = ns.db.profiles[old], nil
 	ns.db.profileNotes[new], ns.db.profileNotes[old] = ns.db.profileNotes[old], nil
 	ns.db.profileIcons[new], ns.db.profileIcons[old] = ns.db.profileIcons[old], nil
+	local points = ns.db.profileResetPoints
+	if points then points[new], points[old] = points[old], nil end
 	-- (Other characters with it as their own go back to the account's next login.)
 	for _, holder in ipairs({ ns.db, ns.chardb }) do
 		if holder.profile == old then holder.profile = new end
@@ -631,14 +682,59 @@ function ns.DeleteProfile(name)
 	ns.db.profiles[name] = nil
 	ns.db.profileNotes[name] = nil
 	ns.db.profileIcons[name] = nil
+	ns.ForgetResetPoint(name)
 	return true
 end
 
--- Back to the profile's base: a built-in's own values, or the defaults.
+local AgainstDefaults -- (below)
+
+-- Reset points: a profile's settings as the player saved them, for Reset
+-- profile and each page's Reset to go back to instead of the profile's
+-- base. db.profileResetPoints[name] is stored as the profile is (changes
+-- from its base, and its lists), so settings it doesn't change still follow
+-- a built-in's values as they're updated.
+function ns.HasResetPoint(name)
+	local points = ns.db and ns.db.profileResetPoints
+	return points ~= nil and points[name or ns.ActiveProfile()] ~= nil
+end
+
+function ns.SaveResetPoint(name)
+	name = name or ns.ActiveProfile()
+	if name == ns.ActiveProfile() then ns.SaveProfile() end
+	ns.db.profileResetPoints = ns.db.profileResetPoints or {}
+	-- (The one it replaces kept among the backups, to go back to: Backups.lua.)
+	local old = ns.db.profileResetPoints[name]
+	if old and ns.BackupProfile then
+		ns.BackupProfile(name, "save", AgainstDefaults(old, ns.ProfileBase(name)))
+	end
+	ns.db.profileResetPoints[name] = CopyTable(ns.db.profiles[name] or {})
+	ns.Log("state", "reset point saved: " .. name)
+end
+
+function ns.ForgetResetPoint(name)
+	if ns.db.profileResetPoints then ns.db.profileResetPoints[name or ns.ActiveProfile()] = nil end
+end
+
+-- What a Reset goes back to: the profile's base, with its reset point on top.
+function ns.ResetBase(name)
+	name = name or ns.ActiveProfile()
+	local base = ns.ProfileBase(name)
+	local point = ns.db.profileResetPoints and ns.db.profileResetPoints[name]
+	if not point then return base end
+	local values = {}
+	for k, v in pairs(base) do values[k] = v end
+	for k, v in pairs(point) do values[k] = v end
+	return values
+end
+
+-- Back to the profile's reset point if it has one, else its base: a
+-- built-in's own values, or the defaults.
 function ns.ResetProfile()
-	if ns.BackupProfile then ns.BackupProfile(ns.ActiveProfile(), "reset") end -- (Backups.lua)
-	ns.db.profiles[ns.ActiveProfile()] = nil
-	Load(ns.ActiveProfile())
+	local name = ns.ActiveProfile()
+	if ns.BackupProfile then ns.BackupProfile(name, "reset") end -- (Backups.lua)
+	local point = ns.db.profileResetPoints and ns.db.profileResetPoints[name]
+	ns.db.profiles[name] = point and CopyTable(point) or nil
+	Load(name)
 	SettingsChanged()
 end
 
@@ -695,7 +791,7 @@ end
 
 -- A profile's saved changes over its base, as changes from the defaults
 -- (as your own profiles are stored), and its lists.
-local function AgainstDefaults(saved, base)
+function AgainstDefaults(saved, base)
 	local shared = {}
 	for k, default in pairs(ns.DEFAULTS) do
 		if IsProfileKey(k) then
@@ -860,4 +956,5 @@ function ns.InitProfiles()
 		-- like those groups, aren't in the defaults the live settings start from.)
 		Load(wanted)
 	end
+	ns.WarmPartValues()
 end
