@@ -130,7 +130,8 @@ local function ReadValue(text, pos, depth)
 	elseif tag == "n" then
 		local digits, after = text:match("^([%d%.eE%+%-]+);()", pos + 1)
 		local number = tonumber(digits)
-		if not number then error("number") end
+		-- (Never written out, as Writable has it: an infinite one is a broken string.)
+		if not number or not Writable(number) then error("number") end
 		return number, after
 	elseif tag == "s" then
 		local length, start = text:match("^(%d+):()", pos + 1)

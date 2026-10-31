@@ -381,7 +381,7 @@ ns.PROFILE_MODULES = {
 			set("chatSpeechBehind", false)
 			set("bubblesOffTop", false)
 		end },
-	{ key = "no-visions", name = "No visions", scope = { "Heal Vision", "Quest Vision", "Vision", "Roll Vision",
+	{ key = "no-visions", name = "No visions", scope = { "Heal Vision", "Quest Vision", "Vision", "Duel Vision", "Roll Vision",
 		"Vitals Vision", "Combat Vision" },
 		tip = "Every vision off: Heal, Quest, Duel, Roll, Vitals and Combat Vision.",
 		apply = function(set)

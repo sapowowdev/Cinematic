@@ -134,10 +134,14 @@ local LOOT_ROLL_FORMATS = {
 }
 local lootRollPatterns
 
-local function FormatToPattern(format)
+-- (capture: the first %s slot captured, for the name it holds.)
+local function FormatToPattern(format, capture)
 	-- Mark the %s / %d / %1$s slots, escape the rest, then fill the slots in.
 	local pattern = format:gsub("%%%d*%$?([sd])", "\1%1")
 	pattern = pattern:gsub("[%^%$%(%)%.%[%]%*%+%-%?%%]", "%%%0")
+	if capture then
+		pattern = pattern:gsub("\1s", "(.-)", 1)
+	end
 	pattern = pattern:gsub("\1s", ".+"):gsub("\1d", "%%d+")
 	return "^" .. pattern .. "$"
 end

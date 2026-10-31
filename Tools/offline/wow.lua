@@ -183,6 +183,11 @@ function M.Install(client)
 		UnitExists = function() return false end,
 		GetBuildInfo = function() return client == "retail" and "11.2.0" or "1.15.7", "0", "", client == "retail" and 110200 or 11507 end,
 		GetRealmName = function() return "Realm" end,
+		GetNumClasses = function() return 2 end,
+		GetClassInfo = function(id)
+			if id == 1 then return "Warrior", "WARRIOR", 1 end
+			if id == 2 then return "Mage", "MAGE", 8 end
+		end,
 		GetAddOnMetadata = function() return nil end,
 		IsAddOnLoaded = function() return false end,
 		hooksecurefunc = function() end,
