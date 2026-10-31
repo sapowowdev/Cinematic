@@ -2320,6 +2320,12 @@ local tickTables = {
 	hovered = {}, triggered = {}, pinged = {}, mouseRows = {}, mouseGroups = {}, events = {},
 	combatShown = {}, placeLists = {}, auraOnly = {}, cooldownBarUp = {},
 	partsHovered = {}, partsHeldUntil = {}, deathKept = {},
+	-- ("extra:<name>", an added frame's row key, made once for each name.)
+	extraKey = setmetatable({}, { __index = function(keys, name)
+		local key = "extra:" .. name
+		keys[name] = key
+		return key
+	end }),
 }
 
 -- "group:<group>", a group's key in the shown lists, made once for each
@@ -2805,9 +2811,11 @@ do
 	end
 
 	-- The facts for where you are now (inCombat: as the In combat column has
-	-- it). Worked out once a frame (the nameplates ask for each kind).
+	-- it). Worked out once a frame (the nameplates ask for each kind); only
+	-- combat and nocombat go by inCombat, set again on each call (callers
+	-- asking both ways in one frame had it all worked out again each time).
 	local facts = {}
-	local factsAt, factsCombat
+	local factsAt
 	function ns.RuleFacts(inCombat)
 		local now = GetTime()
 		inCombat = inCombat and true or false
@@ -2825,10 +2833,12 @@ do
 		facts.tipenemy, facts.tipfriendly = tip and tip.tipenemy or false, tip and tip.tipfriendly or false
 		facts.tipgather, facts.tipquest = tip and tip.tipgather or false, tip and tip.tipquest or false
 		facts.tipother = tip and tip.tipother or false
-		if factsAt == now and factsCombat == inCombat then
+		if factsAt == now then
+			facts.combat = inCombat
+			facts.nocombat = not inCombat and not facts.calm
 			return facts
 		end
-		factsAt, factsCombat = now, inCombat
+		factsAt = now
 		local place = ns.GetPlaceType()
 		local hasTarget = ns.HasTarget()
 		local enemy = hasTarget and ns.IsEnemyUnit("target") and not ns.Flag(UnitIsDeadOrGhost("target"))
@@ -3123,7 +3133,7 @@ do
 		end
 		-- Added frames, by their rows on the Advanced Frames page.
 		for name in pairs(ns.db.extraFrames) do
-			local key = "extra:" .. name
+			local key = tickTables.extraKey[name]
 			local ticked = ns.RuleShows(key, facts)
 			if ticked == nil then
 				ticked = KeptHere(placeLists, key) or (isOn and isOn(key))
@@ -6864,8 +6874,9 @@ do
 
 	-- Each tick: the bars as the setting (and the page's master switch) say.
 	function ns.UpdateSwingOrder()
-		local swap = ns.db.handleSwing and ns.db["swingRangedOnTop" .. select(2, UnitClass("player"))]
-			and true or false
+		-- (The class's setting name made once: a new string each tick was garbage.)
+		order.key = order.key or "swingRangedOnTop" .. select(2, UnitClass("player"))
+		local swap = ns.db.handleSwing and ns.db[order.key] and true or false
 		if order.swapped ~= swap then
 			-- (Not swapped and the game's anchors not taken yet: nothing to put back.)
 			if swap or next(order.game) then

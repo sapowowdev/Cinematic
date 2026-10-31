@@ -1490,6 +1490,17 @@ do
 		painting = false
 	end
 
+	-- A frame's textures, from its GetRegions (no table: this runs each frame).
+	local function PaintRegions(unitFrame, child, ...)
+		if not child then
+			return
+		end
+		if child:GetObjectType() == "Texture" then
+			Paint(child, "GetVertexColor", "SetVertexColor", unitFrame, "border")
+		end
+		return PaintRegions(unitFrame, ...)
+	end
+
 	-- The border's textures (Forever's is a frame of them round the bar).
 	local function PaintBorder(unitFrame)
 		for _, field in ipairs(BORDER_FIELDS) do
@@ -1498,11 +1509,7 @@ do
 				if region:GetObjectType() == "Texture" then
 					Paint(region, "GetVertexColor", "SetVertexColor", unitFrame, "border")
 				elseif region.GetRegions then
-					for _, child in ipairs({ region:GetRegions() }) do
-						if child:GetObjectType() == "Texture" then
-							Paint(child, "GetVertexColor", "SetVertexColor", unitFrame, "border")
-						end
-					end
+					PaintRegions(unitFrame, region:GetRegions())
 				end
 			end
 		end
@@ -2333,6 +2340,7 @@ end
 -- A plate given a new unit takes the parts' alphas (or lets go of its last
 -- unit's), and its class and role icons. One whose player changes sides (a
 -- duel starting) swaps icon rows; roles are read again when the group changes.
+local SELF_UNITS = { player = true, target = true, focus = true, mouseover = true }
 local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 watcher:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
@@ -2371,9 +2379,12 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 		if (levels.TargetArrow or 0) > 0 and AggroRowsOn() and type(unit) == "string" then
 			if unit:find("^nameplate") then
 				RefreshTargetArrow(C_NamePlate.GetNamePlateForUnit(unit))
-			else
+			elseif SELF_UNITS[unit] then
 				RefreshMarks()
 			end
+			-- (A group member's own: not every plate for each, dozens a second
+			-- in a raid. Aggro goes by the enemy's target, its plate's event,
+			-- and the When check's twice a second catches the rest.)
 		end
 		return
 	end

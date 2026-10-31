@@ -696,6 +696,7 @@ function ns.HealVisionActive()
 	return next(members) ~= nil
 end
 
+local applyPending = false
 local watcher = CreateFrame("Frame")
 for _, event in ipairs({ "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_IN_RANGE_UPDATE",
 	"UNIT_AURA", "PLAYER_SPECIALIZATION_CHANGED", "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA",
@@ -711,8 +712,15 @@ watcher:SetScript("OnEvent", function(_, event, unit)
 		UpdateAll()
 	else
 		-- (After the game has set its frames up for the new group, or place:
-		-- the Vision grid may say otherwise there.)
-		C_Timer.After(0.5, ns.ApplyHealVisionFrames)
+		-- the Vision grid may say otherwise there. Once for a burst: joining
+		-- a raid sends dozens.)
+		if not applyPending then
+			applyPending = true
+			C_Timer.After(0.5, function()
+				applyPending = false
+				ns.ApplyHealVisionFrames()
+			end)
+		end
 	end
 end)
 watcher:SetScript("OnUpdate", function(_, elapsed)
