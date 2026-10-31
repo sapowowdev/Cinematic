@@ -1514,6 +1514,7 @@ do
 		}, pages = {
 			{ "Cameras", "Interface\\Icons\\INV_Misc_Spyglass_03", label = "General" },
 			{ "Camera Settings", "Interface\\Icons\\Trade_Engineering" }, -- (an icon per camera instead)
+			{ "My Shots", "Interface\\Icons\\INV_Misc_Spyglass_02" }, -- (ShotsPage.lua)
 			{ "Shoulder Cam", "Interface\\Icons\\INV_Shoulder_02", dev = true }, -- (ShoulderCam.lua)
 		} },
 		-- (label: the name on its icon, when the page is registered under another)
@@ -4639,6 +4640,7 @@ local function CreateCamerasPanel()
 	local WHEN_CHIP = { 0.08, 0.2, 0.35, 0.55, 0.8, 1 }
 	local NEVER_CHIP = { 0.35, 0.25, 0.05, 1, 0.8, 0.35 }
 	local PLAIN_CHIP = { 0.18, 0.18, 0.18, 0.8, 0.8, 0.8 }
+	local MINE_CHIP = { 0.18, 0.29, 0.11, 0.73, 0.89, 0.54 }
 	local PLACE_NAMES = { world = L["Open world"], city = L["Cities"], instance = L["Instances"],
 		bg = L["BGs & arenas"], group = L["Grouped"] }
 	local PLACE_WORDS = { "world", "city", "instance", "bg" }
@@ -4660,7 +4662,7 @@ local function CreateCamerasPanel()
 
 	local grid = CreateFrame("Frame", nil, content)
 	grid:SetSize(ROW_W, ROW_H)
-	grid:SetPoint("TOPLEFT", help, "BOTTOMLEFT", 0, -10)
+	grid:SetPoint("TOPLEFT", help, "BOTTOMLEFT", 0, -34) -- (room for New trigger and Sort by above it)
 	local rows, drawers, opened = {}, {}, {}
 	local MakeRow -- (below)
 	local function Changed()
@@ -4671,9 +4673,10 @@ local function CreateCamerasPanel()
 		opened[id] = not opened[id]
 		grid:Refresh()
 	end
-	-- (A trigger of your own: its name, else what starts it.)
+	-- (A trigger of your own: what starts it, "/cheer"; its name is the row's.)
 	local function TriggerName(trigger)
-		return trigger.custom and ns.CustomTriggerLabel(trigger.key) or trigger.key
+		return trigger.custom and ns.DescribeTriggerSource(ns.GetDB().cameraRows[trigger.key .. ".source"])
+			or trigger.key
 	end
 	local function RowLabel(id)
 		local trigger, copy = ns.CameraRowTrigger(id)
@@ -4695,7 +4698,11 @@ local function CreateCamerasPanel()
 		local db, key = ns.GetDB(), ns.CameraRowKey(id)
 		local camera = ns.CameraRowValue(id, "camera")
 		if camera == trigger.off then return { { L["No camera"], PLAIN_CHIP } } end
-		local list = { { SHORT[camera] or tostring(camera), CAM_CHIP[camera] or PLAIN_CHIP } }
+		-- (A shot: its name, in its camera's colors; a trigger of your own: Mine first.)
+		local base = ns.ShotBase(camera)
+		local list = { { base ~= camera and ns.CameraName(camera) or SHORT[camera] or tostring(camera),
+			CAM_CHIP[base] or PLAIN_CHIP } }
+		if trigger.custom then table.insert(list, 1, { L["Mine"], MINE_CHIP }) end
 		if trigger.music and ns.CameraRowValue(id, "music") then list[#list + 1] = { L["Music"], PLAIN_CHIP } end
 		if trigger.cine and ns.CameraRowValue(id, "cine") then list[#list + 1] = { "CineMode", PLAIN_CHIP } end
 		local extra = EXTRAS[trigger.key]
@@ -4751,12 +4758,24 @@ local function CreateCamerasPanel()
 			ns.SetCameraRowValue(id, "camera", value)
 			Changed()
 		end
+		-- Its cameras, and My Shots' shots where it has the cozy camera (the
+		-- standing-still ones a shot is made from).
+		local function Cameras()
+			local list = {}
+			for _, value in ipairs(trigger.cameras) do list[#list + 1] = value end
+			for _, value in ipairs(trigger.cameras) do
+				if value == "cozy" then
+					for _, shot in ipairs((ns.ShotList())) do list[#list + 1] = "shot:" .. shot end
+				end
+			end
+			return list
+		end
 		local ok, pick = ns.MenuDropdown(parent)
 		if ok and pick and pick.SetupMenu then
 			pick:SetWidth(150)
 			pick:SetupMenu(function(_, root)
-				for _, value in ipairs(trigger.cameras) do
-					root:CreateRadio(ns.CAMERA_NAMES[value], function()
+				for _, value in ipairs(Cameras()) do
+					root:CreateRadio(ns.CameraName(value), function()
 						return ns.GetDB() ~= nil and ns.CameraRowValue(id, "camera") == value
 					end, function() Set(value) end)
 				end
@@ -4766,16 +4785,16 @@ local function CreateCamerasPanel()
 			pick = ns.PanelButton(parent)
 			pick:SetSize(150, 22)
 			pick:SetScript("OnClick", function()
-				local now = ns.CameraRowValue(id, "camera")
-				for i, value in ipairs(trigger.cameras) do
+				local now, list = ns.CameraRowValue(id, "camera"), Cameras()
+				for i, value in ipairs(list) do
 					if value == now then
-						Set(trigger.cameras[i % #trigger.cameras + 1])
+						Set(list[i % #list + 1])
 						return
 					end
 				end
-				Set(trigger.cameras[1])
+				Set(list[1])
 			end)
-			pick.Refresh = function(self) self:SetText(ns.CAMERA_NAMES[ns.CameraRowValue(id, "camera")] or "") end
+			pick.Refresh = function(self) self:SetText(ns.CameraName(ns.CameraRowValue(id, "camera")) or "") end
 		end
 		pick.searchSkip = true
 		controls[#controls + 1] = pick
@@ -4821,7 +4840,7 @@ local function CreateCamerasPanel()
 			if not group then
 				-- (Its name without a leading slash: /dance among the d's.)
 				local name = (LABELS[trigger.key] or TriggerName(trigger)):gsub("^%p+", ""):lower()
-				local camera, cam = ns.CameraRowValue(id, "camera"), ""
+				local camera, cam = ns.ShotBase(ns.CameraRowValue(id, "camera")), ""
 				if sort == nil then
 					cam = hubOrder[HUB_NAMES[camera]] or 99
 				elseif sort == "camera" then
@@ -4881,6 +4900,42 @@ local function CreateCamerasPanel()
 	local sortLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
 	sortLabel:SetPoint("RIGHT", sort, "LEFT", -6, 0)
 	sortLabel:SetText(L["Sort by"])
+	-- A trigger of your own (CustomTriggers.lua): a new one, its settings open,
+	-- or one a friend shared.
+	do
+		local newTrigger = ns.PanelButton(content)
+		newTrigger:SetSize(110, 22)
+		newTrigger:SetPoint("BOTTOMLEFT", grid, "TOPLEFT", 0, 4)
+		newTrigger:SetText(L["+ New trigger"])
+		newTrigger.searchLabel = L["+ New trigger"]
+		Tooltip(newTrigger, L["Make a trigger of your own: say what starts it (an emote, a spell, a buff, a place, " ..
+			"a moment, something you are, or a key), the camera it plays and when it ends."])
+		newTrigger:SetScript("OnClick", function()
+			local new = ns.AddCustomTrigger("emote:cheer", "move", "cozy")
+			if new then
+				opened[new] = true
+				Changed()
+			end
+		end)
+		newTrigger.Refresh = function(self)
+			local count = 0
+			for _ in tostring(ns.GetDB().cameraRows.custom or ""):gmatch("[^,]+") do count = count + 1 end
+			self:SetEnabled(count < ns.CUSTOM_TRIGGER_MAX)
+		end
+		controls[#controls + 1] = newTrigger
+		local import = ns.PanelButton(content)
+		import:SetSize(70, 22)
+		import:SetPoint("LEFT", newTrigger, "RIGHT", 6, 0)
+		import:SetText(L["Import"])
+		import.searchSkip = true
+		Tooltip(import, L["Add a trigger or shot a friend shared (the text from their Share button)."])
+		import:SetScript("OnClick", function()
+			ns.ShowCameraImport(function(new, kind)
+				if kind == "trigger" then opened[new] = true end
+				Changed()
+			end)
+		end)
+	end
 
 	function grid:Refresh()
 		local list = ShownRows()
@@ -5042,7 +5097,8 @@ local function CreateCamerasPanel()
 		row:SetScript("OnEnter", function(self)
 			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
 			GameTooltip:SetText(OwnName(id) ~= "" and OwnName(id) or RowLabel(id), 1, 1, 1)
-			local tip = EVENT_TIPS[key] or TIPS[key]
+			local tip = EVENT_TIPS[key] or TIPS[key] or (trigger.custom and L["A trigger of your own. Open it to set " ..
+				"what starts it, when it ends, and where it comes among the others."])
 			if tip then GameTooltip:AddLine(tip, 0.8, 0.8, 0.8, true) end
 			for _, chip in ipairs(self.chipList or {}) do
 				GameTooltip:AddLine("- " .. chip[1], 1, 0.82, 0)
@@ -5090,24 +5146,38 @@ local function CreateCamerasPanel()
 			end
 			controls[#controls + 1] = copyButton
 		end
-		if copy then
+		if copy or trigger.custom then
 			local remove = Place(CreateFrame("Button", nil, row), ROW_W - 22)
 			remove:SetSize(16, 16)
 			remove:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
 			remove:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
-			Tooltip(remove, L["Remove this copy."])
+			Tooltip(remove, copy and L["Remove this copy."] or L["Delete this trigger of your own, with its copies."])
 			remove:SetScript("OnClick", function()
-				ns.RemoveCameraRow(id)
-				opened[id] = nil
-				Changed()
+				if copy then
+					ns.RemoveCameraRow(id)
+					opened[id] = nil
+					Changed()
+				else
+					ns.ConfirmRemoveCustomTrigger(id, function()
+						opened[id] = nil
+						Changed()
+					end)
+				end
 			end)
 		end
 
 		-- The drawer.
 		local extra = not copy and EXTRAS[key]
 		local LINES = { "Name", "Camera", "When" }
+		-- (A trigger of your own: what starts and ends it, CameraTriggerEditor.lua.)
+		local custom = trigger.custom and not copy
+		if custom then
+			LINES[#LINES + 1] = "Starts"
+			LINES[#LINES + 1] = "Ends"
+		end
 		if extra then LINES[#LINES + 1] = "Extra" end
-		local LINE_NAMES = { Name = L["Name"], Camera = L["Camera"], When = L["When"], Extra = extra and extra[1] }
+		local LINE_NAMES = { Name = L["Name"], Camera = L["Camera"], When = L["When"], Extra = extra and extra[1],
+			Starts = L["Starts"], Ends = L["Ends"] }
 		local lineTop, height = {}, 4
 		for _, each in ipairs(LINES) do
 			lineTop[each] = height
@@ -5231,6 +5301,11 @@ local function CreateCamerasPanel()
 			changed = ns.CameraRowsChanged,
 		})
 		At("When", when, LABEL_W)
+
+		if custom then
+			ns.BuildCustomTriggerLines(drawer, id, { At = At, Changed = Changed, Tooltip = Tooltip, x = LABEL_W,
+				shareX = LABEL_W + 236, AddControl = function(control) controls[#controls + 1] = control end })
+		end
 
 		-- What its trigger needs (its own row only).
 		if extra and extra.list then
@@ -13686,6 +13761,9 @@ ns.OnLanguage(function()
 	CreateCamerasPanel()
 	-- Each camera's own settings, in a section apiece.
 	CreateCameraSettingsPanel()
+	if ns.CreateMyShotsPanel then -- (ShotsPage.lua)
+		ns.CreateMyShotsPanel(ns.lowHealthKit)
+	end
 	if ns.CreateShoulderCamPanel then -- (ShoulderCam.lua)
 		ns.CreateShoulderCamPanel(ns.lowHealthKit)
 	end

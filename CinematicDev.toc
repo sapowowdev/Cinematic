@@ -76,6 +76,9 @@ QuestCam.lua
 ShoulderCam.lua
 CameraRows.lua
 CustomTriggers.lua
+Shots.lua
+CameraTriggerEditor.lua
+ShotsPage.lua
 QuestTalk.lua
 CameraTests.lua
 Tint.lua

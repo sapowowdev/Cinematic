@@ -1418,6 +1418,7 @@ function ns.ActiveEvent()
 		return cache.key, cache.camera
 	end
 	local key, camera = CurrentEvent()
+	camera = ns.ShotBase(camera) -- (a shot: its camera; Shots.lua)
 	if camera and EVENT_CAM[camera] and ns.IsCameraOffHere(EVENT_CAM[camera]) then
 		key, camera = nil, nil
 	end
@@ -1611,7 +1612,8 @@ local function OrbitSetting(key)
 	if key == "Right" and ns.db[orbitPrefix .. "RandomDir"] then
 		return ns.orbit.randomRight -- picked as the AFK or death camera starts
 	end
-	local value = ns.db[orbitPrefix .. key]
+	-- (A shot running: its numbers, Shots.lua.)
+	local value = ns.ShotSetting(orbitPrefix .. key)
 	if (key == "BackArc" or key == "MinChange") and Indoors() then
 		local limit = ns.db.indoorSwing
 		if key == "MinChange" then
@@ -2070,7 +2072,7 @@ local ZOOM_CLOSEST = 1              -- yards: never zoom in past this
 local ZOOM_PREFIX = { taxi = "taxiZoom", walk = "walkZoom", run = "runZoom", idle = "idleZoom",
 	cozy = "cozyZoom", vista = "vistaZoom", fish = "fishZoom", tele = "teleZoom" }
 local function ZoomSetting(key)
-	local value = ns.db[ZOOM_PREFIX[idleZoom.context] .. key]
+	local value = ns.ShotSetting(ZOOM_PREFIX[idleZoom.context] .. key)
 	if Indoors() then
 		if key == "Distance" then
 			return math.min(value, ns.db.indoorZoomOut)

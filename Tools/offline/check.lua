@@ -155,6 +155,46 @@ if arg[1] then
 			if each:find("^" .. id) then Problem("its row's still in the order: " .. each) end
 		end
 	end
+	-- My Shots (Shots.lua): a shot follows its camera's numbers until given its
+	-- own, a row set to one goes by its camera's mode, a trigger shared with
+	-- its shot comes back whole, a tampered string is clamped or refused, and
+	-- deleting a shot sends its rows back to its camera.
+	local function ShotProblem(text) print("problem\tMy Shots: " .. text) end
+	local shot = ns.AddShot("vista", "Wide")
+	local trigger = shot and ns.AddCustomTrigger("emote:wave", "move", "shot:" .. shot, "Wave")
+	if not (shot and trigger) then
+		ShotProblem("couldn't make a shot and a trigger for it")
+	else
+		if ns.ShotValue(shot, "OrbitBackArc") ~= ns.GetDB().vistaOrbitBackArc then ShotProblem("doesn't follow its camera") end
+		ns.SetShotValue(shot, "OrbitBackArc", 70)
+		if ns.ShotValue(shot, "OrbitBackArc") ~= 70 then ShotProblem("its own number isn't kept") end
+		if ns.CameraValueMode("shot:" .. shot) ~= "vista" then ShotProblem("its row doesn't go by the vista camera") end
+		if ns.ShotSetting("vistaOrbitBackArc") ~= ns.GetDB().vistaOrbitBackArc then
+			ShotProblem("its number applies while it isn't running")
+		end
+		local info = ns.ReadCameraShare(ns.ExportCameraTrigger(trigger))
+		if not (info and info.source == "emote:wave" and info.shot and info.shot.settings.OrbitBackArc == 70) then
+			ShotProblem("a shared trigger doesn't come back whole")
+		end
+		local tampered = ns.ReadCameraShare(ns.PackCameraShare({ kind = "shot", base = "afk", name = "x|cffff0000",
+			settings = { OrbitStep = 9999, Bogus = 1 } }))
+		if not (tampered and tampered.settings.OrbitStep == 180 and tampered.settings.Bogus == nil
+			and not tampered.name:find("|")) then
+			ShotProblem("a tampered shot isn't clamped and cleaned")
+		end
+		local _, why = ns.ReadCameraShare("CINECAM9:abc")
+		if why ~= "newer" then ShotProblem("a newer string reads as " .. tostring(why)) end
+		_, why = ns.ReadCameraShare("CINECAM1:{x=s1;}:000000")
+		if why ~= "broken" then ShotProblem("a wrong checksum reads as " .. tostring(why)) end
+		ns.RemoveShot(shot)
+		if ns.CameraRowValue(trigger, "camera") ~= "vista" then ShotProblem("a deleted shot's row isn't back on its camera") end
+		ns.RemoveCustomTrigger(trigger)
+		local leftover = {}
+		for key in pairs(ns.GetDB().cameraRows) do
+			if key ~= "order" then leftover[#leftover + 1] = tostring(key) end -- (the earlier copy's row order)
+		end
+		if #leftover > 0 then ShotProblem("left behind: " .. table.concat(leftover, ", ")) end
+	end
 	-- Vitals Vision: a page's Reset (its settings back to the profile's) leaves
 	-- each theme's own look on them, not the plain defaults.
 	local db, base = ns.GetDB(), ns.ProfileBase()

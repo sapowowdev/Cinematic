@@ -61,10 +61,13 @@ function ns.RegisterCameraTrigger(trigger)
 	end
 	if ns.CameraRowsChanged then ns.CameraRowsChanged() end
 end
--- Takes a trigger's rows off the page (its settings stay).
+-- Takes a trigger's rows off the page (its settings stay). Its rows' ids
+-- still name it (RETIRED), for a page's controls made for them before.
+local RETIRED = {}
 function ns.UnregisterCameraTrigger(key)
 	local old = TRIGGER[key]
 	if not old then return end
+	RETIRED[key] = old
 	for i = #TRIGGERS, 1, -1 do
 		if TRIGGERS[i] == old then table.remove(TRIGGERS, i) end
 	end
@@ -117,12 +120,17 @@ end)
 local CAM_OF = { cozy = "cozy", vista = "vista", fish = "fish", afk = "idle", tele = "tele", flight = "flight",
 	quest = "quest", walk = "walk", run = "run", [true] = "death", chat = "chatcam" }
 -- A camera value's mode (as ns.CAMERA_OFF_CAMS names it), or nil for none.
-function ns.CameraValueMode(value) return CAM_OF[value] end
+-- (A shot: its camera's, Shots.lua.)
+local function CamOf(value)
+	if ns.ShotBase then value = ns.ShotBase(value) end
+	return CAM_OF[value]
+end
+function ns.CameraValueMode(value) return CamOf(value) end
 
 -- A row's trigger and its number (nil: the trigger's own row).
 function ns.CameraRowTrigger(id)
 	local key, copy = tostring(id):match("^(%a+)(%d?)$")
-	return key and TRIGGER[key], tonumber(copy)
+	return key and (TRIGGER[key] or RETIRED[key]), tonumber(copy)
 end
 
 local function Rows()
@@ -220,7 +228,7 @@ end
 local function Leader(id)
 	local trigger, copy = ns.CameraRowTrigger(id)
 	if copy or not trigger or trigger.custom then return nil end
-	return CAM_OF[ns.CameraRowValue(id, "camera")]
+	return CamOf(ns.CameraRowValue(id, "camera"))
 end
 
 -- The lists a row's When is in, and its key in them.
@@ -377,7 +385,7 @@ function ns.CameraRowsOff(cam)
 	if cam == "quest" then keys = { ns.QuestCamEvent and ns.QuestCamEvent() or "Quest" } end
 	if not keys then return false end -- (the event cameras: their rows decide as an event picks one)
 	for _, key in ipairs(keys) do
-		if TRIGGER[key] and CAM_OF[ns.TriggerSetting(key, "camera")] == cam then return false end
+		if TRIGGER[key] and CamOf(ns.TriggerSetting(key, "camera")) == cam then return false end
 	end
 	return true
 end

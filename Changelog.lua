@@ -11,6 +11,10 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-31", page = "Cameras", title = "Triggers and shots of your own",
+		text = "Make your own camera triggers on the Cameras page: an emote, a spell, a buff, a place, a moment " ..
+		"or a key can start a camera. On My Shots, set how a camera sways and zooms, and share either with a " ..
+		"friend." },
 	{ date = "2026-10-30", page = "Help", title = "Help page",
 		text = "Links to the guidebook, troubleshooting and the bug report form, how to send your log with " ..
 		"/cine log, and the Profiler for a slow game, together in Community." },

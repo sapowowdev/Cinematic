@@ -22,8 +22,43 @@
 -- every standing-still camera). A state still true after its episode ended
 -- doesn't start another until it's been false.
 local _, ns = ...
+local L = ns.L
 
 ns.CUSTOM_TRIGGER_MAX = 20
+-- What can start one, in the editor's order (CameraTriggerEditor.lua), with
+-- the choices of the kinds that have a fixed list.
+ns.CUSTOM_TRIGGER_KINDS = {
+	{ value = "emote", text = L["Emote"] }, { value = "spell", text = L["Spell cast"] },
+	{ value = "aura", text = L["Buff on you"] }, { value = "place", text = L["Place"] },
+	{ value = "moment", text = L["Moment"] }, { value = "state", text = L["State"] },
+	{ value = "key", text = L["Key binding"] },
+}
+ns.CUSTOM_TRIGGER_MOMENTS = {
+	{ value = "levelup", text = L["You level up"] }, { value = "achievement", text = L["You earn an achievement"] },
+	{ value = "quest", text = L["You turn in a quest"] }, { value = "boss", text = L["Your group kills a boss"] },
+	{ value = "alive", text = L["You come back to life"] },
+}
+ns.CUSTOM_TRIGGER_STATES = {
+	{ value = "mounted", text = L["Mounted"] }, { value = "swimming", text = L["Swimming"] },
+	{ value = "flying", text = L["Flying"] }, { value = "indoors", text = L["Indoors"] },
+	{ value = "outdoors", text = L["Outdoors"] }, { value = "resting", text = L["Resting (an inn or a city)"] },
+	{ value = "stealthed", text = L["Stealthed"] }, { value = "night", text = L["Night (game time)"] },
+}
+ns.CUSTOM_TRIGGER_KEYS = {}
+for n = 1, 5 do
+	ns.CUSTOM_TRIGGER_KEYS[n] = { value = tostring(n), text = (L["Custom camera trigger %d"]):format(n) }
+end
+ns.OnLanguage(function()
+	for _, list in ipairs({ ns.CUSTOM_TRIGGER_KINDS, ns.CUSTOM_TRIGGER_MOMENTS, ns.CUSTOM_TRIGGER_STATES }) do
+		ns.TranslateFields(list, "text")
+	end
+	for n, each in ipairs(ns.CUSTOM_TRIGGER_KEYS) do each.text = (L["Custom camera trigger %d"]):format(n) end
+end)
+local function ChoiceText(list, value)
+	for _, each in ipairs(list) do
+		if each.value == value then return each.text end
+	end
+end
 local CAMERAS = { "cozy", "vista", "fish", "afk", "none" }
 local DEFAULT_SECS = 5 -- a moment's (or an instant cast's) camera, when its until doesn't say
 local TICK = 0.1 -- seconds between looks at the states
@@ -102,6 +137,28 @@ local function Rows()
 	return db and type(db.cameraRows) == "table" and db.cameraRows or nil
 end
 
+-- An emote as its token, lower case: "/lol" or "lol" -> "laugh", by the
+-- game's own emote commands (any language, any alias); else as typed.
+local emoteTokens -- ("/lol" -> "laugh", built on first use)
+function ns.EmoteToken(text)
+	text = tostring(text or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+	if not emoteTokens then
+		emoteTokens = {}
+		for i = 1, 1000 do
+			local token = _G["EMOTE" .. i .. "_TOKEN"]
+			if type(token) == "string" then
+				emoteTokens["/" .. token:lower()] = token:lower()
+				for j = 1, 10 do
+					local cmd = _G["EMOTE" .. i .. "_CMD" .. j]
+					if type(cmd) == "string" then emoteTokens[cmd:lower()] = token:lower() end
+				end
+			end
+		end
+	end
+	local slashed = text:find("^/") and text or "/" .. text
+	return emoteTokens[slashed] or text:gsub("^/", "")
+end
+
 -- What each trigger is doing: id -> { source, kind, what, spellID,
 -- untilText, untilKind, secs, on, since, cond, done, casting, dirty, lookedAt }.
 local live = {}
@@ -118,6 +175,7 @@ local function Parse(id, state)
 	state.source, state.untilText = source, untilText
 	local kind, what = source:match("^(%a+):(.*)$")
 	state.kind, state.what = kind, what and what:lower() or ""
+	if kind == "emote" then state.what = ns.EmoteToken(state.what) end
 	state.spellID = (kind == "spell" or kind == "aura") and tonumber(state.what) or nil
 	local secs = tonumber(untilText:match("^time:(%d+%.?%d*)$"))
 	state.untilKind = secs and "time" or untilText
@@ -318,12 +376,37 @@ function ns.CustomTriggersChanged()
 	ns.SyncCustomTriggers()
 end
 
+-- What starts a trigger, in words: "/cheer", "Cast Fishing", "Mounted"...
+function ns.DescribeTriggerSource(source)
+	local kind, what = tostring(source or ""):match("^(%a+):(.*)$")
+	what = what or ""
+	if kind == "emote" then
+		return "/" .. ns.EmoteToken(what)
+	elseif kind == "spell" then
+		local id = tonumber(what)
+		local name = id and ((C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id))
+			or (GetSpellInfo and GetSpellInfo(id)))
+		return (L["Cast %s"]):format(type(name) == "string" and name or what)
+	elseif kind == "aura" then
+		return (L["Buff: %s"]):format(what)
+	elseif kind == "place" then
+		return (L["In %s"]):format(what)
+	elseif kind == "moment" then
+		return ChoiceText(ns.CUSTOM_TRIGGER_MOMENTS, what) or what
+	elseif kind == "state" then
+		return ChoiceText(ns.CUSTOM_TRIGGER_STATES, what) or what
+	elseif kind == "key" then
+		return (L["Custom camera trigger %d"]):format(tonumber(what) or 1)
+	end
+	return tostring(source or "?")
+end
+
 -- A trigger's name for the page and logs: your own, else what starts it.
 function ns.CustomTriggerLabel(id)
 	local rows = Rows()
 	local name = rows and rows[id .. ".name"]
 	if type(name) == "string" and name:find("%S") then return name end
-	return rows and tostring(rows[id .. ".source"] or id) or id
+	return ns.DescribeTriggerSource(rows and rows[id .. ".source"])
 end
 
 -- Whether a custom spell trigger is on with its cast going: the cast isn't
@@ -410,11 +493,16 @@ function ns.RemoveCustomTrigger(id)
 		if each ~= id then list[#list + 1] = each end
 	end
 	rows.custom = #list > 0 and table.concat(list, ",") or nil
-	local order = {}
-	for _, each in ipairs(ns.CameraRowOrder()) do
-		if each ~= id then order[#order + 1] = each end
+	-- (Out of a row order of your own, if there is one.)
+	if rows.order then
+		local order = {}
+		for _, each in ipairs(ns.CameraRowOrder()) do
+			if each ~= id then order[#order + 1] = each end
+		end
+		ns.SetCameraRowOrder(order)
+	else
+		ns.SyncCustomTriggers()
 	end
-	ns.SetCameraRowOrder(order)
 end
 
 -- For /cine debug triggers: each one, what starts it, whether it's on and

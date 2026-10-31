@@ -25,6 +25,7 @@ globals = {
 -- The WoW API the addon uses (add new ones here as they come up)
 read_globals = {
 	"CinematicFrame",
+	"GetZoneText", "DELETE", "CLOSE", -- (the camera trigger editor and My Shots)
 	"MovieFrame",
 	"CORPSE",
 	"FACTION_ALLIANCE",
