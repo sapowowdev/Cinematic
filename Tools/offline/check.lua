@@ -155,6 +155,23 @@ if arg[1] then
 			if each:find("^" .. id) then Problem("its row's still in the order: " .. each) end
 		end
 	end
+	-- A built-in trigger deleted (CameraRows' deleted list): its rows go, it
+	-- starts no camera, and Add back brings it back as it was.
+	local afkCamera = ns.CameraRowValue("AFK", "camera")
+	ns.SetTriggerDeleted("AFK", true)
+	for _, each in ipairs(ns.CameraRowOrder()) do
+		if each:find("^AFK%d?$") then Problem("a deleted trigger's row is still listed: " .. each) end
+	end
+	if ns.TriggerRowNow("AFK") ~= nil or ns.TriggerSetting("AFK", "camera") ~= "none" then
+		Problem("a deleted trigger still picks a camera")
+	end
+	if ns.DeletedTriggers()[1] ~= "AFK" then Problem("Add back doesn't list it") end
+	ns.SetTriggerDeleted("AFK", false)
+	local back = false
+	for _, each in ipairs(ns.CameraRowOrder()) do back = back or each == "AFK" end
+	if not back or ns.CameraRowValue("AFK", "camera") ~= afkCamera or ns.GetDB().cameraRows.deleted ~= nil then
+		Problem("Add back didn't bring it back as it was")
+	end
 	-- My Shots (Shots.lua): a shot follows its camera's numbers until given its
 	-- own, a row set to one goes by its camera's mode, a trigger shared with
 	-- its shot comes back whole, a tampered string is clamped or refused, and

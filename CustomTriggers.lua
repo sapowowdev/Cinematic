@@ -59,7 +59,12 @@ local function ChoiceText(list, value)
 		if each.value == value then return each.text end
 	end
 end
-local CAMERAS = { "cozy", "vista", "fish", "afk", "none" }
+-- The cameras one can play: those that run where you stand (the tele
+-- camera with a pretend cast, the death camera as its test runs it), and
+-- camera scripts (CameraScripts.lua puts them in before "none").
+local CAMERAS = { "cozy", "vista", "fish", "afk", "tele", "death", "none" }
+ns.CUSTOM_TRIGGER_CAMERAS = CAMERAS
+local DEATH_FOR = 3600 -- seconds: the death camera's run with no time of its own (moving or Stop ends it)
 local DEFAULT_SECS = 5 -- a moment's (or an instant cast's) camera, when its until doesn't say
 local TICK = 0.1 -- seconds between looks at the states
 local SLOW_LOOK = 1 -- seconds between looks at buffs and places with no event
@@ -183,11 +188,42 @@ local function Parse(id, state)
 	state.on, state.cond, state.done, state.dirty = false, nil, false, true
 end
 
+-- Starting one: the tele camera needs a cast to spin and zoom over (a pretend
+-- one, its time long), the death camera runs as its test does (no event of
+-- its own: Key leaves it out, or the AFK camera would run too).
 local function Start(state)
 	state.on, state.since, state.done = true, GetTime(), false
+	local camera = state.id and ns.TriggerSetting(state.id, "camera")
+	state.death, state.tele = camera == "death", camera == "tele"
+	if camera == "tele" and ns.PretendDepartCast then
+		ns.PretendDepartCast(state.untilKind == "time" and state.secs or 10)
+	elseif state.death then
+		ns.deathTestUntil, ns.deathTestLoud = GetTime() + (state.untilKind == "time" and state.secs or DEATH_FOR), false
+	end
 end
 local function Stop(state)
 	state.on, state.done = false, true
+	if state.death then
+		state.death = false
+		ns.deathTestUntil = 0
+	end
+end
+-- Whether one of these plays the tele camera now (its pretend cast holds
+-- while it does, Camera.lua's DepartTimeLeft).
+function ns.CustomTeleOn()
+	for _, id in ipairs(liveOrder) do
+		if live[id].on and live[id].tele then return true end
+	end
+	return false
+end
+-- Whether one of these runs the death camera now (CameraRows' CameraRowsOff:
+-- its own Die row needn't be set to it).
+function ns.CustomDeathOn()
+	if GetTime() >= (ns.deathTestUntil or 0) then return false end
+	for _, id in ipairs(liveOrder) do
+		if live[id].on and live[id].death then return true end
+	end
+	return false
 end
 
 -- The game events the triggers need now, registered only while one does.
@@ -359,13 +395,14 @@ function ns.SyncCustomTriggers()
 	for i, id in ipairs(ids) do
 		local state = live[id] or {}
 		live[id], liveOrder[i] = state, id
+		state.id = id
 		if not ns.CAMERA_TRIGGER[id] then
 			ns.RegisterCameraTrigger({ key = id, custom = true, cameras = CAMERAS, off = "none", music = true,
 				cine = true })
 		end
 		Parse(id, state)
 		ns.RegisterTriggerSource({ id = "custom:" .. id, order = OrderOf(id, i), custom = id,
-			Key = function() return state.on and id or nil end })
+			Key = function() return state.on and not state.death and id or nil end })
 	end
 	Watch()
 	ticker:SetShown(#liveOrder > 0)

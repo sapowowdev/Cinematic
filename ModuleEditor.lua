@@ -3,19 +3,23 @@
 -- in the game. Changes are kept in db.devEdits (ns.DevEdits) until cleared,
 -- and a profile takes them when it's picked or reset; Export gives the Lua
 -- to paste back into those two files. Three parts:
---   Profiles: each built-in's choice per slot (click one for another) and
---     modules of its own.
+--   Profiles: each built-in's choice per slot (click one for another); its
+--     name gives modules of its own, its Lua and Undo.
 --   Choices: each slot's choices and their modules (Modules... ticks one in
 --     or out), and Try to put one on your live settings.
 --   Modules: one at a time: what it changes and where, its name and scope;
 --     Try it on, take your live settings into it, or make a new one from a
 --     page or a section of one.
 -- Options.lua calls ns.CreateModuleEditor with the page helpers it shares
--- (dev build only).
+-- (dev build only: a page in the Community hub).
 
 local _, ns = ...
 
-local NAME_W, SLOT_W, ROW_H, WIDTH = 120, 84, 22, 700
+-- (WIDTH: what fits in a hub page; the profiles' grid is NAME_W, then the rest
+-- shared by the slots (SlotWidth))
+local NAME_W, ROW_H, WIDTH = 90, 22, 600
+local function SlotWidth() return math.floor((WIDTH - NAME_W) / #ns.PROFILE_SLOTS) end
+local CHOICE_W, CHOICE_BUTTONS = 170, 124 -- (a choice's name column; Modules... and Try)
 local OWN_PROFILE = "My setup" -- (Try on a built-in: a profile of your own first)
 
 -- A value as Lua source (keys sorted, so the same settings give the same text).
@@ -270,15 +274,12 @@ end
 
 function ns.CreateModuleEditor(kit)
 	local canvas, content = kit.CreateScrollPage(true)
-	local title = kit.Label(content, "GameFontNormalLarge", "|cffff4040DEV ONLY|r Module Editor")
+	local title = kit.Label(content, "GameFontNormalLarge", "Module Editor")
 	title:SetPoint("TOPLEFT", 16, -16)
-	local intro = kit.Label(content, "GameFontHighlight", "The built-in profiles, the choices each slot offers " ..
+	local intro = kit.PageIntro(content, title, "The built-in profiles, the choices each slot offers " ..
 		"and the modules they're made of (ProfileChoices.lua, ProfileModules.lua). Changes here are kept " ..
 		"(green) until you clear them, and a profile takes them when you pick or reset it. Export gives the " ..
 		"Lua to paste back into the files.")
-	intro:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
-	intro:SetWidth(WIDTH)
-	intro:SetJustifyH("LEFT")
 
 	local output, status, Refresh
 	local function Button(parent, text, width, tip, onClick)
@@ -295,9 +296,15 @@ function ns.CreateModuleEditor(kit)
 		output:SetFocus()
 	end
 	local function Header(text, anchor, y)
-		local label = kit.Label(content, "GameFontNormalLarge", text)
-		label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, y or -18)
-		return label
+		return kit.Header(content, text, anchor, y)
+	end
+	-- A grey note under a header, wrapped to the page.
+	local function Note(text, anchor)
+		local note = kit.Label(content, "GameFontHighlightSmall", text)
+		note:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -6)
+		note:SetWidth(WIDTH)
+		note:SetTextColor(0.7, 0.7, 0.7)
+		return note
 	end
 
 	-- Top: the changes kept, and what to do with them.
@@ -325,9 +332,10 @@ function ns.CreateModuleEditor(kit)
 
 	-- 1. Profiles: a row each, a cell per slot.
 	local profilesHead = Header("Profiles", export, -20)
-	local profilesNote = kit.Label(content, "GameFontHighlightSmall", "Each built-in's choice per slot: white its " ..
-		"own, grey the one it's from (or the slot's default), green changed here. Click one for another.")
-	profilesNote:SetPoint("TOPLEFT", profilesHead, "BOTTOMLEFT", 0, -6)
+	local profilesNote = Note("Each built-in's choice per slot: white its own, grey the one it's from (or the " ..
+		"slot's default), green changed here. Click a cell for another choice, a name for its own modules, " ..
+		"its Lua or Undo.", profilesHead)
+	local SLOT_W = SlotWidth()
 	local slotHeads = CreateFrame("Frame", nil, content)
 	slotHeads:SetSize(WIDTH, 16)
 	slotHeads:SetPoint("TOPLEFT", profilesNote, "BOTTOMLEFT", 0, -10)
@@ -348,11 +356,19 @@ function ns.CreateModuleEditor(kit)
 		local tags = {}
 		if profile.client then tags[#tags + 1] = profile.client == "forever" and "F" or "R" end
 		if profile.hidden then tags[#tags + 1] = "hidden" end
-		local name = kit.Label(row, "GameFontHighlightSmall", (profile.label or profile.name)
-			.. (#tags > 0 and " |cff808080(" .. table.concat(tags, ",") .. ")|r" or ""))
+		-- Its name: a menu of modules of its own on top of its choices (or one of
+		-- the choices' taken out), its Lua and Undo.
+		local name = CreateFrame("Button", nil, row)
+		name:SetSize(NAME_W - 4, ROW_H - 2)
 		name:SetPoint("LEFT")
-		name:SetWidth(NAME_W - 4)
-		name:SetWordWrap(false)
+		name:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+		name.text = kit.Label(name, "GameFontHighlightSmall", (profile.label or profile.name)
+			.. (#tags > 0 and " |cff808080(" .. table.concat(tags, ",") .. ")|r" or ""))
+		name.text:SetPoint("LEFT")
+		name.text:SetPoint("RIGHT")
+		name.text:SetWordWrap(false)
+		kit.Tooltip(name, (profile.label or profile.name) .. ": modules of its own, its picks and modules " ..
+			"as Lua, or Undo.")
 		row.cells = {}
 		for i, slot in ipairs(ns.PROFILE_SLOTS) do
 			local cell = CreateFrame("Button", nil, row)
@@ -397,20 +413,26 @@ function ns.CreateModuleEditor(kit)
 					or ("The default (" .. tostring(info and info.default) .. ")"), function() Pick(nil) end }
 				Menu(self, entries)
 			end)
+			cell:SetScript("OnEnter", function(self)
+				GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+				GameTooltip:SetText(self.text:GetText() or "", 1, 1, 1)
+				GameTooltip:AddLine("Click for another choice.", 0.7, 0.7, 0.7)
+				GameTooltip:Show()
+			end)
+			cell:SetScript("OnLeave", GameTooltip_Hide)
 			row.cells[i] = cell
 		end
-		local extra = Button(row, "+", 24, "Modules of its own on top of its choices (or one of the " ..
-			"choices' taken out).", function(self)
+		name:SetScript("OnClick", function(self)
 			local own, client = OwnCopy(profile), ClientOf(profile)
 			local resolved = ns.ResolveModules(profile, client, ns.ALL_BUILTIN_BY_NAME, EditOf)
-			local inIt, entries = {}, {}
+			local inIt, modules = {}, {}
 			for _, entry in ipairs(resolved) do inIt[entry.key] = entry end
 			for _, key in ipairs(ns.ModuleKeys()) do
 				local module = ns.GetModule(key)
 				if not module.client or module.client == client then
 					local entry = inIt[key]
 					local note = entry and entry.slot and " |cff808080(" .. entry.slot .. ")|r" or ""
-					entries[#entries + 1] = { (entry and "|cff40ff40[x]|r " or "[  ] ") .. module.name .. note, function()
+					modules[#modules + 1] = { (entry and "|cff40ff40[x]|r " or "[  ] ") .. module.name .. note, function()
 						local list, found = own.modules, false
 						for i = #list, 1, -1 do
 							if list[i] == key or list[i] == "-" .. key then
@@ -425,38 +447,35 @@ function ns.CreateModuleEditor(kit)
 					end }
 				end
 			end
+			local entries = { { "Modules of its own", modules },
+				{ "Lua (in the box below)", function() Show(ProfileLua(profile)) end } }
+			if EditOf(profile.name) then
+				entries[#entries + 1] = { "Undo (as in the code)", function()
+					Edits().profiles[profile.name] = nil
+					Changed()
+					Refresh()
+				end }
+			end
 			Menu(self, entries)
 		end)
-		extra:SetPoint("LEFT", row, "LEFT", NAME_W + #ns.PROFILE_SLOTS * SLOT_W, 0)
-		local lua = Button(row, "Lua", 40, "Its picks and modules lines, with your changes, in the box below.",
-			function() Show(ProfileLua(profile)) end)
-		lua:SetPoint("LEFT", extra, "RIGHT", 2, 0)
-		local undo = Button(row, "Undo", 46, "Its picks and modules back to the code's.", function()
-			Edits().profiles[profile.name] = nil
-			Changed()
-			Refresh()
-		end)
-		undo:SetPoint("LEFT", lua, "RIGHT", 2, 0)
-		row.undo = undo
 		profileRows[#profileRows + 1] = row
 	end
 
 	-- 2. Choices: each slot's, a row each.
 	local choicesHead = Header("Choices", anchor, -22)
-	local choicesNote = kit.Label(content, "GameFontHighlightSmall", "Each slot's choices and their modules. " ..
-		"Modules... ticks one in or out; Try puts the choice on your live settings (on a built-in, in a " ..
-		"profile of your own, " .. OWN_PROFILE .. ").")
-	choicesNote:SetPoint("TOPLEFT", choicesHead, "BOTTOMLEFT", 0, -6)
-	choicesNote:SetWidth(WIDTH)
-	choicesNote:SetJustifyH("LEFT")
+	local choicesNote = Note("Each slot's choices and their modules. Modules... ticks one in or out; Try puts " ..
+		"the choice on your live settings (on a built-in, in a profile of your own, " .. OWN_PROFILE .. ").",
+		choicesHead)
 	local choiceRows = {}
 	anchor = choicesNote
 	for _, slot in ipairs(ns.PROFILE_SLOTS) do
 		local info = ns.SLOT_CHOICES[slot.key]
 		if info then
-			local slotLabel = kit.Label(content, "GameFontNormal", info.label .. " |cff808080(" .. slot.key .. ": "
-				.. (info.question or "") .. ")|r")
-			slotLabel:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
+			local slotLabel = kit.Label(content, "GameFontNormal", info.label .. "  |cff808080" .. slot.key
+				.. (info.question and ": " .. info.question or "") .. "|r")
+			slotLabel:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -14)
+			slotLabel:SetWidth(WIDTH)
+			slotLabel:SetWordWrap(false)
 			anchor = slotLabel
 			for _, choice in ipairs(info.choices) do
 				local row = CreateFrame("Frame", nil, content)
@@ -467,15 +486,14 @@ function ns.CreateModuleEditor(kit)
 				local tags = { choice.part }
 				if choice.hidden then tags[#tags + 1] = "hidden" end
 				if choice.client then tags[#tags + 1] = choice.client .. " only" end
-				local name = kit.Label(row, "GameFontHighlightSmall", choice.label .. " |cff808080("
-					.. table.concat(tags, ", ") .. ")|r")
-				name:SetPoint("TOPLEFT", 12, -4)
-				name:SetWidth(200)
-				name:SetWordWrap(false)
+				-- (name, then its tags on a grey line under it)
+				row.name = kit.Label(row, "GameFontHighlightSmall", choice.label .. "\n|cff808080"
+					.. table.concat(tags, ", ") .. "|r")
+				row.name:SetPoint("TOPLEFT", 12, -4)
+				row.name:SetWidth(CHOICE_W - 16)
 				row.modules = kit.Label(row, "GameFontHighlightSmall")
-				row.modules:SetPoint("TOPLEFT", 216, -4)
-				row.modules:SetWidth(WIDTH - 216 - 150)
-				row.modules:SetJustifyH("LEFT")
+				row.modules:SetPoint("TOPLEFT", CHOICE_W, -4)
+				row.modules:SetWidth(WIDTH - CHOICE_W - CHOICE_BUTTONS - 8)
 				local edit = Button(row, "Modules...", 76, "Tick a module in or out of this choice.", function(self)
 					local entries = {}
 					local current = ns.GetChoice(slot.key, choice.part).modules or {}
@@ -514,14 +532,14 @@ function ns.CreateModuleEditor(kit)
 					end
 					Menu(self, entries)
 				end)
-				edit:SetPoint("TOPRIGHT", row, "TOPRIGHT", -46, 0)
 				local try = Button(row, "Try", 42, "This choice on your live settings, just its slot's settings.",
 					function()
 						if not ns.db.enabled then ns.SetEnabled(true) end
 						ns.ApplyChoice(slot.key, choice.part, OWN_PROFILE)
 						Refresh()
 					end)
-				try:SetPoint("LEFT", edit, "RIGHT", 2, 0)
+				try:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, 0)
+				edit:SetPoint("RIGHT", try, "LEFT", -4, 0)
 				choiceRows[#choiceRows + 1] = row
 			end
 		end
@@ -720,7 +738,6 @@ function ns.CreateModuleEditor(kit)
 				end
 				row.cells[i].text:SetText(text)
 			end
-			row.undo:SetShown(edited ~= nil)
 		end
 		-- Choices' modules.
 		for _, row in ipairs(choiceRows) do
@@ -738,7 +755,8 @@ function ns.CreateModuleEditor(kit)
 			end
 			local text = #names > 0 and table.concat(names, ", ") or "|cff808080nothing: the defaults|r"
 			row.modules:SetText(choice.edited and "|cff40ff40" .. text .. "|r" or text)
-			row:SetHeight(math.max(ROW_H, (row.modules:GetStringHeight() or 0) + 8))
+			row:SetHeight(math.max(ROW_H, (row.modules:GetStringHeight() or 0) + 8,
+				(row.name:GetStringHeight() or 0) + 8))
 		end
 		-- The module picked.
 		local module = picked and ns.GetModule(picked)

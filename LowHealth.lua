@@ -559,6 +559,49 @@ function ns.DeleteVitalsTheme(key)
 	RebuildThemes()
 end
 
+-- Sharing a theme (Share and Import beside the theme): "CINEV1:" (V for
+-- Vitals) and its name, the theme of ours it started as (for its look and
+-- Blizzard art) and its fields, the same base64 as a profile (Share.lua).
+-- Read back as data and cleaned like a profile's (Cleaned); added as one of
+-- theirs. The page's settings (Strength, Reach...) aren't in it.
+function ns.ExportVitalsTheme(theme)
+	local fields = FieldsOf(theme)
+	fields.name = theme.mine and theme.name or L[theme.name]
+	-- (Theirs, built, don't carry it: their saved fields do.)
+	local own = theme.mine and db.lowHealthMyThemes[theme.key]
+	fields.from = own and own.from or theme.key
+	fields.who = UnitName("player")
+	return ns.PackShared("CINEV", 1, fields)
+end
+
+-- What a pasted theme holds: { name, from, who, fields }, or nil and why (text).
+function ns.ReadSharedVitalsTheme(text)
+	local data, why = ns.UnpackShared("CINEV", 1, text)
+	if not data then
+		return nil, why == "newer" and L["This is from a newer Cinematic: update it to add this one."]
+			or why == "other" and L["That isn't a Vitals theme."]
+			or why == "broken" and L["That isn't all of it: copy it again, every letter."] or nil
+	end
+	local from = ORIGINAL[data.from]
+	if not from or from.game then from = ns.LOW_HEALTH_THEMES[1] end
+	local fields = Cleaned(data)
+	fields.from = from.key
+	fields.name = ns.CleanSharedText(data.name, 40) or L["Shared theme"]
+	return { name = fields.name, from = from, who = ns.CleanSharedText(data.who, 48), fields = fields }
+end
+
+-- One of theirs, picked: its key.
+function ns.AddVitalsTheme(info)
+	local n = 1
+	while db.lowHealthMyThemes["my" .. n] do n = n + 1 end
+	local key = "my" .. n
+	db.lowHealthMyThemes[key] = Copy(info.fields)
+	db.lowHealthTheme = key
+	RebuildThemes()
+	SyncThemeLook(WantedTheme())
+	return key
+end
+
 function ns.ResetVitalsTheme(key)
 	db.lowHealthThemeEdits[key] = nil
 	RebuildThemes()
@@ -2059,6 +2102,26 @@ function ns.CreateVitalsStylePanel(kit)
 	-- (Just after its name, not in line with the rows' choices below.)
 	themePicker:ClearAllPoints()
 	themePicker:SetPoint("LEFT", themeName, "LEFT", themeName:GetStringWidth() + 10, 0)
+	-- A theme a friend shared, pasted in: what it is shown before it's added.
+	local function ImportTheme()
+		ns.ShowShareImport(L["Import a Vitals theme"], {
+			read = ns.ReadSharedVitalsTheme,
+			describe = function(info)
+				local function Safe(text) return (tostring(text or ""):gsub("|", "||")) end
+				local lines = { ("|cffffd100%s|r %s"):format(L["Theme:"], Safe(info.name)),
+					L["Started as: %s"]:format(L[info.from.name]) }
+				if info.who then lines[3] = L["Shared by: %s"]:format(Safe(info.who)) end
+				return table.concat(lines, "\n")
+			end,
+			add = function(info)
+				if not ns.GetDB() then return nil end
+				ns.AddVitalsTheme(info)
+				Changed()
+				kit.Refresh()
+				return true
+			end,
+		})
+	end
 	if themePicker.SetupMenu then
 		-- By class: Auto, then a submenu for each class (in its colour), each
 		-- spec in it with its theme. (Replaces the flat list the helper made.)
@@ -2104,6 +2167,7 @@ function ns.CreateVitalsStylePanel(kit)
 			root:CreateButton("|cff9fd0ff+ " .. L["Create theme"] .. "|r", function()
 				PickTheme(ns.CreateVitalsTheme())
 			end)
+			root:CreateButton("|cff9fd0ff" .. L["Import theme"] .. "|r", ImportTheme)
 		end)
 	end
 
@@ -2163,13 +2227,38 @@ function ns.CreateVitalsStylePanel(kit)
 		function(theme) return theme.mine end, function(theme)
 			StaticPopup_Show("CINEMATIC_VITALS_RENAME", nil, nil, theme.key)
 		end)
-	ThemeButton(L["Delete"], L["Deletes this theme of yours."], rename, function(theme) return theme.mine end,
+	local delete = ThemeButton(L["Delete"], L["Deletes this theme of yours."], rename,
+		function(theme) return theme.mine end,
 		function(theme) StaticPopup_Show("CINEMATIC_VITALS_DELETE", theme.name, nil, theme.key) end)
-	ThemeButton(L["Reset theme"], L["Puts this theme back as it comes, undoing your changes to its own " ..
-		"settings (edge, colors, sparks, heartbeat)."], themePicker, function(theme) return theme.edited end,
+	local reset = ThemeButton(L["Reset theme"], L["Puts this theme back as it comes, undoing your changes to its " ..
+		"own settings (edge, colors, sparks, heartbeat)."], themePicker, function(theme) return theme.edited end,
 		function(theme) StaticPopup_Show("CINEMATIC_VITALS_RESET", L[theme.name], nil, theme.key) end)
+	-- Share: the theme shown as a line of text for a friend, after whichever
+	-- of those show. (Import is in the theme menu, or beside it without one.)
+	local create -- (Create theme, below, without a menu)
+	local share = ThemeButton(L["Share theme"], L["This theme as a line of text to send a friend, who adds it with " ..
+		"Import theme in their theme menu. Only the theme (edge, colors, sparks, heartbeat), not this page's " ..
+		"other settings."], themePicker, function() return true end, function(theme)
+			ns.ShowCameraShare(ns.ExportVitalsTheme(theme),
+				L["Share theme: %s"]:format(theme.mine and theme.name or L[theme.name]))
+		end)
+	local shareRefresh = share.Refresh
+	share.Refresh = function(self)
+		shareRefresh(self)
+		local theme = Shown() -- (as their own Refresh, which may come after)
+		local after = theme and (theme.mine and delete or theme.edited and reset or create) or themePicker
+		self:ClearAllPoints()
+		self:SetPoint("LEFT", after, "RIGHT", 6, 0)
+	end
 	if not themePicker.SetupMenu then
-		ThemeButton(L["Create theme"], L["A theme of your own, made from the one shown."], themePicker,
+		local import = ThemeButton(L["Import theme"], L["Adds a theme a friend shared with Share theme."], share,
+			function() return true end, ImportTheme)
+		-- (Shown with no theme to edit too: a Game art one picked.)
+		import.Refresh = function(self)
+			self:SetShown(ns.GetDB() ~= nil)
+			self:SetEnabled(On(ns.GetDB()))
+		end
+		create = ThemeButton(L["Create theme"], L["A theme of your own, made from the one shown."], themePicker,
 			function(theme) return not theme.mine and not theme.edited end, function()
 				ns.CreateVitalsTheme()
 				SyncThemeLook(WantedTheme())

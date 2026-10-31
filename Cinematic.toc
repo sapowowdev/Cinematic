@@ -71,6 +71,7 @@ MenuWheel.lua
 MarkerWheel.lua
 CustomWheels.lua
 IconBrowser.lua
+QuestMarkIcons.lua
 WheelsPage.lua
 QuestMobs.lua
 QuestGlow.lua
@@ -122,7 +123,6 @@ Share.lua
 Backups.lua
 Welcome.lua
 Layouts.lua
-ModuleEditor.lua
 Options.lua
 Changelog.lua
 ChangelogCommits.lua

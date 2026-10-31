@@ -89,7 +89,9 @@ function ns.ShotName(id)
 	local rows = Rows()
 	local name = rows and rows[id .. ".name"]
 	if type(name) == "string" and name:find("%S") then return name end
-	return (L["%s shot"]):format(ns.CAMERA_NAMES[ns.ShotBaseOf(id)] or "")
+	-- (Unnamed: its camera's name, and the number it was given if that was taken: see AddShot.)
+	local num = rows and tonumber(rows[id .. ".num"])
+	return (L["%s shot"]):format(ns.CAMERA_NAMES[ns.ShotBaseOf(id)] or "") .. (num and (" (" .. num .. ")") or "")
 end
 -- Any camera value's name: a shot's, else the camera's.
 function ns.CameraName(value)
@@ -160,8 +162,20 @@ function ns.AddShot(base, name)
 		end
 	end
 	if not id then return nil end
+	-- A name another shot already shows gets the first free number after it,
+	-- "Cozy camera shot (1)", so a new one stands out (the same name is
+	-- still allowed if you type it). Unnamed, the number's kept apart from
+	-- the name, which goes on following its camera.
+	local taken = {}
+	for _, other in ipairs(list) do taken[ns.ShotName(other)] = true end
 	rows[id .. ".base"] = PREFIX[base] and base or "cozy"
-	rows[id .. ".name"] = name
+	rows[id .. ".name"], rows[id .. ".num"] = name, nil
+	local shown = ns.ShotName(id)
+	if taken[shown] then
+		local n = 1
+		while taken[shown .. " (" .. n .. ")"] do n = n + 1 end
+		if name then rows[id .. ".name"] = name .. " (" .. n .. ")" else rows[id .. ".num"] = n end
+	end
 	rows.shots = (rows.shots and rows.shots ~= "" and rows.shots .. "," or "") .. id
 	return id
 end
@@ -180,7 +194,7 @@ function ns.RemoveShot(id)
 	local rows = ns.GetDB().cameraRows
 	local base = ns.ShotBaseOf(id)
 	for _, row in ipairs(ns.ShotUsers(id)) do ns.SetCameraRowValue(row, "camera", base) end
-	rows[id .. ".name"], rows[id .. ".base"] = nil, nil
+	rows[id .. ".name"], rows[id .. ".base"], rows[id .. ".num"] = nil, nil, nil
 	for _, setting in ipairs(ns.SHOT_SETTINGS) do rows[id .. "." .. setting.key] = nil end
 	local list = {}
 	for _, each in ipairs((ns.ShotList())) do

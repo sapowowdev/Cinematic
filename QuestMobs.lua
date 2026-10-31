@@ -579,10 +579,70 @@ function ns.QuestProgressAtlas()
 	return progressAtlas or nil
 end
 
+-- The mark's look, Quest Vision's "Quest mark icon": questMarkStyle for
+-- friendly NPCs (and the quest object's glow), questMarkStyleEnemy for
+-- enemies. Either one of QUEST_MARK_ICONS (QuestMarkIcons.lua): an atlas
+-- name, or a texture path (holding a \). "questnormal" is the ! above, as it
+-- always was; any other is that icon, greyed for one you can't do anything
+-- with. One this client lacks (or a value it doesn't know): the !.
+local function IsFile(icon)
+	return icon:find("\\", 1, true) ~= nil
+end
+
+local usable = {} -- [icon] = whether this client has it
+local function Usable(icon)
+	if type(icon) ~= "string" then
+		return false
+	end
+	if usable[icon] == nil then
+		if not IsFile(icon) then
+			usable[icon] = HasAtlas(icon)
+		elseif GetFileIDFromPath then
+			local ok, id = pcall(GetFileIDFromPath, icon)
+			usable[icon] = ok and id ~= nil
+		else
+			usable[icon] = true -- (can't tell: offered)
+		end
+	end
+	return usable[icon]
+end
+
+-- For the pickers (IconBrowser's source): the icons this client has.
+local available
+ns.QuestMarkIconSource = {
+	list = function()
+		if not available then
+			available = {}
+			for _, icon in ipairs(ns.QUEST_MARK_ICONS or {}) do
+				if Usable(icon) then
+					available[#available + 1] = icon
+				end
+			end
+		end
+		return available
+	end,
+	atlas = function(icon) return not IsFile(icon) end,
+	usable = Usable,
+	name = function(icon) return (icon:match("[^\\]*$")) end,
+}
+
 local function PaintMark(texture)
 	local passive = marks[texture] == "passive"
 	texture:SetDesaturated(false)
 	texture:SetVertexColor(1, 1, 1)
+	local look = ns.Setting(marks[texture] == "enemy" and "questMarkStyleEnemy" or "questMarkStyle")
+	if type(look) == "string" and look:lower() ~= "questnormal" and Usable(look)
+		and (IsFile(look) or pcall(texture.SetAtlas, texture, look)) then
+		if IsFile(look) then
+			texture:SetTexture(look)
+			texture:SetTexCoord(0, 1, 0, 1)
+		end
+		if passive then
+			texture:SetDesaturated(true)
+			texture:SetVertexColor(0.8, 0.8, 0.8)
+		end
+		return
+	end
 	local atlas = passive and not StandardModels() and ns.QuestProgressAtlas()
 	if atlas and pcall(texture.SetAtlas, texture, atlas) then
 		return
@@ -668,10 +728,19 @@ function ns.IsPassiveQuestMob(unit)
 end
 
 local watching
--- passive: the "in progress" mark (see above), else the !. Painted again only
--- when that changes.
-function ns.SetQuestMark(texture, passive)
-	local kind = passive and "passive" or "normal"
+-- unit: the quest mob it's for, nil for none (the quest object's glow). One
+-- you can't do anything with gets the "in progress" mark (see above), an enemy
+-- the enemies' icon, else the friendly one. Painted again only when that changes.
+function ns.SetQuestMark(texture, unit)
+	local kind = "normal"
+	if unit and ns.IsPassiveQuestMob(unit) then
+		kind = "passive"
+	elseif unit then
+		local ok, can = pcall(UnitCanAttack, "player", unit)
+		if ok and Known(can) and can then
+			kind = "enemy"
+		end
+	end
 	if marks[texture] == kind then
 		return
 	end
@@ -679,11 +748,14 @@ function ns.SetQuestMark(texture, passive)
 	PaintMark(texture)
 	if not watching and Settings and Settings.SetOnValueChangedCallback then
 		watching = true
-		pcall(Settings.SetOnValueChangedCallback, MODELS_SETTING, function()
-			for mark in pairs(marks) do
-				PaintMark(mark)
-			end
-		end)
+		pcall(Settings.SetOnValueChangedCallback, MODELS_SETTING, ns.RepaintQuestMarks)
+	end
+end
+
+-- Every mark painted again (the models setting or questMarkStyle changed).
+function ns.RepaintQuestMarks()
+	for mark in pairs(marks) do
+		PaintMark(mark)
 	end
 end
 
@@ -722,7 +794,7 @@ function ns.RefreshTargetQuestIcon()
 	if show then
 		local icon = TargetIcon()
 		if icon then
-			ns.SetQuestMark(icon.texture, ns.IsPassiveQuestMob("target"))
+			ns.SetQuestMark(icon.texture, "target")
 			icon:Show()
 		end
 	elseif targetIcon then

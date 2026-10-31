@@ -806,23 +806,15 @@ function ns.SavePanelSpot(name, spot, width, height)
 	Placed()
 end
 
--- Quest Vision's Put them back: the talk windows open in their usual place
--- again (their spot is the same one Quality of life's dragging keeps).
-function ns.ForgetTalkWindowSpot()
-	local spots = ns.db and ns.db.panelSpots
-	if type(spots) == "table" then
-		for name in pairs(TALK) do
-			spots[name] = nil
-		end
-	end
-end
-
 -- Put windows back: every window opens in its usual place again (the open
--- ones go back as the next window opens or closes).
+-- ones go back as the next window opens or closes), Quest Vision's dialogue
+-- list and bubble too.
 function ns.ForgetPanelSpots()
 	if ns.db then
 		ns.db.panelSpots = nil
 		ns.db.rollSpot = nil -- (the roll window's, dragged apart from the game's roll frames)
+		ns.db.questTalkSpot = nil -- (QuestTalk.lua's list of replies)
+		ns.db.questTalkBubbleSpot = nil -- (and its bubble, while not over an NPC)
 	end
 	wipe(dropped)
 end

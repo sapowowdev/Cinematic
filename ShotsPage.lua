@@ -228,6 +228,10 @@ function ns.CreateMyShotsPanel(kit)
 	end
 
 	canvas:SetScript("OnShow", kit.PageShown(function()
+		-- (Opened by a camera menu's New shot...: that shot.)
+		if ns.myShotsSelect then
+			selected, ns.myShotsSelect = ns.myShotsSelect, nil
+		end
 		kit.Refresh()
 		Layout()
 	end, content))

@@ -2495,13 +2495,20 @@ do
 			return test(facts) and true or false
 		end
 	end
-	-- The row's rule, compiled, when it has one that reads.
+	-- The row's rule, compiled, when it has one that reads. (Kept per row till
+	-- its text changes: asked for each row on every tick.)
+	local ruleText, ruleTest = {}, {}
 	function ns.RuleTest(key)
 		local text = ns.db.frameRules and ns.db.frameRules[key]
-		if type(text) ~= "string" or not text:find("%S") then
-			return nil
+		if text == ruleText[key] then
+			return ruleTest[key]
 		end
-		return (ns.CompileRule(text))
+		local test
+		if type(text) == "string" and text:find("%S") then
+			test = (ns.CompileRule(text))
+		end
+		ruleText[key], ruleTest[key] = text, test
+		return test
 	end
 
 	-- Whether a unit is within an interact distance (the rules' near: 2,
@@ -7380,6 +7387,71 @@ function ns.ForgetExtraFrame(name)
 	ns.db.ignoredFrames[name] = nil
 end
 
+-- The Advanced Frames page's Default row: its key in the shared lists, its
+-- Always a setting of its own (addonDefaultAlways, on to start with: an
+-- addon you install isn't hidden till you say so). A supported addon newly
+-- installed starts with its settings, a frame you add with all but Always
+-- (added to be faded); Copy to all gives them to every row on the page. Written out tick by tick (not left
+-- nil), so a supported addon's own defaults don't come back through.
+ns.EXTRA_DEFAULT_KEY = "extradefault"
+do -- (In a do block: the file is near Lua's 200 locals.)
+	local function Set(list, key, value)
+		ns.db[list] = ns.db[list] or {}
+		ns.db[list][key] = value
+	end
+	local function Get(list, key) return ns.db[list] and ns.db[list][key] end
+	local function CopyDefaultRow(to)
+		local db, from = ns.db, ns.EXTRA_DEFAULT_KEY
+		Set("combatShow", to, ns.IsCombatShowOn(from) and true or false)
+		Set("calmShow", to, ns.IsCalmShowOn(from) and true or false)
+		Set("enemyShow", to, ns.IsEnemyShowOn(from) and true or false)
+		Set("friendlyShow", to, ns.IsFriendlyShowOn(from) and true or false)
+		for _, place in ipairs(ns.PLACE_SHOW) do
+			Set(place.list, to, ns.IsPlaceShowOn(place.list, from) and true or false)
+		end
+		for _, list in ipairs({ "tankHide", "healerHide", "damageHide" }) do
+			Set(list, to, ns.RoleHidden(db, list, from))
+		end
+		Set("frameRules", to, Get("frameRules", from))
+	end
+	-- (always: its Always too, else the frame's left faded.)
+	function ns.ApplyExtraDefault(name, always)
+		CopyDefaultRow("extra:" .. name)
+		if always and ns.db.addonDefaultAlways then
+			ns.StopFading(name)
+		else
+			ns.UnignoreFrame(name)
+		end
+	end
+	local function ApplyAddonDefault(key)
+		CopyDefaultRow("addon:" .. key)
+		ns.db.addonFrames[key] = not ns.db.addonDefaultAlways
+	end
+	function ns.CopyExtraDefaultToAll()
+		for name in pairs(ns.db.extraFrames) do ns.ApplyExtraDefault(name, true) end
+		for _, known in ipairs(ns.ADDON_FRAMES) do ApplyAddonDefault(known.key) end
+		ns.BuildManagedList()
+	end
+	-- Supported addons installed since the last login take the Default row's
+	-- settings. The first time, the ones installed now are just noted.
+	function ns.DefaultNewAddons()
+		local db = ns.db
+		local first = not db.addonsSeen
+		db.addonsSeen = db.addonsSeen or {}
+		local any
+		for _, known in ipairs(ns.ADDON_FRAMES) do
+			if not db.addonsSeen[known.key] and ns.AddOnInstalled(known.addon) then
+				db.addonsSeen[known.key] = true
+				if not first then
+					ApplyAddonDefault(known.key)
+					any = true
+				end
+			end
+		end
+		if any then ns.BuildManagedList() end
+	end
+end
+
 -- Frames that don't take the mouse (the Cooldown Manager's icons, many
 -- addons' bars) are invisible to GetMouseFoci, so failing that, the smallest
 -- named, shown top-level frame the cursor is over. Smallest, so a frame
@@ -7463,6 +7535,7 @@ function ns.AddUnderMouse(name)
 	ns.db.ignoredFrames[name] = nil
 	ns.db.extraFrames[name] = true
 	AddFrame(frame, "extra:" .. name)
+	ns.ApplyExtraDefault(name)
 	ns.Print(L["now fading %s"]:format(name))
 end
 
@@ -7665,6 +7738,7 @@ do
 				ns.db.ignoredFrames[name] = nil
 				ns.db.extraFrames[name] = true
 				AddFrame(frame, "extra:" .. name)
+				ns.ApplyExtraDefault(name)
 				added = added + 1
 			end
 		end

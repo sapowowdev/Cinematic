@@ -527,3 +527,28 @@ function ns.ReadSharedWheel(text)
 		slots = slots,
 	}
 end
+
+-- Any other shared thing (a camera script, CameraScripts.lua): its table as
+-- prefix + format + ":" and the same base64 with a checksum. Unpack gives
+-- the table, or nil and why ("empty", "newer", "other" or "broken").
+function ns.PackShared(prefix, format, data)
+	local out = {}
+	Write(data, out)
+	local body = table.concat(out)
+	return prefix .. format .. ":" .. Encode(body .. Checksum(body))
+end
+function ns.UnpackShared(prefix, format, text)
+	text = (text or ""):gsub("%s", "")
+	if text == "" then return nil, "empty" end
+	local given, encoded = text:match("^" .. prefix .. "(%d+):(.*)")
+	given = tonumber(given)
+	if not given then return nil, "other" end
+	if given > format then return nil, "newer" end
+	local payload = Decode(encoded)
+	local body, sum = payload:sub(1, -9), payload:sub(-8)
+	if #payload < 9 or Checksum(body) ~= sum then return nil, "broken" end
+	local data = Read(body)
+	if type(data) ~= "table" then return nil, "broken" end
+	return data
+end
+ns.CleanSharedText = Clean

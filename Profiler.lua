@@ -332,8 +332,9 @@ function ns.StopProfile()
 	if ns.PeekChat then ns.PeekChat(DEFAULT_CHAT_FRAME, 15) end
 	if run.quiet then
 		-- (Started from the Profiler page: the results are there.)
-		ns.Print(ns.L["CPU recording done (%.3f ms a frame measured): it's on the Profiler page."]:format(
-			ns.lastProfile.total))
+		-- (with a link to the page: ProfilerPage.lua's SetItemRef hook)
+		ns.Print(ns.L["CPU recording done (%.3f ms a frame measured): see the %s page."]:format(
+			ns.lastProfile.total, "|cff71d5ff|Hgarrmission:cinematic:profiler|h[" .. ns.L["Profiler"] .. "]|h|r"))
 		run = nil
 		return true
 	end

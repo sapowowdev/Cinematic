@@ -64,6 +64,8 @@ local DEFAULTS = {
 	fadeInTime = 1.5,
 	combatFadeInTime = 0.2,   -- ...for fades in during a fight (the UI coming back as it starts)
 	letterbox = true,
+	letterboxPage = true,  -- the Letterbox page's Enable Page (off: no bars; tintPage: the Tint page's)
+	tintPage = true,
 	letterboxSize = 0.03,  -- fraction of screen height per bar
 	letterboxAlpha = 1,    -- bar opacity
 	-- The bars' look: the Style hub's Letterbox page (letterboxStyle: on; off,
@@ -952,6 +954,9 @@ DEFAULTS.questVision = true -- the Quest Vision page's switch: off, none of the 
 DEFAULTS.questMobsPlate = false
 DEFAULTS.questMobsName = false
 DEFAULTS.questMobsMark = true
+-- The quest mark's icon on friendly NPCs, and on enemies: one of QUEST_MARK_ICONS (see QuestMobs' PaintMark)
+DEFAULTS.questMarkStyle = "questnormal"
+DEFAULTS.questMarkStyleEnemy = "questnormal"
 DEFAULTS.targetQuestIcon = true -- a quest icon on the target frame while your target is one of them (see QuestMobs)
 -- The nearest tracked quest's item to use on a big button at the extra ability button's spot (see QuestItemButton)
 DEFAULTS.questItemButton = true
@@ -983,6 +988,7 @@ DEFAULTS.cooldownKeybinds = false -- its Show keybinds: each spell's key on its 
 -- CineMode leaves that part of the UI to the game.
 DEFAULTS.handleFrames = true -- Standard Frames
 DEFAULTS.handleAddonFrames = true -- Advanced Frames
+DEFAULTS.addonDefaultAlways = true -- its Default row's Always: addons installed later start left alone (ns.DefaultNewAddons)
 DEFAULTS.handleGamepad = true
 DEFAULTS.handleMinimap = true
 DEFAULTS.handleQuests = true -- Quest tracker
@@ -1269,6 +1275,7 @@ for page, keys in pairs({
 	handleVision = { "minimapVisions", "handleHealVision", "questVision", "rollWindow", "duelPlates",
 		"lowHealth", "combatVision" },
 	duelPlates = { "duelCC" }, -- Duel Vision's page
+	visualEffects = { "letterboxPage", "tintPage" }, -- (the Letterbox and Tint pages' switches)
 }) do
 	for _, key in ipairs(keys) do PAGE_SWITCH[key] = page end
 end
@@ -2768,6 +2775,11 @@ local lastFightAt = -math.huge
 ns.OnCalmEnd(function(cut) lastFightAt = math.min(lastFightAt, cut) end)
 local calmHealthySince -- (Exit Calm Timer when healthy: when you were last back to full)
 local calmTrace = { fighting = false } -- (and for its log lines: a fight was on last tick)
+-- The tick is done in two halves, the frames in one frame and the rest (effects,
+-- CVars, music, nameplates...) in the next, so no one frame takes it all: its
+-- cinematic and elapsed, waiting for the second half. (At low frame rates, with a
+-- tick due every frame, both halves still run in one.)
+local tickRest = {}
 
 local function OnUpdate(_, elapsed)
 	-- Every frame (with EllesmereUI, or watching with /cine debug alpha): frames
@@ -2776,6 +2788,83 @@ local function OnUpdate(_, elapsed)
 		Step(ns.SyncOwnAlphas)
 	end
 	accumulated = accumulated + elapsed
+	if tickRest.cinematic ~= nil then
+		local cinematic, restElapsed = tickRest.cinematic, tickRest.elapsed
+		tickRest.cinematic = nil
+		-- The letterbox, tint, vignette and weather each show except where their grid row says. One
+		-- kept out of fights waits out the Calm Timer after one before fading back in.
+		local now = GetTime()
+		local inCombat = InCombatLockdown() or Flag(UnitAffectingCombat("player"))
+		if inCombat then
+			lastFightAt = now
+		end
+		if inCombat ~= calmTrace.fighting then
+			calmTrace.fighting = inCombat
+			if not inCombat and ns.db.calmEndsAtFull then
+				ns.Log("calm", "fight ended")
+			end
+		end
+		-- Exit Calm Timer when healthy: the Calm Timer ends calmFullAfter seconds
+		-- after your health and power (and your pet's, if ticked) are back to full.
+		if not inCombat and ns.db.calmEndsAtFull and now - lastFightAt < ns.db.calmTime then
+			local healthy = ns.IsPlayerRecovering and Step(ns.IsPlayerRecovering) == false
+				and not (ns.db.calmEndsAtFullPet and Step(ns.IsPetRecovering) ~= false)
+			if not healthy then
+				calmHealthySince = nil
+			else
+				if not calmHealthySince then
+					calmHealthySince = now
+					ns.Log("calm", ("healthy %.1f sec after the fight%s: %s"):format(now - lastFightAt,
+						ns.db.calmEndsAtFullPet and " (with pet)" or "", ns.VitalsReadout and Step(ns.VitalsReadout) or "?"))
+				end
+				if now - calmHealthySince >= (ns.db.calmFullAfter or 0) then
+					local sinceFight = now - lastFightAt
+					Step(ns.EndCalm, now)
+					ns.Log("calm", ("calm timer ended %.1f sec after the fight, %.1f sec after healthy; fading out over %.1f sec")
+						:format(sinceFight, now - calmHealthySince, ns.FadeOutTime()))
+					calmTrace.endedAt = now
+					calmTrace.checkAt = now + ns.FadeOutTime() + 1
+				end
+			end
+		else
+			calmHealthySince = nil
+		end
+		-- (For the log: how long after that the UI is all faded; a second past the
+		-- fade time, what's still up; given up after 30 sec.)
+		if calmTrace.endedAt and (inCombat or now - calmTrace.endedAt > 30) then
+			ns.Log("calm", (inCombat and "a fight started before the UI faded" or "the UI still isn't all faded after 30 sec")
+				.. "; still up: " .. (ns.NotFadedList and Step(ns.NotFadedList) or "?"))
+			calmTrace.endedAt = nil
+		elseif calmTrace.endedAt and ns.AllFaded and Step(ns.AllFaded) then
+			ns.Log("calm", ("all faded %.1f sec after the calm timer ended"):format(now - calmTrace.endedAt))
+			calmTrace.endedAt = nil
+		elseif calmTrace.endedAt and calmTrace.checkAt and now >= calmTrace.checkAt then
+			calmTrace.checkAt = nil
+			ns.Log("calm", ("%.1f sec after the calm timer ended, still up: %s"):format(now - calmTrace.endedAt,
+				ns.NotFadedList and Step(ns.NotFadedList) or "?"))
+		end
+		-- In CineMode; with Start in CineMode (fadeUI) off, over the normal UI (the Subtle profile);
+		-- and while just moving about takes you out of it, with Keep VFX on.
+		local effectsOn = cinematic or (not ns.db.fadeUI and ns.db.enabled and ns.ProfileChosen())
+			or (offForMoving and ns.db.movingKeepVFX) or false
+		-- (Each on while its Show in row, effect:<effect>, is: Visual Effects page;
+		-- the letterbox and tint while their own page's Enable Page is on too.)
+		for _, key in ipairs(GRID_EFFECTS) do
+			effectWanted[key] = effectsOn and ns.db.visualEffects and ns.db[key .. "Page"] ~= false
+				and ns.RowOnNow(EFFECT_ROWS[key], ns.db[key .. "Always"], true) or false
+		end
+		Step(ns.UpdateLetterbox, effectWanted.letterbox, restElapsed)
+		-- (The vignette and weather share the tint's overlay, each fading on its own.)
+		Step(ns.UpdateTint, effectWanted.tint, restElapsed, effectWanted.vignette, effectWanted.weather)
+		Step(ns.UpdateCVars, cinematic)
+		Step(ns.UpdateMusic, cinematic, restElapsed)
+		Step(ns.UpdatePlates, cinematic, restElapsed)
+		Step(ns.UpdateTooltip)
+		Step(ns.UpdateTaxi)
+		if not ns.IsSuspended() then
+			ns.lastCinematic = cinematic
+		end
+	end
 	if accumulated < TICK then
 		return
 	end
@@ -2828,78 +2917,8 @@ local function OnUpdate(_, elapsed)
 		Step(ns.FinishLayoutFade)
 	end
 	Step(ns.UpdateFrames, cinematic or ns.previewRows ~= nil or ns.layoutFadeUntil ~= nil, elapsed)
-	-- The letterbox, tint, vignette and weather each show except where their grid row says. One
-	-- kept out of fights waits out the Calm Timer after one before fading back in.
-	local now = GetTime()
-	local inCombat = InCombatLockdown() or Flag(UnitAffectingCombat("player"))
-	if inCombat then
-		lastFightAt = now
-	end
-	if inCombat ~= calmTrace.fighting then
-		calmTrace.fighting = inCombat
-		if not inCombat and ns.db.calmEndsAtFull then
-			ns.Log("calm", "fight ended")
-		end
-	end
-	-- Exit Calm Timer when healthy: the Calm Timer ends calmFullAfter seconds
-	-- after your health and power (and your pet's, if ticked) are back to full.
-	if not inCombat and ns.db.calmEndsAtFull and now - lastFightAt < ns.db.calmTime then
-		local healthy = ns.IsPlayerRecovering and Step(ns.IsPlayerRecovering) == false
-			and not (ns.db.calmEndsAtFullPet and Step(ns.IsPetRecovering) ~= false)
-		if not healthy then
-			calmHealthySince = nil
-		else
-			if not calmHealthySince then
-				calmHealthySince = now
-				ns.Log("calm", ("healthy %.1f sec after the fight%s: %s"):format(now - lastFightAt,
-					ns.db.calmEndsAtFullPet and " (with pet)" or "", ns.VitalsReadout and Step(ns.VitalsReadout) or "?"))
-			end
-			if now - calmHealthySince >= (ns.db.calmFullAfter or 0) then
-				local sinceFight = now - lastFightAt
-				Step(ns.EndCalm, now)
-				ns.Log("calm", ("calm timer ended %.1f sec after the fight, %.1f sec after healthy; fading out over %.1f sec")
-					:format(sinceFight, now - calmHealthySince, ns.FadeOutTime()))
-				calmTrace.endedAt = now
-				calmTrace.checkAt = now + ns.FadeOutTime() + 1
-			end
-		end
-	else
-		calmHealthySince = nil
-	end
-	-- (For the log: how long after that the UI is all faded; a second past the
-	-- fade time, what's still up; given up after 30 sec.)
-	if calmTrace.endedAt and (inCombat or now - calmTrace.endedAt > 30) then
-		ns.Log("calm", (inCombat and "a fight started before the UI faded" or "the UI still isn't all faded after 30 sec")
-			.. "; still up: " .. (ns.NotFadedList and Step(ns.NotFadedList) or "?"))
-		calmTrace.endedAt = nil
-	elseif calmTrace.endedAt and ns.AllFaded and Step(ns.AllFaded) then
-		ns.Log("calm", ("all faded %.1f sec after the calm timer ended"):format(now - calmTrace.endedAt))
-		calmTrace.endedAt = nil
-	elseif calmTrace.endedAt and calmTrace.checkAt and now >= calmTrace.checkAt then
-		calmTrace.checkAt = nil
-		ns.Log("calm", ("%.1f sec after the calm timer ended, still up: %s"):format(now - calmTrace.endedAt,
-			ns.NotFadedList and Step(ns.NotFadedList) or "?"))
-	end
-	-- In CineMode; with Start in CineMode (fadeUI) off, over the normal UI (the Subtle profile);
-	-- and while just moving about takes you out of it, with Keep VFX on.
-	local effectsOn = cinematic or (not ns.db.fadeUI and ns.db.enabled and ns.ProfileChosen())
-		or (offForMoving and ns.db.movingKeepVFX) or false
-	-- (Each on while its Show in row, effect:<effect>, is: Visual Effects page.)
-	for _, key in ipairs(GRID_EFFECTS) do
-		effectWanted[key] = effectsOn and ns.db.visualEffects
-			and ns.RowOnNow(EFFECT_ROWS[key], ns.db[key .. "Always"], true) or false
-	end
-	Step(ns.UpdateLetterbox, effectWanted.letterbox, elapsed)
-	-- (The vignette and weather share the tint's overlay, each fading on its own.)
-	Step(ns.UpdateTint, effectWanted.tint, elapsed, effectWanted.vignette, effectWanted.weather)
-	Step(ns.UpdateCVars, cinematic)
-	Step(ns.UpdateMusic, cinematic, elapsed)
-	Step(ns.UpdatePlates, cinematic, elapsed)
-	Step(ns.UpdateTooltip)
-	Step(ns.UpdateTaxi)
-	if not ns.IsSuspended() then
-		ns.lastCinematic = cinematic
-	end
+	-- (The rest next frame, see tickRest.)
+	tickRest.cinematic, tickRest.elapsed = cinematic, elapsed
 end
 OnUpdate = ns.Profiled("Update tick", OnUpdate)
 ns.ProfileName(UpdateDroppedTarget, "UpdateDroppedTarget")
@@ -2975,6 +2994,7 @@ function ns.Suspend(reason)
 		return
 	end
 	suspended = true
+	tickRest.cinematic = nil
 	ticker:SetScript("OnUpdate", nil)
 	ns.orbitFrame:SetScript("OnUpdate", nil)
 	RestoreEverything()
@@ -5834,6 +5854,7 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		ns.musicBackOn = nil
 		ns.RestoreMusicVolume()
 		ns.PruneBuiltInExtras()
+		ns.DefaultNewAddons() -- (Advanced Frames: supported addons installed since, the Default row's settings)
 		ns.wasOnTaxi = ns.OnTaxi() -- don't re-center after a /reload mid-flight
 		ns.RegisterChatPeek()
 		ns.HookCameraInput()

@@ -22,13 +22,17 @@ local EFFECT_PAGES = {
 		tip = "Where and when the bars show.", styleTip = "How the letterbox bars look and come in.",
 		intro = "Black bars at the top and bottom of the screen in CineMode, like a film's. Where and when they " ..
 			"show: the row below (nothing ticked: off). Their size and look: the Style tab. The Visual Effects " ..
-			"page's Enable Page turns them off too." },
+			"page's Enable Page turns them off too.",
+		switchTip = "On: the bars show as the row below says. Off: no letterbox anywhere; the row and its " ..
+			"Style tab keep their settings for when you turn this back on." },
 	tint = { name = "Tint", page = "Tint", style = "Tint Style",
 		tip = "Where and when the tint shows.",
 		styleTip = "The color grading: a preset, the time of day and each zone's mood.",
 		intro = "The color grading over the game world in CineMode. Where and when it shows: the row below " ..
 			"(nothing ticked: off). Its preset, the time of day and the zones' tints: the Style tab. The Visual " ..
-			"Effects page's Enable Page turns it off too. The UI isn't tinted." },
+			"Effects page's Enable Page turns it off too. The UI isn't tinted.",
+		switchTip = "On: the tint shows as the row below says. Off: no tint anywhere; everything on this page " ..
+			"and its Style tab keeps its settings for when you turn this back on." },
 }
 
 -- Under the Tint tab's row: how strong it is, its drift, and the zone
@@ -42,17 +46,25 @@ EFFECT_PAGES.tint.More = function(kit, content, stack)
 		"%d%%", 100, ns.RefreshTint), "slider")
 	kit.Tooltip(timeStrength, L["How strongly the time-of-day color applies, in Time of day and " ..
 		"Zone + time of day. Lower it for softer nights; 0 leaves just the zone mood."])
-	local drift = stack:Add(kit.Check(content, "tintDrift", L["Subtle drift"],
-		L["The tint's strength slowly wanders up and down over a few minutes, so a still scene " ..
-		"feels a little more alive. Paused while the Style tab is open."]), "check")
-	drift:HookScript("OnClick", function()
-		kit.Refresh() -- (grey out / enable the amount slider)
-		ns.RefreshTint()
-	end)
-	local driftAmount = stack:Add(kit.Slider(content, "tintDriftAmount", L["Drift amount"], 2, 15, 1, "+/-%d%%", 100,
-		ns.RefreshTint), "slider")
-	kit.Tooltip(driftAmount, L["How far the strength wanders either way, as a share of the strength."])
-	kit.GreyUnless(driftAmount, function(db) return db.tintDrift end)
+	-- (All the way left is Off: tintDrift off, the amount kept for next time.)
+	kit.RecordKey(content, "tintDrift")
+	kit.RecordKey(content, "tintDriftAmount")
+	local driftAmount = stack:Add(kit.Slider(content, {
+		get = function()
+			local db = ns.GetDB()
+			return db.tintDrift and db.tintDriftAmount or 0
+		end,
+		set = function(value)
+			local db = ns.GetDB()
+			db.tintDrift = value > 0
+			if value > 0 then db.tintDriftAmount = value end
+		end,
+	}, L["Drift amount"], 0, 15, 1, function(value)
+		return value == 0 and L["Off"] or ("+/-%d%%"):format(value)
+	end, 100, ns.RefreshTint), "slider")
+	kit.Tooltip(driftAmount, L["The tint's strength slowly wanders up and down over a few minutes, so a still " ..
+		"scene feels a little more alive: how far either way, as a share of the strength. Paused while the " ..
+		"Style tab is open. Off: it stays put."])
 
 	-- Crossing a zone border: how the old zone's tint gives way to the new one.
 	stack:Header(content, L["At zone borders"])
@@ -90,7 +102,11 @@ function ns.CreateEffectPanel(kit, effect)
 	local title = kit.Label(content, "GameFontNormalLarge", L[info.name])
 	ns.EffectTabs(content, title, effect, 1)
 	local intro = kit.PageIntro(content, title, L[info.intro])
-	local stack = kit.Stack(intro, "label")
+	local switch = kit.PageSwitch(content, effect .. "Page", L["Enable Page"], L[info.switchTip], intro, function()
+		ns.letterboxDirty = true
+		if ns.RefreshTint then ns.RefreshTint() end
+	end)
+	local stack = kit.Stack(switch, "check")
 	local header = stack:Header(content, L["Show in"])
 	local key, alwaysKey = "effect:" .. effect, effect .. "Always"
 	local lastRow = ns.ShowTable(content, header, {

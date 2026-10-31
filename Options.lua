@@ -1516,6 +1516,7 @@ do
 			{ "Camera Settings", "Interface\\Icons\\Trade_Engineering" }, -- (an icon per camera instead)
 			{ "My Shots", "Interface\\Icons\\INV_Misc_Spyglass_02" }, -- (ShotsPage.lua)
 			{ "Shoulder Cam", "Interface\\Icons\\INV_Shoulder_02", dev = true }, -- (ShoulderCam.lua)
+			{ "Camera Scripts", "Interface\\Icons\\INV_Scroll_05", dev = true }, -- (CameraScriptsPage.lua)
 		} },
 		-- (label: the name on its icon, when the page is registered under another)
 		-- (the look and the sound: the visual effects' pages, then Audio)
@@ -1583,15 +1584,17 @@ do
 			{ "Vision wheel", "Interface\\Icons\\Ability_EyeOfTheOwl", section = "Wheels" },
 		} },
 		-- (WhatsNew.lua's pages, after Keybinds)
-		-- (Help: where to read up and report a problem, and the Profiler)
+		-- (Help: where to read up and report a problem, and the Profiler; Dev:
+		-- the dev copy's own tools)
 		{ name = "Community", colors = { Updates = { 0.35, 0.6, 0.9 }, People = { 0.3, 0.7, 0.5 },
-			Help = { 0.85, 0.6, 0.3 } }, pages = {
+			Help = { 0.85, 0.6, 0.3 }, Dev = { 0.85, 0.3, 0.25 } }, pages = {
 			{ "New features", "Interface\\Icons\\INV_Misc_Gift_01", section = "Updates" },
 			{ "All changes", "Interface\\Icons\\INV_Misc_Book_11", section = "Updates" },
 			{ "Socials", "Interface\\Icons\\INV_Letter_15", section = "People" },
 			{ "Thanks", "Interface\\Icons\\INV_ValentinesCard02", section = "People" },
 			{ "Help", "Interface\\Icons\\INV_Misc_QuestionMark", section = "Help" }, -- (WhatsNew.lua)
 			{ "Profiler", "Interface\\Icons\\INV_Misc_PocketWatch_02", section = "Help" }, -- (ProfilerPage.lua)
+			{ "Module Editor", "Interface\\Icons\\INV_Misc_Wrench_01", section = "Dev", dev = true }, -- (ModuleEditor.lua)
 		} },
 	}
 	-- Pages still being worked on: "(WIP)" after the name on their icon's mouseover.
@@ -3539,12 +3542,12 @@ local function CreateEffectsPanel()
 	-- letterbox's and tint's rows: their own pages, LetterboxStyle.lua.)
 	local gridHeader = Header(content, L["Show in"], master, -18)
 	gridHeader:SetPoint("TOPLEFT", master, "BOTTOMLEFT", 2, -18)
-	local gridNote = PageIntro(content, gridHeader,
+	PageIntro(content, gridHeader,
 		L["Where and when each effect shows in CineMode. Always: everywhere. Combat: In combat, Calm Timer (after a " ..
 		"fight, till it's run out), Out of combat (the rest of the time), In a camera mode (flights, AFK, cozy and the " ..
 		"rest). Location: the places. Nothing ticked: it's off."])
 	local EFFECT_LABELS = { vignette = L["Vignette"], weather = L["Weather"] }
-	local effectRows = { opts = { quiet = true, cam = true, anyFight = true } }
+	local effectRows = { opts = { quiet = true, cam = true, anyFight = true }, underHeader = true }
 	for _, effect in ipairs(ns.EFFECT_GRID) do
 		if EFFECT_LABELS[effect] then
 			local key, alwaysKey = "effect:" .. effect, effect .. "Always"
@@ -3559,7 +3562,7 @@ local function CreateEffectsPanel()
 				end }
 		end
 	end
-	local lastGridRow = ns.ShowTable(content, gridNote, effectRows, L["Visual Effects"])
+	local lastGridRow = ns.ShowTable(content, gridHeader, effectRows, L["Visual Effects"])
 
 	-- The vignette, inn glow and weather: each slider on one line with its
 	-- name, as on Graphics+, the sliders lined up past the longest name and
@@ -4353,19 +4356,33 @@ local function CreateAudioPanel()
 		"the UI returns and your music is switched off again (logging out too). With your game " ..
 		"music on, it's left alone, bar the stops below. Off: CineMode leaves your music alone."], subtitle)
 
-	-- Left column: music, fatigue
-	local musicHeader = Header(content, L["Music"], music, -18)
-	musicHeader:SetPoint("TOPLEFT", music, "BOTTOMLEFT", 2, -18)
+	-- One column, each slider on one line with its name (an inline stack, as on Graphics+).
+	local stack = Stack(music, "check", true)
 
-	local musicFade = Slider(content, "musicFadeTime", L["Music fade time"], 0.5, 10, 0.5, L["%.1f sec"])
-	musicFade:SetPoint("TOPLEFT", musicHeader, "BOTTOMLEFT", 2, -26)
+	-- First: where and when music plays, a row as the Standard Frames
+	-- page's (GridRows.lua). Off: it fades out (your own game music too), back after.
+	local playsHeader = stack:Header(content, L["Music plays in"])
+	stack:Help(content,
+		L["Where and when music can play in CineMode; anywhere else it fades out (your own game music too) " ..
+		"and back in after. Always: everywhere. Out of combat: back once the Calm Timer has run out after a " ..
+		"fight (with Calm Timer too: as soon as the fight ends)."])
+	-- (underHeader: the column names level with the header, as on the Letterbox page.)
+	local lastRow = ns.ShowTable(content, playsHeader, {
+		opts = { quiet = true, cam = true, anyFight = true }, underHeader = true, {
+		key = "music", label = L["Music"], alwaysKey = "musicAlways",
+		alwaysOn = function() return ns.GetDB().musicAlways end,
+		setAlways = function(value) ns.GetDB().musicAlways = value end,
+		alwaysTip = L["Music can play all through CineMode. (The other columns then have nothing to add.)"],
+	} }, L["Audio"])
+	stack:Continue(lastRow, "label")
+
+	stack:Header(content, L["Music"])
+	local musicFade = stack:Add(Slider(content, "musicFadeTime", L["Music fade time"], 0.5, 10, 0.5,
+		L["%.1f sec"]), "slider")
 	Tooltip(musicFade, L["How long music takes to fade in or out with CineMode."])
 
-	local fatigueHeader = Header(content, L["Fatigue"], musicFade, -24)
-	fatigueHeader:SetPoint("TOPLEFT", musicFade, "BOTTOMLEFT", -2, -24)
-
 	-- (Minutes, in half-minute steps.)
-	local fatigue = Slider(content, "musicFatigue", L["Music fatigue"], 0, 30, 0.5, function(value)
+	local fatigue = stack:Add(Slider(content, "musicFatigue", L["Music fatigue"], 0, 30, 0.5, function(value)
 		local minutes, seconds = math.floor(value), math.floor((value % 1) * 60 + 0.5)
 		if minutes == 0 then
 			return L["%d sec"]:format(seconds)
@@ -4373,38 +4390,18 @@ local function CreateAudioPanel()
 			return L["%d min"]:format(minutes)
 		end
 		return L["%d min %d sec"]:format(minutes, seconds)
-	end)
-	fatigue:SetPoint("TOPLEFT", fatigueHeader, "BOTTOMLEFT", 2, -26)
+	end), "slider")
 	Tooltip(fatigue, L["Once a camera has started music, no camera starts it again for this long, " ..
 		"counted from when it started. The first camera after a login or /reload always can. " ..
 		"Music coming back after a mute doesn't count. 0 turns this off."])
 
-	-- Right column: stopping as you leave the camera modes.
-	local muteHeader = Label(content, "GameFontNormal", L["Stop music"])
-	muteHeader:SetPoint("TOPLEFT", musicHeader, "TOPLEFT", 320, 0)
-
-	local movingMusic = Check(content, "musicPauseWhenMoving", L["Leaving a camera mode"],
+	-- Stopping as you leave the camera modes.
+	stack:Add(Check(content, "musicPauseWhenMoving", L["Stop music leaving a camera mode"],
 		L["Music fades out once you leave the camera modes and move on: walking off from the cozy " ..
 		"camera, say. Going from one camera straight to another (vista to cozy) keeps it playing, " ..
 		"as does standing still. A fresh track fades in when the next camera starts (standing " ..
 		"still counts once the AFK camera starts, with Go AFK's music on, Cameras page). " ..
-		"Fades at the music fade time."])
-	movingMusic:SetPoint("TOPLEFT", muteHeader, "BOTTOMLEFT", -2, -6)
-
-	-- Below both: where and when music plays, a row as the Standard Frames
-	-- page's (GridRows.lua). Off: it fades out (your own game music too), back after.
-	local playsHeader = Header(content, L["Music plays in"], fatigue, -24)
-	playsHeader:SetPoint("TOPLEFT", fatigue, "BOTTOMLEFT", -4, -28)
-	local playsNote = PageIntro(content, playsHeader,
-		L["Where and when music can play in CineMode; anywhere else it fades out (your own game music too) " ..
-		"and back in after. Always: everywhere. Out of combat: back once the Calm Timer has run out after a " ..
-		"fight (with Calm Timer too: as soon as the fight ends)."])
-	ns.ShowTable(content, playsNote, { opts = { quiet = true, cam = true, anyFight = true }, {
-		key = "music", label = L["Music"], alwaysKey = "musicAlways",
-		alwaysOn = function() return ns.GetDB().musicAlways end,
-		setAlways = function(value) ns.GetDB().musicAlways = value end,
-		alwaysTip = L["Music can play all through CineMode. (The other columns then have nothing to add.)"],
-	} }, L["Audio"])
+		"Fades at the music fade time."]), "check")
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -4629,13 +4626,14 @@ local function CreateCamerasPanel()
 	-- (Short camera names, for the chips; their colors: back, then text.)
 	local SHORT = { cozy = L["Cozy"], vista = L["Vista"], fish = L["Fish"], afk = L["AFK"], tele = L["Tele"],
 		flight = L["Flight"], quest = L["Quest"], walk = L["RP Walk"], run = L["Auto-run"], [true] = L["Death"],
-		chat = L["Chat"] }
+		chat = L["Chat"], death = L["Death"] }
 	local CAM_CHIP = {
 		cozy = { 0.29, 0.19, 0.03, 1, 0.77, 0.42 }, tele = { 0.18, 0.12, 0.29, 0.78, 0.66, 1 },
 		afk = { 0.13, 0.19, 0.29, 0.66, 0.77, 1 }, vista = { 0.05, 0.23, 0.21, 0.5, 0.88, 0.83 },
 		fish = { 0.05, 0.16, 0.27, 0.5, 0.75, 1 }, flight = { 0.09, 0.23, 0.29, 0.62, 0.88, 1 },
 		quest = { 0.29, 0.24, 0.03, 1, 0.88, 0.4 }, walk = { 0.09, 0.23, 0.09, 0.62, 0.89, 0.62 },
 		run = { 0.09, 0.23, 0.09, 0.62, 0.89, 0.62 }, [true] = { 0, 0, 0, 0.85, 0.85, 0.85 },
+		death = { 0, 0, 0, 0.85, 0.85, 0.85 },
 		chat = { 0.27, 0.09, 0.2, 1, 0.66, 0.85 } }
 	local WHEN_CHIP = { 0.08, 0.2, 0.35, 0.55, 0.8, 1 }
 	local NEVER_CHIP = { 0.35, 0.25, 0.05, 1, 0.8, 0.35 }
@@ -4656,13 +4654,18 @@ local function CreateCamerasPanel()
 	-- trigger needs).
 	local ROW_W, ROW_H, ON_X, NAME_X, NAME_W, CHIPS_X, CHIPS_W = 590, 28, 16, 46, 206, 256, 252
 	local DRAWER_X, LINE_H, LABEL_W = 20, 34, 62
-	-- Copies of a row (its copy button): hidden for now (true brings it back).
-	-- Copies already made still show, with their arrows and remove button.
-	local SHOW_COPY = false
+	-- Copies of a row (its copy button; false hides it again). Copies made
+	-- show either way, with their arrows and remove button.
+	local SHOW_COPY = true
 
+	-- (The line above the rows: New trigger, Import and Sort by. The New
+	-- trigger panel opens under it, the rows below that.)
+	local bar = CreateFrame("Frame", nil, content)
+	bar:SetSize(ROW_W, 26)
+	bar:SetPoint("TOPLEFT", help, "BOTTOMLEFT", 0, -6)
 	local grid = CreateFrame("Frame", nil, content)
 	grid:SetSize(ROW_W, ROW_H)
-	grid:SetPoint("TOPLEFT", help, "BOTTOMLEFT", 0, -34) -- (room for New trigger and Sort by above it)
+	grid:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", 0, -2)
 	local rows, drawers, opened = {}, {}, {}
 	local MakeRow -- (below)
 	local function Changed()
@@ -4700,7 +4703,7 @@ local function CreateCamerasPanel()
 		if camera == trigger.off then return { { L["No camera"], PLAIN_CHIP } } end
 		-- (A shot: its name, in its camera's colors; a trigger of your own: Mine first.)
 		local base = ns.ShotBase(camera)
-		local list = { { base ~= camera and ns.CameraName(camera) or SHORT[camera] or tostring(camera),
+		local list = { { base ~= camera and ns.CameraName(camera) or SHORT[camera] or ns.CameraName(camera) or tostring(camera),
 			CAM_CHIP[base] or PLAIN_CHIP } }
 		if trigger.custom then table.insert(list, 1, { L["Mine"], MINE_CHIP }) end
 		if trigger.music and ns.CameraRowValue(id, "music") then list[#list + 1] = { L["Music"], PLAIN_CHIP } end
@@ -4759,25 +4762,23 @@ local function CreateCamerasPanel()
 			Changed()
 		end
 		-- Its cameras, and My Shots' shots where it has the cozy camera (the
-		-- standing-still ones a shot is made from).
-		local function Cameras()
-			local list = {}
-			for _, value in ipairs(trigger.cameras) do list[#list + 1] = value end
-			for _, value in ipairs(trigger.cameras) do
-				if value == "cozy" then
-					for _, shot in ipairs((ns.ShotList())) do list[#list + 1] = "shot:" .. shot end
-				end
-			end
-			return list
-		end
+		-- standing-still ones a shot is made from), No camera last
+		-- (CameraTriggerEditor.lua).
+		local function Cameras() return ns.CameraChoiceValues(trigger.cameras) end
+		local takesShots = false
+		for _, value in ipairs(trigger.cameras) do takesShots = takesShots or value == "cozy" end
 		local ok, pick = ns.MenuDropdown(parent)
 		if ok and pick and pick.SetupMenu then
 			pick:SetWidth(150)
 			pick:SetupMenu(function(_, root)
 				for _, value in ipairs(Cameras()) do
-					root:CreateRadio(ns.CameraName(value), function()
+					root:CreateRadio(ns.CameraName(value) or tostring(value), function()
 						return ns.GetDB() ~= nil and ns.CameraRowValue(id, "camera") == value
 					end, function() Set(value) end)
+				end
+				-- (New shot...: made, picked, and My Shots opened on it.)
+				if takesShots and #(ns.ShotList()) < ns.SHOT_MAX then
+					root:CreateButton(L["New shot..."], function() ns.NewShotFor(Set) end)
 				end
 			end)
 			pick.Refresh = function(self) self:GenerateMenu() end
@@ -4824,7 +4825,7 @@ local function CreateCamerasPanel()
 	-- trigger's rows together in their order.
 	local HUB_NAMES = { cozy = "Cozy Cam", vista = "Vista Cam", fish = "Fish Cam", afk = "AFK Cam",
 		tele = "Tele Cam", flight = "Flight Cam", quest = "Quest Cam", walk = "RP Walk Cam", run = "Auto-run Cam",
-		[true] = "Death Cam", chat = "Chat Cam" }
+		[true] = "Death Cam", chat = "Chat Cam", death = "Death Cam" }
 	local SORTS = { { nil, "Hub" }, { "camera", "Camera" }, { "trigger", "Trigger" } }
 	local function SortOf()
 		local sort = ns.GetDB().cameraRows.sort
@@ -4892,7 +4893,7 @@ local function CreateCamerasPanel()
 			end
 		end
 	end
-	sort:SetPoint("BOTTOMRIGHT", grid, "TOPRIGHT", 0, 4)
+	sort:SetPoint("RIGHT", bar, "RIGHT", 0, 0)
 	sort.searchSkip = true
 	Tooltip(sort, L["How the rows are listed: Hub groups them by camera in the Camera hub's order, Camera by " ..
 		"camera name, Trigger by trigger name. Either way a trigger's rows stay together, in the order they're tried."])
@@ -4900,23 +4901,31 @@ local function CreateCamerasPanel()
 	local sortLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
 	sortLabel:SetPoint("RIGHT", sort, "LEFT", -6, 0)
 	sortLabel:SetText(L["Sort by"])
-	-- A trigger of your own (CustomTriggers.lua): a new one, its settings open,
+	-- A trigger of your own (CustomTriggers.lua): a new one, made in the New
+	-- trigger panel (CameraTriggerEditor.lua) and added to the rows on Save,
 	-- or one a friend shared.
 	do
+		local draft
+		draft = ns.BuildTriggerDraft(content, { width = ROW_W, Tooltip = Tooltip,
+			onSaved = function() Changed() end,
+			onShown = function(shown)
+				grid:ClearAllPoints()
+				if shown then
+					grid:SetPoint("TOPLEFT", draft, "BOTTOMLEFT", 0, -8)
+				else
+					grid:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", 0, -2)
+				end
+				FitContentHeight(content)
+			end })
+		draft:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", 0, -2)
 		local newTrigger = ns.PanelButton(content)
 		newTrigger:SetSize(110, 22)
-		newTrigger:SetPoint("BOTTOMLEFT", grid, "TOPLEFT", 0, 4)
+		newTrigger:SetPoint("LEFT", bar, "LEFT", 0, 0)
 		newTrigger:SetText(L["+ New trigger"])
 		newTrigger.searchLabel = L["+ New trigger"]
 		Tooltip(newTrigger, L["Make a trigger of your own: say what starts it (an emote, a spell, a buff, a place, " ..
 			"a moment, something you are, or a key), the camera it plays and when it ends."])
-		newTrigger:SetScript("OnClick", function()
-			local new = ns.AddCustomTrigger("emote:cheer", "move", "cozy")
-			if new then
-				opened[new] = true
-				Changed()
-			end
-		end)
+		newTrigger:SetScript("OnClick", function() draft:Open() end)
 		newTrigger.Refresh = function(self)
 			local count = 0
 			for _ in tostring(ns.GetDB().cameraRows.custom or ""):gmatch("[^,]+") do count = count + 1 end
@@ -4935,6 +4944,11 @@ local function CreateCamerasPanel()
 				Changed()
 			end)
 		end)
+		-- (Built-in triggers you've deleted: Add back, shown while there are any.)
+		local addBack = ns.BuildAddBackMenu(content, function(trigger) return LABELS[trigger] or trigger end, Changed)
+		addBack:SetPoint("LEFT", import, "RIGHT", 6, 0)
+		Tooltip(addBack, L["Bring back a built-in trigger you deleted, with its settings as they were."])
+		controls[#controls + 1] = addBack
 	end
 
 	function grid:Refresh()
@@ -5146,22 +5160,29 @@ local function CreateCamerasPanel()
 			end
 			controls[#controls + 1] = copyButton
 		end
-		if copy or trigger.custom then
+		-- (Every row: a copy, one of yours with its copies, or a built-in
+		-- trigger's own row, which Add back brings back.)
+		do
 			local remove = Place(CreateFrame("Button", nil, row), ROW_W - 22)
 			remove:SetSize(16, 16)
 			remove:SetNormalTexture("Interface\\Buttons\\UI-StopButton")
 			remove:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
-			Tooltip(remove, copy and L["Remove this copy."] or L["Delete this trigger of your own, with its copies."])
+			Tooltip(remove, copy and L["Remove this copy."]
+				or trigger.custom and L["Delete this trigger of your own, with its copies."]
+				or L["Delete this trigger: its rows go and it starts no camera. Add back, above the rows, brings it " ..
+				"back with its settings."])
 			remove:SetScript("OnClick", function()
-				if copy then
-					ns.RemoveCameraRow(id)
+				local function Gone()
 					opened[id] = nil
 					Changed()
+				end
+				if copy then
+					ns.RemoveCameraRow(id)
+					Gone()
+				elseif trigger.custom then
+					ns.ConfirmRemoveCustomTrigger(id, Gone)
 				else
-					ns.ConfirmRemoveCustomTrigger(id, function()
-						opened[id] = nil
-						Changed()
-					end)
+					ns.ConfirmDeleteBuiltInTrigger(key, RowLabel(id), Gone)
 				end
 			end)
 		end
@@ -5240,7 +5261,8 @@ local function CreateCamerasPanel()
 
 		-- Camera: its camera, its Music and CineMode.
 		local pick = At("Camera", CameraPick(drawer, id), LABEL_W)
-		Tooltip(pick, L["The camera this row starts. No camera: none (and its trigger's rows below aren't tried)."])
+		Tooltip(pick, trigger.custom and L[ns.CUSTOM_CAMERA_TIP]
+			or L["The camera this row starts. No camera: none (and its trigger's rows below aren't tried)."])
 		local x = LABEL_W + 166
 		if trigger.music then
 			local music = Check(drawer, nil, L["Music"], MUSIC_TIPS[key] or MUSIC_TIP, function(value)
@@ -5362,8 +5384,8 @@ end
 -- ...: where the rows are (page, then section). The Chat page's rows
 -- aren't frames: rows.labelWidth widens the names, rows.columnTips[c] is a
 -- column's tip, rows.noHeadings leaves the headings out (a row added later
--- under a table's), rows.underHeader sits it close under a stack:Header
--- anchor (the one-line headings' empty top taken up), and a row's
+-- under a table's), rows.underHeader sits it close under a header or a
+-- page switch (the one-line headings' empty top taken up), and a row's
 -- alwaysOn() / setAlways(value) are its Always box's own setting.
 local function ShowTable(content, anchor, rows, ...)
 	-- One table: a row per frame, a column per situation.
@@ -5700,6 +5722,7 @@ local function CreateCombatPanel()
 			same:SetPoint("RIGHT", text, "LEFT", -2, 0)
 		end
 		local before = Widgets()
+		sectionRows.underHeader = true
 		section.last = ShowTable(content, frame, sectionRows, "Standard Frames", heading)
 		for object in pairs(Widgets()) do
 			if not before[object] then
@@ -6037,12 +6060,9 @@ local function CreateBubblesPanel()
 	-- Show in: a row per kind of bubble, as the Standard Frames page's
 	-- (GridRows.lua): where and when each shows.
 	local stack = Stack(switch, "check")
-	stack:Header(content, L["Show in"])
+	local bubbleHeader = stack:Header(content, L["Show in"])
 	stack:Help(content, L["Where and when each kind of bubble shows. Always: everywhere. Nothing ticked: never."])
-	local bubbleTop = CreateFrame("Frame", nil, content)
-	bubbleTop:SetSize(1, 1)
-	stack:Add(bubbleTop, "label")
-	local bubbleRows = { opts = { quiet = true, cam = true, anyFight = true } }
+	local bubbleRows = { opts = { quiet = true, cam = true, anyFight = true }, underHeader = true }
 	for _, bubble in ipairs({ { "Say", L["Say & yell"] }, { "Party", L["Party"] } }) do
 		local alwaysKey = "bubbles" .. bubble[1] .. "Always"
 		bubbleRows[#bubbleRows + 1] = { key = "bubble:" .. bubble[1], label = bubble[2], alwaysKey = alwaysKey,
@@ -6051,7 +6071,7 @@ local function CreateBubblesPanel()
 			alwaysTip = L["These bubbles show everywhere, in fights and out. (The other columns then have nothing to add.)"],
 			apply = Changed }
 	end
-	stack:Continue(ShowTable(content, bubbleTop, bubbleRows, L["Chat bubbles"]), "label")
+	stack:Continue(ShowTable(content, bubbleHeader, bubbleRows, L["Chat bubbles"]), "label")
 
 	-- Custom bubbles: ones Cinematic draws itself, looking like the game's.
 	-- Speech from behind you (Speech.lua): says and yells with no bubble on
@@ -6167,7 +6187,8 @@ local function CreateQualityPanel()
 	local putBack = ns.PanelButton(content)
 	putBack:SetSize(160, 22)
 	putBack:SetText(L["Put windows back"])
-	Tooltip(putBack, L["Forget where you've dragged the windows to: each opens in its usual place again."])
+	Tooltip(putBack, L["Forget where you've dragged the windows to: each opens in its usual place again."]
+		.. " " .. L["Quest Vision's list of replies and its bubble too."])
 	putBack:SetScript("OnClick", function()
 		if ns.ForgetPanelSpots then
 			ns.ForgetPanelSpots()
@@ -6331,6 +6352,7 @@ local function CreateGamepadPanel()
 	local switch = PageSwitch(content, "handleGamepad", L["Enable Page"],
 		L["On: CineMode fades the gamepad's bars, button hints and reticle as this page says. Off: it " ..
 		"leaves them alone."], subtitle)
+	rows.underHeader = true
 	local lastRow = ShowTable(content, switch, rows, "Gamepad")
 
 	-- The prompt sits on a nameplate, not a frame of its own: a setting for
@@ -9476,29 +9498,16 @@ end
 -- Their rows as the Standard Frames page's: Always, the dropdowns, the roles and Edit (GridRows.lua).
 local THIRD_PARTY_LAYOUT = { roles = true, edit = true }
 
--- The custom frames' column headings, above their rows.
-local function GetExtraHeadings()
-	if extrasPanel.headings then
-		return extrasPanel.headings
-	end
-	local headings = CreateFrame("Frame", nil, extrasPanel)
-	headings:SetSize(THIRD_PARTY_LABEL_WIDTH + ns.GridWidth(THIRD_PARTY_LAYOUT), FRAME_HEADING_HEIGHT)
-	headings:SetPoint("TOPLEFT", extrasPanel.addMode, "BOTTOMLEFT", 0, -10)
-	ns.GridHeadings(ns.GRID_KIT, headings, headings, THIRD_PARTY_LABEL_WIDTH, THIRD_PARTY_LAYOUT)
-	extrasPanel.headings = headings
-	return headings
-end
-
 -- One row of the custom frames list, made as needed: a small X (takes it off
 -- the list), the name, and the columns. row.item: { name, picked, kept, added }.
+-- Placed by the page's Layout, in its Custom frames band.
 local function GetExtraRow(index)
 	local row = extraRows[index]
 	if row then
 		return row
 	end
-	row = CreateFrame("Frame", nil, extrasPanel)
-	row:SetSize(THIRD_PARTY_LABEL_WIDTH + ns.GridWidth(THIRD_PARTY_LAYOUT), 26)
-	row:SetPoint("TOPLEFT", GetExtraHeadings(), "BOTTOMLEFT", 0, -2 - (index - 1) * 24)
+	row = CreateFrame("Frame", nil, extrasPanel.box)
+	row:SetSize(THIRD_PARTY_LABEL_WIDTH + ns.GridWidth(THIRD_PARTY_LAYOUT), 24)
 
 	row.delete = ns.SkinClose(CreateFrame("Button", nil, row, "UIPanelCloseButton"))
 	row.delete:SetSize(22, 22)
@@ -9567,11 +9576,11 @@ RefreshExtras = function()
 			-- (For the page's Reset: just these rows of the shared lists, and its rule.)
 			for c = 2, #THIRD_PARTY_COLUMNS do
 				RecordKey(extrasPanel, THIRD_PARTY_COLUMNS[c][3])
-				RecordRow(extrasPanel, THIRD_PARTY_COLUMNS[c][3], key)
+				RecordRow(extrasPanel, THIRD_PARTY_COLUMNS[c][3], key, L["Custom frames"])
 			end
 			for _, list in ipairs({ "calmShow", "tankHide", "healerHide", "damageHide", "frameRules" }) do
 				RecordKey(extrasPanel, list)
-				RecordRow(extrasPanel, list, key)
+				RecordRow(extrasPanel, list, key, L["Custom frames"])
 			end
 		end
 		row.grid:Refresh()
@@ -9580,12 +9589,9 @@ RefreshExtras = function()
 		else
 			row.text:SetText(item.name)
 		end
-		row:Show()
 	end
-	for i = #items + 1, #extraRows do extraRows[i]:Hide() end
-
-	GetExtraHeadings():SetShown(#items > 0)
-	extrasPanel.empty:SetShown(#items == 0)
+	extrasPanel.extraCount = #items
+	extrasPanel.Layout()
 	FitContentHeight(extrasPanel)
 end
 
@@ -10702,6 +10708,67 @@ local function CreateVisionPanel()
 		"Nameplates page enabled."])
 	GreyUnless(questIcon, function(db) return db.handlePlates and not db.questMobsMark end)
 	questStack:Add(questIcon, "check")
+	-- The mark's icon, one for friendly NPCs and one for enemies: a button
+	-- showing the icon picked, and on a click the icon browser (search and
+	-- scroll, as for profile icons: IconBrowser.lua) with every quest, talk and
+	-- cursor icon this client has (QuestMarkIcons.lua).
+	questStack:Add(Label(content, "GameFontHighlight", L["Quest mark icon"]), "label")
+	local markRow = CreateFrame("Frame", nil, content)
+	markRow:SetSize(300, 30)
+	local markSource = ns.QuestMarkIconSource
+	local markBrowser = ns.IconBrowser(canvas, function(pickedKey, icon)
+		ns.GetDB()[pickedKey] = icon
+		if ns.RepaintQuestMarks then ns.RepaintQuestMarks() end
+		Refresh()
+	end, markSource)
+	-- (What the marks show: the pick, or the ! where this client lacks it.)
+	local function MarkShown(key)
+		local db = ns.GetDB()
+		local icon = db and db[key]
+		return markSource.usable(icon) and icon or "questnormal"
+	end
+	local function MarkButton(key, text, tip, x)
+		local button = CreateFrame("Button", nil, markRow)
+		button:SetSize(30, 30)
+		button:SetPoint("LEFT", x, 0)
+		local edge = button:CreateTexture(nil, "BACKGROUND")
+		edge:SetAllPoints()
+		edge:SetColorTexture(0.45, 0.38, 0.2, 1)
+		local back = button:CreateTexture(nil, "BORDER")
+		back:SetPoint("TOPLEFT", 2, -2)
+		back:SetPoint("BOTTOMRIGHT", -2, 2)
+		back:SetColorTexture(0.05, 0.05, 0.05, 1)
+		button.icon = button:CreateTexture(nil, "ARTWORK")
+		button.icon:SetAllPoints(back)
+		local hl = button:CreateTexture(nil, "HIGHLIGHT")
+		hl:SetAllPoints(back)
+		hl:SetColorTexture(1, 1, 1, 0.2)
+		local name = Label(markRow, "GameFontHighlight", text)
+		name:SetPoint("LEFT", button, "RIGHT", 8, 0)
+		button:SetScript("OnClick", function(self)
+			markBrowser:Open(self, key, MarkShown(key))
+		end)
+		Tooltip(button, tip)
+		button.Refresh = function(self)
+			local icon = MarkShown(key)
+			if markSource.usable(icon) and markSource.atlas(icon) then
+				self.icon:SetAtlas(icon)
+			else
+				self.icon:SetTexture(markSource.usable(icon) and icon or ns.QUEST_MOB_TEXTURE)
+				self.icon:SetTexCoord(0, 1, 0, 1)
+			end
+		end
+		controls[#controls + 1] = button
+		RecordKey(content, key)
+	end
+	MarkButton("questMarkStyle", L["Friendly"],
+		L["The quest mark's icon on friendly NPCs you still need for a quest (an NPC to talk to): on their " ..
+		"nameplates or names, on your target frame, and over the quest object that glows. One you can't do " ..
+		"anything with yourself shows it grayed (with the default !, the game's \"in progress\" mark). Click to pick another."], 0)
+	MarkButton("questMarkStyleEnemy", L["Enemy"],
+		L["The quest mark's icon on enemies you still need for a quest (a mob to kill): on their nameplates " ..
+		"or names, and on your target frame. Click to pick another."], 140)
+	questStack:Add(markRow, "dropdown")
 	local questItem = Check(content, "questItemButton", L["Quest item button"],
 		L["Where your extra ability button goes (the extra abilities frame's place in Edit Mode), a big button " ..
 		"with the item the nearest tracked quest gives you to use, the one in the quest tracker. Click it or press its " ..
@@ -10835,20 +10902,6 @@ local function CreateVisionPanel()
 				end
 			end,
 		}
-		-- (Drag the list to move it; this forgets where.)
-		local putBack = ns.PanelButton(content)
-		putBack:SetSize(160, 22)
-		putBack:SetText(L["Put them back"])
-		Tooltip(putBack, L["Drag the list of replies to move it, and the bubble while it isn't over an NPC. " ..
-			"This forgets where you dropped them: each opens in its usual place again."] .. "\n\n" ..
-			L["With custom dialogue frames off, it forgets where you dragged the game's gossip and quest window."])
-		putBack:SetScript("OnClick", function()
-			ns.GetDB().questTalkSpot = nil
-			ns.GetDB().questTalkBubbleSpot = nil
-			if ns.ForgetTalkWindowSpot then ns.ForgetTalkWindowSpot() end
-			ApplyTalk()
-		end)
-		questStack:Add(putBack, "label")
 	end
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()
@@ -11046,7 +11099,8 @@ local function CreateVisionPanel()
 		local LAYOUT = { roles = true, edit = true }
 		local gridTop = CreateFrame("Frame", nil, content)
 		gridTop:SetSize(NAME_WIDTH + ns.GridWidth(LAYOUT), FRAME_HEADING_HEIGHT)
-		gridTop:SetPoint("TOPLEFT", healSwitch, "BOTTOMLEFT", 2, -10)
+		-- (Up into the headings' empty top, as ShowTable's underHeader.)
+		gridTop:SetPoint("TOPLEFT", healSwitch, "BOTTOMLEFT", 2, 6)
 		ns.GridHeadings(ns.GRID_KIT, content, gridTop, NAME_WIDTH, LAYOUT)
 		local row = CreateFrame("Frame", nil, content)
 		row:SetSize(gridTop:GetWidth(), 24)
@@ -11427,18 +11481,18 @@ local function CreateTooltipPanel()
 	-- where and when tooltips show in CineMode. Its rule can tell them apart
 	-- by kind (the editor's Tooltip line: tipenemy and the rest).
 	local hideHeader = Section(L["Show tooltips"])
-	local hideNote = PageIntro(content, hideHeader,
+	PageIntro(content, hideHeader,
 		L["In CineMode, where and when tooltips show; the rest of the time they're hidden. For some kinds " ..
 		"only (enemies, friendlies, gatherables, quest objectives, anything else), Edit its rule: the " ..
 		"Tooltip line has a word for each."])
-	local tooltipRows = { opts = { quiet = true, cam = true, anyFight = true },
+	local tooltipRows = { opts = { quiet = true, cam = true, anyFight = true }, underHeader = true,
 		{ key = "tooltip:All", label = L["Tooltips"],
 			tip = L["Every tooltip: units, things in the world and the UI's (action bars, bags, menus and the rest)."],
 			alwaysKey = "tooltipAlways",
 			alwaysOn = function() return ns.GetDB().tooltipAlways end,
 			setAlways = function(value) ns.GetDB().tooltipAlways = value end,
 			alwaysTip = L["Tooltips show all through CineMode. (The other columns then have nothing to add.)"] } }
-	previous = ShowTable(content, hideNote, tooltipRows, L["Tooltips"])
+	previous = ShowTable(content, hideHeader, tooltipRows, L["Tooltips"])
 	previous.sectionX = 0
 
 	-- Tooltip look: where tooltips show (tooltipCursorMode, with the page
@@ -11553,24 +11607,36 @@ local function CreateExtrasPanel()
 		L["On: CineMode fades the supported addons' frames, and frames you added, as this page says. " ..
 		"Off: it leaves them all alone."], title)
 	local stack = Stack(switch, "check")
-	stack:Header(content, L["Supported addons"])
+	-- One grid for every addon's frames: the supported addons' and the custom
+	-- frames', under one set of headings and the Default row. (Their settings
+	-- stay in sections of those names, for the profile modules' scopes: the
+	-- custom frames' and the Default row's recorded as Custom frames.)
+	stack:Add(Label(content, "GameFontNormal", L["Addon frames"]), "header")
+	SetSection(content, L["Supported addons"])
 	stack:Help(content, L["These addons' frames are hidden in CineMode unless ticked, like the game's " ..
 		"frames on the Standard Frames page. Tick Always to leave an addon's frames alone (shown the " ..
 		"whole time); the next three show them only while you fight or have something targeted, and " ..
-		"the places while you're there."])
+		"the places while you're there."] .. "\n\n" ..
+		L["To fade something else, hover over it and type |cffffd100/cine add|r, " ..
+			"or type |cffffd100/cine add|r and its frame name. To pick up several, use the button below " ..
+			"(or |cffffd100/cine add mode|r) and hover over each one. " ..
+		"The columns work as for the supported addons above; the X takes a frame off the list."] .. "\n\n" ..
+		L["The Default row is what frames you add, and addons you install later, start with; its Copy to all " ..
+		"gives it to every row here."])
 
 	-- The addons, laid out afresh each time the page opens (most load after
 	-- this one, so whether they're loaded isn't known when it's built): those
-	-- loaded, those installed but not loaded, then the rest supported. A suite's
-	-- parts (suite = its name) sit under a header that opens and closes (closed
-	-- to start with).
+	-- loaded, those installed but not loaded, the custom frames, then the rest
+	-- supported. A suite's parts (suite = its name) sit under a header that
+	-- opens and closes (closed to start with).
 	local box = CreateFrame("Frame", nil, content)
 	box:SetSize(640, 1)
 	stack:Add(box, "label")
+	content.box = box
 
 	local LABEL_WIDTH, ROW_HEIGHT, INDENT = THIRD_PARTY_LABEL_WIDTH, 24, 18
 	local COLUMNS = THIRD_PARTY_COLUMNS
-	-- The columns' headings, placed by Layout over the first open section's rows.
+	-- The columns' headings, placed by Layout at the top.
 	local headings = CreateFrame("Frame", nil, box)
 	headings:SetSize(LABEL_WIDTH + ns.GridWidth(THIRD_PARTY_LAYOUT), FRAME_HEADING_HEIGHT)
 	ns.GridHeadings(ns.GRID_KIT, headings, headings, LABEL_WIDTH, THIRD_PARTY_LAYOUT)
@@ -11648,6 +11714,7 @@ local function CreateExtrasPanel()
 	local bandSections = {
 		loaded = { id = "Advanced Frames/loaded", open = true },
 		installed = { id = "Advanced Frames/installed", open = true },
+		custom = { id = "Advanced Frames/custom", open = true },
 		missing = { id = "Advanced Frames/missing", open = false },
 	}
 	local missingNote = Label(box, "GameFontHighlightSmall", "")
@@ -11655,6 +11722,61 @@ local function CreateExtrasPanel()
 	missingNote:SetJustifyH("LEFT")
 	missingNote:SetJustifyV("TOP")
 	local Layout
+
+	-- The Default row, first under the headings: what a frame you add, or an
+	-- addon you install later, starts with (ns.ApplyExtraDefault,
+	-- ns.DefaultNewAddons), and Copy to all to give it to every row now.
+	local defaultRow = CreateFrame("Frame", nil, box)
+	defaultRow:SetSize(LABEL_WIDTH + ns.GridWidth(THIRD_PARTY_LAYOUT), ROW_HEIGHT)
+	local defaultName = Label(defaultRow, "GameFontNormal", L["Default"])
+	defaultName:SetPoint("LEFT", 0, 0)
+	StaticPopupDialogs.CINEMATIC_EXTRA_COPY_ALL = {
+		text = L["Give every addon's frames the Default row's settings?"],
+		button1 = YES, button2 = NO,
+		OnAccept = function()
+			ns.CopyExtraDefaultToAll()
+			RefreshExtras()
+			Refresh()
+		end,
+		timeout = 0, whileDead = true, hideOnEscape = true,
+	}
+	local copyAll = ns.PanelButton(defaultRow)
+	copyAll:SetSize(80, 20)
+	copyAll:SetPoint("RIGHT", defaultRow, "LEFT", LABEL_WIDTH - 6, 0)
+	copyAll:SetText(L["Copy to all"])
+	Tooltip(copyAll, L["Gives every row on this page, supported addons and custom frames, the Default row's " ..
+		"settings, replacing their own."])
+	copyAll:SetScript("OnClick", function() StaticPopup_Show("CINEMATIC_EXTRA_COPY_ALL") end)
+	local function DefaultKey() return ns.EXTRA_DEFAULT_KEY end
+	local function SetDefaultAlways(value) ns.GetDB().addonDefaultAlways = value end
+	RecordKey(content, "addonDefaultAlways", L["Custom frames"])
+	for c = 2, #COLUMNS do
+		RecordKey(content, COLUMNS[c][3])
+		RecordRow(content, COLUMNS[c][3], ns.EXTRA_DEFAULT_KEY, L["Custom frames"])
+	end
+	for _, list in ipairs({ "calmShow", "tankHide", "healerHide", "damageHide", "frameRules" }) do
+		RecordKey(content, list)
+		RecordRow(content, list, ns.EXTRA_DEFAULT_KEY, L["Custom frames"])
+	end
+	local defaultParts = ns.ListRowParts(DefaultKey, COLUMNS, nil, SetDefaultAlways)
+	local defaultGrid = ns.GridRow(ns.GRID_KIT, defaultRow, LABEL_WIDTH, THIRD_PARTY_LAYOUT, {
+		band = 1,
+		always = { isOn = function() return ns.GetDB().addonDefaultAlways end, set = SetDefaultAlways,
+			tip = L["Ticked, supported addons you install later start with Always ticked: shown the whole " ..
+			"time in CineMode. Unticked, they start hidden, except as the other columns say. (Frames you add " ..
+			"yourself start faded either way.)"] },
+		menus = defaultParts.menus,
+		roles = { key = DefaultKey },
+		rule = { key = DefaultKey, label = function() return L["Default"] end, grid = defaultParts.grid,
+			words = defaultParts.words, apply = defaultParts.apply },
+	})
+	defaultGrid:SetPoint("LEFT", defaultRow, "LEFT", LABEL_WIDTH, 0)
+
+	-- The Custom frames band's tools (add mode's button, the search box; made
+	-- below) and its "None yet.".
+	local tools = CreateFrame("Frame", nil, box)
+	tools:SetSize(LABEL_WIDTH + ns.GridWidth(THIRD_PARTY_LAYOUT), 58)
+	local empty = Label(box, "GameFontDisableSmall", L["None yet."])
 
 	local function SectionBandFor(key, title)
 		local holder = sectionBands[key]
@@ -11709,13 +11831,18 @@ local function CreateExtrasPanel()
 		end
 		for _, holder in pairs(sectionBands) do holder:Hide() end
 		for _, header in pairs(suiteHeaders) do header:Hide() end
-		headings:Hide()
 		for _, row in ipairs(rows) do
 			row.label:Hide()
 			row.grid:Hide()
 		end
-		local band = 0
+		for _, row in ipairs(extraRows) do row:Hide() end
+		tools:Hide()
+		empty:Hide()
 		for _, row in ipairs(notes) do row.frame:Hide() end
+		-- The headings and the Default row, always at the top.
+		Place(headings, 0, FRAME_HEADING_HEIGHT + 4)
+		Place(defaultRow, 0, ROW_HEIGHT)
+		local band = 1
 
 		local function PlaceRow(row, indent)
 			row.label:SetText(indent > 0 and row.suiteLabel or row.known.short or row.known.label)
@@ -11731,8 +11858,8 @@ local function CreateExtrasPanel()
 		end
 
 		-- One section: its addons in the page's order, a suite's together under
-		-- its header. The columns' headings go under the first open one with rows.
-		local headingsPlaced, lastOpen
+		-- its header.
+		local lastOpen = true
 		local function Band(key, title)
 			y = y + (y > 0 and (lastOpen and 12 or 6) or 0)
 			Place(SectionBandFor(key, title), 0, BAND_HEIGHT)
@@ -11756,10 +11883,6 @@ local function CreateExtrasPanel()
 			end
 			if #list + #noteList == 0 or not Band(key, title) then
 				return
-			end
-			if #list > 0 and not headingsPlaced then
-				headingsPlaced = true
-				Place(headings, 0, FRAME_HEADING_HEIGHT + 4)
 			end
 			-- (Texts read now: they're translated once the language is known.)
 			for _, row in ipairs(noteList) do
@@ -11799,6 +11922,20 @@ local function CreateExtrasPanel()
 		Section("loaded", L["Loaded"], function(known) return ns.AddOnLoaded(known.addon) end)
 		Section("installed", L["Installed, not loaded"], function(known) return not ns.AddOnLoaded(known.addon) end)
 
+		-- The frames you added (RefreshExtras fills the rows), under their tools.
+		if Band("custom", L["Custom frames"]) then
+			Place(tools, 0, 58)
+			local count = content.extraCount or 0
+			for i = 1, count do
+				band = band + 1
+				extraRows[i].grid:SetBand(band)
+				Place(extraRows[i], 0, ROW_HEIGHT)
+			end
+			if count == 0 then
+				Place(empty, 0, 16)
+			end
+		end
+
 		-- The rest supported, by name (a suite once).
 		local missing, listed = {}, {}
 		for _, known in ipairs(ns.ADDON_FRAMES) do
@@ -11821,18 +11958,13 @@ local function CreateExtrasPanel()
 		end
 		box:SetHeight(math.max(1, y))
 	end
-
-	stack:Header(content, L["Custom frames"])
-	content.help = stack:Help(content,
-		L["To fade something else, hover over it and type |cffffd100/cine add|r, " ..
-			"or type |cffffd100/cine add|r and its frame name. To pick up several, use the button below " ..
-			"(or |cffffd100/cine add mode|r) and hover over each one. " ..
-		"The columns work as for the supported addons above; the X takes a frame off the list."])
+	content.Layout = Layout
+	SetSection(content, L["Custom frames"]) -- (what's below: the custom frames' tools)
 
 	-- Add mode (/cine add mode): pick up frames by hovering, then fade them all.
-	local addMode = ns.PanelButton(content)
-	addMode:SetSize(180, 22)
-	addMode:SetPoint("TOPLEFT", content.help, "BOTTOMLEFT", 0, -10)
+	local addMode = ns.PanelButton(tools)
+	addMode:SetSize(220, 22)
+	addMode:SetPoint("TOPLEFT", tools, "TOPLEFT", 0, -2)
 	Tooltip(addMode, L["Hover over the frames you want to fade (move this window out of the way, " ..
 		"or close it), then click Stop or type /cine add mode again to fade them all. " ..
 		"The game's own frames and ones already faded are left out. /cine add cancel drops them."])
@@ -11871,14 +12003,15 @@ local function CreateExtrasPanel()
 	-- typed (a frame's name or its addon's); hovering a match marks it on
 	-- screen, clicking it fades it.
 	local FIND_ROWS = 12
-	local made, find = pcall(CreateFrame, "EditBox", nil, content, "SearchBoxTemplate")
+	local made, find = pcall(CreateFrame, "EditBox", nil, tools, "SearchBoxTemplate")
 	if not made or not find then
-		find = ns.SkinEditBox(CreateFrame("EditBox", nil, content, "InputBoxTemplate"))
+		find = ns.SkinEditBox(CreateFrame("EditBox", nil, tools, "InputBoxTemplate"))
 	end
-	find:SetSize(220, 20)
+	find:SetSize(215, 20)
 	find:SetAutoFocus(false)
 	find.searchSkip = true
-	find:SetPoint("LEFT", addMode, "RIGHT", 40, 0)
+	-- (Under the button, its edge in line: the search box's art stands out past its left.)
+	find:SetPoint("TOPLEFT", addMode, "BOTTOMLEFT", 5, -8)
 	if find.Instructions then
 		find.Instructions:SetText(L["Find frames by name or addon"])
 	end
@@ -12008,9 +12141,6 @@ local function CreateExtrasPanel()
 		found:Hide()
 		ns.MarkFrame(nil)
 	end)
-
-	content.empty = Label(content, "GameFontDisableSmall", L["None yet."])
-	content.empty:SetPoint("TOPLEFT", addMode, "BOTTOMLEFT", 0, -12)
 
 	canvas:SetScript("OnShow", PageShown(function()
 		if ns.GetDB() then
@@ -13767,6 +13897,9 @@ ns.OnLanguage(function()
 	if ns.CreateShoulderCamPanel then -- (ShoulderCam.lua)
 		ns.CreateShoulderCamPanel(ns.lowHealthKit)
 	end
+	if ns.CreateCameraScriptsPanel then -- (CameraScriptsPage.lua, dev copy)
+		ns.CreateCameraScriptsPanel(ns.lowHealthKit)
+	end
 	if ns.CreateWheelsPanels then -- (WheelsPage.lua; its hub listed after Camera)
 		ns.CreateWheelsPanels(ns.lowHealthKit)
 	end
@@ -13781,10 +13914,10 @@ ns.OnLanguage(function()
 	if ns.CreateProfilerPanel then -- (ProfilerPage.lua: Community's last page)
 		ns.CreateProfilerPanel(ns.lowHealthKit)
 	end
-	-- The dev build's own pages, at the very end (ModuleEditor.lua, Layouts.lua).
+	-- The dev build's Module Editor, Community's last page (ModuleEditor.lua).
 	if ns.isDev and ns.CreateModuleEditor then
 		ns.CreateModuleEditor({ CreateScrollPage = CreateScrollPage, Label = Label, PageShown = PageShown,
-			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip })
+			RegisterSubpage = RegisterSubpage, Tooltip = Tooltip, PageIntro = PageIntro, Header = Header })
 	end
 	GuardGamepadClose()
 end)

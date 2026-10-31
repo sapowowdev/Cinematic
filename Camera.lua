@@ -370,7 +370,9 @@ do
 	-- swing round (and zoom in) so it's in front of you before the cast ends;
 	-- nil otherwise.
 	function ns.DepartTimeLeft()
-		if pretending and (ns.manualCam ~= "tele" or GetTime() >= castEndsAt) then
+		-- (Its key's run, or a trigger of your own playing it: CustomTriggers.lua.)
+		local held = ns.manualCam == "tele" or (ns.CustomTeleOn and ns.CustomTeleOn())
+		if pretending and (not held or GetTime() >= castEndsAt) then
 			-- The pretend cast over (or stopped): like a cancelled one, the spin
 			-- turns back and the zoom goes back out, and the camera ends.
 			pretending, castEndsAt = false, nil
@@ -1467,6 +1469,8 @@ end
 -- camera, or whose own camera takes over). With Stand still set to another
 -- camera or none, just standing there doesn't start it.
 function ns.StillRunsAFK()
+	-- (An event set to a camera script: the script moves the camera, CameraScripts.lua.)
+	if ns.IsScriptCamera and ns.IsScriptCamera(select(2, ns.ActiveEvent())) then return false end
 	return EventCamera("Still") == "afk" or ns.ActiveEvent() ~= nil
 end
 local RECENTER_TIME = 5 -- seconds a swing back behind you lasts

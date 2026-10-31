@@ -110,7 +110,8 @@ if ns.ChatCamCommand then
 end
 
 -- Each camera's name, and its row on the old Camera Modes page (ns.CAMERA_OFF_CAMS).
-ns.CAMERA_NAMES = { cozy = L["Cozy camera"], vista = L["Vista camera"], fish = L["Fish camera"],
+-- (death: the death camera as a trigger of your own plays it; the Die row's is true.)
+ns.CAMERA_NAMES = { cozy = L["Cozy camera"], vista = L["Vista camera"], fish = L["Fish camera"], death = L["Death camera"],
 	afk = L["AFK camera"], tele = L["Tele camera"], flight = L["Flight camera"], quest = L["Quest camera"],
 	walk = L["RP walk camera"], run = L["Auto-run camera"], [true] = L["Death camera"], chat = L["Chat camera"],
 	none = L["No camera"], [false] = L["No camera"] }
@@ -118,7 +119,7 @@ ns.OnLanguage(function()
 	for value, name in pairs(ns.CAMERA_NAMES) do ns.CAMERA_NAMES[value] = L[name] end
 end)
 local CAM_OF = { cozy = "cozy", vista = "vista", fish = "fish", afk = "idle", tele = "tele", flight = "flight",
-	quest = "quest", walk = "walk", run = "run", [true] = "death", chat = "chatcam" }
+	quest = "quest", walk = "walk", run = "run", [true] = "death", chat = "chatcam", death = "death" }
 -- A camera value's mode (as ns.CAMERA_OFF_CAMS names it), or nil for none.
 -- (A shot: its camera's, Shots.lua.)
 local function CamOf(value)
@@ -139,15 +140,51 @@ local function Rows()
 	return type(rows) == "table" and rows or {}
 end
 
+-- Built-in triggers you've deleted ("deleted": their keys, comma separated):
+-- no rows, no camera; their settings stay for Add back (or a Reset).
+local deletedCache = { text = false, set = {} }
+local function DeletedSet()
+	local text = Rows().deleted
+	if deletedCache.text ~= text then
+		local set = {}
+		for key in tostring(text or ""):gmatch("[^,]+") do set[key] = true end
+		deletedCache.text, deletedCache.set = text, set
+	end
+	return deletedCache.set
+end
+function ns.TriggerDeleted(key) return DeletedSet()[key] == true end
+-- The deleted ones, in the page's order.
+function ns.DeletedTriggers()
+	local list, set = {}, DeletedSet()
+	for _, trigger in ipairs(TRIGGERS) do
+		if set[trigger.key] then list[#list + 1] = trigger.key end
+	end
+	return list
+end
+function ns.SetTriggerDeleted(key, deleted)
+	local trigger = TRIGGER[key]
+	if not trigger or trigger.custom then return end
+	local set, list = DeletedSet(), {}
+	for _, each in ipairs(TRIGGERS) do
+		local on = set[each.key]
+		if each.key == key then on = deleted end
+		if on then list[#list + 1] = each.key end
+	end
+	ns.GetDB().cameraRows.deleted = #list > 0 and table.concat(list, ",") or nil
+	ns.CameraRowsChanged()
+end
+
 -- Every row in order: each trigger's own and its copies, the triggers as
--- TRIGGERS has them (a copy before its own row comes first for it).
+-- TRIGGERS has them (a copy before its own row comes first for it), less
+-- the deleted ones.
 -- Worked out again only when the order changes. (Triggers of your own
 -- brought up to date first: a profile loaded has its own.)
 orderCache = { text = false }
 function ns.CameraRowOrder()
 	if ns.SyncCustomTriggers then ns.SyncCustomTriggers() end
 	local text = Rows().order
-	if orderCache.text == text and orderCache.list then return orderCache.list end
+	local deleted = DeletedSet()
+	if orderCache.text == text and orderCache.deleted == deleted and orderCache.list then return orderCache.list end
 	local byTrigger, seen = {}, {}
 	for id in tostring(text or ""):gmatch("[^,]+") do
 		local trigger, copy = ns.CameraRowTrigger(id)
@@ -159,11 +196,13 @@ function ns.CameraRowOrder()
 	end
 	local list = {}
 	for _, trigger in ipairs(TRIGGERS) do
-		local own = byTrigger[trigger.key] or {}
-		if not seen[trigger.key] then table.insert(own, 1, trigger.key) end
-		for _, id in ipairs(own) do list[#list + 1] = id end
+		if not deleted[trigger.key] then
+			local own = byTrigger[trigger.key] or {}
+			if not seen[trigger.key] then table.insert(own, 1, trigger.key) end
+			for _, id in ipairs(own) do list[#list + 1] = id end
+		end
 	end
-	orderCache.text, orderCache.list = text, list
+	orderCache.text, orderCache.deleted, orderCache.list = text, deleted, list
 	return list
 end
 -- A trigger's rows, in order.
@@ -311,7 +350,7 @@ end
 -- nil (no camera). Worked out once a frame for each trigger.
 local nowCache = { at = -1 }
 function ns.TriggerRowNow(key)
-	if not ns.db or not TRIGGER[key] then return nil end
+	if not ns.db or not TRIGGER[key] or DeletedSet()[key] then return nil end
 	local now = GetTime()
 	if nowCache.at ~= now then
 		wipe(nowCache)
@@ -383,6 +422,8 @@ local OWN_TRIGGER = { flight = { "Flight" }, walk = { "Walk" }, run = { "Run" },
 function ns.CameraRowsOff(cam)
 	local keys = OWN_TRIGGER[cam]
 	if cam == "quest" then keys = { ns.QuestCamEvent and ns.QuestCamEvent() or "Quest" } end
+	-- (A trigger of your own running it: CustomTriggers.lua.)
+	if cam == "death" and ns.CustomDeathOn and ns.CustomDeathOn() then return false end
 	if not keys then return false end -- (the event cameras: their rows decide as an event picks one)
 	for _, key in ipairs(keys) do
 		if TRIGGER[key] and CamOf(ns.TriggerSetting(key, "camera")) == cam then return false end

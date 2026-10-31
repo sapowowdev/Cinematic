@@ -206,7 +206,26 @@ local function SkinnedBox(parent)
 	return ns.SkinEditBox and ns.SkinEditBox(box) or box
 end
 
-function ns.IconBrowser(canvas, onPick)
+-- source: other icons instead of the game's, { list = function() return
+-- icons end, atlas = function(icon) end (true: an atlas name), name =
+-- function(icon) end (the find box and mouseover) }; shown whole, uncropped.
+function ns.IconBrowser(canvas, onPick, source)
+	local function List()
+		return source and source.list() or AllIcons()
+	end
+	-- (An icon on a texture: an atlas, or a file cropped to its picture's edge.)
+	local function Paint(texture, icon)
+		if source and source.atlas(icon) then
+			texture:SetAtlas(icon)
+		else
+			texture:SetTexture(icon)
+			if source then
+				texture:SetTexCoord(0, 1, 0, 1)
+			else
+				texture:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+			end
+		end
+	end
 	local width = EDGE * 2 + COLUMNS * CELL + (COLUMNS - 1) * GAP + SCROLL_W + 6
 	local height = EDGE * 2 + HEADER + ROWS * CELL + (ROWS - 1) * GAP
 	local browser = CreateFrame("Frame", nil, canvas, BackdropTemplateMixin and "BackdropTemplate" or nil)
@@ -257,7 +276,9 @@ function ns.IconBrowser(canvas, onPick)
 	result:SetTextColor(1, 0.4, 0.35)
 	box:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
-		GameTooltip:SetText(L["Type part of a name to see the icons it matches: any spell, the items you " ..
+		GameTooltip:SetText(source and L["Type part of an icon's name to see the ones it matches, such as " ..
+			"bang, turnin or speak. Enter picks the first."]
+			or L["Type part of a name to see the icons it matches: any spell, the items you " ..
 			"carry and wear, mounts, or an icon's file name such as INV_Misc_Bag_07. Enter picks the first."],
 			1, 1, 1, 1, true)
 		GameTooltip:Show()
@@ -275,9 +296,18 @@ function ns.IconBrowser(canvas, onPick)
 	local function Matches(typed)
 		typed = typed:match("^%s*(.-)%s*$")
 		if typed == "" then
-			return AllIcons()
+			return List()
 		end
 		local text = typed:lower()
+		if source then
+			local list = {}
+			for _, icon in ipairs(List()) do
+				if source.name(icon):lower():find(text, 1, true) then
+					list[#list + 1] = icon
+				end
+			end
+			return list
+		end
 		local list, seen = {}, {}
 		local function Add(icon)
 			if icon and not seen[Key(icon)] then
@@ -312,7 +342,7 @@ function ns.IconBrowser(canvas, onPick)
 		if not self:GetText():find("%S") then
 			return
 		end
-		local icon = shown[1] or ns.FindIcon and ns.FindIcon(self:GetText())
+		local icon = shown[1] or not source and ns.FindIcon and ns.FindIcon(self:GetText())
 		if icon then
 			Pick(icon)
 		end
@@ -343,7 +373,8 @@ function ns.IconBrowser(canvas, onPick)
 			-- scan reaches it.)
 			cell:SetScript("OnEnter", function(self)
 				local file = self.file
-				local name = file and (nameOf and nameOf[Key(file)] or spellNames[Key(file)])
+				local name = file and source and source.name(file)
+					or file and (nameOf and nameOf[Key(file)] or spellNames[Key(file)])
 					or type(file) == "string" and file:match("[^\\/]*$")
 				if name then
 					GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -380,7 +411,7 @@ function ns.IconBrowser(canvas, onPick)
 			local file = shown[top * COLUMNS + i]
 			cell.file = file
 			if file then
-				cell.icon:SetTexture(file)
+				Paint(cell.icon, file)
 				if Same(file, browser.current) then
 					cell.border:SetColorTexture(1, 0.82, 0, 1)
 				else
@@ -441,20 +472,22 @@ function ns.IconBrowser(canvas, onPick)
 			return
 		end
 		self.owner, self.key, self.current = owner, key, picked
-		current:SetTexture(picked or "Interface\\Icons\\INV_Misc_QuestionMark")
+		Paint(current, picked or "Interface\\Icons\\INV_Misc_QuestionMark")
 		self.partial = nil
-		named, nameOf = NamedIcons(), {}
-		for _, entry in ipairs(named) do
-			nameOf[Key(entry[2])] = nameOf[Key(entry[2])] or entry[3]
+		if not source then
+			named, nameOf = NamedIcons(), {}
+			for _, entry in ipairs(named) do
+				nameOf[Key(entry[2])] = nameOf[Key(entry[2])] or entry[3]
+			end
+			StartSpellScan()
 		end
-		StartSpellScan()
 		box:SetText("")
 		result:SetText("")
-		shown = AllIcons()
+		shown = List()
 		slider:SetMinMaxValues(0, MaxTop())
 		-- (Scrolled to the one picked now, when it's in the list.)
 		local row = 0
-		for i, icon in ipairs(AllIcons()) do
+		for i, icon in ipairs(shown) do
 			if Same(icon, picked) then
 				row = math.floor((i - 1) / COLUMNS) - math.floor(ROWS / 2)
 				break

@@ -22,6 +22,7 @@ local L = ns.L
 local GLOBAL_KEYS = {
 	enabled = true, minimapButton = true, minimapAngle = true, logDetail = true, language = true,
 	masterWheelOrder = true, masterWheelOff = true, customWheels = true, wheelExtras = true, -- (Wheels pages)
+	cameraScripts = true, -- (CameraScripts.lua: your scripts, the same in every profile)
 }
 -- Lists kept as tables that belong to a profile (their defaults are in code;
 -- see EnsureTables in Core.lua). Missing from a profile: emptied, which means defaults.

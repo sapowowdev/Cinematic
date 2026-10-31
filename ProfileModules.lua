@@ -501,7 +501,7 @@ ns.PROFILE_MODULES = {
 		end },
 
 	-- Sound and chat
-	{ key = "music-fatigue", name = "Music fatigue", scope = { "Audio/Fatigue" },
+	{ key = "music-fatigue", name = "Music fatigue", scope = { "Audio/Music" },
 		tip = "No camera starts music again within half a minute of the last start.",
 		apply = function(set) set("musicFatigue", 0.5) end },
 	{ key = "no-cinemode-music", name = "No music in CineMode", scope = { "Audio/top" },
@@ -778,36 +778,62 @@ local function Serial(value)
 end
 ns.SerialValue = Serial
 
+-- Whether two values are the same, tables by what's in them (as their
+-- Serial would be, without making the text: ns.SettingSlot asks thousands).
+local function Same(a, b)
+	if a == b or (a ~= a and b ~= b) then return true end
+	if type(a) ~= "table" or type(b) ~= "table" then return false end
+	for k, v in pairs(a) do
+		if not Same(v, b[k]) then return false end
+	end
+	for k in pairs(b) do
+		if a[k] == nil then return false end
+	end
+	return true
+end
+
 -- What modules change once applied (the old grids' settings gone over to
 -- the new): each setting, or list row, that differs from the defaults
 -- applied the same way, as { key, row (or nil), value }. hoverGroups as a whole.
 -- before: ns.ModuleBase(client), when working out many (it's the same each time).
+local NO_ROWS = {}
+-- (The defaults the modules are applied over, one table used again each time:
+-- a new copy of the thousands of them each call was most of the garbage.)
+local scratch = {}
 function ns.ModuleEffect(resolved, client, before)
-	local function Defaults()
-		local values = {}
-		for k, v in pairs(ns.DEFAULTS) do values[k] = v end
-		return values
+	local DEFAULTS = ns.DEFAULTS
+	if not before then
+		before = {}
+		for k, v in pairs(DEFAULTS) do before[k] = v end
+		before = ns.ApplyModules({}, before, client)
 	end
-	before = before or ns.ApplyModules({}, Defaults(), client)
-	local after = ns.ApplyModules(resolved, Defaults(), client)
-	local keys, out = {}, {}
-	for k in pairs(before) do keys[k] = true end
-	for k in pairs(after) do keys[k] = true end
-	for key in pairs(keys) do
-		local a, b = before[key], after[key]
+	for k in pairs(scratch) do
+		if DEFAULTS[k] == nil then scratch[k] = nil end
+	end
+	for k, v in pairs(DEFAULTS) do scratch[k] = v end
+	local after = ns.ApplyModules(resolved, scratch, client)
+	local out = {}
+	local function Compare(key, a, b)
 		-- (Most aren't touched: the same value, or the same table, both sides.)
 		if a == b then
 		elseif ns.IS_PROFILE_TABLE[key] and key ~= "hoverGroups" and (type(a) == "table" or type(b) == "table") then
-			a, b = type(a) == "table" and a or {}, type(b) == "table" and b or {}
-			local rows = {}
-			for row in pairs(a) do rows[row] = true end
-			for row in pairs(b) do rows[row] = true end
-			for row in pairs(rows) do
-				if Serial(a[row]) ~= Serial(b[row]) then out[#out + 1] = { key, row, b[row] } end
+			a, b = type(a) == "table" and a or NO_ROWS, type(b) == "table" and b or NO_ROWS
+			for row, value in pairs(a) do
+				if not Same(value, b[row]) then out[#out + 1] = { key, row, b[row] } end
 			end
-		elseif Serial(a) ~= Serial(b) then
+			for row, value in pairs(b) do
+				if a[row] == nil then out[#out + 1] = { key, row, value } end
+			end
+		elseif not Same(a, b) then
 			out[#out + 1] = { key, nil, b }
 		end
+	end
+	for key, a in pairs(before) do
+		local b = after[key]
+		if a ~= b then Compare(key, a, b) end
+	end
+	for key, b in pairs(after) do
+		if before[key] == nil then Compare(key, nil, b) end
 	end
 	table.sort(out, function(x, y)
 		return x[1] .. "." .. tostring(x[2]) < y[1] .. "." .. tostring(y[2])

@@ -172,6 +172,7 @@ read_globals = {
 	"GetSpellInfo",
 	"GetSubZoneText",
 	"GetTime",
+	"GetFileIDFromPath",
 	"GetTrackingTexture",
 	"GetUnitSpeed",
 	"InCombatLockdown",

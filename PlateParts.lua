@@ -1023,8 +1023,8 @@ function RefreshQuestIcon(plate)
 	end
 	icon = QuestIcon(plate)
 	if icon then
-		-- (One you can't do anything with: the "in progress" mark. See QuestMobs.)
-		ns.SetQuestMark(icon.texture, unit and ns.IsPassiveQuestMob(unit))
+		-- (Its look by the unit: enemy, friendly, or the "in progress" mark. See QuestMobs.)
+		ns.SetQuestMark(icon.texture, unit)
 		PlaceQuestIcon(icon, plate, body, kept, share, mark)
 		icon:SetAlpha(level)
 		icon:Show()

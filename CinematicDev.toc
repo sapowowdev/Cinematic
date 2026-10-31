@@ -62,6 +62,7 @@ MenuWheel.lua
 MarkerWheel.lua
 CustomWheels.lua
 IconBrowser.lua
+QuestMarkIcons.lua
 WheelsPage.lua
 QuestMobs.lua
 QuestGlow.lua
@@ -79,6 +80,7 @@ CustomTriggers.lua
 Shots.lua
 CameraTriggerEditor.lua
 ShotsPage.lua
+CameraScripts.lua
 QuestTalk.lua
 CameraTests.lua
 Tint.lua
@@ -117,6 +119,7 @@ Backups.lua
 Welcome.lua
 Layouts.lua
 ModuleEditor.lua
+CameraScriptsPage.lua
 Options.lua
 Changelog.lua
 ChangelogCommits.lua

@@ -377,6 +377,8 @@ local function HandleSlash(msg)
 		end
 	elseif cmd == "chatcam" and ns.ChatCamCommand then -- (ChatCam.lua)
 		ns.ChatCamCommand(arg)
+	elseif cmd == "script" and ns.CameraScriptCommand then -- (CameraScripts.lua, dev copy)
+		ns.CameraScriptCommand(msg:match("^%s*%S+%s*(.-)%s*$"))
 	elseif cmd == "debug" and arg == "speakers" then
 		ns.Print("log where speaking NPCs' bubbles and plates are on screen: " .. OnOff(ns.ToggleSpeakerWatch())
 			.. " (/reload afterwards to save the log)")

@@ -322,9 +322,18 @@ timerText:SetPoint("TOP", 0, -6)
 local timerNote = timer:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 timerNote:SetPoint("TOP", timerText, "BOTTOM", 0, -3)
 local doneAt, shownSecond
+-- (once done, a click opens the Profiler page; it takes the mouse only then)
+timer:SetScript("OnMouseUp", function(self)
+	self:Hide()
+	ns.OpenOptions("Profiler")
+end)
+hooksecurefunc("SetItemRef", function(link) -- (the chat line's link, Profiler.lua)
+	if link == "garrmission:cinematic:profiler" then ns.OpenOptions("Profiler") end
+end)
 timer:SetScript("OnUpdate", function(self)
 	local left, deep = ns.ProfileTimeLeft()
 	if left then
+		if doneAt then self:EnableMouse(false) end
 		doneAt = nil
 		local second = math.ceil(left)
 		if second ~= shownSecond then -- (new text once a second, not every frame)
@@ -339,13 +348,15 @@ timer:SetScript("OnUpdate", function(self)
 	if not doneAt then
 		doneAt, shownSecond = now, nil
 		timerText:SetText("|cff40ff40" .. L["CPU recording done"] .. "|r")
-		timerNote:SetText(L["Open the Profiler page to see it, or Copy report there to share it."])
+		timerNote:SetText(L["Click here for the Profiler page, or Copy report there to share it."])
+		self:EnableMouse(true)
 	elseif now - doneAt > DONE_SHOWN then
 		self:Hide()
 	end
 end)
 function ns.ShowProfileTimer()
 	doneAt, shownSecond = nil, nil
+	timer:EnableMouse(false)
 	timer:Show()
 end
 
@@ -590,6 +601,7 @@ function ns.CreateProfilerPanel(kit)
 	end
 	legend:SetText(table.concat(legendParts, "    ") .. "    |cffffd100--|r " .. L["average"])
 
+	local TILE_FONTS = { "GameFontHighlightLarge", "GameFontHighlight", "GameFontHighlightSmall" }
 	-- Tiles: a big figure with its name under it, in a row.
 	-- (beside: the tile before it in its row; else under below, the row's first)
 	local function Tile(label, beside, below, tip, width)
@@ -612,6 +624,21 @@ function ns.CreateProfilerPanel(kit)
 		tile.label = tile:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
 		tile.label:SetPoint("BOTTOMLEFT", 8, 5)
 		tile.label:SetText(label)
+		-- (A figure too wide for its tile steps down a font size till it fits;
+		-- the text set again after, as a new font object alone shows boxes in Russian.)
+		local fitting
+		function tile.Fit()
+			if fitting then return end
+			fitting = true
+			local text = tile.value:GetText()
+			for _, font in ipairs(TILE_FONTS) do
+				tile.value:SetFontObject(font)
+				tile.value:SetText(text)
+				if tile.value:GetStringWidth() <= tile:GetWidth() - 16 then break end
+			end
+			fitting = false
+		end
+		hooksecurefunc(tile.value, "SetText", tile.Fit)
 		return tile
 	end
 	local nowTile = Tile(L["Now"])
@@ -951,6 +978,7 @@ function ns.CreateProfilerPanel(kit)
 		if width > 0 then
 			for _, tile in ipairs(row) do
 				tile:SetWidth(width / #row)
+				tile.Fit()
 			end
 		end
 	end
