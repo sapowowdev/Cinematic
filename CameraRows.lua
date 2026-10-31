@@ -15,6 +15,10 @@
 -- are under "trig:<id>" in the shared lists (cityShow..., frameRules,
 -- tankHide...).
 --
+-- Triggers of your own (CustomTriggers.lua: custom = true) keep all of theirs
+-- in it too, their own row's included: "custom" their ids, and
+-- "<id>.source", "<id>.until", "<id>.after" what starts and ends them.
+--
 -- Before the page was one, each camera had its When (the Camera Modes page's
 -- "cam:<cam>" rows, camAlways<cam>, <cam>CalmWait). A trigger's own row
 -- follows its camera's until it's given a When of its own, so nothing
@@ -56,6 +60,18 @@ function ns.RegisterCameraTrigger(trigger)
 		wipe(triggerRows)
 	end
 	if ns.CameraRowsChanged then ns.CameraRowsChanged() end
+end
+-- Takes a trigger's rows off the page (its settings stay).
+function ns.UnregisterCameraTrigger(key)
+	local old = TRIGGER[key]
+	if not old then return end
+	for i = #TRIGGERS, 1, -1 do
+		if TRIGGERS[i] == old then table.remove(TRIGGERS, i) end
+	end
+	TRIGGER[key] = nil
+	orderCache.text, orderCache.list = false, nil
+	wipe(triggerRows)
+	ns.CameraRowsChanged()
 end
 
 -- (A WoW Forever event has no row on retail.)
@@ -117,9 +133,11 @@ end
 
 -- Every row in order: each trigger's own and its copies, the triggers as
 -- TRIGGERS has them (a copy before its own row comes first for it).
--- Worked out again only when the order changes.
+-- Worked out again only when the order changes. (Triggers of your own
+-- brought up to date first: a profile loaded has its own.)
 orderCache = { text = false }
 function ns.CameraRowOrder()
+	if ns.SyncCustomTriggers then ns.SyncCustomTriggers() end
 	local text = Rows().order
 	if orderCache.text == text and orderCache.list then return orderCache.list end
 	local byTrigger, seen = {}, {}
@@ -165,6 +183,11 @@ function ns.CameraRowValue(id, field)
 		local value = Rows()[id .. "." .. field]
 		if value ~= nil then return value end
 	end
+	if trigger.custom then
+		local value = Rows()[trigger.key .. "." .. field]
+		if value == nil then return field == "camera" and trigger.off or false end
+		return value
+	end
 	local key = trigger[field]
 	if not key then return field == "camera" and trigger.off or false end
 	local value = db[key]
@@ -177,7 +200,7 @@ function ns.SetCameraRowValue(id, field, value)
 	local trigger, copy = ns.CameraRowTrigger(id)
 	if not trigger then return end
 	local db = ns.GetDB()
-	if copy then
+	if copy or trigger.custom then
 		db.cameraRows[id .. "." .. field] = value
 	elseif trigger[field] then
 		db[trigger[field]] = value
@@ -196,7 +219,7 @@ end
 -- its camera now; nil for a copy, or with no camera.
 local function Leader(id)
 	local trigger, copy = ns.CameraRowTrigger(id)
-	if copy or not trigger then return nil end
+	if copy or not trigger or trigger.custom then return nil end
 	return CAM_OF[ns.CameraRowValue(id, "camera")]
 end
 
@@ -396,8 +419,11 @@ function ns.CopyCameraRow(id)
 	rows[new .. ".name"] = type(own) == "string" and own:find("%S") and (L["%s (copy)"]):format(own):sub(1, 40) or nil
 	ns.CameraRowFollow(id)
 	local from = (Leader(id) and not OwnWhen(id)) and ("cam:" .. Leader(id)) or ROW_KEY[id]
-	rows[new .. ".always"] = from == ROW_KEY[id] and ns.CameraRowAlways(id)
-		or (db["camAlways" .. Leader(id)] and true or false)
+	if from == ROW_KEY[id] then
+		rows[new .. ".always"] = ns.CameraRowAlways(id)
+	else
+		rows[new .. ".always"] = db["camAlways" .. Leader(id)] and true or false
+	end
 	rows[new .. ".calm"] = ns.CameraRowCalm(id)
 	rows[new .. ".off"] = rows[id .. ".off"]
 	local IS_ON = { combatShow = ns.IsCombatShowOn, calmShow = ns.IsCalmShowOn, quietShow = ns.IsQuietShowOn,

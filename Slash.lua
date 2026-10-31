@@ -568,6 +568,47 @@ local function HandleSlash(msg)
 			ns.db.cameraModes == false and "off" or "on", tostring(ns.GetPlaceType()), tostring(ns.db.takeoffInCity),
 			tostring(InCombatLockdown()), tostring((ns.ActiveEvent()))))
 		for _, line in ipairs(ns.DescribeCameraRows()) do ns.Print(line) end
+	elseif cmd == "debug" and (arg == "triggers" or arg:find("^triggers ")) then
+		-- Triggers of your own (CustomTriggers.lua), until the Cameras page has
+		-- their editor: add <kind>:<what> [until] [camera], remove <id>, clear.
+		-- With nothing after: each one, whether it's on and why, the priority list.
+		local rest = arg:match("^triggers%s*(.-)$")
+		local CAMERAS = { cozy = true, vista = true, fish = true, afk = true, none = true }
+		if rest:find("^add ") then
+			local words = {}
+			for word in rest:sub(5):gmatch("%S+") do words[#words + 1] = word end
+			local camera = CAMERAS[words[#words] or ""] and table.remove(words) or nil
+			local last = words[#words] or ""
+			local untilText = (last == "move" or last == "ends" or last == "key" or last:find("^time:%d+$"))
+				and table.remove(words) or nil
+			local source = table.concat(words, " ")
+			if not source:find("^%a+:.+") then
+				ns.Print("usage: /cine debug triggers add emote:cheer [move|ends|key|time:5] [cozy|vista|fish|afk]")
+			else
+				local id = ns.AddCustomTrigger(source, untilText or "move", camera)
+				ns.Print(id and ("added %s: %s until %s, %s camera"):format(id, source, untilText or "move",
+					camera or "cozy") or ("no room: %d triggers at most"):format(ns.CUSTOM_TRIGGER_MAX))
+			end
+		elseif rest:find("^remove ") or rest == "clear" then
+			local want = rest:match("^remove%s+(%S+)")
+			local ids = {}
+			for id in tostring(ns.GetDB().cameraRows.custom or ""):gmatch("[^,]+") do
+				if not want or id:lower() == want then ids[#ids + 1] = id end
+			end
+			for _, id in ipairs(ids) do ns.RemoveCustomTrigger(id) end
+			ns.Print(("removed %d trigger(s): %s"):format(#ids, table.concat(ids, ", ")))
+		end
+		ns.SyncCustomTriggers()
+		local event, camera = ns.ActiveEvent()
+		ns.Print(("triggers: client %s, combat %s, moving %s, event now %s (%s)"):format(
+			ns.isRetail and "retail" or "classic/forever", tostring(InCombatLockdown()), tostring(ns.playerMoving),
+			tostring(event), tostring(camera)))
+		local order = {}
+		for _, source in ipairs(ns.TRIGGER_SOURCES) do order[#order + 1] = source.id end
+		ns.Print("priority: " .. table.concat(order, " > "))
+		local lines = ns.DescribeCustomTriggers()
+		if #lines == 0 then ns.Print("no triggers of your own yet: /cine debug triggers add emote:cheer time:5 vista") end
+		for _, line in ipairs(lines) do ns.Print(line) end
 	elseif cmd == "eventtest" then
 		-- Records which game events fire over the next 8 seconds (sit in a chair
 		-- meanwhile), leaving out the constant background ones, then lists them.

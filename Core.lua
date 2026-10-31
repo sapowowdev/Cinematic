@@ -25,6 +25,9 @@ local function SetBindingNames()
 	BINDING_NAME_CINEMATIC_CAM_TELE = "Cinematic: " .. L["Start the tele camera"]
 	BINDING_NAME_CINEMATIC_CAM_DEATH = "Cinematic: " .. L["Test the death camera"]
 	BINDING_NAME_CINEMATIC_STOPCAM = "Cinematic: " .. L["Stop the camera"]
+	for n = 1, 5 do
+		_G["BINDING_NAME_CINEMATIC_CUSTOMTRIGGER" .. n] = "Cinematic: " .. (L["Custom camera trigger %d"]):format(n)
+	end
 	BINDING_NAME_CINEMATIC_SHOWTOOLTIPS = "Cinematic: " .. L["Show hidden tooltips (hold)"]
 	BINDING_NAME_CINEMATIC_TOGGLETOOLTIPS = "Cinematic: " .. L["Toggle tooltip hiding"]
 	BINDING_NAME_CINEMATIC_RELOAD = "Cinematic: " .. L["Reload the UI"]
@@ -1884,7 +1887,8 @@ local function IsBusy()
 	return (corpse and not (ns.IsDeathCinematic and ns.IsDeathCinematic()))
 		or (ns.db.revealOnCast and (Flag(UnitCastingInfo("player")) or Flag(UnitChannelInfo("player")))
 			and not (ns.IsFishingEvent and ns.IsFishingEvent())
-			and not (ns.IsDepartEvent and ns.IsDepartEvent()))
+			and not (ns.IsDepartEvent and ns.IsDepartEvent())
+			and not (ns.CustomCastCounts and ns.CustomCastCounts()))
 		or CursorBusy()
 		or AnyRevealFrameShown()
 end

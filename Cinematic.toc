@@ -83,6 +83,7 @@ Triggers.lua
 Camera.lua
 QuestCam.lua
 CameraRows.lua
+CustomTriggers.lua
 QuestTalk.lua
 CameraTests.lua
 Tint.lua

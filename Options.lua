@@ -4671,9 +4671,13 @@ local function CreateCamerasPanel()
 		opened[id] = not opened[id]
 		grid:Refresh()
 	end
+	-- (A trigger of your own: its name, else what starts it.)
+	local function TriggerName(trigger)
+		return trigger.custom and ns.CustomTriggerLabel(trigger.key) or trigger.key
+	end
 	local function RowLabel(id)
 		local trigger, copy = ns.CameraRowTrigger(id)
-		return (LABELS[trigger.key] or trigger.key) .. (copy and " (" .. copy .. ")" or "")
+		return (LABELS[trigger.key] or TriggerName(trigger)) .. (copy and " (" .. copy .. ")" or "")
 	end
 	local function OwnName(id)
 		local db = ns.GetDB()
@@ -4816,7 +4820,7 @@ local function CreateCamerasPanel()
 			local group = byTrigger[trigger]
 			if not group then
 				-- (Its name without a leading slash: /dance among the d's.)
-				local name = (LABELS[trigger.key] or trigger.key):gsub("^%p+", ""):lower()
+				local name = (LABELS[trigger.key] or TriggerName(trigger)):gsub("^%p+", ""):lower()
 				local camera, cam = ns.CameraRowValue(id, "camera"), ""
 				if sort == nil then
 					cam = hubOrder[HUB_NAMES[camera]] or 99
@@ -4928,7 +4932,7 @@ local function CreateCamerasPanel()
 	for _, list in ipairs(ns.CAMERA_ROW_LISTS) do RecordKey(content, list) end
 	for _, trigger in ipairs(ns.CAMERA_TRIGGERS) do
 		for _, field in ipairs({ "camera", "music", "cine" }) do
-			if trigger[field] then RecordKey(content, trigger[field]) end
+			if type(trigger[field]) == "string" then RecordKey(content, trigger[field]) end
 		end
 		if INSTANT[trigger.key] then RecordKey(content, INSTANT[trigger.key]) end
 		local extra = EXTRAS[trigger.key]
@@ -4990,7 +4994,7 @@ local function CreateCamerasPanel()
 			if own ~= "" then
 				name:SetText(own .. " |cff999999" .. RowLabel(id) .. "|r")
 			else
-				name:SetText((LABELS[key] or key) .. (copy and " |cff999999(" .. copy .. ")|r" or ""))
+				name:SetText((LABELS[key] or TriggerName(trigger)) .. (copy and " |cff999999(" .. copy .. ")|r" or ""))
 			end
 			name:SetAlpha((ns.CameraRowOn(id) and HasCamera(id)) and 1 or 0.5)
 			self.chips:SetAlpha(ns.CameraRowOn(id) and 1 or 0.5)

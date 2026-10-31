@@ -108,6 +108,53 @@ if arg[1] then
 	if mismatches > 0 then
 		print(("problem\tTrigger sources pick differently from the old order in %d cases"):format(mismatches))
 	end
+	-- Triggers of your own (CustomTriggers.lua): one added is a row with its
+	-- camera, sits after the emotes in the priority list (or first), starts
+	-- from its key, and taken off leaves nothing behind.
+	local function Problem(text) print("problem\tCustom triggers: " .. text) end
+	local function SourceOf(id)
+		for _, source in ipairs(ns.TRIGGER_SOURCES) do
+			if source.custom == id then return source end
+		end
+	end
+	local before = #ns.CAMERA_TRIGGERS
+	local id = ns.AddCustomTrigger("key:1", "key", "vista", "Photo mode")
+	local rows = ns.GetDB().cameraRows
+	if id ~= "MineA" then Problem("the first one's id is " .. tostring(id)) end
+	if id then
+		if not ns.CAMERA_TRIGGER[id] or #ns.CAMERA_TRIGGERS ~= before + 1 then Problem("not on the Cameras page") end
+		local listed = false
+		for _, each in ipairs(ns.CameraRowOrder()) do listed = listed or each == id end
+		if not listed then Problem("its row isn't in the row order") end
+		if ns.CameraRowValue(id, "camera") ~= "vista" then Problem("its camera is " .. tostring(ns.CameraRowValue(id, "camera"))) end
+		ns.SetCameraRowValue(id, "music", true)
+		if rows[id .. ".music"] ~= true or ns.CameraRowValue(id, "music") ~= true then Problem("music not kept") end
+		local source = SourceOf(id)
+		if not source or not (source.order > 500 and source.order < 600) then
+			Problem("not between the emotes and the weapon: " .. tostring(source and source.order))
+		end
+		if source and source.Key({}) ~= nil then Problem("on before its key") end
+		Cinematic_CustomTrigger(1)
+		if source and source.Key({}) ~= id then Problem("its key didn't start it") end
+		Cinematic_CustomTrigger(1)
+		if source and source.Key({}) ~= nil then Problem("its key didn't stop it") end
+		rows[id .. ".after"] = ""
+		ns.CustomTriggersChanged()
+		source = SourceOf(id)
+		if not source or source.order >= 100 then Problem("after \"\" isn't first: " .. tostring(source and source.order)) end
+		local copy = ns.CopyCameraRow(id)
+		if copy ~= id .. "2" then Problem("its copy is " .. tostring(copy)) end
+		ns.RemoveCustomTrigger(id)
+		ns.SyncCustomTriggers()
+		if ns.CAMERA_TRIGGER[id] or #ns.CAMERA_TRIGGERS ~= before or SourceOf(id) then Problem("still there taken off") end
+		for key in pairs(rows) do
+			if tostring(key):find("^" .. id) then Problem("left behind: " .. key) end
+		end
+		if rows.custom ~= nil then Problem("its list is " .. tostring(rows.custom)) end
+		for _, each in ipairs(ns.CameraRowOrder()) do
+			if each:find("^" .. id) then Problem("its row's still in the order: " .. each) end
+		end
+	end
 	-- Vitals Vision: a page's Reset (its settings back to the profile's) leaves
 	-- each theme's own look on them, not the plain defaults.
 	local db, base = ns.GetDB(), ns.ProfileBase()

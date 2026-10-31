@@ -1394,7 +1394,7 @@ do
 				or "no emote seen"
 			return key == "SitButton" and ("Campfire button, " .. detail) or detail
 		end
-		return "-"
+		return ns.CustomTriggerDetail and ns.CustomTriggerDetail(key) or "-"
 	end
 end
 
@@ -3025,7 +3025,7 @@ function ns.UpdateOrbit(cinematic, elapsed)
 	-- Casting (crafting, say) is busy too. (The cozy camera keeps going: cooking
 	-- at a campfire is still cozy.) So is a Chat Cam conversation (NPCs talking to you).
 	local casting = (ns.Flag(UnitCastingInfo("player")) or ns.Flag(UnitChannelInfo("player")))
-		and not ns.IsFishingEvent() and not ns.IsDepartEvent()
+		and not ns.IsFishingEvent() and not ns.IsDepartEvent() and not ns.CustomCastCounts()
 	-- A movie or in-game cutscene playing: you're watching, not standing about,
 	-- so the timer starts once it's over.
 	local movie = (MovieFrame and ns.Flag(MovieFrame:IsShown())) or (CinematicFrame and ns.Flag(CinematicFrame:IsShown()))

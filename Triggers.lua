@@ -26,6 +26,13 @@ function ns.RegisterTriggerSource(source)
 	table.insert(list, at, source)
 end
 
+function ns.UnregisterTriggerSource(id)
+	local list = ns.TRIGGER_SOURCES
+	for i = #list, 1, -1 do
+		if list[i].id == id then table.remove(list, i) end
+	end
+end
+
 -- The first source's trigger that has a camera (cameraOf(key): its camera
 -- here and now, or nil), and that camera; nil for none.
 function ns.PickTrigger(state, cameraOf)

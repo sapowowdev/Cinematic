@@ -73,6 +73,21 @@
 	<Binding name="CINEMATIC_STOPCAM" category="ADDONS">
 		Cinematic_StopCamera()
 	</Binding>
+	<Binding name="CINEMATIC_CUSTOMTRIGGER1" category="ADDONS">
+		Cinematic_CustomTrigger(1)
+	</Binding>
+	<Binding name="CINEMATIC_CUSTOMTRIGGER2" category="ADDONS">
+		Cinematic_CustomTrigger(2)
+	</Binding>
+	<Binding name="CINEMATIC_CUSTOMTRIGGER3" category="ADDONS">
+		Cinematic_CustomTrigger(3)
+	</Binding>
+	<Binding name="CINEMATIC_CUSTOMTRIGGER4" category="ADDONS">
+		Cinematic_CustomTrigger(4)
+	</Binding>
+	<Binding name="CINEMATIC_CUSTOMTRIGGER5" category="ADDONS">
+		Cinematic_CustomTrigger(5)
+	</Binding>
 	<Binding name="CINEMATIC_SHOWTOOLTIPS" category="ADDONS" runOnUp="true">
 		Cinematic_ShowTooltips(keystate)
 	</Binding>
