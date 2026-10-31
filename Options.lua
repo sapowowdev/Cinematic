@@ -5869,29 +5869,24 @@ local function CreateBubblesPanel()
 	end
 	stack:Continue(ShowTable(content, bubbleTop, bubbleRows, L["Chat bubbles"]), "label")
 
-
+	-- Custom bubbles: ones Cinematic draws itself, looking like the game's.
 	-- Speech from behind you (Speech.lua): says and yells with no bubble on
-	-- screen, shown low on the screen. Only with the page on.
-	stack:Header(content, L["Behind you"])
-	stack:Help(content, L["Says and yells with no bubble on your screen (the speaker is behind you, or out of " ..
-		"view) can show low on the screen, looking like the chat bubbles, instead of bringing up chat. " ..
-		"It needs the Chat page's Show chat when a message arrives and " ..
-		"Hide speech you can see as a bubble. How the lines look, and where they show: the Style hub's Chat " ..
-		"bubbles page."])
-	local speechBehind = stack:Add(Check(content, "chatSpeechBehind", L["Show speech from behind you at the bottom"],
-		L["Says and yells with no bubble on your screen (the speaker is behind you, or out of view) show as " ..
-		"a line of text low on the screen, with the speaker's name, instead of bringing up chat. " ..
-		"It looks like the bubbles (the Style hub's Chat bubbles page)."]), "check")
-	GreyUnless(speechBehind, function(db) return db.chatPeek and db.chatHideBubbled end)
-	-- (Grey while it's off.)
-	local function IfSpeechBehind(db) return db.chatPeek and db.chatHideBubbled and db.chatSpeechBehind end
-	speechBehind:HookScript("OnClick", Refresh) -- grey out / enable the choices under it
-
-	local speechChatShown = stack:Add(Check(content, "speechBehindChatShown", L["Also while chat is showing"],
-		L["Speech from behind you shows low on the screen even while the chat window is up (when you hover " ..
-		"it, type, or a message brought it up). Unticked, it shows only while chat is faded, and goes to chat otherwise."]),
-		"check", 24)
-	GreyUnless(speechChatShown, IfSpeechBehind)
+	-- screen, shown low on the screen. Keep bubbles on screen (Bubbles.lua):
+	-- retail's drawn again below the bar, classic's moved.
+	stack:Header(content, L["Custom bubbles"])
+	stack:Help(content, L["The game only shows a bubble over someone on your screen, and puts one from someone " ..
+		"above you at the very top of the screen, under the letterbox bar. So Cinematic draws bubbles of its own, " ..
+		"looking like the game's, for speech whose bubble you can't see. How they look, and where speech from " ..
+		"behind you shows: the Style hub's Chat bubbles page."])
+	local offScreen = stack:Add(Check(content, "chatSpeechBehind", L["Show off-screen bubbles"],
+		L["Says and yells whose bubble isn't on your screen (the speaker is behind you, or out of view) show in " ..
+		"a bubble low on the screen, with the speaker's name, instead of bringing up chat. It needs the Chat " ..
+		"page's Show chat when a message arrives and Hide speech you can see as a bubble."]), "check")
+	GreyUnless(offScreen, function(db) return db.chatPeek and db.chatHideBubbled end)
+	stack:Add(Check(content, "bubblesOffTop", L["Keep bubbles on screen"],
+		L["A bubble the game would put at the very top of the screen (someone above you, up some stairs say) " ..
+		"shows a little lower instead, below the letterbox bar (or a bit down from the top with the bars off), " ..
+		"where you can read it."]), "check")
 
 	canvas:SetScript("OnShow", PageShown(Refresh, content))
 	canvas:Hide()

@@ -327,13 +327,15 @@ local function Styled()
 	return next(faded) or next(scaled) or next(restyled) or next(skins)
 end
 
--- Kept off the top of the screen: the game pins a bubble to the screen's top
--- edge, under the letterbox bar. Its inside (the frame holding its background,
--- tail and text) is moved down until its top is below the bar, or 10% from
--- the top while the bars are off. The game places the bubble itself each
--- frame, so this is looked at each frame while it shows. Bubbles the game
--- keeps from addons (in instances, on retail) are left as they are.
+-- Kept on the screen (bubblesOffTop, the page's Keep bubbles on screen): the
+-- game pins a bubble to the screen's top edge, under the letterbox bar. It's
+-- brought down until its top is below the bar, or 10% from the top while the
+-- bars are off: classic's moved itself (Lift), retail's drawn again by us
+-- (LiftText). The game places the bubble itself each frame, so this is looked
+-- at each frame while it shows. Bubbles the game keeps from addons (in
+-- instances, on retail) are left as they are.
 local TOP_MARGIN = 0.1
+DEFAULTS.bubblesOffTop = true
 local lifted = setmetatable({}, { __mode = "k" }) -- inside frame -> { points, by }
 
 local function Readable(value)
@@ -354,6 +356,67 @@ local function TopLine()
 	return (height - bar) * UIParent:GetEffectiveScale()
 end
 
+-- /cine debug bubbles: each bubble's lift logged as it changes, frame by
+-- frame (a bubble glitching up off the top on retail).
+local tracing = false
+local lastTrace = setmetatable({}, { __mode = "k" }) -- inside frame -> its last line
+
+local function Num(value)
+	if value == nil then return "nil" end
+	if not Readable(value) then return "secret" end
+	return ("%.1f"):format(value)
+end
+
+local function Trace(inside, text)
+	local said = inside.String and inside.String:GetText()
+	said = type(said) == "string" and not (issecretvalue and issecretvalue(said)) and said:sub(1, 16) or "?"
+	local bubble = inside:GetParent()
+	-- (Also what the game itself does to it: shown, its own animation, where
+	-- across, how tall: a jump the lift doesn't explain shows up in these.)
+	local games = {}
+	if bubble and bubble.GetAnimationGroups then
+		for _, group in ipairs({ bubble:GetAnimationGroups() }) do
+			games[#games + 1] = group:IsPlaying() and ("playing " .. Num(group:GetProgress())) or "still"
+		end
+	end
+	local textX = inside.String and select(4, inside.String:GetPoint(1))
+	local line = ("\"%s\" %s; bubble top %s, alpha %s, visible %s, left %s, x %s, height %s, game anim %s"):format(
+		said, text, Num(bubble and bubble:GetTop()), Num(bubble and bubble:GetAlpha()),
+		tostring(bubble and ns.Flag(bubble:IsVisible())), Num(inside:GetLeft()), Num(textX),
+		Num(inside:GetHeight()), #games > 0 and table.concat(games, "/") or "none")
+	if lastTrace[inside] ~= line then
+		lastTrace[inside] = line
+		ns.Log("bubbles", ("frame %d: %s"):format(ns.bubbleTraceFrame or 0, line))
+	end
+end
+
+-- Once per bubble: what each part hangs off, and the game's own animations
+-- on it (another way to keep it down might hang off these).
+local function Name(frame)
+	if frame == nil then return "nil" end
+	local name = frame.GetDebugName and frame:GetDebugName()
+	return (type(name) == "string" and name ~= "") and name or tostring(frame)
+end
+
+local function DumpAnchors(inside)
+	local bubble = inside:GetParent()
+	for _, part in ipairs({ { "bubble", bubble }, { "inside", inside }, { "text", inside.String } }) do
+		local label, frame = part[1], part[2]
+		if frame then
+			local points = {}
+			for i = 1, frame:GetNumPoints() do
+				local point, relative, relativePoint, x, y = frame:GetPoint(i)
+				points[#points + 1] = ("%s to %s %s %s,%s"):format(tostring(point), Name(relative),
+					tostring(relativePoint), Num(x), Num(y))
+			end
+			ns.Log("bubbles", ("  %s %s: parent %s, %s; clamped %s; %s"):format(label, Name(frame),
+				Name(frame:GetParent()), #points > 0 and table.concat(points, "; ") or "no points",
+				tostring(frame.IsClampedToScreen and frame:IsClampedToScreen()),
+				frame.GetAnimationGroups and (select("#", frame:GetAnimationGroups()) .. " animation groups") or ""))
+		end
+	end
+end
+
 local function Place(inside, state, by)
 	state.moving = true
 	inside:ClearAllPoints()
@@ -364,33 +427,170 @@ local function Place(inside, state, by)
 	state.by = by
 end
 
--- Retail's inside hangs off its text (String), which the game places itself
--- each frame: the text is moved down instead, the inside with it. (Moving the
--- inside left the words up under the bar, the box below them.) The game's
--- own place is told from ours by it not being where we last put it.
-local function LiftText(inside, text, state)
-	local on = ns.db and ns.db.handleBubbles
-	local point, relative, relativePoint, x, y = text:GetPoint(1)
-	if not (point and Readable(x) and Readable(y)) or text:GetNumPoints() ~= 1 then
-		return
+-- Retail's inside hangs off its text (String), which the engine itself places,
+-- at no set time in the frame (no Lua call to catch). Moving the text lost to
+-- it every few frames, and the bubble flicked up under the bar; drawing the
+-- bubble lower with a Translation flicked too, the engine drawing it without
+-- the offset on some frames. So a bubble that would reach the bar is hidden
+-- (its inside faded out) and our copy of it shown under the bar instead: the
+-- engine never touches ours. It's placed from the game's bubble each frame (a
+-- frame behind at most), and handed back as the game's drops under the line,
+-- where the two are in the same place.
+local TAIL_EDGE = 14 -- (the copy's tail stays this far in from the bubble's sides)
+
+-- Our copy: a bubble like the Style page's preview (back, tail and words).
+local function MakeCopy()
+	local frame = CreateFrame("Frame", nil, WorldFrame)
+	frame:Hide()
+	frame.game = ns.MakeGameBubble(frame)
+	frame.skin = ns.MakeBubbleSkin(frame)
+	ours[frame.skin] = true
+	for _, back in ipairs({ frame.game or false, frame.skin }) do
+		if back then
+			back:SetAllPoints()
+			back:SetFrameLevel(frame:GetFrameLevel() + 1)
+		end
 	end
-	local ours = state.textX == x and state.textY == y
-	if not ours then
-		state.baseY, state.by = y, 0 -- (the game's place this frame)
+	local words = CreateFrame("Frame", nil, frame)
+	words:SetAllPoints()
+	words:SetFrameLevel(frame:GetFrameLevel() + 5)
+	frame.text = words:CreateFontString(nil, "OVERLAY")
+	frame.text:SetWordWrap(true)
+	return frame
+end
+
+-- Dressed as the game's bubble is now: its words (font, size, color, wrap,
+-- already styled by StyleText), the look's back, and the tail where the
+-- game's is along the bottom.
+local function DressCopy(copy, inside, text)
+	-- (The game's font object, not its file: a file loses the font family, and
+	-- Russian, Korean and Chinese show as boxes. Restyled, it's a file already.)
+	local object = text:GetFontObject()
+	if object and not restyled[text] then
+		copy.text:SetFontObject(object)
+	else
+		local file, height, flags = text:GetFont()
+		if file then copy.text:SetFont(file, height, flags or "") end
+	end
+	copy.text:SetShadowColor(text:GetShadowColor())
+	copy.text:SetShadowOffset(text:GetShadowOffset())
+	copy.text:SetTextColor(text:GetTextColor())
+	if text.GetTextScale and copy.text.SetTextScale then copy.text:SetTextScale(text:GetTextScale()) end
+	copy.text:SetJustifyH(text:GetJustifyH())
+	copy.text:SetWidth(text:GetWidth())
+	copy.text:SetText(text:GetText())
+	copy.text:ClearAllPoints()
+	copy.text:SetPoint("TOPLEFT", copy, "TOPLEFT", text:GetLeft() - inside:GetLeft(), text:GetTop() - inside:GetTop())
+	local look = ns.StyleOn("bubblesStyle") and Look() or nil
+	local own = look and ns.BubbleBackColor(look)
+	local boxed = not look or look.bubblesBack ~= "none"
+	if look then ns.DressBubbleSkin(copy.skin, look) end
+	copy.skin:SetShown(boxed and own ~= nil)
+	local tailOn = not look or look.bubblesTail and true or false
+	if copy.game then
+		copy.game:SetShown(boxed and not own)
+		copy.game:SetAlpha(look and tonumber(look.bubblesAlpha) or 1)
+		copy.game.tail:SetShown(tailOn)
+	end
+	copy.skin.tail:SetShown(tailOn)
+	local gameTail = inside.Tail
+	if not gameTail then
+		for i = 1, select("#", inside:GetRegions()) do
+			local region = select(i, inside:GetRegions())
+			if region:GetObjectType() == "Texture" and IsTail(region, inside) then gameTail = region end
+		end
+	end
+	-- (The game slides its tail toward the speaker, out past the bubble's
+	-- corner with them off to the side: ours stays along the bottom edge, and
+	-- turned the way the game's is.)
+	local left, right = gameTail and gameTail:GetLeft(), gameTail and gameTail:GetRight()
+	local x = Readable(left) and Readable(right) and (left + right) / 2 - inside:GetLeft() or 20
+	local wide = inside:GetWidth()
+	-- (Its corners only when it's the same art as ours.)
+	local coords = gameTail and gameTail.GetAtlas and gameTail:GetAtlas() == "ChatBubble-Tail"
+		and { gameTail:GetTexCoord() }
+	for _, back in ipairs({ copy.game or false, copy.skin }) do
+		if back then
+			local tail = back.tail
+			local half = (tail:GetWidth() or 0) / 2
+			local most = math.max(TAIL_EDGE + half, wide - TAIL_EDGE - half)
+			tail:ClearAllPoints()
+			tail:SetPoint("TOP", back, "BOTTOMLEFT", math.max(TAIL_EDGE + half, math.min(most, x)), back.tailInto)
+			if coords and #coords == 8 then tail:SetTexCoord(unpack(coords)) end
+		end
+	end
+end
+
+-- The game's bubble back, our copy put away.
+local function Release(inside, state)
+	if state.copy and state.copy:IsShown() then
+		state.copy:Hide()
+		inside:SetAlpha(1)
+		local skin = skins[inside:GetParent()]
+		if skin then skin:SetAlpha(1) end
+	end
+	state.said, state.by = nil, 0
+end
+
+-- Our copy shown by the game's bubble's place, its top down by.
+local function ShowCopy(inside, state, text, scale, by)
+	local bubble = inside:GetParent()
+	local copy = state.copy
+	if not copy then
+		copy = MakeCopy()
+		state.copy = copy
+	end
+	local said = text:GetText()
+	if not copy:IsShown() or said ~= state.said then
+		state.said = said
+		copy:SetFrameStrata(bubble:GetFrameStrata())
+		copy:SetFrameLevel(bubble:GetFrameLevel() + 1)
+		copy:SetScale(scale / WorldFrame:GetEffectiveScale())
+		DressCopy(copy, inside, text)
+	end
+	copy:SetSize(inside:GetWidth(), inside:GetHeight())
+	copy:ClearAllPoints()
+	copy:SetPoint("TOPLEFT", WorldFrame, "BOTTOMLEFT", inside:GetLeft(), inside:GetTop() - by)
+	copy:SetAlpha(bubble:GetAlpha())
+	if not copy:IsShown() then
+		copy:Show()
+		inside:SetAlpha(0)
+		local skin = skins[bubble]
+		if skin then skin:SetAlpha(0) end
+	end
+	state.by = by
+end
+
+local function LiftText(inside, state)
+	local on = ns.db and ns.db.handleBubbles and ns.db.bubblesOffTop
+	local text = inside.String
+	local top, scale = inside:GetTop(), inside:GetEffectiveScale()
+	if not (Readable(top) and Readable(scale)) or scale <= 0 then
+		if tracing then Trace(inside, ("text: top %s, scale %s unreadable"):format(Num(top), Num(scale))) end
+		return
 	end
 	local by = 0
 	if on then
-		local top, scale = inside:GetTop(), inside:GetEffectiveScale()
-		if not (Readable(top) and Readable(scale)) or scale <= 0 then
-			return
-		end
-		local over = (top + state.by) - TopLine() / scale
+		-- (Its top as the game places it: the copy doesn't move it.)
+		local over = top - TopLine() / scale
 		by = over > 0 and over or 0
 	end
-	if math.abs(by - state.by) > 0.5 or (by == 0 and state.by ~= 0) then
-		text:ClearAllPoints()
-		text:SetPoint(point, relative, relativePoint, x, state.baseY - by)
-		state.by, state.textX, state.textY = by, x, state.baseY - by
+	-- (/cine debug bubbles drop: every bubble far down, to see the copy.)
+	if ns.bubbleDropTest then by = by + 200 end
+	local was = state.by
+	if by > 0 then
+		ShowCopy(inside, state, text, scale, by)
+	elseif was ~= 0 or (state.copy and state.copy:IsShown()) then
+		Release(inside, state)
+	end
+	if tracing then
+		if not state.dumped then
+			state.dumped = true
+			DumpAnchors(inside)
+		end
+		Trace(inside, ("text: page %s, top %s, line %s, by %s -> %s, %s"):format(
+			on and "on" or "off", Num(top), Num(TopLine() / scale), Num(was), Num(state.by),
+			state.copy and state.copy:IsShown() and "copy" or "game's"))
 	end
 end
 
@@ -402,7 +602,7 @@ local function Lift(inside)
 			state = { by = 0 }
 			lifted[inside] = state
 		end
-		LiftText(inside, text, state)
+		LiftText(inside, state)
 		return
 	end
 	local state = lifted[inside]
@@ -416,9 +616,10 @@ local function Lift(inside)
 			end
 		end)
 	end
-	local on = ns.db and ns.db.handleBubbles
+	local on = ns.db and ns.db.handleBubbles and ns.db.bubblesOffTop
 	if not on then
 		if state.by ~= 0 and state.points then Place(inside, state, 0) end
+		if tracing then Trace(inside, ("inside: page off, top %s"):format(Num(inside:GetTop()))) end
 		return
 	end
 	local top, scale = inside:GetTop(), inside:GetEffectiveScale()
@@ -434,8 +635,13 @@ local function Lift(inside)
 	end
 	local over = (top + state.by) - TopLine() / scale
 	local by = over > 0 and over or 0
+	local was = state.by
 	if math.abs(by - state.by) > 0.5 or (by == 0 and state.by ~= 0) then
 		Place(inside, state, by)
+	end
+	if tracing then
+		Trace(inside, ("inside: top %s, line %s, by %s -> %s"):format(Num(top), Num(TopLine() / scale),
+			Num(was), Num(state.by)))
 	end
 end
 
@@ -450,9 +656,48 @@ local function HookBubbles()
 			if inside and not (inside.IsForbidden and inside:IsForbidden()) then
 				hooked[bubble] = true
 				bubble:HookScript("OnUpdate", function() Lift(inside) end)
+				-- (Gone or reused: our copy goes too, and the game's comes back.)
+				bubble:HookScript("OnHide", function()
+					local state = lifted[inside]
+					if state and state.copy then Release(inside, state) end
+				end)
 			end
 		end
 	end
+end
+
+-- Returns whether it's on now. (Hooks the bubbles as they show even with the
+-- page off, to see the game's own place.)
+local traceHooker = CreateFrame("Frame")
+function ns.ToggleBubbleTrace()
+	tracing = not tracing
+	ns.bubbleTraceFrame = 0
+	local zoom, count
+	traceHooker:SetScript("OnUpdate", tracing and function()
+		ns.bubbleTraceFrame = ns.bubbleTraceFrame + 1
+		HookBubbles()
+		-- (The camera bumping on stairs moves every bubble at once.)
+		local now = GetCameraZoom and GetCameraZoom()
+		if Readable(now) and (not zoom or math.abs(now - zoom) > 0.05) then
+			zoom = now
+			ns.Log("bubbles", ("frame %d: camera zoom %s"):format(ns.bubbleTraceFrame, Num(now)))
+		end
+		local bubbles = C_ChatBubbles and C_ChatBubbles.GetAllChatBubbles and #C_ChatBubbles.GetAllChatBubbles(false)
+		if bubbles ~= count then
+			count = bubbles
+			ns.Log("bubbles", ("frame %d: %s bubbles"):format(ns.bubbleTraceFrame, tostring(bubbles)))
+		end
+	end or nil)
+	if tracing then
+		local letterbox = ns.letterbox
+		ns.Log("bubbles", ("tracing; page %s, %s, screen %s x %s, UI scale %s, letterbox %s, top line %s"):format(
+			ns.db and ns.db.handleBubbles and "on" or "off", ns.isRetail and "retail" or "classic",
+			Num(UIParent:GetWidth()), Num(UIParent:GetHeight()), Num(UIParent:GetEffectiveScale()),
+			letterbox and ns.Flag(letterbox:IsShown()) and Num(letterbox.top:GetHeight()) or "off", Num(TopLine())))
+	else
+		ns.Log("bubbles", "tracing stopped")
+	end
+	return tracing
 end
 
 -- Whether a bubble saying exactly this text is showing on screen (so its chat
@@ -478,6 +723,7 @@ local function SaysText(frame, text)
 end
 ns.BubbleSays = SaysText -- (/cine debug speakers)
 
+local placeTold -- (/cine debug speech: the last line its bubble's place was told for)
 function ns.IsBubbleOnScreen(text)
 	if not (C_ChatBubbles and C_ChatBubbles.GetAllChatBubbles) then
 		return false
@@ -486,12 +732,25 @@ function ns.IsBubbleOnScreen(text)
 	for _, bubble in ipairs(C_ChatBubbles.GetAllChatBubbles(false)) do
 		if not (bubble.IsForbidden and bubble:IsForbidden()) and ns.Flag(bubble:IsVisible())
 			and SaysText(bubble, text) then
-			-- (Its centre in the world frame's own units, inside the screen.)
+			-- (Ours showing for it, below the bar: on screen, wherever the game's is.)
+			local inside = bubble:GetChildren()
+			local state = inside and lifted[inside]
+			if state and state.copy and state.copy:IsShown() then
+				return true
+			end
+			-- (Its centre in the world frame's own units, inside the screen. Past
+			-- the top counts too while Keep bubbles on screen brings it down.)
 			local x, y = bubble:GetCenter()
 			local scale = bubble:GetEffectiveScale() / WorldFrame:GetEffectiveScale()
 			if type(x) == "number" and not (issecretvalue and issecretvalue(x)) then
 				x, y = x * scale, y * scale
-				if x >= 0 and x <= width and y >= 0 and y <= height then
+				local lifting = ns.db and ns.db.handleBubbles and ns.db.bubblesOffTop
+				if ns.speechWatch and placeTold ~= text then
+					placeTold = text -- (once a line: this is asked each frame while chat waits)
+					ns.Print(("speech: its bubble at %.0f, %.0f of %.0f x %.0f%s"):format(x, y, width, height,
+						lifting and " (kept on screen)" or ""))
+				end
+				if x >= 0 and x <= width and y >= 0 and (y <= height or lifting) then
 					return true
 				end
 			end

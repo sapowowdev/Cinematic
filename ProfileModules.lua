@@ -375,6 +375,12 @@ ns.PROFILE_MODULES = {
 		apply = function(set)
 			set("combatVision", true)
 		end },
+	{ key = "no-custom-bubbles", name = "No custom bubbles", scope = { "Chat bubbles/Custom bubbles" },
+		tip = "Only the game's own chat bubbles: no off-screen ones, and none brought down from the top of the screen.",
+		apply = function(set)
+			set("chatSpeechBehind", false)
+			set("bubblesOffTop", false)
+		end },
 	{ key = "no-visions", name = "No visions", scope = { "Heal Vision", "Quest Vision", "Vision", "Roll Vision",
 		"Vitals Vision", "Combat Vision" },
 		tip = "Every vision off: Heal, Quest, Duel, Roll, Vitals and Combat Vision.",
@@ -511,7 +517,7 @@ ns.PROFILE_MODULES = {
 			set("chatPeekChannelList", { General = true, Trade = true, LocalDefense = false, Services = false,
 				TradeLocal = false })
 		end },
-	{ key = "pure-chat", name = "Pure: chat", scope = { "Chat/Other", "Chat bubbles/top", "Chat bubbles/Behind you" },
+	{ key = "pure-chat", name = "Pure: chat", scope = { "Chat/Other", "Chat bubbles/top", "Chat bubbles/Custom bubbles" },
 		tip = "Chat doesn't peek for General or LocalDefense, and speech from behind you shows low on the screen " ..
 		"(the Chat bubbles page on, which it needs).",
 		apply = function(set)

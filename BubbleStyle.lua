@@ -134,7 +134,7 @@ function ns.CreateBubbleStylePanel(kit)
 		L["Where the tail sits along the bubble: 0 at its left end, 50 in the middle, 100 at its right end."], Tailed)
 	-- How wide a line gets before it wraps, and which way the lines line up.
 	rows.Slider("speechBehindWidth", L["Max width"], 200, 1000, 20, "%d", nil,
-		L["How wide a line of speech from behind you can get. A longer one wraps into rows of about the same length."],
+		L["How wide a line of speech from behind you can get before it wraps onto the next row, as a bubble overhead does."],
 		Behind)
 	local align = kit.Dropdown(content, "speechBehindAlign", {
 		{ value = "auto", text = L["By where it's moved to"] },

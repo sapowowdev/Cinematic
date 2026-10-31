@@ -140,6 +140,7 @@ local function PrintDebugHelp()
 	print("  /cine debug modules - profile modules: any writing outside their pages and sections, or two of a profile's setting the same thing (in the log)")
 	print("  /cine debug speech - show a sample line of speech from behind you, and print what happens to each say and yell (again to stop)")
 	print("  /cine debug speakers - log where each speaking NPC's bubble and plate are on screen, and the angle off the middle (again to stop, /reload to save)")
+	print("  /cine debug bubbles - log each chat bubble's place, frame by frame as it changes, and how far it's moved off the top (again to stop, /reload to save)")
 	print("  /cine debug layoutexport - save the Edit Mode layout you're on as an export string (in the saved settings: /reload after)")
 	print("  /cine debug cvars - graphics CVars: which exist here; run, move the Graphics sliders, run again to log what the menu changed")
 	print("  /cine debug cvars <words> - log every CVar whose name has any of the words in it, with its value and default")
@@ -378,6 +379,13 @@ local function HandleSlash(msg)
 	elseif cmd == "debug" and arg == "speakers" then
 		ns.Print("log where speaking NPCs' bubbles and plates are on screen: " .. OnOff(ns.ToggleSpeakerWatch())
 			.. " (/reload afterwards to save the log)")
+	elseif cmd == "debug" and arg == "bubbles drop" then
+		ns.bubbleDropTest = not ns.bubbleDropTest
+		ns.Print("chat bubbles drawn 200 lower, to test the lift is drawn: " .. OnOff(ns.bubbleDropTest)
+			.. " (until you /reload)")
+	elseif cmd == "debug" and arg == "bubbles" then
+		ns.Print("log each chat bubble's place and how far it's moved off the top, as it changes: "
+			.. OnOff(ns.ToggleBubbleTrace()) .. " (/reload afterwards to save the log)")
 	elseif cmd == "debug" and arg == "alpha" then
 		ns.alphaWatch = not ns.alphaWatch
 		ns.Print("print frames setting their own alpha: " .. OnOff(ns.alphaWatch) .. " (until you /reload)")

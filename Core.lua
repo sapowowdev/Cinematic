@@ -238,12 +238,11 @@ local DEFAULTS = {
 	chatSpeechBehind = false, -- ...and one with no bubble on screen shows low on the screen instead
 	speechBehindName = true, -- ...with who said it ("Name says: ")
 	speechBehindClassColor = true, -- ...players' names in their class colour
-	speechBehindChatShown = false, -- ...also while the chat window is up
-	speechBehindWidth = 480, -- ...wrapping past this wide, into even rows
+	speechBehindWidth = 480, -- ...wrapping past this wide
 	speechBehindAlign = "CENTER", -- ...lined up "LEFT", "CENTER", "RIGHT", or by where it's moved to
 	speechBehindRise = true, -- ...rising up from below the screen (Chat bubbles page)
-	speechBehindScale = 0.9, -- ...smaller than a bubble overhead
-	speechBehindAlpha = 0.8, -- ...and fainter
+	speechBehindScale = 1, -- ...its size next to a bubble overhead (smaller: further away)
+	speechBehindAlpha = 1, -- ...its opacity (fainter: muffled)
 	speechBehindTailTop = true, -- ...its bubble's tail on top, pointing up
 	speechBehindTailFlip = true, -- ...mirrored, curling the other way
 	speechBehindTailPos = 0.8, -- ...along the bubble: 0 its left end, 0.5 the middle, 1 its right end
@@ -4553,6 +4552,20 @@ ticker:SetScript("OnEvent", ns.Profiled("Core events", function(self, event, arg
 		-- Heal Vision (Vision page) as its defaults in every profile: its grid
 		-- unticked, the options as the defaults say. Once. (Saved profiles drop
 		-- theirs, to follow their base.)
+		-- Speech from behind you as big and solid as the bubbles overhead now:
+		-- its size and opacity still at their old defaults (smaller, fainter)
+		-- take the new ones, here and in saved profiles. Ones you'd changed
+		-- stay. Once.
+		if not ns.db.speechBehindLookV2 then
+			local was = { speechBehindScale = 0.9, speechBehindAlpha = 0.8 }
+			for key, old in pairs(was) do
+				if ns.db[key] == old then ns.db[key] = DEFAULTS[key] end
+				for _, saved in pairs(ns.db.profiles or {}) do
+					if type(saved) == "table" and saved[key] == old then saved[key] = DEFAULTS[key] end
+				end
+			end
+			ns.db.speechBehindLookV2 = true
+		end
 		if not ns.db.healVisionDefaultsV1 then
 			for key, value in pairs(DEFAULTS) do
 				if key:find("^healVision") then

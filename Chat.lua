@@ -425,7 +425,7 @@ local function SpeakOrPeek(line)
 	if not (ns.db.handleBubbles and ns.db.chatSpeechBehind and ns.ShowSpeechBehind
 			and ns.Flag(chatFrame:IsShown())) then
 		PeekWindow(chatFrame)
-	elseif ChatUnseen(chatFrame) or ns.db.speechBehindChatShown then
+	elseif ChatUnseen(chatFrame) then
 		ns.ShowSpeechBehind(line[4], line[5], line[2], line[6])
 	end
 	-- (Otherwise chat is up and the line is in it. Either way it doesn't keep

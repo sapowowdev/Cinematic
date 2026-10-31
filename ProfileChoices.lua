@@ -163,7 +163,7 @@ ns.BUILTIN_PROFILES = {
 			"letterbox, and the camera's left to you."],
 		picks = { layout = { forever = "preset" }, frames = "nofade", camera = "off", vfx = "noletterbox",
 			sound = "nomusic" },
-		modules = { "no-visions" },
+		modules = { "no-visions", "no-custom-bubbles" },
 	},
 	{
 		name = "Balanced",

@@ -11,7 +11,7 @@ local _, ns = ...
 
 local MAX_LINES = 3
 local GAP = 4 -- between lines
-local PAD_X, PAD_Y = 18, 12 -- round the text, in a bubble
+local PAD_X, PAD_Y = 16, 16 -- round the text, in a bubble (the game's own bubbles')
 local TAIL_SPACE = 12 -- under a bubble, for its tail
 local RISE_FROM = 80 -- how far below the screen a rising line starts
 local FADE_IN, FADE_OUT = 0.2, 0.6 -- seconds
@@ -136,15 +136,11 @@ local function SetLook(line, words)
 		text:SetShadowColor(font:GetShadowColor())
 		text:SetShadowOffset(font:GetShadowOffset())
 	end
-	-- (Only as wide as its words, so a bubble fits them; past Max width, into
-	-- rows of about even length, not a long one and a word left over. The
-	-- slack: words don't break exactly at the even width.)
+	-- (Only as wide as its words, so a bubble fits them; past Max width, it
+	-- wraps there, as the game's bubbles do.)
 	local wide = text.GetUnboundedStringWidth and text:GetUnboundedStringWidth() or text:GetStringWidth()
 	if type(wide) == "number" and wide < most then
 		text:SetWidth(math.ceil(wide) + 2)
-	elseif type(wide) == "number" then
-		local rows = math.ceil(wide / most)
-		text:SetWidth(math.min(most, math.ceil(wide / rows) + 40))
 	end
 	-- (The game's bubble, or a back of our own: Dark, Custom.)
 	local own = ns.BubbleBackColor and ns.BubbleBackColor(look)
