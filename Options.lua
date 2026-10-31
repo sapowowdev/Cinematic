@@ -1531,12 +1531,15 @@ do
 			{ "Vision wheel", "Interface\\Icons\\Ability_EyeOfTheOwl", section = "Wheels" },
 		} },
 		-- (WhatsNew.lua's pages, after Keybinds)
-		{ name = "Community", colors = { Updates = { 0.35, 0.6, 0.9 }, People = { 0.3, 0.7, 0.5 } }, pages = {
+		-- (Help: where to read up and report a problem, and the Profiler)
+		{ name = "Community", colors = { Updates = { 0.35, 0.6, 0.9 }, People = { 0.3, 0.7, 0.5 },
+			Help = { 0.85, 0.6, 0.3 } }, pages = {
 			{ "New features", "Interface\\Icons\\INV_Misc_Gift_01", section = "Updates" },
 			{ "All changes", "Interface\\Icons\\INV_Misc_Book_11", section = "Updates" },
 			{ "Socials", "Interface\\Icons\\INV_Letter_15", section = "People" },
 			{ "Thanks", "Interface\\Icons\\INV_ValentinesCard02", section = "People" },
-			{ "Profiler", "Interface\\Icons\\INV_Misc_PocketWatch_02" }, -- (ProfilerPage.lua)
+			{ "Help", "Interface\\Icons\\INV_Misc_QuestionMark", section = "Help" }, -- (WhatsNew.lua)
+			{ "Profiler", "Interface\\Icons\\INV_Misc_PocketWatch_02", section = "Help" }, -- (ProfilerPage.lua)
 		} },
 	}
 	-- Pages still being worked on: "(WIP)" after the name on their icon's mouseover.

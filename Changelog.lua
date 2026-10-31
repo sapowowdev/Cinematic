@@ -11,6 +11,9 @@
 local _, ns = ...
 
 ns.CHANGELOG_FEATURES = {
+	{ date = "2026-10-30", page = "Help", title = "Help page",
+		text = "Links to the guidebook, troubleshooting and the bug report form, how to send your log with " ..
+		"/cine log, and the Profiler for a slow game, together in Community." },
 	{ date = "2026-10-30", page = "Profiler", title = "Profiler",
 		text = "See how much of your computer's time Cinematic takes, as a graph of the last five minutes, and " ..
 		"record a while of play to see which parts cost the most. If Cinematic feels slow, Copy report and " ..

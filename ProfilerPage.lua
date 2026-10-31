@@ -5,7 +5,7 @@
 -- a recording with Profiler.lua's timers (/cine debug cpu): it starts once the
 -- settings close, and its sections show here as bars, biggest first. Copy
 -- report gives it all as English text, for players to send us.
-local _, ns = ...
+local ADDON_NAME, ns = ...
 local L = ns.L
 
 ns.DEFAULTS.profilerPage = false -- its page's switch: off, nothing's sampled or saved
@@ -71,6 +71,13 @@ local function Share(addon, app)
 	return app and app > 0 and addon * 100 / app or 0
 end
 
+-- A sample that makes sense: the addon took no more than the whole frame.
+-- (Just after a reload or a loading screen the game's averages can be out of
+-- step: the addon's still counting the load, the frame's started over.)
+local function Sensible(addon, app)
+	return type(addon) == "number" and type(app) == "number" and app > 0 and addon <= app
+end
+
 -- Kept over a reload or logout: the samples (oldest first) and the last
 -- recording in CinematicDB.profiler, with a digest to read in the file (the
 -- averages for each state and each minute).
@@ -84,8 +91,10 @@ local function Restore()
 	local samples = saved.samples
 	if type(samples) == "table" and type(samples.addon) == "table" then
 		for i = 1, #samples.addon do
-			Push(samples.addon[i], samples.app[i] or 0, samples.all[i] or 0, samples.state[i] or STATE_NORMAL,
-				samples.cam[i] ~= "none" and samples.cam[i] or nil, samples.at[i] or 0)
+			if Sensible(samples.addon[i], samples.app[i]) then
+				Push(samples.addon[i], samples.app[i], samples.all[i] or 0, samples.state[i] or STATE_NORMAL,
+					samples.cam[i] ~= "none" and samples.cam[i] or nil, samples.at[i] or 0)
+			end
 		end
 	end
 	if type(saved.last) == "table" and not ns.lastProfile then
@@ -148,8 +157,79 @@ local function Digest()
 	return lines
 end
 
+-- Every loaded addon by the game's own figures (retail's profiler), in ms a
+-- frame: now (its recent average), on average since login, and its worst
+-- frame. Read only while the page shows or for a report: nothing's sampled.
+local function AddonMetric(name, metric)
+	local profiler = C_AddOnProfiler
+	local id = Enum and Enum.AddOnProfilerMetric and Enum.AddOnProfilerMetric[metric]
+	if not (profiler and profiler.GetAddOnMetric and id) then
+		return nil
+	end
+	local ok, value = pcall(profiler.GetAddOnMetric, name, id)
+	if ok and type(value) == "number" and not (issecretvalue and issecretvalue(value)) then
+		return value
+	end
+	return nil
+end
+
+local addonList = {} -- { name, now, average, peak } each, reused
+local function ReadAddons()
+	local GetNum = C_AddOns and C_AddOns.GetNumAddOns or _G.GetNumAddOns
+	local GetInfo = C_AddOns and C_AddOns.GetAddOnInfo or _G.GetAddOnInfo
+	local IsLoaded = C_AddOns and C_AddOns.IsAddOnLoaded or _G.IsAddOnLoaded
+	local found = 0
+	if GetNum and GetInfo and IsLoaded then
+		for i = 1, GetNum() do
+			local name = GetInfo(i)
+			local now = name and IsLoaded(i) and AddonMetric(name, "RecentAverageTime")
+			if now then
+				found = found + 1
+				local entry = addonList[found] or {}
+				addonList[found] = entry
+				entry.name, entry.now = name, now
+				entry.average = AddonMetric(name, "SessionAverageTime") or 0
+				entry.peak = AddonMetric(name, "PeakTime") or 0
+			end
+		end
+	end
+	for i = found + 1, #addonList do
+		addonList[i] = nil
+	end
+	return addonList
+end
+
+-- How the list is sorted: by one of the figures, biggest first, or by name.
+local ADDON_ORDER = {}
+for _, key in ipairs({ "now", "average", "peak" }) do
+	ADDON_ORDER[key] = function(a, b)
+		if a[key] ~= b[key] then
+			return a[key] > b[key]
+		end
+		return a.name < b.name
+	end
+end
+ADDON_ORDER.name = function(a, b)
+	return a.name:lower() < b.name:lower()
+end
+
+local function SortedAddons(by)
+	local list = ReadAddons()
+	table.sort(list, ADDON_ORDER[by] or ADDON_ORDER.average)
+	return list
+end
+
+local function AddonLines()
+	local lines = {}
+	for _, addon in ipairs(SortedAddons("average")) do
+		lines[#lines + 1] = ("%s: now %.3f, average %.3f, worst %.2f"):format(addon.name, addon.now, addon.average,
+			addon.peak)
+	end
+	return lines
+end
+
 -- Everything as text to send us (Copy report): what it ran on, the graph's
--- digest and the last recording, in English for us to read.
+-- digest, every addon's figures and the last recording, in English for us to read.
 local function ShareText()
 	local version, build = GetBuildInfo()
 	local lines = {
@@ -165,6 +245,12 @@ local function ShareText()
 		end
 	else
 		lines[#lines + 1] = "no samples"
+	end
+	lines[#lines + 1] = ""
+	lines[#lines + 1] = "[every loaded addon, the game's figures in ms a frame, biggest average first]"
+	local addons = AddonLines()
+	for _, line in ipairs(#addons > 0 and addons or { "not on this client" }) do
+		lines[#lines + 1] = line
 	end
 	lines[#lines + 1] = ""
 	lines[#lines + 1] = "[the last recording]"
@@ -190,7 +276,7 @@ local function Save()
 		samples.state[n], samples.cam[n] = sampleState[slot], tostring(sampleCam[slot] or "none")
 		samples.at[n] = sampleAt[slot]
 	end
-	CinematicDB.profiler = { samples = samples, digest = Digest(), last = ns.lastProfile,
+	CinematicDB.profiler = { samples = samples, digest = Digest(), addons = AddonLines(), last = ns.lastProfile,
 		states = { STATES[1][1], STATES[2][1], STATES[3][1], STATES[4][1] } }
 end
 
@@ -207,11 +293,11 @@ local function Sample()
 	end
 	local metric = ns.ProfileGameMetric
 	local addon = metric and metric("addon", "RecentAverageTime")
-	if not addon then
+	local app = metric and metric("app", "RecentAverageTime")
+	if not Sensible(addon, app) then
 		return
 	end
-	Push(addon, metric("app", "RecentAverageTime") or 0, metric("overall", "RecentAverageTime") or 0,
-		CurrentState(), ns.activeCam, time())
+	Push(addon, app, metric("overall", "RecentAverageTime") or 0, CurrentState(), ns.activeCam, time())
 	if onSample then
 		onSample()
 	end
@@ -263,11 +349,20 @@ function ns.ShowProfileTimer()
 	timer:Show()
 end
 
--- The recording waiting for the settings to close: its length, and whether
--- it's a detailed one (every ns function timed: deep).
+-- A recording: the page's Record button, with its options (how long,
+-- detailed, start now). Without Start now it waits for the settings to close.
+ns.DEFAULTS.profilerSeconds = 120   -- how long a recording runs
+ns.DEFAULTS.profilerDetailed = false -- every ns function timed too (deep)
+ns.DEFAULTS.profilerNow = false     -- start right away, with the settings open (to measure them)
 local armedSeconds, armedDeep
 local armer = CreateFrame("Frame")
 armer:Hide()
+local function StartRecording(seconds, deep)
+	if ns.StartProfile(seconds, true, deep) then
+		ns.Print((deep and L["Detailed CPU recording for %d seconds: play as usual."]
+			or L["CPU recording for %d seconds: play as usual."]):format(seconds))
+	end
+end
 armer:SetScript("OnUpdate", function(self)
 	if SettingsOpen() then
 		return
@@ -275,11 +370,25 @@ armer:SetScript("OnUpdate", function(self)
 	self:Hide()
 	local seconds, deep = armedSeconds, armedDeep
 	armedSeconds, armedDeep = nil, nil
-	if ns.StartProfile(seconds, true, deep) then
-		ns.Print((deep and L["Detailed CPU recording for %d seconds: play as usual."]
-			or L["CPU recording for %d seconds: play as usual."]):format(seconds))
-	end
+	StartRecording(seconds, deep)
 end)
+
+-- Clear all data: the graph's samples, the last recording and what's saved.
+-- (The game's own figures for each addon are its own: they start again only
+-- when it does.)
+local function ClearData()
+	for _, list in ipairs({ addonMs, appMs, allMs, sampleState, sampleCam, sampleAt }) do
+		wipe(list)
+	end
+	head, count = 0, 0
+	ns.lastProfile = nil
+	if CinematicDB then
+		CinematicDB.profiler = nil
+	end
+end
+
+local ROW_HEIGHT = 18
+local SORT_ARROW = " |TInterface\\Buttons\\Arrow-Down-Up:12:12:0:-2|t"
 
 function ns.CreateProfilerPanel(kit)
 	local canvas, content = kit.CreateScrollPage(true)
@@ -307,13 +416,144 @@ function ns.CreateProfilerPanel(kit)
 		return button
 	end
 
-	-- The graph.
+	-- A table: a header row of column names (click one to sort by it, the one
+	-- in use gold with an arrow), then rows, every other one shaded. columns:
+	-- { key, label, width } each, the first the name (as wide as is left,
+	-- with a bar behind it of the sorted figure); cell(row, key) gives a
+	-- cell's text. onSort(key) when a header's clicked.
+	local function Table(anchor, columns, onSort, onEnter)
+		local tableFrame = CreateFrame("Frame", nil, content)
+		tableFrame:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -8)
+		tableFrame:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+		tableFrame:SetHeight(ROW_HEIGHT)
+		tableFrame.headers, tableFrame.rows = {}, {}
+		local right = 0
+		for i = #columns, 1, -1 do
+			local column = columns[i]
+			local header = CreateFrame("Button", nil, tableFrame)
+			header:SetHeight(ROW_HEIGHT)
+			header.text = header:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+			header.text:SetAllPoints()
+			if i == 1 then
+				header:SetPoint("TOPLEFT")
+				header:SetPoint("RIGHT", tableFrame, "RIGHT", -right, 0)
+				header.text:SetJustifyH("LEFT")
+			else
+				header:SetPoint("TOPRIGHT", tableFrame, "TOPRIGHT", -right, 0)
+				header:SetWidth(column[3])
+				header.text:SetJustifyH("RIGHT")
+				right = right + column[3]
+			end
+			header.key, header.label = column[1], column[2]
+			header:SetScript("OnClick", function() onSort(column[1]) end)
+			header:SetScript("OnEnter", function(self) self.text:SetTextColor(1, 1, 1) end)
+			header:SetScript("OnLeave", function(self) self.text:SetTextColor(self.color[1], self.color[2],
+				self.color[3]) end)
+			header.color = { 1, 0.82, 0 }
+			tableFrame.headers[i] = header
+		end
+		local line = tableFrame:CreateTexture(nil, "ARTWORK")
+		line:SetColorTexture(1, 0.82, 0, 0.35)
+		line:SetHeight(1)
+		line:SetPoint("TOPLEFT", 0, -ROW_HEIGHT)
+		line:SetPoint("TOPRIGHT", 0, -ROW_HEIGHT)
+		function tableFrame:ShowSort(key)
+			for _, header in ipairs(self.headers) do
+				local on = header.key == key
+				header.color = on and { 1, 0.82, 0 } or { 0.75, 0.75, 0.75 }
+				header.text:SetText(on and header.label .. SORT_ARROW or header.label)
+				header.text:SetTextColor(header.color[1], header.color[2], header.color[3])
+			end
+		end
+		function tableFrame:Row(i)
+			local row = self.rows[i]
+			if row then
+				return row
+			end
+			row = CreateFrame("Frame", nil, self)
+			row:SetHeight(ROW_HEIGHT)
+			row:SetPoint("TOPLEFT", 0, -i * ROW_HEIGHT - 2)
+			row:SetPoint("RIGHT")
+			local shade = row:CreateTexture(nil, "BACKGROUND")
+			shade:SetAllPoints()
+			shade:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.04 or 0)
+			row.bar = row:CreateTexture(nil, "BORDER")
+			row.bar:SetPoint("LEFT", 2, 0)
+			row.bar:SetHeight(ROW_HEIGHT - 4)
+			row.bar:SetColorTexture(1, 1, 1, 1)
+			row.cells = {}
+			local cellRight = 0
+			for c = #columns, 1, -1 do
+				local cell = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+				cell:SetHeight(ROW_HEIGHT)
+				cell:SetWordWrap(false)
+				if c == 1 then
+					cell:SetPoint("LEFT", 6, 0)
+					cell:SetPoint("RIGHT", row, "RIGHT", -cellRight - 8, 0)
+					cell:SetJustifyH("LEFT")
+				else
+					cell:SetPoint("RIGHT", row, "RIGHT", -cellRight, 0)
+					cell:SetWidth(columns[c][3])
+					cell:SetJustifyH("RIGHT")
+					cellRight = cellRight + columns[c][3]
+				end
+				row.cells[c] = cell
+			end
+			row.nameWidth = function()
+				return (row:GetWidth() or 0) - cellRight
+			end
+			if onEnter then
+				row:EnableMouse(true)
+				row:SetScript("OnEnter", onEnter)
+				row:SetScript("OnLeave", GameTooltip_Hide)
+			end
+			self.rows[i] = row
+			return row
+		end
+		-- Shows n rows (fill(row, i) sets each) and hides the rest.
+		function tableFrame:Fill(n, fill)
+			for i = 1, n do
+				local row = self:Row(i)
+				fill(row, i)
+				row:Show()
+			end
+			for i = n + 1, #self.rows do
+				self.rows[i]:Hide()
+			end
+			self:SetHeight((n + 1) * ROW_HEIGHT + 4)
+		end
+		-- A row's bar: share (0 to 1) of the name column, in a color.
+		function tableFrame.Bar(row, share, r, g, b, a)
+			local width = row.nameWidth()
+			if width <= 0 then width = 200 end
+			row.bar:SetWidth(math.max(width * math.min(share, 1), 1))
+			row.bar:SetVertexColor(r, g, b, a or 0.35)
+		end
+		return tableFrame
+	end
+
+	-- The switch, and Clear all data beside it.
 	local Refresh -- (below)
 	local switch = kit.PageSwitch(content, "profilerPage", L["Enable page"],
 		L["On: the graph samples the game's figure every second and keeps it over a reload, and you can " ..
 		"record. Off (to start with): nothing is sampled or saved, and it costs nothing."], intro,
 		function() Refresh() end)
-	local graphHeader = kit.Header(content, L["The game's figure, the last five minutes"], switch, -14)
+	StaticPopupDialogs.CINEMATIC_PROFILER_CLEAR = {
+		text = L["Clear the Profiler's graph and its last recording, here and in what's saved? (The game's own " ..
+			"figures for each addon start again only when the game does.)"],
+		button1 = L["Clear"], button2 = CANCEL or L["Cancel"],
+		OnAccept = function()
+			ClearData()
+			Refresh()
+		end,
+		timeout = 0, whileDead = true, hideOnEscape = true,
+	}
+	local clear = Button(L["Clear all data"], 130, L["Clears the graph's samples and the last recording, " ..
+		"here and in what's saved."], function() StaticPopup_Show("CINEMATIC_PROFILER_CLEAR") end)
+	clear:SetPoint("TOPRIGHT", content, "TOPRIGHT", -16, -14)
+
+	-- The graph, and its figures under it in tiles.
+	local graphHeader = kit.Header(content, L["The game's figure, the last five minutes"], switch, -16)
 	local graph = CreateFrame("Frame", nil, content)
 	graph:SetPoint("TOPLEFT", graphHeader, "BOTTOMLEFT", 0, -8)
 	graph:SetPoint("RIGHT", content, "RIGHT", -60, 0)
@@ -348,9 +588,38 @@ function ns.CreateProfilerPanel(kit)
 		legendParts[i] = ("|TInterface\\Buttons\\WHITE8X8:10:10:0:0:8:8:0:8:0:8:%d:%d:%d|t %s"):format(
 			state[2] * 255, state[3] * 255, state[4] * 255, L[state[1]])
 	end
-	legend:SetText(table.concat(legendParts, "   ") .. "   |cffffd100--|r " .. L["average"])
-	local nowText = Text(content, "GameFontHighlight", legend, 0, -8)
-	local stateText = Text(content, "GameFontHighlightSmall", nowText, 0, -6)
+	legend:SetText(table.concat(legendParts, "    ") .. "    |cffffd100--|r " .. L["average"])
+
+	-- Tiles: a big figure with its name under it, in a row.
+	-- (beside: the tile before it in its row; else under below, the row's first)
+	local function Tile(label, beside, below, tip, width)
+		local tile = CreateFrame("Frame", nil, content)
+		tile:SetSize(width or 150, 44)
+		if beside then
+			tile:SetPoint("LEFT", beside, "RIGHT", 8, 0)
+		else
+			tile:SetPoint("TOPLEFT", below or legend, "BOTTOMLEFT", 0, -10)
+		end
+		if tip then
+			tile:EnableMouse(true)
+			kit.Tooltip(tile, tip)
+		end
+		local shade = tile:CreateTexture(nil, "BACKGROUND")
+		shade:SetAllPoints()
+		shade:SetColorTexture(1, 1, 1, 0.05)
+		tile.value = tile:CreateFontString(nil, "ARTWORK", "GameFontHighlightLarge")
+		tile.value:SetPoint("TOPLEFT", 8, -5)
+		tile.label = tile:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+		tile.label:SetPoint("BOTTOMLEFT", 8, 5)
+		tile.label:SetText(label)
+		return tile
+	end
+	local nowTile = Tile(L["Now"])
+	local averageTile = Tile(L["Average"], nowTile)
+	local peakTile = Tile(L["Peak"], averageTile)
+	local allTile = Tile(L["All addons"], peakTile)
+	local tiles = { nowTile, averageTile, peakTile, allTile }
+	local stateText = Text(content, "GameFontHighlightSmall", nowTile, 0, -10)
 	stateText:SetPoint("RIGHT", content, "RIGHT", -16, 0)
 	stateText:SetJustifyV("TOP")
 
@@ -416,14 +685,18 @@ function ns.CreateProfilerPanel(kit)
 			averageLabel:Hide()
 		end
 		if count == 0 then
-			nowText:SetText("")
+			for _, tile in ipairs(tiles) do
+				tile.value:SetText("-")
+			end
 			stateText:SetText("")
 			return
 		end
 		local newest = Slot(1)
-		nowText:SetText(L["Now: |cffffd100%.1f%%|r of the frame (%.3f ms of %.2f ms)   |   %d s: average %.1f%%, " ..
-			"peak %.1f%%   |   all addons %.1f%%"]:format(Share(addonMs[newest], appMs[newest]), addonMs[newest],
-			appMs[newest], count, average, peak, Share(sumAll, sumApp)))
+		nowTile.value:SetText(("|cffffd100%.1f%%|r  %.2f ms"):format(Share(addonMs[newest], appMs[newest]),
+			addonMs[newest]))
+		averageTile.value:SetText(("%.1f%%  %.2f ms"):format(average, sumAddon / count))
+		peakTile.value:SetText(("%.1f%%"):format(peak))
+		allTile.value:SetText(("%.1f%%"):format(Share(sumAll, sumApp)))
 		local parts = {}
 		for state = 1, #STATES do
 			if bySeconds[state] > 0 then
@@ -431,7 +704,7 @@ function ns.CreateProfilerPanel(kit)
 					Share(byAddon[state], byApp[state]), byAddon[state] / bySeconds[state], bySeconds[state])
 			end
 		end
-		stateText:SetText(table.concat(parts, "   ·   "))
+		stateText:SetText(table.concat(parts, "     "))
 	end
 
 	-- Mouse over the graph: that second's figures.
@@ -476,59 +749,224 @@ function ns.CreateProfilerPanel(kit)
 		GameTooltip:Hide()
 	end)
 
-	-- The recording.
-	local recordHeader = kit.Header(content, L["Recording (the addon's own timers)"], stateText, -22)
-	local status
-	local function ArmedText(seconds, deep)
-		return (deep and L["Starts when you close the settings: %d seconds, detailed."]
-			or L["Starts when you close the settings: %d seconds."]):format(seconds)
+	-- Every addon, the game's figures: a table sorted by a header, the first
+	-- few unless Show all.
+	local ADDON_ROWS = 12
+	local addonSort, addonAll = "average", false
+	local DrawAddons -- (below)
+	local addonHeader = kit.Header(content, L["All addons (the game's figures, ms a frame)"], stateText, -24)
+	local addonTable = Table(addonHeader, {
+		{ "name", L["Addon"] }, { "now", L["Now"], 80 }, { "average", L["Average"], 80 },
+		{ "peak", L["Worst"], 80 }, { "share", L["Share now"], 90 },
+	}, function(key)
+		addonSort = key == "share" and "now" or key
+		DrawAddons()
+	end)
+	local addonEmpty = Text(content, "GameFontDisable", addonTable, 6, -2)
+	addonEmpty:SetText(L["The game's profiler isn't on this client."])
+	local showAll = Button(L["Show all"], 110, nil, function()
+		addonAll = not addonAll
+		DrawAddons()
+		kit.FitContentHeight(content)
+	end)
+	showAll:SetPoint("TOPLEFT", addonTable, "BOTTOMLEFT", 0, -6)
+	-- Which addons the table shows: a menu of every loaded one to tick (none
+	-- ticked: all). Kept until a reload.
+	local addonFilter, filtered = {}, {}
+	local function FilterCount()
+		local ticked = 0
+		for _ in pairs(addonFilter) do ticked = ticked + 1 end
+		return ticked
 	end
-	local function Arm(seconds, deep)
-		if ns.IsProfiling() or not PageOn() then
-			return
+	local filterMenu
+	local function FilterText()
+		local ticked = FilterCount()
+		return ticked == 0 and L["All addons"] or L["%d addons"]:format(ticked)
+	end
+	local okMenu, menu = ns.MenuDropdown(content)
+	if okMenu and menu and menu.SetupMenu then
+		filterMenu = menu
+		filterMenu:SetWidth(170)
+		filterMenu:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+		filterMenu:SetPoint("BOTTOM", addonHeader, "BOTTOM", 0, -4)
+		kit.Tooltip(filterMenu, L["Which addons the table shows: tick the ones to compare, or All addons for " ..
+			"every one."])
+		filterMenu:SetupMenu(function(_, root)
+			root:CreateButton(L["All addons"], function()
+				wipe(addonFilter)
+				DrawAddons()
+			end)
+			root:CreateDivider()
+			local names = {}
+			for _, addon in ipairs(ReadAddons()) do
+				names[#names + 1] = addon.name
+			end
+			table.sort(names, function(a, b) return a:lower() < b:lower() end)
+			for _, name in ipairs(names) do
+				root:CreateCheckbox(name, function() return addonFilter[name] == true end, function()
+					addonFilter[name] = not addonFilter[name] or nil
+					DrawAddons()
+				end)
+			end
+		end)
+	end
+	function DrawAddons()
+		addonTable:ShowSort(addonSort)
+		local list = SortedAddons(addonSort)
+		if next(addonFilter) then
+			wipe(filtered)
+			for _, addon in ipairs(list) do
+				if addonFilter[addon.name] then
+					filtered[#filtered + 1] = addon
+				end
+			end
+			list = filtered
 		end
-		armedSeconds, armedDeep = seconds, deep
-		armer:Show()
-		status:SetText(ArmedText(seconds, deep))
+		if filterMenu then
+			if filterMenu.OverrideText then
+				filterMenu:OverrideText(FilterText())
+			elseif filterMenu.SetDefaultText then
+				filterMenu:SetDefaultText(FilterText())
+			end
+		end
+		local app = ns.ProfileGameMetric and ns.ProfileGameMetric("app", "RecentAverageTime") or 0
+		local figure = addonSort == "name" and "average" or addonSort
+		local biggest = 0.0001
+		for _, addon in ipairs(list) do
+			biggest = math.max(biggest, addon[figure])
+		end
+		addonTable:Fill(addonAll and #list or math.min(#list, ADDON_ROWS), function(row, i)
+			local addon = list[i]
+			local ours = addon.name == ADDON_NAME
+			row.cells[1]:SetText(addon.name)
+			row.cells[1]:SetTextColor(ours and 1 or 1, ours and 0.82 or 1, ours and 0 or 1)
+			row.cells[2]:SetText(("%.3f"):format(addon.now))
+			row.cells[3]:SetText(("%.3f"):format(addon.average))
+			row.cells[4]:SetText(("%.2f"):format(addon.peak))
+			row.cells[5]:SetText(("%.1f%%"):format(Share(addon.now, app)))
+			if ours then
+				addonTable.Bar(row, addon[figure] / biggest, 1, 0.82, 0)
+			else
+				addonTable.Bar(row, addon[figure] / biggest, 0.45, 0.6, 0.85)
+			end
+		end)
+		addonEmpty:SetShown(#list == 0)
+		showAll:SetShown(#list > ADDON_ROWS)
+		showAll:SetText(addonAll and L["Show fewer"] or L["Show all"])
 	end
-	local record30 = Button(L["Record 30 s"], 110, L["Times the addon's busy parts for 30 seconds, starting " ..
-		"when you close the settings. Play as usual meanwhile; open this page again for the results."],
-		function() Arm(30) end)
-	record30:SetPoint("TOPLEFT", recordHeader, "BOTTOMLEFT", 0, -8)
-	local record120 = Button(L["Record 2 min"], 110, L["The same for two minutes."], function() Arm(120) end)
-	record120:SetPoint("LEFT", record30, "RIGHT", 8, 0)
-	local recordDeep = Button(L["Record 2 min, detailed"], 160, L["Two minutes with nearly every one of the " ..
-		"addon's functions timed too, not just its busy parts, each listed under the part that called it: it " ..
-		"shows what inside a busy part costs. The timing itself takes time, so everything reads higher than it is."],
-		function() Arm(120, true) end)
-	recordDeep:SetPoint("LEFT", record120, "RIGHT", 8, 0)
-	local stop = Button(L["Stop"], 70, L["Stops the recording now (or the one waiting for the settings to close)."],
-		function()
-			armedSeconds = nil
+
+	-- The recording: one Record button (Stop while one runs or waits), its
+	-- options beside it, then the results as a table.
+	local recordHeader = kit.Header(content, L["Recording (the addon's own timers)"], showAll, -24)
+	local LENGTHS = { { value = 30, text = L["30 seconds"] }, { value = 60, text = L["1 minute"] },
+		{ value = 120, text = L["2 minutes"] }, { value = 300, text = L["5 minutes"] } }
+	local function LengthText(seconds)
+		for _, length in ipairs(LENGTHS) do
+			if length.value == seconds then return length.text end
+		end
+		return ("%d s"):format(seconds)
+	end
+	local status
+	local record = Button(L["Record"], 110, nil, function()
+		if ns.IsProfiling() or armedSeconds then
+			armedSeconds, armedDeep = nil, nil
 			armer:Hide()
 			ns.StopProfile()
-			Refresh()
+		elseif PageOn() then
+			local db = ns.GetDB()
+			local seconds, deep = db.profilerSeconds or 120, db.profilerDetailed and true or false
+			if db.profilerNow then
+				StartRecording(seconds, deep)
+			else
+				armedSeconds, armedDeep = seconds, deep
+				armer:Show()
+			end
+		end
+		Refresh()
+	end)
+	record:SetPoint("TOPLEFT", recordHeader, "BOTTOMLEFT", 0, -10)
+	kit.Tooltip(record, L["Times the addon's busy parts as you play, for as long as is picked beside it. It starts " ..
+		"when you close the settings (or right away, with Start now), and the results show here. Click it again " ..
+		"to stop."])
+	local length = kit.Dropdown and kit.Dropdown(content, "profilerSeconds", LENGTHS, 120, function() Refresh() end)
+	if not length then
+		-- (No dropdowns on this client: a button that steps through them.)
+		length = Button("", 120, nil, function(self)
+			local db = ns.GetDB()
+			local following = LENGTHS[1].value
+			for i, choice in ipairs(LENGTHS) do
+				if choice.value == db.profilerSeconds then
+					following = LENGTHS[i % #LENGTHS + 1].value
+					break
+				end
+			end
+			db.profilerSeconds = following
+			self:Refresh()
 		end)
-	stop:SetPoint("LEFT", recordDeep, "RIGHT", 8, 0)
-	local copy = Button(L["Copy report"], 110, L["Everything here as text, to copy and send us (on Discord, " ..
-		"or in a bug report): your game version, the graph's figures and the last recording. It's in English, " ..
-		"for us to read."], function()
+		length.Refresh = function(self) self:SetText(LengthText(ns.GetDB().profilerSeconds)) end
+		kit.AddControl(length)
+	end
+	kit.Tooltip(length, L["How long a recording runs."])
+	length:SetPoint("LEFT", record, "RIGHT", 10, 0)
+	local detailed = kit.Check(content, "profilerDetailed", L["Detailed"], L["Nearly every one of the addon's " ..
+		"functions timed too, not just its busy parts, each listed under the part that called it: it shows " ..
+		"what inside a busy part costs. The timing itself takes time, so everything reads higher than it is."])
+	detailed:SetPoint("LEFT", length, "RIGHT", 12, 0)
+	local startNow = kit.Check(content, "profilerNow", L["Start now"], L["Start right away, with the settings " ..
+		"open, instead of when you close them: to measure the settings pages themselves. Click through the ones " ..
+		"to check while it runs."])
+	startNow:SetPoint("LEFT", detailed.Text or detailed, "RIGHT", 16, 0)
+	local copy = Button(L["Copy report"], 120, L["Everything here as text, to copy and send us (on Discord, " ..
+		"or in a bug report): your game version, the graph's figures, every addon's and the last recording. " ..
+		"It's in English, for us to read."], function()
 			ns.ShowText(L["Profiler: press Ctrl+C to copy"], ShareText())
 		end)
-	copy:SetPoint("LEFT", stop, "RIGHT", 8, 0)
-	status = Text(content, "GameFontHighlightSmall", record30, 0, -8)
+	copy:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	copy:SetPoint("TOP", record, "TOP")
+	status = Text(content, "GameFontHighlight", record, 0, -12)
 	status:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	local summary = Text(content, "GameFontHighlight", status, 0, -8)
-	summary:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-	local columns = Text(content, "GameFontDisableSmall", summary, 0, -10)
-	columns:SetText(L["part: ms a frame · share of measured · calls a frame · KB of garbage a second " ..
-		"(mouse over for more)"])
+	-- The recording's figures in tiles, like the graph's.
+	local RECORD_TILE = 138
+	local measuredTile = Tile(L["Cinematic, timed"], nil, status, L["What the addon's timers measured: ms a " ..
+		"frame, and its share of the frame."], RECORD_TILE)
+	local gameTile = Tile(L["The game's figure"], measuredTile, nil, L["What the game measured for Cinematic " ..
+		"meanwhile, the timers' parts and all the rest."], RECORD_TILE)
+	local garbageTile = Tile(L["Garbage"], gameTile, nil, L["Memory made and thrown away, a second: the game " ..
+		"spends time clearing it up."], RECORD_TILE)
+	local slowTile = Tile(L["Slow frames"], garbageTile, nil, L["Frames where the addon took over 5 ms, and " ..
+		"their share of all frames."], RECORD_TILE)
+	local worstTile = Tile(L["Worst frame"], slowTile, nil, L["The most the addon took in one frame."], RECORD_TILE)
+	local recordTiles = { measuredTile, gameTile, garbageTile, slowTile, worstTile }
+	-- Each row of tiles shares the page's width (16 in from each side, 8
+	-- between), however wide the settings window is.
+	local function FitTiles(row)
+		local width = (content:GetWidth() or 0) - 32 - 8 * (#row - 1)
+		if width > 0 then
+			for _, tile in ipairs(row) do
+				tile:SetWidth(width / #row)
+			end
+		end
+	end
+	content:HookScript("OnSizeChanged", function()
+		FitTiles(tiles)
+		FitTiles(recordTiles)
+	end)
+	FitTiles(tiles)
+	FitTiles(recordTiles)
+	-- (Whose code the parts are: only Cinematic's own can be timed. Other
+	-- addons show only as a whole, in All addons above.)
+	local partsNote = Text(content, "GameFontDisableSmall", measuredTile, 0, -12)
+	partsNote:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+	partsNote:SetText(L["Every part below is Cinematic's own code: an addon can only time its own. For other " ..
+		"addons, see All addons above."])
 
-	-- The recorded sections: a row each, bar against the biggest, parts under it.
-	-- (Their names are the code's own, in English.)
-	local rows = {}
+	-- The recorded parts: a table sorted by a header (parts called by a
+	-- section stay under it). (Their names are the code's own, in English.)
+	local partSort = "ms"
+	local DrawRecording -- (below)
 	local function RowTip(row)
 		local data = row.data
+		if not data then return end
 		GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
 		GameTooltip:SetText(data.name, 1, 0.82, 0)
 		GameTooltip:AddLine(L["%.4f ms a frame, %.2f calls a frame"]:format(data.ms, data.calls), 1, 1, 1)
@@ -539,124 +977,139 @@ function ns.CreateProfilerPanel(kit)
 		end
 		GameTooltip:Show()
 	end
-	local function Row(i)
-		local row = rows[i]
-		if row then
-			return row
+	local partTable = Table(partsNote, {
+		{ "name", L["Part"] }, { "ms", L["ms a frame"], 80 }, { "share", L["Share"], 60 },
+		{ "calls", L["Calls a frame"], 90 }, { "worst", L["Worst ms"], 70 }, { "kb", L["Garbage KB/s"], 90 },
+	}, function(key)
+		partSort = key == "share" and "ms" or key
+		DrawRecording()
+	end, RowTip)
+	local PART_ORDER = {}
+	for _, key in ipairs({ "ms", "calls", "worst", "kb" }) do
+		PART_ORDER[key] = function(a, b)
+			if a[key] ~= b[key] then return a[key] > b[key] end
+			return a.name < b.name
 		end
-		row = CreateFrame("Frame", nil, content)
-		row:SetHeight(16)
-		row:SetPoint("TOPLEFT", i == 1 and columns or rows[i - 1], "BOTTOMLEFT", 0, i == 1 and -6 or -2)
-		row:SetPoint("RIGHT", content, "RIGHT", -16, 0)
-		row.label = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-		row.label:SetPoint("LEFT")
-		row.label:SetWidth(210)
-		row.label:SetJustifyH("LEFT")
-		row.label:SetWordWrap(false)
-		row.value = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-		row.value:SetPoint("RIGHT")
-		row.value:SetWidth(190)
-		row.value:SetJustifyH("RIGHT")
-		row.track = row:CreateTexture(nil, "BACKGROUND")
-		row.track:SetPoint("LEFT", 216, 0)
-		row.track:SetPoint("RIGHT", -196, 0)
-		row.track:SetHeight(10)
-		row.track:SetColorTexture(1, 1, 1, 0.06)
-		row.bar = row:CreateTexture(nil, "ARTWORK")
-		row.bar:SetPoint("LEFT", row.track, "LEFT")
-		row.bar:SetHeight(10)
-		row.bar:SetColorTexture(1, 1, 1, 1)
-		row:EnableMouse(true)
-		row:SetScript("OnEnter", RowTip)
-		row:SetScript("OnLeave", GameTooltip_Hide)
-		rows[i] = row
-		return row
 	end
-	local function FillRow(i, data, child, biggest, total)
-		local row = Row(i)
-		row.data, row.child = data, child
-		row.label:SetText(child and "      > " .. data.name or data.name)
-		if child then
-			row.label:SetTextColor(0.7, 0.7, 0.7)
-			row.value:SetText(("%.3f · - · %.2f · %.1f"):format(data.ms, data.calls, data.kb))
-			row.bar:SetVertexColor(0.45, 0.55, 0.7, 0.8)
-		else
-			row.label:SetTextColor(1, 1, 1)
-			row.value:SetText(("%.3f · %.0f%% · %.2f · %.1f"):format(data.ms, total > 0 and data.ms * 100 / total or 0,
-				data.calls, data.kb))
-			-- (Gold, orange where it makes a lot of garbage.)
-			if data.kb > 5 then
-				row.bar:SetVertexColor(1, 0.5, 0.15, 0.9)
-			else
-				row.bar:SetVertexColor(1, 0.82, 0, 0.9)
-			end
-		end
-		local trackWidth = row.track:GetWidth()
-		if not trackWidth or trackWidth <= 0 then
-			trackWidth = 200
-		end
-		row.bar:SetWidth(math.max(trackWidth * math.min(data.ms / biggest, 1), 1))
-		row:Show()
-	end
-	local function DrawRecording()
-		if ns.IsProfiling() then
-			status:SetText(L["Recording now: close the settings and play; open this page again when it's done."])
-		elseif armedSeconds then
-			status:SetText(ArmedText(armedSeconds, armedDeep))
-		elseif not ns.lastProfile then
-			status:SetText(L["No recording yet."])
-		end
+	PART_ORDER.name = function(a, b) return a.name:lower() < b.name:lower() end
+	local partRows = {} -- { data, child } each, reused
+	function DrawRecording()
+		partTable:ShowSort(partSort)
 		local last = ns.lastProfile
+		local left = ns.ProfileTimeLeft()
+		if left then
+			status:SetText(L["Recording: %d:%02d left."]:format(math.floor(math.ceil(left) / 60),
+				math.ceil(left) % 60))
+		elseif armedSeconds then
+			status:SetText((armedDeep and L["Starts when you close the settings: %d seconds, detailed."]
+				or L["Starts when you close the settings: %d seconds."]):format(armedSeconds))
+		elseif last then
+			status:SetText((last.deep and L["Last recording: %s, %s, detailed"] or L["Last recording: %s, %s"]):format(
+				date("%H:%M", last.finished), LengthText(math.floor(last.seconds + 0.5))))
+		elseif PageOn() then
+			status:SetText(L["No recording yet."])
+		else
+			status:SetText(L["Turn on Enable page to record."])
+		end
 		local used = 0
+		for _, tile in ipairs(recordTiles) do
+			tile:SetShown(last ~= nil)
+		end
+		partsNote:SetShown(last ~= nil)
 		if last then
-			if not (ns.IsProfiling() or armedSeconds) then
-				status:SetText((last.deep and L["Last recording (detailed): %s, %.0f s (%.0f fps). At the start: %s"]
-					or L["Last recording: %s, %.0f s (%.0f fps). At the start: %s"]):format(
-					date("%H:%M:%S", last.finished), last.seconds, last.fps, last.startState))
-			end
-			local text = L["Measured |cffffd100%.3f ms a frame|r (%.2f%% of the %.2f ms frame), garbage %.0f KB a " ..
-				"second; frames over 1 / 5 / 16 ms: %d / %d / %d, worst %.2f ms"]:format(last.total,
-				last.total * 100 / last.frameMs, last.frameMs, last.kb, last.spikes[1], last.spikes[5], last.spikes[16],
-				last.worst)
-			if last.game then
-				text = text .. "\n" .. L["The game's figure meanwhile: |cffffd100%.3f ms a frame (%.1f%%)|r, so " ..
-					"%.3f ms the timers don't cover; all addons %.3f ms"]:format(last.game.addon,
-					Share(last.game.addon, last.game.app), last.game.addon - last.total, last.game.overall)
-			end
-			summary:SetText(text)
-			local biggest = math.max(last.sections[1] and last.sections[1].ms or 0, 0.0001)
-			for _, section in ipairs(last.sections) do
+			local frames = math.max(last.fps * last.seconds, 1)
+			measuredTile.value:SetText(("|cffffd100%.2f ms|r  %.1f%%"):format(last.total,
+				last.total * 100 / last.frameMs))
+			gameTile.value:SetText(last.game and ("%.2f ms  %.1f%%"):format(last.game.addon,
+				Share(last.game.addon, last.game.app)) or "-")
+			garbageTile.value:SetText(("%.0f KB/s"):format(last.kb))
+			slowTile.value:SetText(("%d  %.1f%%"):format(last.spikes[5], last.spikes[5] * 100 / frames))
+			worstTile.value:SetText(("%.1f ms"):format(last.worst))
+			local sections = {}
+			for i, section in ipairs(last.sections) do sections[i] = section end
+			table.sort(sections, PART_ORDER[partSort] or PART_ORDER.ms)
+			local limit = last.deep and DEEP_CHILD_ROWS or CHILD_ROWS
+			for _, section in ipairs(sections) do
 				used = used + 1
-				FillRow(used, section, false, biggest, last.total)
-				for c, child in ipairs(section.children) do
-					if c > (last.deep and DEEP_CHILD_ROWS or CHILD_ROWS) then break end
-					used = used + 1
-					FillRow(used, child, true, biggest, last.total)
+				partRows[used] = partRows[used] or {}
+				partRows[used].data, partRows[used].child = section, false
+				-- (A detailed recording times a part twice when it's both one of
+				-- the timed parts and a function on ns: "UpdateFrames" and
+				-- "ns.UpdateFrames", the same time. Only the first shows.)
+				local named = { [section.name] = true }
+				for _, child in ipairs(section.children) do
+					named[child.name] = true
+				end
+				local shown = 0
+				for _, child in ipairs(section.children) do
+					local own = child.name:match("^ns%.(.+)")
+					if not (own and named[own]) then
+						shown = shown + 1
+						if shown > limit then break end
+						used = used + 1
+						partRows[used] = partRows[used] or {}
+						partRows[used].data, partRows[used].child = child, true
+					end
 				end
 			end
-		else
-			summary:SetText("")
 		end
-		columns:SetShown(used > 0)
-		for i = used + 1, #rows do
-			rows[i]:Hide()
+		local biggest = math.max(last and last.sections[1] and last.sections[1].ms or 0, 0.0001)
+		for _, section in ipairs(last and last.sections or {}) do
+			biggest = math.max(biggest, section.ms)
 		end
+		local total = last and last.total or 0
+		partTable:SetShown(used > 0)
+		partTable:Fill(used, function(row, i)
+			local data, child = partRows[i].data, partRows[i].child
+			row.data, row.child = data, child
+			row.cells[1]:SetText(child and "    > " .. data.name or data.name)
+			row.cells[1]:SetTextColor(child and 0.7 or 1, child and 0.7 or 1, child and 0.7 or 1)
+			row.cells[2]:SetText(("%.3f"):format(data.ms))
+			row.cells[3]:SetText(child and "" or ("%.0f%%"):format(total > 0 and data.ms * 100 / total or 0))
+			row.cells[4]:SetText(("%.2f"):format(data.calls))
+			row.cells[5]:SetText(("%.2f"):format(data.worst))
+			row.cells[6]:SetText(("%.1f"):format(data.kb))
+			if child then
+				partTable.Bar(row, data.ms / biggest, 0.45, 0.6, 0.85, 0.25)
+			elseif data.kb > 5 then
+				partTable.Bar(row, data.ms / biggest, 1, 0.5, 0.15) -- (orange: a lot of garbage)
+			else
+				partTable.Bar(row, data.ms / biggest, 1, 0.82, 0)
+			end
+		end)
+		if used == 0 then partTable:Hide() end
 	end
 
 	function Refresh()
 		DrawGraph()
+		DrawAddons()
 		DrawRecording()
 		local on = PageOn() and true or false
-		record30:SetEnabled(on)
-		record120:SetEnabled(on)
-		recordDeep:SetEnabled(on)
-		if not on and not ns.IsProfiling() and not armedSeconds then
-			status:SetText(L["Turn on Enable page to record."])
-		end
+		local busy = ns.IsProfiling() or armedSeconds ~= nil
+		record:SetText(busy and L["Stop"] or L["Record"])
+		record:SetEnabled(on or busy)
 	end
 	canvas:SetScript("OnShow", kit.PageShown(Refresh, content))
 	canvas:HookScript("OnShow", function() onSample = DrawGraph end)
 	canvas:SetScript("OnHide", function() onSample = nil end)
+	-- (The addons' figures, and whether a recording's running, read again
+	-- every second while the page shows: reading them costs nothing while
+	-- it's closed.)
+	local shownAt, wasBusy = 0, false
+	canvas:SetScript("OnUpdate", function()
+		local now = GetTime()
+		if now - shownAt >= 1 then
+			shownAt = now
+			DrawAddons()
+			local busy = ns.IsProfiling() or armedSeconds ~= nil
+			if busy ~= wasBusy then
+				wasBusy = busy
+				Refresh()
+			elseif busy then
+				DrawRecording() -- (the time left)
+			end
+		end
+	end)
 	-- (The graph's width is only known once laid out.)
 	graph:SetScript("OnSizeChanged", DrawGraph)
 	canvas:Hide()

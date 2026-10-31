@@ -186,14 +186,11 @@ local SOCIALS = {
 		text = "Cinematic's code, and a form to report bugs." },
 }
 
-local function CreateSocialsPanel(kit)
-	local canvas, content = kit.CreateScrollPage()
-	local last = Heading(kit, content, L["Socials"],
-		L["Where to find Cinematic outside the game. Click a link and press Ctrl+C to copy it, " ..
-		"then paste it into your browser."])
-
+-- Rows of links under last, each its icon, name, a line about it and the
+-- link in a box to copy (Socials, Help); gives the last row.
+local function LinkRows(kit, content, last, links)
 	local ICON = 32
-	for i, social in ipairs(SOCIALS) do
+	for i, social in ipairs(links) do
 		local row = CreateFrame("Frame", nil, content)
 		row:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, i == 1 and -18 or -14)
 		row:SetPoint("RIGHT", content, "RIGHT", -16, 0)
@@ -232,6 +229,15 @@ local function CreateSocialsPanel(kit)
 		box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
 		last = row
 	end
+	return last
+end
+
+local function CreateSocialsPanel(kit)
+	local canvas, content = kit.CreateScrollPage()
+	local last = Heading(kit, content, L["Socials"],
+		L["Where to find Cinematic outside the game. Click a link and press Ctrl+C to copy it, " ..
+		"then paste it into your browser."])
+	LinkRows(kit, content, last, SOCIALS)
 
 	canvas:Hide()
 	kit.RegisterSubpage(canvas, "Socials")
@@ -267,11 +273,78 @@ local function CreateThanksPanel(kit)
 	kit.RegisterSubpage(canvas, "Thanks")
 end
 
+-- Help: where to read up and where to report a problem, then how to send
+-- your log with it, and the Profiler for a slow game.
+local HELP_LINKS = {
+	{ name = "Guidebook", url = "https://sapowowdev.github.io/Cinematic/", icon = "Interface\\Icons\\INV_Misc_Book_09",
+		text = "How every page, camera and Vision works." },
+	{ name = "Troubleshooting", url = "https://sapowowdev.github.io/Cinematic/help/troubleshooting.html",
+		icon = "Interface\\Icons\\INV_Misc_Wrench_01",
+		text = "Fixes for common problems: start here if something looks wrong." },
+	{ name = "Report a bug", url = "https://github.com/sapowowdev/Cinematic/issues/new?template=bug_report.yml",
+		icon = "Interface\\Icons\\Trade_Engineering",
+		text = "A form on GitHub (it takes a free account). Paste your log into it: see below." },
+	{ name = "Discord", url = "https://sapowowdev.github.io/Cinematic/discord.html", icon = "Interface\\Icons\\INV_Letter_15",
+		text = "No GitHub account? Post in #bug-reports, with your log as a .txt file." },
+}
+
+local function CreateHelpPanel(kit)
+	local canvas, content = kit.CreateScrollPage()
+	local last = Heading(kit, content, L["Help"],
+		L["Stuck, or something looks wrong? Read up in the guide, or report it to us. Click a link and press " ..
+		"Ctrl+C to copy it, then paste it into your browser (addons can't open one)."])
+	-- (The names as shown: translated here, as SOCIALS' are kept as they are.)
+	local links = {}
+	for i, link in ipairs(HELP_LINKS) do
+		links[i] = { name = L[link.name], url = link.url, icon = link.icon, text = link.text }
+	end
+	last = LinkRows(kit, content, last, links)
+
+	local function Section(title, text, anchor)
+		local header = kit.Label(content, "GameFontNormal", title)
+		header:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -22)
+		local body = kit.Label(content, "GameFontHighlightSmall", text)
+		body:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -8)
+		body:SetPoint("RIGHT", content, "RIGHT", -16, 0)
+		body:SetJustifyH("LEFT")
+		body:SetJustifyV("TOP")
+		body:SetSpacing(4)
+		return body
+	end
+	local function Button(text, anchor, onClick)
+		local button = ns.PanelButton(content)
+		button:SetSize(160, 22)
+		button:SetText(text)
+		button:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10)
+		button:SetScript("OnClick", onClick)
+		return button
+	end
+
+	local logText = Section(L["Sending your log"],
+		L["1. Type |cffffd100/cine log|r in chat, or click Open the log below.\n" ..
+		"2. The log opens already selected: press Ctrl+C to copy it.\n" ..
+		"3. Paste it into your bug report. On Discord it's too long for a message: paste it into a .txt " ..
+		"file and attach that.\n" ..
+		"It holds the addon's recent history, any Lua errors and a summary of your setup (game version, " ..
+		"changed settings, other addons). It doesn't include your character's name or realm."], last)
+	local openLog = Button(L["Open the log"], logText, function() ns.ShowLog() end)
+
+	local slowText = Section(L["Is Cinematic slowing your game?"],
+		L["Turn on the Profiler page and record a while of your usual play (a fight too), then click Copy " ..
+		"report there and send it with your bug report."], openLog)
+	Button(L["Open the Profiler"], slowText, function() ns.OpenOptions("Profiler") end)
+
+	canvas:SetScript("OnShow", kit.PageShown(function() end, content))
+	canvas:Hide()
+	kit.RegisterSubpage(canvas, "Help")
+end
+
 ns.CreateWhatsNewPanels = function(kit)
 	CreateFeaturesPanel(kit)
 	CreateCommitsPanel(kit)
 	CreateSocialsPanel(kit)
 	CreateThanksPanel(kit)
+	CreateHelpPanel(kit)
 end
 
 -- After an update with new features, a line in chat at login with a [What's
