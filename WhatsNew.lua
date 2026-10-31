@@ -264,6 +264,11 @@ local function CreateThanksPanel(kit)
 	local canvas, content = kit.CreateScrollPage()
 	local last = Heading(kit, content, L["Thanks"],
 		L["Cinematic is better for the players who tested it, reported bugs and sent ideas. Thank you!"])
+	-- (Sapo's sign-off: as written, not translated.)
+	local signOff = kit.Label(content, "GameFontHighlightSmall", "\"Keep yer feet on the ground!\" -Sapo")
+	signOff:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -6)
+	signOff:SetTextColor(0.6, 0.6, 0.6)
+	last = signOff
 	for i, name in ipairs(THANKS) do
 		local line = kit.Label(content, "GameFontHighlight", name)
 		line:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, i == 1 and -18 or -8)
