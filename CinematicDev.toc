@@ -70,6 +70,7 @@ Effects.lua
 TooltipParts.lua
 PlateParts.lua
 PlateGuild.lua
+Triggers.lua
 Camera.lua
 QuestCam.lua
 ShoulderCam.lua

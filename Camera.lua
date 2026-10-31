@@ -1309,19 +1309,9 @@ do
 		logoutAt = nil
 	end
 
-	-- The first of the events given (in order; nil or false for ones not on)
-	-- that has a camera, and its camera. (Passed as arguments, not a list:
-	-- a table made each call was garbage.)
-	local function FirstWithCamera(...)
-		for i = 1, select("#", ...) do
-			local key = select(i, ...)
-			local camera = key and EventCamera(key)
-			if camera then
-				return key, camera
-			end
-		end
-		return nil
-	end
+	-- What's on now, for the trigger sources (Triggers.lua) to pick from:
+	-- filled each time, the one table kept (a new one each call was garbage).
+	local state = {}
 
 	function CurrentEvent()
 		if not ns.db or ns.OnTaxi() then
@@ -1369,14 +1359,13 @@ do
 		if byFire then
 			stoppedByMove.Campfire = nil
 		end
-		-- A Hearthstone or teleport cast first (it calls a logout off anyway),
-		-- then logging out, then going AFK (it comes after whatever you were
-		-- doing: AFK while sitting is the AFK camera), then the rest, and
-		-- standing still last.
-		local departing = (emoteEvent == "Hearth" or emoteEvent == "Teleport") and emoteEvent
-		local stoodStill = ns.stillSince ~= nil and GetTime() - ns.stillSince >= ns.db.idleOrbitDelay
-		return FirstWithCamera(departing, LoggingOut() and "Logout", afk and "AFK", byFire and "Campfire",
-			emoteEvent, weapon and "Weapon", campfire and "Campfire", stoodStill and "Still")
+		-- The first of them on with a camera, in Triggers.lua's order. (All
+		-- read first: LoggingOut ends a countdown that's over, whoever wins.)
+		state.departing = (emoteEvent == "Hearth" or emoteEvent == "Teleport") and emoteEvent
+		state.logout, state.afk, state.byFire = LoggingOut(), afk, byFire
+		state.emote, state.weapon, state.campfire = emoteEvent, weapon, campfire
+		state.still = ns.stillSince ~= nil and GetTime() - ns.stillSince >= ns.db.idleOrbitDelay
+		return ns.PickTrigger(state, EventCamera)
 	end
 
 	-- For the camera mode log: what set off an event (the key from

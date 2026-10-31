@@ -53,6 +53,61 @@ if arg[1] then
 			end
 		end
 	end
+	-- The Cameras page's triggers, in the order they always had (a WoW Forever
+	-- one left out on retail, the chat camera's only where it's loaded).
+	local expected = { "Hearth", "Teleport", "Logout", "AFK", "Sit", "SitButton", "Sleep", "Dance", "Kneel", "Stare",
+		"Chair", "Weapon", "Campfire", "Fishing", "Still", "Flight", "Quest", "QuestGossip", "Walk", "Run", "Death" }
+	if client == "retail" then table.remove(expected, 6) end
+	if ns.ChatCamCommand then
+		expected[#expected + 1] = "Chat"
+		expected[#expected + 1] = "ChatNearby"
+	end
+	local keys = {}
+	for i, trigger in ipairs(ns.CAMERA_TRIGGERS) do
+		keys[i] = trigger.key
+		if ns.CAMERA_TRIGGER[trigger.key] ~= trigger then print("problem\tCamera trigger " .. trigger.key .. " not indexed") end
+	end
+	if table.concat(keys, ",") ~= table.concat(expected, ",") then
+		print("problem\tCamera triggers are " .. table.concat(keys, ",") .. ", not " .. table.concat(expected, ","))
+	end
+	-- The trigger sources (Triggers.lua) pick as the fixed order before them
+	-- did, for every mix of what's on and which triggers have a camera.
+	local function OldPick(state, cameraOf)
+		local order = { state.departing, state.logout and "Logout", state.afk and "AFK", state.byFire and "Campfire",
+			state.emote, state.weapon and "Weapon", state.campfire and "Campfire", state.still and "Still" }
+		for i = 1, 8 do
+			local camera = order[i] and cameraOf(order[i])
+			if camera then return order[i], camera end
+		end
+	end
+	local EMOTES = { false, "Sit", "Fishing", "Hearth" }
+	local CAMERA_SETS = {
+		{ Hearth = "tele", Teleport = "tele", Logout = "cozy", AFK = "afk", Campfire = "cozy", Sit = "vista",
+			Fishing = "fish", Weapon = "cozy", Still = "afk" },
+		{ Logout = "cozy", Campfire = "cozy", Fishing = "fish", Still = "afk" },
+		{ AFK = "afk", Sit = "vista", Weapon = "cozy" },
+		{ Teleport = "tele", Campfire = "cozy" },
+		{},
+	}
+	local mismatches = 0
+	for _, cameras in ipairs(CAMERA_SETS) do
+		local function CameraOf(key) return cameras[key] end
+		for bits = 0, 63 do
+			for _, departing in ipairs({ false, "Hearth", "Teleport" }) do
+				for _, emote in ipairs(EMOTES) do
+					local function Bit(n) return math.floor(bits / 2 ^ n) % 2 == 1 end
+					local state = { departing = departing, logout = Bit(0), afk = Bit(1), byFire = Bit(2), emote = emote,
+						weapon = Bit(3), campfire = Bit(4), still = Bit(5) }
+					local newKey, newCamera = ns.PickTrigger(state, CameraOf)
+					local oldKey, oldCamera = OldPick(state, CameraOf)
+					if newKey ~= oldKey or newCamera ~= oldCamera then mismatches = mismatches + 1 end
+				end
+			end
+		end
+	end
+	if mismatches > 0 then
+		print(("problem\tTrigger sources pick differently from the old order in %d cases"):format(mismatches))
+	end
 	-- Vitals Vision: a page's Reset (its settings back to the profile's) leaves
 	-- each theme's own look on them, not the plain defaults.
 	local db, base = ns.GetDB(), ns.ProfileBase()

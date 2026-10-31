@@ -34,7 +34,36 @@ local function Event(key, cameras)
 	return { key = key, camera = "event" .. key .. "Camera", music = music, cine = "event" .. key .. "Cine",
 		cameras = cameras or EVENT_CAMERAS, off = "none" }
 end
-local TRIGGERS = {
+local TRIGGERS, TRIGGER = {}, {}
+ns.CAMERA_TRIGGERS, ns.CAMERA_TRIGGER = TRIGGERS, TRIGGER
+local orderCache, triggerRows -- (below: worked out again when a trigger's added)
+
+-- Adds a trigger's rows to the page (key: letters only, as a row id is the
+-- key and a copy number), at the end of the list. Again with the same key:
+-- its fields replaced, in its place.
+function ns.RegisterCameraTrigger(trigger)
+	local old = TRIGGER[trigger.key]
+	if old then
+		for i, each in ipairs(TRIGGERS) do
+			if each == old then TRIGGERS[i] = trigger end
+		end
+	else
+		TRIGGERS[#TRIGGERS + 1] = trigger
+	end
+	TRIGGER[trigger.key] = trigger
+	if orderCache then
+		orderCache.text, orderCache.list = false, nil
+		wipe(triggerRows)
+	end
+	if ns.CameraRowsChanged then ns.CameraRowsChanged() end
+end
+
+-- (A WoW Forever event has no row on retail.)
+local FOREVER_ONLY = {}
+for _, event in ipairs(ns.EVENTS) do
+	if event.forever then FOREVER_ONLY[event.key] = true end
+end
+for _, trigger in ipairs({
 	Event("Hearth", { "tele", "none" }), Event("Teleport", { "tele", "none" }), Event("Logout"), Event("AFK"),
 	Event("Sit"), Event("SitButton"), Event("Sleep"), Event("Dance"), Event("Kneel"), Event("Stare"),
 	Event("Chair"), Event("Weapon"), Event("Campfire"), Event("Fishing"), Event("Still"),
@@ -46,30 +75,20 @@ local TRIGGERS = {
 		off = "none" },
 	{ key = "Death", camera = "deathOrbit", music = "deathSong", cine = "deathCine", cameras = { true, false },
 		off = false },
-}
--- (A flight's music is the flight camera's own switch.)
-for _, trigger in ipairs(TRIGGERS) do
+}) do
+	-- (A flight's music is the flight camera's own switch.)
 	if trigger.key == "Flight" then trigger.music = "musicCamFlight" end
-end
--- (A WoW Forever event has no row on retail.)
-for i = #TRIGGERS, 1, -1 do
-	for _, event in ipairs(ns.EVENTS) do
-		if event.key == TRIGGERS[i].key and event.forever and ns.isRetail then table.remove(TRIGGERS, i) end
-	end
+	if not (FOREVER_ONLY[trigger.key] and ns.isRetail) then ns.RegisterCameraTrigger(trigger) end
 end
 -- (The chat camera: ChatCam.lua; no music or CineMode switch yet.)
 if ns.ChatCamCommand then
-	TRIGGERS[#TRIGGERS + 1] = { key = "Chat", camera = "chatCamera", cameras = { "chat", "none" }, off = "none" }
-	TRIGGERS[#TRIGGERS + 1] = { key = "ChatNearby", camera = "chatNearbyCamera", cameras = { "chat", "none" },
-		off = "none" }
+	ns.RegisterCameraTrigger({ key = "Chat", camera = "chatCamera", cameras = { "chat", "none" }, off = "none" })
+	ns.RegisterCameraTrigger({ key = "ChatNearby", camera = "chatNearbyCamera", cameras = { "chat", "none" },
+		off = "none" })
 	-- Capital cities' citizens never stop chatting: that row's Cities unticked
 	-- to start with (its other ticks follow the chat camera's).
 	ns.LIST_DEFAULTS.cityShow["trig:ChatNearby"] = false
 end
-ns.CAMERA_TRIGGERS = TRIGGERS
-local TRIGGER = {}
-for _, trigger in ipairs(TRIGGERS) do TRIGGER[trigger.key] = trigger end
-ns.CAMERA_TRIGGER = TRIGGER
 
 -- Each camera's name, and its row on the old Camera Modes page (ns.CAMERA_OFF_CAMS).
 ns.CAMERA_NAMES = { cozy = L["Cozy camera"], vista = L["Vista camera"], fish = L["Fish camera"],
@@ -99,7 +118,7 @@ end
 -- Every row in order: each trigger's own and its copies, the triggers as
 -- TRIGGERS has them (a copy before its own row comes first for it).
 -- Worked out again only when the order changes.
-local orderCache = { text = false }
+orderCache = { text = false }
 function ns.CameraRowOrder()
 	local text = Rows().order
 	if orderCache.text == text and orderCache.list then return orderCache.list end
@@ -122,7 +141,7 @@ function ns.CameraRowOrder()
 	return list
 end
 -- A trigger's rows, in order.
-local triggerRows = {}
+triggerRows = {}
 function ns.TriggerRowIds(key)
 	local list = ns.CameraRowOrder()
 	local cached = triggerRows[key]
